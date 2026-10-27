@@ -116,6 +116,12 @@ class AppState {
 		tab: DetailsTab = 'describe',
 		extra: Partial<Pick<Details, 'editing' | 'previous' | 'mode'>> = {}
 	) {
+		const shown = this.details;
+		if (shown && sameResource(shown.resource, resource) && sameObject(shown.target, target)) {
+			// Same object: switch tabs in place, so running logs and shells survive.
+			Object.assign(shown, { tab, editing: false, ...extra });
+			return;
+		}
 		this.details = { resource, target, tab, editing: false, ...extra };
 	}
 
@@ -155,6 +161,10 @@ class AppState {
 
 export function sameResource(a: ResourceRef, b: ResourceRef) {
 	return a.group === b.group && a.version === b.version && a.plural === b.plural;
+}
+
+export function sameObject(a: ObjectRef, b: ObjectRef) {
+	return sameResource(a.resource, b.resource) && a.namespace === b.namespace && a.name === b.name;
 }
 
 export function refOf(resource: ResourceRef): ResourceRef {
