@@ -1,16 +1,18 @@
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{any, get, post, put};
+use axum::routing::{any, delete, get, post, put};
 use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
-    ClusterInfo, ContextList, DeleteOptions, EventInfo, Kubri, MetricsKind, ObjectRef, ResourceInfo,
-    ResourceRef, Usage,
+    ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, Kubri, LogEvent,
+    LogOptions, MetricsKind, ObjectRef, PortForwardInfo, PortForwardRequest, ResourceInfo, ResourceRef,
+    Terminal, TerminalOptions, TerminalOutput, Usage,
 };
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -32,6 +34,12 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/object/restart", post(restart))
         .route("/events", get(events))
         .route("/metrics", get(metrics))
+        .route("/logs", any(logs))
+        .route("/terminal", any(terminal))
+        .route("/portforwards", get(port_forwards).post(start_port_forward))
+        .route("/portforwards/{id}", delete(stop_port_forward))
+        .route("/node/cordon", post(cordon))
+        .route("/node/drain", post(drain))
         .with_state(kubri)
 }
 
@@ -52,11 +60,12 @@ impl IntoResponse for ApiError {
                 .api_status()
                 .and_then(|code| StatusCode::from_u16(code).ok())
                 .unwrap_or(StatusCode::BAD_GATEWAY),
-            UnknownContext(_) | UnknownResource(_) => StatusCode::NOT_FOUND,
+            UnknownContext(_) | UnknownResource(_) | NotFound(_) => StatusCode::NOT_FOUND,
             NoKubeconfig(_) | NotConnected => StatusCode::CONFLICT,
             Unsupported(_) | InvalidObject(_) => StatusCode::BAD_REQUEST,
             Timeout => StatusCode::GATEWAY_TIMEOUT,
             Kubeconfig(_) | Kube(_) => StatusCode::BAD_GATEWAY,
+            Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let body = Json(serde_json::json!({ "error": self.0.to_string() }));
         (status, body).into_response()
@@ -228,6 +237,185 @@ async fn metrics(
     Ok(Json(kubri.metrics(query.kind, namespace.as_deref()).await?))
 }
 
+/// Reads the JSON request a streaming socket starts with. Parameters go in a message rather
+/// than the query string because they nest and include numbers and flags.
+async fn first_message<T: DeserializeOwned>(socket: &mut WebSocket) -> Result<T, String> {
+    loop {
+        match socket.recv().await {
+            Some(Ok(Message::Text(text))) => {
+                return serde_json::from_str(&text).map_err(|e| format!("invalid request: {e}"));
+            }
+            Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
+            _ => return Err("expected a request".to_owned()),
+        }
+    }
+}
+
+async fn send_json<T: Serialize>(socket: &mut WebSocket, value: &T) {
+    if let Ok(text) = serde_json::to_string(value) {
+        let _ = socket.send(Message::text(text)).await;
+    }
+}
+
+#[derive(Deserialize)]
+struct LogsRequest {
+    target: ObjectRef,
+    #[serde(default)]
+    options: LogOptions,
+}
+
+/// Streams [`LogEvent`]s as JSON text frames. The client sends a [`LogsRequest`] first.
+async fn logs(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(move |mut socket| async move {
+        let events = match first_message::<LogsRequest>(&mut socket).await {
+            Ok(req) => kubri
+                .logs(&req.target, req.options)
+                .await
+                .map_err(|e| e.to_string()),
+            Err(err) => Err(err),
+        };
+        match events {
+            Ok(events) => forward(socket, events).await,
+            Err(message) => {
+                send_json(
+                    &mut socket,
+                    &LogEvent::Error {
+                        source: None,
+                        message,
+                    },
+                )
+                .await;
+                send_json(&mut socket, &LogEvent::End).await;
+            }
+        }
+    })
+}
+
+#[derive(Deserialize)]
+struct TerminalRequest {
+    target: ObjectRef,
+    #[serde(default)]
+    options: TerminalOptions,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum TerminalControl {
+    Resize { cols: u16, rows: u16 },
+}
+
+/// A terminal session. The client sends a [`TerminalRequest`] first, then keystrokes as
+/// binary frames and `{"type":"resize"}` as text. The server answers `{"type":"ready"}`,
+/// then output as binary frames, and `{"type":"exit"}` when the process ends.
+async fn terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(move |mut socket| async move {
+        let opened = match first_message::<TerminalRequest>(&mut socket).await {
+            Ok(req) => kubri
+                .open_terminal(&req.target, req.options)
+                .await
+                .map_err(|e| e.to_string()),
+            Err(err) => Err(err),
+        };
+        match opened {
+            Ok(terminal) => run_terminal(socket, terminal).await,
+            Err(message) => {
+                let exit = TerminalOutput::Exit {
+                    message: Some(message),
+                };
+                send_json(&mut socket, &exit).await;
+            }
+        }
+    })
+}
+
+async fn run_terminal(mut socket: WebSocket, terminal: Terminal) {
+    let Terminal {
+        container,
+        mut input,
+        mut output,
+    } = terminal;
+    send_json(
+        &mut socket,
+        &serde_json::json!({ "type": "ready", "container": container }),
+    )
+    .await;
+    let (mut tx, mut rx) = socket.split();
+    // Input and output run side by side, so a blocked stdin never stalls the output.
+    let keys = async move {
+        while let Some(Ok(msg)) = rx.next().await {
+            match msg {
+                Message::Binary(data) => {
+                    if input.write(&data).await.is_err() {
+                        break;
+                    }
+                }
+                Message::Text(text) => match serde_json::from_str(&text) {
+                    Ok(TerminalControl::Resize { cols, rows }) => input.resize(cols, rows),
+                    Err(err) => tracing::debug!(%err, "ignoring terminal message"),
+                },
+                Message::Close(_) => break,
+                _ => {}
+            }
+        }
+    };
+    let screen = async move {
+        while let Some(out) = output.next().await {
+            let msg = match &out {
+                TerminalOutput::Data { data } => Message::binary(data.clone()),
+                TerminalOutput::Exit { .. } => match serde_json::to_string(&out) {
+                    Ok(text) => Message::text(text),
+                    Err(_) => break,
+                },
+            };
+            let exit = matches!(out, TerminalOutput::Exit { .. });
+            if tx.send(msg).await.is_err() || exit {
+                break;
+            }
+        }
+        let _ = tx.close().await;
+    };
+    tokio::select! {
+        _ = keys => {}
+        _ = screen => {}
+    }
+}
+
+async fn port_forwards(State(kubri): State<Arc<Kubri>>) -> Json<Vec<PortForwardInfo>> {
+    Json(kubri.port_forwards())
+}
+
+async fn start_port_forward(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<PortForwardRequest>,
+) -> ApiResult<PortForwardInfo> {
+    Ok(Json(kubri.start_port_forward(req).await?))
+}
+
+async fn stop_port_forward(State(kubri): State<Arc<Kubri>>, Path(id): Path<u32>) -> ApiResult<()> {
+    Ok(Json(kubri.stop_port_forward(id)?))
+}
+
+#[derive(Deserialize)]
+struct Cordon {
+    name: String,
+    cordoned: bool,
+}
+
+async fn cordon(State(kubri): State<Arc<Kubri>>, Json(req): Json<Cordon>) -> ApiResult<()> {
+    Ok(Json(kubri.cordon(&req.name, req.cordoned).await?))
+}
+
+#[derive(Deserialize)]
+struct Drain {
+    name: String,
+    #[serde(default)]
+    options: DrainOptions,
+}
+
+async fn drain(State(kubri): State<Arc<Kubri>>, Json(req): Json<Drain>) -> ApiResult<DrainReport> {
+    Ok(Json(kubri.drain(&req.name, req.options).await?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,6 +480,47 @@ mod tests {
         assert_eq!(status, StatusCode::CONFLICT);
 
         let (status, _) = send(disconnected(), get("/metrics?kind=pods")).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+    }
+
+    fn post_json(uri: &str, body: &str) -> Request<Body> {
+        Request::post(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn port_forward_routes() {
+        let (status, body) = send(disconnected(), get("/portforwards")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, serde_json::json!([]));
+
+        let start = post_json(
+            "/portforwards",
+            r#"{"target":{"resource":{"group":"","version":"v1","plural":"pods"},
+                "namespace":"shop","name":"web-1"},"remotePort":8080}"#,
+        );
+        let (status, _) = send(disconnected(), start).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        let stop = Request::delete("/portforwards/7").body(Body::empty()).unwrap();
+        let (status, body) = send(disconnected(), stop).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"], "port-forward 7 does not exist");
+    }
+
+    #[tokio::test]
+    async fn node_routes_parse_their_parameters() {
+        let cordon = post_json("/node/cordon", r#"{"name":"worker-1","cordoned":true}"#);
+        let (status, _) = send(disconnected(), cordon).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        let drain = post_json(
+            "/node/drain",
+            r#"{"name":"worker-1","options":{"force":true,"gracePeriodSeconds":30}}"#,
+        );
+        let (status, _) = send(disconnected(), drain).await;
         assert_eq!(status, StatusCode::CONFLICT);
     }
 }
