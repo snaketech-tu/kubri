@@ -115,6 +115,7 @@
 			<button
 				class="icon"
 				onclick={() => (app.maximized = !app.maximized)}
+				onmousedown={(e) => e.preventDefault()}
 				title={app.maximized ? 'Restore (f)' : 'Maximize (f)'}
 				aria-label={app.maximized ? 'Restore' : 'Maximize'}>{app.maximized ? '⤡' : '⤢'}</button
 			>
