@@ -1,41 +1,33 @@
 import { SvelteMap } from 'svelte/reactivity';
-import { backend, type KubeObject, type ResourceRef } from './api';
+import { backend, type Column, type MetricsKind, type ResourceRef, type Row, type Usage } from './api';
 
-function key(obj: KubeObject) {
-	return obj.metadata.uid ?? `${obj.metadata.namespace ?? ''}/${obj.metadata.name}`;
-}
-
-/** A live list of objects. Call `start` from an `$effect` and return its result to clean up. */
-export class LiveList {
-	#items = new SvelteMap<string, KubeObject>();
+/** A live table of objects. Call `start` from an `$effect` and return its result to clean up. */
+export class LiveTable {
+	#rows = new SvelteMap<string, Row>();
+	columns = $state<Column[]>([]);
 	loading = $state(true);
 	error = $state<string | null>(null);
-
-	items = $derived(
-		[...this.#items.values()].sort(
-			(a, b) =>
-				(a.metadata.namespace ?? '').localeCompare(b.metadata.namespace ?? '') ||
-				a.metadata.name.localeCompare(b.metadata.name)
-		)
-	);
+	rows = $derived([...this.#rows.values()]);
 
 	start(resource: ResourceRef, namespace: string | null) {
-		this.#items.clear();
+		this.#rows.clear();
+		this.columns = [];
 		this.loading = true;
 		this.error = null;
-		return backend.watch(resource, namespace, (event) => {
+		return backend.watchTable(resource, namespace, (event) => {
 			switch (event.type) {
 				case 'reset':
-					this.#items.clear();
-					for (const item of event.items) this.#items.set(key(item), item);
+					this.#rows.clear();
+					for (const row of event.rows) this.#rows.set(row.key, row);
+					this.columns = event.columns;
 					this.loading = false;
 					this.error = null;
 					break;
 				case 'upsert':
-					this.#items.set(key(event.item), event.item);
+					this.#rows.set(event.row.key, event.row);
 					break;
 				case 'delete':
-					this.#items.delete(key(event.item));
+					this.#rows.delete(event.row.key);
 					break;
 				case 'error':
 					this.error = event.message;
@@ -43,5 +35,39 @@ export class LiveList {
 					break;
 			}
 		});
+	}
+}
+
+const METRICS_INTERVAL = 15_000;
+
+/** Polls metrics-server. `available` stays false when it is not installed. */
+export class LiveMetrics {
+	usage = $state(new Map<string, Usage>());
+	available = $state(false);
+
+	start(kind: MetricsKind, namespace: string | null) {
+		this.usage = new Map();
+		this.available = false;
+		let stopped = false;
+		const poll = async () => {
+			try {
+				const list = await backend.metrics(kind, namespace);
+				if (stopped) return;
+				this.usage = new Map(list.map((u) => [`${u.namespace ?? ''}/${u.name}`, u]));
+				this.available = true;
+			} catch {
+				if (!stopped) this.available = false;
+			}
+		};
+		poll();
+		const timer = setInterval(poll, METRICS_INTERVAL);
+		return () => {
+			stopped = true;
+			clearInterval(timer);
+		};
+	}
+
+	get(namespace: string | null, name: string): Usage | undefined {
+		return this.usage.get(`${namespace ?? ''}/${name}`);
 	}
 }

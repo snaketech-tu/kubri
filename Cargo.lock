@@ -2288,6 +2288,7 @@ name = "kubri-core"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "http",
  "k8s-openapi",
  "kube",
  "serde",
@@ -2304,6 +2305,7 @@ dependencies = [
  "futures",
  "kubri-core",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tracing",

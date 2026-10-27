@@ -5,7 +5,11 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use futures::StreamExt;
-use kubri_core::{ClusterInfo, ContextList, Kubri, ResourceInfo, ResourceRef, WatchEvent};
+use kubri_core::{
+    ClusterInfo, ContextList, DeleteOptions, EventInfo, Kubri, MetricsKind, ObjectRef, ResourceInfo,
+    ResourceRef, TableEvent, Usage,
+};
+use serde_json::Value;
 use tauri::State;
 use tauri::async_runtime::JoinHandle;
 use tauri::ipc::Channel;
@@ -41,15 +45,15 @@ async fn resources(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<ResourceIn
 }
 
 #[tauri::command]
-async fn watch(
+async fn watch_table(
     kubri: State<'_, Arc<Kubri>>,
     watches: State<'_, Arc<Watches>>,
     resource: ResourceRef,
     namespace: Option<String>,
-    on_event: Channel<WatchEvent>,
+    on_event: Channel<TableEvent>,
 ) -> CommandResult<u32> {
     let events = kubri
-        .watch(&resource, namespace.as_deref())
+        .watch_table(&resource, namespace.as_deref())
         .await
         .map_err(|e| e.to_string())?;
     let id = watches.next_id.fetch_add(1, Ordering::Relaxed);
@@ -74,6 +78,71 @@ fn unwatch(watches: State<'_, Arc<Watches>>, id: u32) {
     }
 }
 
+#[tauri::command]
+async fn get_object(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Value> {
+    kubri.get(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn replace_object(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+    value: Value,
+) -> CommandResult<Value> {
+    kubri.replace(&target, value).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn patch_object(kubri: State<'_, Arc<Kubri>>, target: ObjectRef, patch: Value) -> CommandResult<Value> {
+    kubri.patch(&target, patch).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn delete_object(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+    options: Option<DeleteOptions>,
+) -> CommandResult<()> {
+    kubri
+        .delete(&target, &options.unwrap_or_default())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn scale(kubri: State<'_, Arc<Kubri>>, target: ObjectRef, replicas: u32) -> CommandResult<()> {
+    kubri.scale(&target, replicas).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn restart(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<()> {
+    kubri.restart(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn events(
+    kubri: State<'_, Arc<Kubri>>,
+    namespace: Option<String>,
+    uid: String,
+) -> CommandResult<Vec<EventInfo>> {
+    kubri
+        .events(namespace.as_deref(), &uid)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn metrics(
+    kubri: State<'_, Arc<Kubri>>,
+    kind: MetricsKind,
+    namespace: Option<String>,
+) -> CommandResult<Vec<Usage>> {
+    kubri
+        .metrics(kind, namespace.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -90,8 +159,16 @@ pub fn run() {
             reload_contexts,
             switch_context,
             resources,
-            watch,
-            unwatch
+            watch_table,
+            unwatch,
+            get_object,
+            replace_object,
+            patch_object,
+            delete_object,
+            scale,
+            restart,
+            events,
+            metrics
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Kubri");

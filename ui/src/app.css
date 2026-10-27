@@ -12,6 +12,9 @@
 	--warn: #c27c0e;
 	--bad: #d64545;
 	--shadow: 0 12px 32px rgb(16 24 40 / 14%);
+	--syntax-key: #2456c4;
+	--syntax-string: #1f7a45;
+	--syntax-literal: #a3500f;
 	--mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 	color-scheme: light;
 }
@@ -31,6 +34,9 @@
 		--warn: #e5a73b;
 		--bad: #f06b6b;
 		--shadow: 0 12px 32px rgb(0 0 0 / 45%);
+		--syntax-key: #8fb1f5;
+		--syntax-string: #7fd4a0;
+		--syntax-literal: #f0b46b;
 		color-scheme: dark;
 	}
 }

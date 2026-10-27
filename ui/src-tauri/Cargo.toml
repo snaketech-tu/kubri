@@ -23,5 +23,6 @@ kubri-core.workspace = true
 tauri = { version = "2", features = [] }
 futures.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

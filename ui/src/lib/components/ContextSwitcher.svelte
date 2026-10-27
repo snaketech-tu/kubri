@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { app } from '../state.svelte';
 
-	let open = $state(false);
 	let query = $state('');
 	let input = $state<HTMLInputElement>();
 
@@ -10,18 +9,18 @@
 	);
 
 	function toggle() {
-		open = !open;
+		app.contextMenuOpen = !app.contextMenuOpen;
 		query = '';
-		if (open) queueMicrotask(() => input?.focus());
+		if (app.contextMenuOpen) queueMicrotask(() => input?.focus());
 	}
 
 	function choose(name: string) {
-		open = false;
+		app.contextMenuOpen = false;
 		if (name !== app.cluster?.context) app.switchContext(name);
 	}
 
 	function onkeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') open = false;
+		if (e.key === 'Escape') app.contextMenuOpen = false;
 		if (e.key === 'Enter' && filtered[0]) choose(filtered[0].name);
 	}
 
@@ -50,8 +49,8 @@
 		<span class="chevron">▾</span>
 	</button>
 
-	{#if open}
-		<div class="backdrop" onclick={() => (open = false)} role="presentation"></div>
+	{#if app.contextMenuOpen}
+		<div class="backdrop" onclick={() => (app.contextMenuOpen = false)} role="presentation"></div>
 		<div class="menu" role="listbox">
 			<div class="search">
 				<input bind:this={input} bind:value={query} {onkeydown} placeholder="Search contexts…" />

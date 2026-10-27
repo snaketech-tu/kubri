@@ -1,21 +1,20 @@
 <script lang="ts">
 	import { ALL_NAMESPACES, app } from '../state.svelte';
-	import { LiveList } from '../watch.svelte';
 
-	const namespaces = new LiveList();
-
-	$effect(() => {
-		if (!app.cluster) return;
-		return namespaces.start({ group: '', version: 'v1', plural: 'namespaces' }, null);
-	});
+	// Keep the current and default namespace selectable even if listing namespaces is forbidden.
+	const options = $derived(
+		[...new Set([...app.namespaces, app.namespace, app.cluster?.defaultNamespace ?? ''])]
+			.filter(Boolean)
+			.sort()
+	);
 </script>
 
-<label class="picker" title="Namespace">
+<label class="picker" title="Namespace (:ns, 0 for all)">
 	<span>ns</span>
 	<select bind:value={app.namespace} disabled={!app.selected?.namespaced}>
 		<option value={ALL_NAMESPACES}>All namespaces</option>
-		{#each namespaces.items as ns (ns.metadata.name)}
-			<option value={ns.metadata.name}>{ns.metadata.name}</option>
+		{#each options as ns (ns)}
+			<option value={ns}>{ns}</option>
 		{/each}
 	</select>
 </label>

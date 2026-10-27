@@ -4,26 +4,32 @@
 //! Both frontends talk to the cluster only through it.
 
 mod context;
+mod discovery;
 mod error;
+mod metrics;
+mod objects;
 mod resource;
-mod watch;
+mod table;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use futures::Stream;
-use kube::api::DynamicObject;
+use k8s_openapi::api::core::v1::Event;
+use kube::api::{DynamicObject, ListParams, Patch, PatchParams, PostParams};
 use kube::config::{KubeConfigOptions, Kubeconfig};
-use kube::discovery::{ApiResource, Discovery};
 use kube::{Api, Client, Config};
 use serde::Serialize;
+use serde_json::Value;
 use tokio::sync::RwLock;
 
 pub use context::ContextInfo;
 pub use error::{Error, Result};
+pub use metrics::{MetricsKind, Usage, parse_quantity};
+pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
 pub use resource::{ResourceInfo, ResourceRef};
-pub use watch::WatchEvent;
+pub use table::{Column, Row, TableEvent};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -50,7 +56,7 @@ struct Session {
     info: ClusterInfo,
     client: Client,
     resources: Vec<ResourceInfo>,
-    api_resources: HashMap<ResourceRef, ApiResource>,
+    by_ref: HashMap<ResourceRef, usize>,
 }
 
 pub struct Kubri {
@@ -124,7 +130,7 @@ impl Kubri {
             let server = config.cluster_url.to_string();
             let client = Client::try_from(config)?;
             let version = client.apiserver_version().await?.git_version;
-            let discovery = Discovery::new(client.clone()).run().await?;
+            let resources = discovery::discover(&client).await?;
             Ok::<_, Error>(Session::new(
                 ClusterInfo {
                     context: context.to_owned(),
@@ -133,7 +139,7 @@ impl Kubri {
                     default_namespace: namespace,
                 },
                 client,
-                &discovery,
+                resources,
             ))
         })
         .await
@@ -150,29 +156,136 @@ impl Kubri {
         Ok(self.session().await?.resources.clone())
     }
 
-    /// Streams the objects of one resource type. `namespace` is ignored for cluster-scoped
-    /// resources, and `None` watches all namespaces.
+    /// Streams a resource list with the columns `kubectl get` shows. `namespace` is ignored
+    /// for cluster-scoped resources, and `None` lists all namespaces.
     ///
     /// The stream is bound to the context that was active when it was created.
-    pub async fn watch(
+    pub async fn watch_table(
         &self,
         resource: &ResourceRef,
         namespace: Option<&str>,
-    ) -> Result<impl Stream<Item = WatchEvent> + Send + 'static> {
+    ) -> Result<impl Stream<Item = TableEvent> + Send + 'static> {
         let session = self.session().await?;
-        let api_resource = session
-            .api_resources
-            .get(resource)
-            .ok_or_else(|| Error::UnknownResource(resource.to_string()))?;
-        let namespaced = session
+        let api = session.api(resource, namespace)?;
+        Ok(table::watch_table(
+            session.client.clone(),
+            api.resource_url().to_owned(),
+        ))
+    }
+
+    /// Fetches one object in full.
+    pub async fn get(&self, obj: &ObjectRef) -> Result<Value> {
+        let api = self
+            .session()
+            .await?
+            .api(&obj.resource, obj.namespace.as_deref())?;
+        Ok(serde_json::to_value(api.get(&obj.name).await?)?)
+    }
+
+    /// Replaces an object, as `kubectl edit` does. Fails with a conflict if it changed since
+    /// `object` was read.
+    pub async fn replace(&self, obj: &ObjectRef, object: Value) -> Result<Value> {
+        let api = self
+            .session()
+            .await?
+            .api(&obj.resource, obj.namespace.as_deref())?;
+        let object: DynamicObject = serde_json::from_value(object)?;
+        let saved = api.replace(&obj.name, &PostParams::default(), &object).await?;
+        Ok(serde_json::to_value(saved)?)
+    }
+
+    /// Applies a JSON merge patch, for example to change labels or annotations.
+    pub async fn patch(&self, obj: &ObjectRef, patch: Value) -> Result<Value> {
+        let api = self
+            .session()
+            .await?
+            .api(&obj.resource, obj.namespace.as_deref())?;
+        let saved = api
+            .patch(&obj.name, &PatchParams::default(), &Patch::Merge(patch))
+            .await?;
+        Ok(serde_json::to_value(saved)?)
+    }
+
+    pub async fn delete(&self, obj: &ObjectRef, options: &DeleteOptions) -> Result<()> {
+        let api = self
+            .session()
+            .await?
+            .api(&obj.resource, obj.namespace.as_deref())?;
+        api.delete(&obj.name, &options.to_params()).await?;
+        Ok(())
+    }
+
+    /// Sets the replica count through the `scale` subresource, so CRDs that support it work too.
+    pub async fn scale(&self, obj: &ObjectRef, replicas: u32) -> Result<()> {
+        let session = self.session().await?;
+        let info = session.info_for(&obj.resource)?;
+        if !info.subresources.iter().any(|s| s == "scale") {
+            return Err(Error::Unsupported(format!("{} cannot be scaled", info.kind)));
+        }
+        let api = session.api(&obj.resource, obj.namespace.as_deref())?;
+        let patch = serde_json::json!({ "spec": { "replicas": replicas } });
+        api.patch_scale(&obj.name, &PatchParams::default(), &Patch::Merge(patch))
+            .await?;
+        Ok(())
+    }
+
+    /// Restarts the pods of a Deployment, StatefulSet or DaemonSet, like
+    /// `kubectl rollout restart`.
+    pub async fn restart(&self, obj: &ObjectRef) -> Result<()> {
+        let session = self.session().await?;
+        let info = session.info_for(&obj.resource)?;
+        if !matches!(info.kind.as_str(), "Deployment" | "StatefulSet" | "DaemonSet") {
+            return Err(Error::Unsupported(format!("{} cannot be restarted", info.kind)));
+        }
+        let now = k8s_openapi::jiff::Timestamp::now().to_string();
+        let api = session.api(&obj.resource, obj.namespace.as_deref())?;
+        api.patch(
+            &obj.name,
+            &PatchParams::default(),
+            &Patch::Merge(objects::restart_patch(&now)),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Events about the object with `uid`, newest first.
+    pub async fn events(&self, namespace: Option<&str>, uid: &str) -> Result<Vec<EventInfo>> {
+        let session = self.session().await?;
+        let api: Api<Event> = match namespace {
+            Some(ns) => Api::namespaced(session.client.clone(), ns),
+            None => Api::all(session.client.clone()),
+        };
+        let params = ListParams::default().fields(&format!("involvedObject.uid={uid}"));
+        let mut events: Vec<EventInfo> = api
+            .list(&params)
+            .await?
+            .items
+            .into_iter()
+            .map(EventInfo::from_event)
+            .collect();
+        events.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
+        Ok(events)
+    }
+
+    /// Current CPU and memory usage from metrics-server. Fails with
+    /// [`Error::UnknownResource`] when metrics-server is not installed.
+    pub async fn metrics(&self, kind: MetricsKind, namespace: Option<&str>) -> Result<Vec<Usage>> {
+        let session = self.session().await?;
+        let plural = match kind {
+            MetricsKind::Pods => "pods",
+            MetricsKind::Nodes => "nodes",
+        };
+        let resource = session
             .resources
             .iter()
-            .any(|r| r.reference == *resource && r.namespaced);
-        let api: Api<DynamicObject> = match namespace {
-            Some(ns) if namespaced => Api::namespaced_with(session.client.clone(), ns, api_resource),
-            _ => Api::all_with(session.client.clone(), api_resource),
-        };
-        Ok(watch::watch_objects(api))
+            .find(|r| r.reference.group == "metrics.k8s.io" && r.reference.plural == plural)
+            .ok_or_else(|| Error::UnknownResource(format!("metrics.k8s.io/{plural}")))?;
+        let api = session.api(&resource.reference, namespace)?;
+        let request = kube::core::Request::new(api.resource_url())
+            .list(&ListParams::default())
+            .map_err(|e| Error::Unsupported(e.to_string()))?;
+        let list: Value = session.client.request(request).await?;
+        Ok(metrics::parse_usage(&list))
     }
 
     async fn session(&self) -> Result<Arc<Session>> {
@@ -181,31 +294,35 @@ impl Kubri {
 }
 
 impl Session {
-    fn new(info: ClusterInfo, client: Client, discovery: &Discovery) -> Self {
-        let mut resources = Vec::new();
-        let mut api_resources = HashMap::new();
-        for group in discovery.groups() {
-            for (api_resource, caps) in group.recommended_resources() {
-                // Subresources such as pods/log are reached through their parent.
-                if api_resource.plural.contains('/') {
-                    continue;
-                }
-                let info = ResourceInfo::new(&api_resource, &caps);
-                api_resources.insert(info.reference.clone(), api_resource);
-                resources.push(info);
-            }
-        }
-        resources.sort_by(|a, b| {
-            a.kind
-                .cmp(&b.kind)
-                .then(a.reference.group.cmp(&b.reference.group))
-        });
+    fn new(info: ClusterInfo, client: Client, resources: Vec<ResourceInfo>) -> Self {
+        let by_ref = resources
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (r.reference.clone(), i))
+            .collect();
         Self {
             info,
             client,
             resources,
-            api_resources,
+            by_ref,
         }
+    }
+
+    fn info_for(&self, resource: &ResourceRef) -> Result<&ResourceInfo> {
+        self.by_ref
+            .get(resource)
+            .map(|&i| &self.resources[i])
+            .ok_or_else(|| Error::UnknownResource(resource.to_string()))
+    }
+
+    /// An API handle for `resource`. `namespace` is ignored for cluster-scoped resources.
+    fn api(&self, resource: &ResourceRef, namespace: Option<&str>) -> Result<Api<DynamicObject>> {
+        let info = self.info_for(resource)?;
+        let api_resource = info.api_resource();
+        Ok(match namespace {
+            Some(ns) if info.namespaced => Api::namespaced_with(self.client.clone(), ns, &api_resource),
+            _ => Api::all_with(self.client.clone(), &api_resource),
+        })
     }
 }
 
