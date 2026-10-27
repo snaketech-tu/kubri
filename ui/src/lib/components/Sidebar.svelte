@@ -16,7 +16,8 @@
 			(r) =>
 				r.verbs.includes('watch') &&
 				(r.kind.toLowerCase().includes(filter.toLowerCase()) ||
-					r.plural.includes(filter.toLowerCase()))
+					r.plural.includes(filter.toLowerCase()) ||
+					r.shortNames.includes(filter.toLowerCase()))
 		)
 	);
 	const pinned = $derived(
@@ -47,7 +48,11 @@
 </nav>
 
 {#snippet item(r: ResourceInfo)}
-	<button class:active={app.selected && sameResource(r, app.selected)} onclick={() => (app.selected = r)}>
+	<button
+		class:active={app.selected && sameResource(r, app.selected)}
+		onclick={() => app.open(r)}
+		title={r.shortNames.length ? `:${r.shortNames[0]}` : `:${r.plural}`}
+	>
 		<span>{r.kind}</span>
 		{#if r.group}<span class="group">{r.group}</span>{/if}
 	</button>

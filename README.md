@@ -2,7 +2,16 @@
 
 A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9s](https://k9scli.io) can do. It runs as a desktop app or in your browser.
 
-> **Status:** early development. Kubri can read your kubeconfig, switch contexts, and show a live list of any resource type, including CRDs. See the [roadmap](docs/ROADMAP.md) for what comes next.
+> **Status:** early development. See the [roadmap](docs/ROADMAP.md) for what comes next.
+
+## Features
+
+- Uses your existing kubeconfig and switches contexts from anywhere.
+- Live lists of every resource type, including CRDs, with the same columns as `kubectl get` (press <kbd>w</kbd> for the wide view), sorting, filtering (`-l app=web` for labels) and CPU/memory from metrics-server.
+- A command palette like k9s: <kbd>:</kbd> then `pods`, `deploy kube-system`, `ctx prod`, `ns default` or any short name.
+- Describe view with containers, conditions and events; YAML view and editor.
+- Delete (also several at once), scale, rollout restart, and edit labels and annotations.
+- Fully usable from the keyboard. Press <kbd>?</kbd> in the app for all shortcuts.
 
 ## How it works
 
@@ -38,7 +47,7 @@ Checks that CI runs:
 
 ```sh
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
-cd ui && pnpm check
+cd ui && pnpm check && pnpm test
 ```
 
 ## License

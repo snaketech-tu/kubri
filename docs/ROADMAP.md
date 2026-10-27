@@ -9,7 +9,7 @@ Kubri aims for feature parity with k9s. The work is split into four steps that b
 - Global context switcher, namespace picker, live resource list.
 - CI, Apache 2.0 license.
 
-## 2. Resource browser
+## 2. Resource browser ✅
 
 - Global context switcher everywhere, including `:ctx` in the command palette.
 - Lists and details for every resource type, with the columns `kubectl get` shows.
