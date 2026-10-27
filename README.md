@@ -11,6 +11,10 @@ A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9
 - A command palette like k9s: <kbd>:</kbd> then `pods`, `deploy kube-system`, `ctx prod`, `ns default` or any short name.
 - Describe view with containers, conditions and events; YAML view and editor.
 - Delete (also several at once), scale, rollout restart, and edit labels and annotations.
+- Live logs of a pod, or of every pod behind a deployment, service or other workload, with all containers merged, previous logs, timestamps and a regex filter.
+- Shell into any container or attach to its main process, in a real terminal (xterm.js).
+- Port-forwards to pods, workloads and services (named target ports included), listed under `:pf`.
+- Node maintenance: cordon, uncordon and drain with the same safety checks as `kubectl drain`.
 - Fully usable from the keyboard. Press <kbd>?</kbd> in the app for all shortcuts.
 
 ## How it works
@@ -41,7 +45,7 @@ pnpm dev                       # in ui/, then open http://localhost:5173
 
 To serve a production build in the browser, run `pnpm build` in `ui/`, then `cargo run --release -p kubri-server` from the repository root and open <http://127.0.0.1:7878>.
 
-The web server has no login yet. Keep it on localhost until authentication lands.
+The web server has no login yet. Keep it on localhost until authentication lands: anyone who can reach it can open shells in your cluster and port-forwards on the server's machine.
 
 Checks that CI runs:
 

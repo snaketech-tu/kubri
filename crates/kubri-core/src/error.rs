@@ -12,6 +12,8 @@ pub enum Error {
     NotConnected,
     #[error("resource `{0}` is not served by the cluster")]
     UnknownResource(String),
+    #[error("{0} does not exist")]
+    NotFound(String),
     #[error("{0}")]
     Unsupported(String),
     #[error("invalid object: {0}")]
@@ -22,6 +24,8 @@ pub enum Error {
     Kube(#[from] kube::Error),
     #[error("timed out while connecting to the cluster")]
     Timeout,
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
 }
 
 impl Error {

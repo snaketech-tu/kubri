@@ -6,17 +6,24 @@
 mod context;
 mod discovery;
 mod error;
+mod logs;
 mod metrics;
+mod node;
 mod objects;
+mod portforward;
 mod resource;
+mod selector;
 mod table;
+mod terminal;
+#[cfg(test)]
+mod testing;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::Stream;
-use k8s_openapi::api::core::v1::Event;
+use futures::{Stream, StreamExt};
+use k8s_openapi::api::core::v1::{Event, Node, Pod, Service};
 use kube::api::{DynamicObject, ListParams, Patch, PatchParams, PostParams};
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use kube::{Api, Client, Config};
@@ -26,10 +33,14 @@ use tokio::sync::RwLock;
 
 pub use context::ContextInfo;
 pub use error::{Error, Result};
+pub use logs::{LogEvent, LogLine, LogOptions, LogSource};
 pub use metrics::{MetricsKind, Usage, parse_quantity};
+pub use node::{DrainOptions, DrainReport, PodIssue};
 pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
+pub use portforward::{PortForwardInfo, PortForwardRequest};
 pub use resource::{ResourceInfo, ResourceRef};
 pub use table::{Column, Row, TableEvent};
+pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -62,6 +73,7 @@ struct Session {
 pub struct Kubri {
     kubeconfig: RwLock<Result<Kubeconfig, String>>,
     session: RwLock<Option<Arc<Session>>>,
+    forwards: std::sync::Mutex<portforward::Forwards>,
 }
 
 impl Kubri {
@@ -79,6 +91,7 @@ impl Kubri {
         Self {
             kubeconfig: RwLock::new(kubeconfig),
             session: RwLock::new(None),
+            forwards: Default::default(),
         }
     }
 
@@ -288,8 +301,142 @@ impl Kubri {
         Ok(metrics::parse_usage(&list))
     }
 
+    /// Streams container logs of a pod, or of every pod a workload or Service selects.
+    pub async fn logs(
+        &self,
+        target: &ObjectRef,
+        options: LogOptions,
+    ) -> Result<impl Stream<Item = LogEvent> + Send + 'static> {
+        let session = self.session().await?;
+        let pods = session.pods_of(target).await?;
+        let mut sources = logs::sources(&pods, options.container.as_deref());
+        if sources.is_empty() {
+            return Err(Error::Unsupported(format!("{} has no pods", target.name)));
+        }
+        let notice = (sources.len() > logs::MAX_STREAMS).then(|| LogEvent::Error {
+            source: None,
+            message: format!(
+                "showing the first {} of {} containers",
+                logs::MAX_STREAMS,
+                sources.len()
+            ),
+        });
+        sources.truncate(logs::MAX_STREAMS);
+        let events = logs::stream_logs(session.client.clone(), sources, options);
+        // The notice goes after the sources, which always come first.
+        Ok(events.enumerate().flat_map(move |(i, event)| {
+            let notice = if i == 0 { notice.clone() } else { None };
+            futures::stream::iter(std::iter::once(event).chain(notice))
+        }))
+    }
+
+    /// Opens a shell in a pod's container, or attaches to its main process.
+    pub async fn open_terminal(&self, target: &ObjectRef, options: TerminalOptions) -> Result<Terminal> {
+        let session = self.session().await?;
+        if !session.is_core(&target.resource, "Pod")? {
+            return Err(Error::Unsupported("terminals open in pods".into()));
+        }
+        let api = session.pod_api(target.namespace.as_deref())?;
+        let pod = api.get(&target.name).await?;
+        terminal::open(api, &pod, options).await
+    }
+
+    /// Running port-forwards, of every context.
+    pub fn port_forwards(&self) -> Vec<PortForwardInfo> {
+        self.forwards.lock().unwrap().list()
+    }
+
+    /// Forwards a local port to a pod. For a Service or workload a ready pod is picked, and a
+    /// Service port is mapped to the pod port it targets.
+    pub async fn start_port_forward(&self, request: PortForwardRequest) -> Result<PortForwardInfo> {
+        portforward::validate_address(request.address.as_deref())?;
+        let session = self.session().await?;
+        let target = &request.target;
+        let api = session.pod_api(target.namespace.as_deref())?;
+        let (pod, port) = if session.is_core(&target.resource, "Pod")? {
+            (api.get(&target.name).await?, request.remote_port)
+        } else {
+            let pods = session.pods_of(target).await?;
+            let pod = portforward::pick_pod(pods)
+                .ok_or_else(|| Error::Unsupported(format!("{} has no ready pod", target.name)))?;
+            let port = if session.is_core(&target.resource, "Service")? {
+                let services: Api<Service> =
+                    Api::namespaced(session.client.clone(), api.namespace().unwrap_or_default());
+                let service = services.get(&target.name).await?;
+                portforward::service_target_port(&service, request.remote_port, &pod)?
+            } else {
+                request.remote_port
+            };
+            (pod, port)
+        };
+        let destination = portforward::Destination {
+            namespace: pod.metadata.namespace.clone().unwrap_or_default(),
+            pod: pod.metadata.name.clone().unwrap_or_default(),
+            port,
+            api,
+        };
+        portforward::start(&self.forwards, session.info.context.clone(), request, destination).await
+    }
+
+    pub fn stop_port_forward(&self, id: u32) -> Result<()> {
+        self.forwards.lock().unwrap().stop(id)
+    }
+
+    /// Marks a node (un)schedulable, like `kubectl cordon` and `kubectl uncordon`.
+    pub async fn cordon(&self, node: &str, cordoned: bool) -> Result<()> {
+        let session = self.session().await?;
+        let nodes: Api<Node> = Api::all(session.client.clone());
+        let patch = serde_json::json!({ "spec": { "unschedulable": cordoned } });
+        nodes
+            .patch(node, &PatchParams::default(), &Patch::Merge(patch))
+            .await?;
+        Ok(())
+    }
+
+    /// Cordons a node and evicts its pods, like `kubectl drain`. Pods the options do not
+    /// allow to evict stop the drain before anything is evicted; see [`DrainReport::failed`].
+    pub async fn drain(&self, node: &str, options: DrainOptions) -> Result<DrainReport> {
+        self.cordon(node, true).await?;
+        let session = self.session().await?;
+        let pods: Api<Pod> = Api::all(session.client.clone());
+        let on_node = ListParams::default().fields(&format!("spec.nodeName={node}"));
+        let mut report = DrainReport::default();
+        let mut evict = Vec::new();
+        for pod in pods.list(&on_node).await?.items {
+            match node::plan(&pod, &options) {
+                node::Plan::Evict => evict.push(pod),
+                node::Plan::Skip(reason) => report.skipped.push(PodIssue {
+                    pod: node::pod_name(&pod),
+                    reason,
+                }),
+                node::Plan::Block(reason) => report.failed.push(PodIssue {
+                    pod: node::pod_name(&pod),
+                    reason,
+                }),
+            }
+        }
+        if report.failed.is_empty() {
+            node::evict_all(session.client.clone(), evict, &options, &mut report).await;
+        }
+        tracing::info!(
+            node,
+            evicted = report.evicted.len(),
+            failed = report.failed.len(),
+            "drained"
+        );
+        Ok(report)
+    }
+
     async fn session(&self) -> Result<Arc<Session>> {
         self.session.read().await.clone().ok_or(Error::NotConnected)
+    }
+}
+
+impl Drop for Kubri {
+    fn drop(&mut self) {
+        if let Ok(forwards) = self.forwards.get_mut() {
+            forwards.stop_all();
+        }
     }
 }
 
@@ -313,6 +460,45 @@ impl Session {
             .get(resource)
             .map(|&i| &self.resources[i])
             .ok_or_else(|| Error::UnknownResource(resource.to_string()))
+    }
+
+    /// Whether `resource` is the built-in core type `kind`, such as `Pod`.
+    fn is_core(&self, resource: &ResourceRef, kind: &str) -> Result<bool> {
+        Ok(resource.group.is_empty() && self.info_for(resource)?.kind == kind)
+    }
+
+    fn pod_api(&self, namespace: Option<&str>) -> Result<Api<Pod>> {
+        let namespace = namespace.ok_or_else(|| Error::Unsupported("a namespace is required".into()))?;
+        Ok(Api::namespaced(self.client.clone(), namespace))
+    }
+
+    /// The pods behind `target`: the pod itself, or the pods a workload or Service selects.
+    async fn pods_of(&self, target: &ObjectRef) -> Result<Vec<Pod>> {
+        let info = self.info_for(&target.resource)?;
+        if self.is_core(&target.resource, "Pod")? {
+            let pod = self
+                .pod_api(target.namespace.as_deref())?
+                .get(&target.name)
+                .await?;
+            return Ok(vec![pod]);
+        }
+        if !info.namespaced {
+            return Err(Error::Unsupported(format!(
+                "a {} has no pods of its own",
+                info.kind
+            )));
+        }
+        let object = self
+            .api(&target.resource, target.namespace.as_deref())?
+            .get(&target.name)
+            .await?;
+        let selector = selector::pod_selector(&serde_json::to_value(object)?).ok_or_else(|| {
+            Error::Unsupported(format!("{} {} does not select pods", info.kind, target.name))
+        })?;
+        let pods = self.pod_api(target.namespace.as_deref())?;
+        let mut pods = pods.list(&ListParams::default().labels(&selector)).await?.items;
+        pods.sort_by(|a, b| a.metadata.name.cmp(&b.metadata.name));
+        Ok(pods)
     }
 
     /// An API handle for `resource`. `namespace` is ignored for cluster-scoped resources.

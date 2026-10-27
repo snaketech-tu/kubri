@@ -3,8 +3,11 @@
 	import { canEdit, save } from '../actions';
 	import { backend, type EventInfo, type KubeObject } from '../api';
 	import { errorMessage } from '../format';
+	import { containerNames, hasLogs, isPods } from '../pods';
 	import { app, type Details } from '../state.svelte';
 	import Describe from './Describe.svelte';
+	import LogView from './LogView.svelte';
+	import TerminalView from './TerminalView.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
 	let { details }: { details: Details } = $props();
@@ -40,10 +43,30 @@
 		events = [];
 		load();
 		const timer = setInterval(() => {
-			if (!details.editing) load();
+			if (!details.editing && (details.tab === 'describe' || details.tab === 'yaml')) load();
 		}, REFRESH);
 		return () => clearInterval(timer);
 	});
+
+	// Logs and shells keep running in the background once opened, until another object is shown.
+	let opened = $state({ logs: false, shell: false });
+	$effect(() => {
+		void details.target;
+		opened = { logs: false, shell: false };
+	});
+	$effect(() => {
+		if (details.tab === 'logs' || details.tab === 'shell') opened[details.tab] = true;
+	});
+
+	const logs = $derived(hasLogs(details.resource, object));
+	const shell = $derived(isPods(details.resource));
+	const containers = $derived(containerNames(object));
+	const targetKey = $derived(JSON.stringify(details.target));
+
+	function close() {
+		app.details = null;
+		app.maximized = false;
+	}
 
 	const yamlText = $derived.by(() => {
 		if (!object) return '';
@@ -88,12 +111,26 @@
 			<span class="kind">{details.resource.kind}</span>
 			<h2 title={title}>{title}</h2>
 		</div>
-		<button class="close" onclick={() => (app.details = null)} title="Close (Esc)">×</button>
+		<div class="window">
+			<button
+				class="icon"
+				onclick={() => (app.maximized = !app.maximized)}
+				title={app.maximized ? 'Restore (f)' : 'Maximize (f)'}
+				aria-label={app.maximized ? 'Restore' : 'Maximize'}>{app.maximized ? '⤡' : '⤢'}</button
+			>
+			<button class="icon close" onclick={close} title="Close (Esc)" aria-label="Close">×</button>
+		</div>
 	</header>
 
 	<nav>
 		<button class:active={details.tab === 'describe'} onclick={() => (details.tab = 'describe')}>Describe <kbd>d</kbd></button>
 		<button class:active={details.tab === 'yaml'} onclick={() => (details.tab = 'yaml')}>YAML <kbd>y</kbd></button>
+		{#if logs}
+			<button class:active={details.tab === 'logs'} onclick={() => (details.tab = 'logs')}>Logs <kbd>l</kbd></button>
+		{/if}
+		{#if shell}
+			<button class:active={details.tab === 'shell'} onclick={() => (details.tab = 'shell')}>Shell <kbd>s</kbd></button>
+		{/if}
 		<span class="spacer"></span>
 		{#if details.tab === 'yaml'}
 			<label class="managed"><input type="checkbox" bind:checked={showManaged} disabled={details.editing} /> managed fields</label>
@@ -116,7 +153,21 @@
 	{/if}
 
 	<div class="body">
-		{#if !object}
+		{#key targetKey}
+			{#if opened.logs && logs}
+				<div class="tool" class:hidden={details.tab !== 'logs'}>
+					<LogView target={details.target} {containers} previous={details.previous} />
+				</div>
+			{/if}
+			{#if opened.shell && shell}
+				<div class="tool" class:hidden={details.tab !== 'shell'}>
+					<TerminalView target={details.target} {containers} mode={details.mode} />
+				</div>
+			{/if}
+		{/key}
+		{#if details.tab === 'logs' || details.tab === 'shell'}
+			<!-- Shown above. -->
+		{:else if !object}
 			{#if !error}<p class="muted">Loading…</p>{/if}
 		{:else if details.tab === 'describe'}
 			<Describe {object} {events} {now} />
@@ -168,16 +219,23 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.close {
+	.window {
+		display: flex;
+		gap: 2px;
+	}
+	.icon {
 		width: 30px;
 		height: 30px;
 		border: none;
 		border-radius: 6px;
 		background: none;
-		font-size: 20px;
+		font-size: 16px;
 		color: var(--text-muted);
 	}
-	.close:hover {
+	.icon.close {
+		font-size: 20px;
+	}
+	.icon:hover {
 		background: var(--surface-2);
 	}
 	nav {
@@ -248,6 +306,16 @@
 	.body > :global(*) {
 		flex: 1;
 		min-height: 0;
+	}
+	.tool {
+		display: flex;
+		flex-direction: column;
+	}
+	.tool > :global(*) {
+		flex: 1;
+	}
+	.tool.hidden {
+		display: none;
 	}
 	.muted {
 		padding: 20px;

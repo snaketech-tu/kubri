@@ -4,6 +4,7 @@ export type Action =
 	| { type: 'resource'; resource: ResourceInfo; namespace?: string }
 	| { type: 'context'; name: string }
 	| { type: 'namespace'; name: string }
+	| { type: 'portforwards' }
 	| { type: 'help' };
 
 export interface Suggestion {
@@ -14,6 +15,7 @@ export interface Suggestion {
 
 const CONTEXT_COMMANDS = ['ctx', 'context', 'contexts'];
 const NAMESPACE_COMMANDS = ['ns', 'namespace', 'namespaces'];
+const PORT_FORWARD_COMMANDS = ['pf', 'portforward', 'portforwards'];
 
 /** Groups that win when several resources share a name, e.g. core `events` over events.k8s.io. */
 const PREFERRED_GROUPS = ['', 'apps', 'batch', 'networking.k8s.io', 'rbac.authorization.k8s.io'];
@@ -69,6 +71,13 @@ export function suggest(
 		return [{ label: 'help', detail: 'Keyboard shortcuts', action: { type: 'help' } }];
 	}
 
+	const portForwards: Suggestion = {
+		label: 'pf',
+		detail: 'Running port-forwards',
+		action: { type: 'portforwards' }
+	};
+	if (PORT_FORWARD_COMMANDS.includes(cmd)) return [portForwards];
+
 	if (CONTEXT_COMMANDS.includes(cmd)) {
 		return contexts
 			.filter((c) => c.name.toLowerCase().includes(arg))
@@ -107,5 +116,6 @@ export function suggest(
 	if (cmd && 'ns'.startsWith(cmd)) {
 		extra.push(...suggest('ns ', resources, contexts, namespaces).slice(0, 5));
 	}
+	if (cmd && PORT_FORWARD_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(portForwards);
 	return [...resourceSuggestions, ...extra];
 }

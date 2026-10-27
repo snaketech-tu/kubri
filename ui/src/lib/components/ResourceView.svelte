@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { canDelete, canEdit, canRestart, canScale } from '../actions';
+	import { canDelete, canEdit, canRestart, canScale, cordon } from '../actions';
 	import type { MetricsKind, ObjectRef, ResourceInfo, Row } from '../api';
 	import { age, cpu, memory } from '../format';
-	import { app, refOf } from '../state.svelte';
+	import { canPortForward, hasLogs, isNodes, isPods } from '../pods';
+	import { app, refOf, type Details, type DetailsTab } from '../state.svelte';
 	import { cellTone } from '../status';
 	import { filterRows, isAgeColumn, sortRows, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
@@ -139,10 +140,15 @@
 		}
 	}
 
-	function open(row: Row | undefined, tab: 'describe' | 'yaml' = 'describe', editing = false) {
-		if (!row) return;
+	function open(
+		row: Row | undefined,
+		tab: DetailsTab = 'describe',
+		extra: Partial<Pick<Details, 'editing' | 'previous' | 'mode'>> = {}
+	) {
+		if (!row) return false;
 		cursorKey = row.key;
-		app.showDetails(resource, target(row), tab, editing);
+		app.showDetails(resource, target(row), tab, extra);
+		return true;
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -201,7 +207,24 @@
 					return true;
 				case 'e':
 					if (!canEdit(resource)) return false;
-					open(current, 'yaml', true);
+					open(current, 'yaml', { editing: true });
+					return true;
+				case 'l':
+					return hasLogs(resource) && open(current, 'logs');
+				case 'p':
+					return isPods(resource) && open(current, 'logs', { previous: true });
+				case 'f':
+					if (!app.details) return false;
+					app.maximized = !app.maximized;
+					return true;
+				case 'F':
+					if (!canPortForward(resource) || !current) return false;
+					app.dialog = { kind: 'portforward', resource, target: target(current) };
+					return true;
+				case 'c':
+				case 'u':
+					if (!isNodes(resource) || !current) return false;
+					cordon(current.name, e.key === 'c');
 					return true;
 				case ' ':
 					if (current) {
@@ -213,14 +236,21 @@
 				case 'Delete':
 					return remove();
 				case 's':
+					if (isPods(resource)) return open(current, 'shell', { mode: 'shell' });
 					if (!canScale(resource) || !current) return false;
 					app.dialog = { kind: 'scale', resource, target: target(current) };
 					return true;
+				case 'a':
+					return isPods(resource) && open(current, 'shell', { mode: 'attach' });
 				case 'r':
+					if (isNodes(resource) && current) {
+						app.dialog = { kind: 'drain', resource, target: target(current) };
+						return true;
+					}
 					if (!canRestart(resource) || !current) return false;
 					app.dialog = { kind: 'restart', resource, target: target(current) };
 					return true;
-				case 'a':
+				case 'L':
 					if (!resource.verbs.includes('patch') || !current) return false;
 					app.dialog = { kind: 'labels', resource, target: target(current) };
 					return true;
@@ -240,7 +270,10 @@
 					app.namespace = '';
 					return true;
 				case 'Escape':
-					if (app.details) app.details = null;
+					if (app.details) {
+						app.details = null;
+						app.maximized = false;
+					}
 					else if (selection.size) selection.clear();
 					else if (filter) filter = '';
 					else return false;

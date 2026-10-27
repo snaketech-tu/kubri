@@ -4,22 +4,67 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use kubri_core::{
-    ClusterInfo, ContextList, DeleteOptions, EventInfo, Kubri, MetricsKind, ObjectRef, ResourceInfo,
-    ResourceRef, TableEvent, Usage,
+    ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, Kubri, LogEvent,
+    LogOptions, MetricsKind, ObjectRef, PortForwardInfo, PortForwardRequest, ResourceInfo, ResourceRef,
+    TableEvent, Terminal, TerminalInput, TerminalOptions, TerminalOutput, Usage,
 };
 use serde_json::Value;
 use tauri::State;
 use tauri::async_runtime::JoinHandle;
-use tauri::ipc::Channel;
+use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 use tracing_subscriber::EnvFilter;
 
-/// Running watches, so the UI can stop them when it navigates away.
+/// Running table watches and log streams, so the UI can stop them when it navigates away.
 #[derive(Default)]
-struct Watches {
+struct Streams {
     next_id: AtomicU32,
     tasks: Mutex<HashMap<u32, JoinHandle<()>>>,
+}
+
+impl Streams {
+    /// Forwards `events` to the UI until the stream ends, the UI goes away or [`unwatch`] is called.
+    fn spawn<T>(self: &Arc<Self>, events: impl Stream<Item = T> + Send + 'static, channel: Channel<T>) -> u32
+    where
+        T: IpcResponse + Send + 'static,
+    {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let registry = Arc::clone(self);
+        // Hold the lock while spawning so the task cannot remove itself before it is added.
+        let mut tasks = self.tasks.lock().unwrap();
+        let task = tauri::async_runtime::spawn(async move {
+            let mut events = std::pin::pin!(events);
+            while let Some(event) = events.next().await {
+                if channel.send(event).is_err() {
+                    break;
+                }
+            }
+            registry.tasks.lock().unwrap().remove(&id);
+        });
+        tasks.insert(id, task);
+        id
+    }
+}
+
+/// Open terminals: their input, and the task that sends their output to the UI.
+#[derive(Default)]
+struct Terminals {
+    next_id: AtomicU32,
+    sessions: Mutex<HashMap<u32, TerminalSession>>,
+}
+
+struct TerminalSession {
+    input: Arc<tokio::sync::Mutex<TerminalInput>>,
+    task: JoinHandle<()>,
+}
+
+impl Terminals {
+    fn input(&self, id: u32) -> CommandResult<Arc<tokio::sync::Mutex<TerminalInput>>> {
+        let sessions = self.sessions.lock().unwrap();
+        let session = sessions.get(&id).ok_or("the terminal is closed")?;
+        Ok(Arc::clone(&session.input))
+    }
 }
 
 type CommandResult<T> = Result<T, String>;
@@ -47,7 +92,7 @@ async fn resources(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<ResourceIn
 #[tauri::command]
 async fn watch_table(
     kubri: State<'_, Arc<Kubri>>,
-    watches: State<'_, Arc<Watches>>,
+    streams: State<'_, Arc<Streams>>,
     resource: ResourceRef,
     namespace: Option<String>,
     on_event: Channel<TableEvent>,
@@ -56,26 +101,138 @@ async fn watch_table(
         .watch_table(&resource, namespace.as_deref())
         .await
         .map_err(|e| e.to_string())?;
-    let id = watches.next_id.fetch_add(1, Ordering::Relaxed);
-    let registry = Arc::clone(&watches);
+    Ok(streams.spawn(events, on_event))
+}
+
+#[tauri::command]
+async fn logs(
+    kubri: State<'_, Arc<Kubri>>,
+    streams: State<'_, Arc<Streams>>,
+    target: ObjectRef,
+    options: Option<LogOptions>,
+    on_event: Channel<LogEvent>,
+) -> CommandResult<u32> {
+    let events = kubri
+        .logs(&target, options.unwrap_or_default())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(streams.spawn(events, on_event))
+}
+
+/// Stops a table watch or log stream.
+#[tauri::command]
+fn unwatch(streams: State<'_, Arc<Streams>>, id: u32) {
+    if let Some(task) = streams.tasks.lock().unwrap().remove(&id) {
+        task.abort();
+    }
+}
+
+/// Opens a terminal. The channel receives `{"type":"ready"}`, then output as raw bytes,
+/// then `{"type":"exit"}`.
+#[tauri::command]
+async fn terminal_open(
+    kubri: State<'_, Arc<Kubri>>,
+    terminals: State<'_, Arc<Terminals>>,
+    target: ObjectRef,
+    options: Option<TerminalOptions>,
+    on_event: Channel<InvokeResponseBody>,
+) -> CommandResult<u32> {
+    let Terminal {
+        container,
+        input,
+        mut output,
+    } = kubri
+        .open_terminal(&target, options.unwrap_or_default())
+        .await
+        .map_err(|e| e.to_string())?;
+    let id = terminals.next_id.fetch_add(1, Ordering::Relaxed);
+    let registry = Arc::clone(&terminals);
+    let mut sessions = terminals.sessions.lock().unwrap();
     let task = tauri::async_runtime::spawn(async move {
-        let mut events = std::pin::pin!(events);
-        while let Some(event) = events.next().await {
-            if on_event.send(event).is_err() {
+        let ready = serde_json::json!({ "type": "ready", "container": container });
+        let _ = on_event.send(InvokeResponseBody::Json(ready.to_string()));
+        while let Some(out) = output.next().await {
+            let body = match out {
+                TerminalOutput::Data { data } => InvokeResponseBody::Raw(data),
+                exit @ TerminalOutput::Exit { .. } => {
+                    InvokeResponseBody::Json(serde_json::to_string(&exit).unwrap_or_default())
+                }
+            };
+            if on_event.send(body).is_err() {
                 break;
             }
         }
-        registry.tasks.lock().unwrap().remove(&id);
+        registry.sessions.lock().unwrap().remove(&id);
     });
-    watches.tasks.lock().unwrap().insert(id, task);
+    sessions.insert(
+        id,
+        TerminalSession {
+            input: Arc::new(tokio::sync::Mutex::new(input)),
+            task,
+        },
+    );
     Ok(id)
 }
 
 #[tauri::command]
-fn unwatch(watches: State<'_, Arc<Watches>>, id: u32) {
-    if let Some(task) = watches.tasks.lock().unwrap().remove(&id) {
-        task.abort();
+async fn terminal_write(terminals: State<'_, Arc<Terminals>>, id: u32, data: String) -> CommandResult<()> {
+    let input = terminals.input(id)?;
+    let mut input = input.lock().await;
+    input.write(data.as_bytes()).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn terminal_resize(
+    terminals: State<'_, Arc<Terminals>>,
+    id: u32,
+    cols: u16,
+    rows: u16,
+) -> CommandResult<()> {
+    let input = terminals.input(id)?;
+    input.lock().await.resize(cols, rows);
+    Ok(())
+}
+
+#[tauri::command]
+fn terminal_close(terminals: State<'_, Arc<Terminals>>, id: u32) {
+    if let Some(session) = terminals.sessions.lock().unwrap().remove(&id) {
+        session.task.abort();
     }
+}
+
+#[tauri::command]
+fn port_forwards(kubri: State<'_, Arc<Kubri>>) -> Vec<PortForwardInfo> {
+    kubri.port_forwards()
+}
+
+#[tauri::command]
+async fn start_port_forward(
+    kubri: State<'_, Arc<Kubri>>,
+    request: PortForwardRequest,
+) -> CommandResult<PortForwardInfo> {
+    kubri.start_port_forward(request).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn stop_port_forward(kubri: State<'_, Arc<Kubri>>, id: u32) -> CommandResult<()> {
+    kubri.stop_port_forward(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn cordon(kubri: State<'_, Arc<Kubri>>, name: String, cordoned: bool) -> CommandResult<()> {
+    kubri.cordon(&name, cordoned).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn drain(
+    kubri: State<'_, Arc<Kubri>>,
+    name: String,
+    options: Option<DrainOptions>,
+) -> CommandResult<DrainReport> {
+    kubri
+        .drain(&name, options.unwrap_or_default())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -153,14 +310,25 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(Arc::new(Kubri::load()))
-        .manage(Arc::new(Watches::default()))
+        .manage(Arc::new(Streams::default()))
+        .manage(Arc::new(Terminals::default()))
         .invoke_handler(tauri::generate_handler![
             contexts,
             reload_contexts,
             switch_context,
             resources,
             watch_table,
+            logs,
             unwatch,
+            terminal_open,
+            terminal_write,
+            terminal_resize,
+            terminal_close,
+            port_forwards,
+            start_port_forward,
+            stop_port_forward,
+            cordon,
+            drain,
             get_object,
             replace_object,
             patch_object,

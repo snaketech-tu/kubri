@@ -44,6 +44,9 @@
 			case 'namespace':
 				app.namespace = action.name;
 				break;
+			case 'portforwards':
+				app.showPortForwards();
+				break;
 			case 'help':
 				app.helpOpen = true;
 				break;
