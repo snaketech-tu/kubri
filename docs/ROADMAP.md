@@ -18,11 +18,11 @@ Kubri aims for feature parity with k9s. The work is split into four steps that b
 - Actions: delete, scale, restart, labels and annotations.
 - CPU and memory metrics from metrics-server.
 
-## 3. Pod and node tools
+## 3. Pod and node tools ✅
 
-- Live log streaming with filtering, multiple containers, previous logs.
+- Live log streaming for pods, workloads and services, with filtering, multiple containers, previous logs.
 - Shell into containers (xterm.js), attach.
-- Port forwarding.
+- Port forwarding to pods, workloads and services, with a list of running forwards.
 - Node cordon, uncordon and drain.
 
 ## 4. Advanced features and release
