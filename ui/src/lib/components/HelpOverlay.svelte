@@ -11,6 +11,7 @@
 				['g / G', 'First / last row'],
 				['/', 'Filter (-l key=value for labels)'],
 				['0', 'All namespaces'],
+				[':pf', 'Port-forwards'],
 				['w', 'Wide columns'],
 				['Shift+N / Shift+A', 'Sort by name / age'],
 				['Esc', 'Close, clear selection or filter']
@@ -21,7 +22,10 @@
 			[
 				['Enter  or  d', 'Describe'],
 				['y', 'YAML'],
-				['e', 'Edit YAML (Ctrl+S saves)']
+				['e', 'Edit YAML (Ctrl+S saves)'],
+				['l', 'Logs of a pod, workload or service'],
+				['p', 'Logs of the previous container'],
+				['f', 'Maximize or restore the panel']
 			]
 		],
 		[
@@ -32,8 +36,24 @@
 				['Ctrl+D  or  Delete', 'Delete'],
 				['s', 'Scale'],
 				['r', 'Rollout restart'],
-				['a', 'Labels and annotations'],
+				['Shift+L', 'Labels and annotations'],
 				['?', 'This help']
+			]
+		],
+		[
+			'Pods',
+			[
+				['s', 'Shell'],
+				['a', 'Attach'],
+				['Shift+F', 'Port-forward (also deployments, services)']
+			]
+		],
+		[
+			'Nodes',
+			[
+				['c', 'Cordon'],
+				['u', 'Uncordon'],
+				['r', 'Drain']
 			]
 		]
 	];

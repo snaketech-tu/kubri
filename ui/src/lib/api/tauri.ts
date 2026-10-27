@@ -1,5 +1,6 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
-import type { Backend, TableEvent } from './types';
+import { writeQueue } from './queue';
+import type { Backend, LogEvent, TableEvent, TerminalEvent } from './types';
 
 /** Talks to the Rust side of the desktop app through Tauri commands. */
 export const tauriBackend: Backend = {
@@ -27,5 +28,56 @@ export const tauriBackend: Backend = {
 	scale: (target, replicas) => invoke('scale', { target, replicas }),
 	restart: (target) => invoke('restart', { target }),
 	events: (namespace, uid) => invoke('events', { namespace, uid }),
-	metrics: (kind, namespace) => invoke('metrics', { kind, namespace })
+	metrics: (kind, namespace) => invoke('metrics', { kind, namespace }),
+
+	streamLogs(target, options, onEvent) {
+		const channel = new Channel<LogEvent>();
+		channel.onmessage = onEvent;
+		const id = invoke<number>('logs', { target, options, onEvent: channel }).catch((err) => {
+			onEvent({ type: 'error', source: null, message: String(err) });
+			onEvent({ type: 'end' });
+			return null;
+		});
+		return () => {
+			id.then((id) => id !== null && invoke('unwatch', { id }));
+		};
+	},
+
+	openTerminal(target, options, onEvent) {
+		// Output arrives as raw bytes, control messages as JSON.
+		const channel = new Channel<ArrayBuffer | Exclude<TerminalEvent, { type: 'data' }>>();
+		channel.onmessage = (msg) => {
+			onEvent(msg instanceof ArrayBuffer ? { type: 'data', data: new Uint8Array(msg) } : msg);
+		};
+		let id: number | null = null;
+		let closed = false;
+		const input = writeQueue(
+			(data) => invoke('terminal_write', { id, data }),
+			() => {}
+		);
+		invoke<number>('terminal_open', { target, options, onEvent: channel }).then(
+			(opened) => {
+				id = opened;
+				if (closed) invoke('terminal_close', { id });
+				else input.start();
+			},
+			(err) => onEvent({ type: 'exit', message: String(err) })
+		);
+		return {
+			write: (data) => input.write(data),
+			resize(cols, rows) {
+				if (id !== null && !closed) invoke('terminal_resize', { id, cols, rows }).catch(() => {});
+			},
+			close() {
+				closed = true;
+				if (id !== null) invoke('terminal_close', { id });
+			}
+		};
+	},
+
+	portForwards: () => invoke('port_forwards'),
+	startPortForward: (request) => invoke('start_port_forward', { request }),
+	stopPortForward: (id) => invoke('stop_port_forward', { id }),
+	cordon: (name, cordoned) => invoke('cordon', { name, cordoned }),
+	drain: (name, options) => invoke('drain', { name, options })
 };

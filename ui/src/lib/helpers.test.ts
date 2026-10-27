@@ -33,6 +33,11 @@ const contexts: ContextInfo[] = [
 ];
 
 describe('command palette', () => {
+	it('opens the port-forward list', () => {
+		expect(suggest('pf', resources, contexts, [])[0].action).toEqual({ type: 'portforwards' });
+		expect(suggest(':portforwards', resources, contexts, [])).toHaveLength(1);
+	});
+
 	it('resolves short names exactly', () => {
 		expect(matchResources('po', resources)[0].plural).toBe('pods');
 		expect(matchResources('deploy', resources)[0].kind).toBe('Deployment');

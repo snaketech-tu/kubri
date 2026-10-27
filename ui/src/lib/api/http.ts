@@ -1,4 +1,4 @@
-import type { Backend, ObjectRef } from './types';
+import type { Backend, ObjectRef, TerminalEvent } from './types';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
 	const response = await fetch(`/api${path}`, {
@@ -21,6 +21,20 @@ function objectQuery(target: ObjectRef) {
 	});
 }
 
+function socketUrl(path: string) {
+	const url = new URL(`/api${path}`, location.href);
+	url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+	return url;
+}
+
+/** Opens a socket that starts with a JSON request, like the logs and terminal endpoints. */
+function requestSocket(path: string, request: unknown) {
+	const socket = new WebSocket(socketUrl(path));
+	socket.binaryType = 'arraybuffer';
+	socket.onopen = () => socket.send(JSON.stringify(request));
+	return socket;
+}
+
 /** Talks to kubri-server over HTTP and WebSockets. */
 export const httpBackend: Backend = {
 	contexts: () => request('GET', '/contexts'),
@@ -30,11 +44,8 @@ export const httpBackend: Backend = {
 
 	watchTable(resource, namespace, onEvent) {
 		const params = new URLSearchParams({ ...resource, namespace: namespace ?? '' });
-		const url = new URL(`/api/table?${params}`, location.href);
-		url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-
 		let stopped = false;
-		const socket = new WebSocket(url);
+		const socket = new WebSocket(socketUrl(`/table?${params}`));
 		socket.onmessage = (msg) => onEvent(JSON.parse(msg.data));
 		socket.onclose = (e) => {
 			if (!stopped && e.code !== 1000) {
@@ -56,5 +67,68 @@ export const httpBackend: Backend = {
 	events: (namespace, uid) =>
 		request('GET', `/events?${new URLSearchParams({ namespace: namespace ?? '', uid })}`),
 	metrics: (kind, namespace) =>
-		request('GET', `/metrics?${new URLSearchParams({ kind, namespace: namespace ?? '' })}`)
+		request('GET', `/metrics?${new URLSearchParams({ kind, namespace: namespace ?? '' })}`),
+
+	streamLogs(target, options, onEvent) {
+		let stopped = false;
+		let ended = false;
+		const socket = requestSocket('/logs', { target, options });
+		socket.onmessage = (msg) => {
+			const event = JSON.parse(msg.data);
+			if (event.type === 'end') ended = true;
+			onEvent(event);
+		};
+		socket.onclose = () => {
+			if (stopped || ended) return;
+			onEvent({ type: 'error', source: null, message: 'Lost connection to kubri-server' });
+			onEvent({ type: 'end' });
+		};
+		return () => {
+			stopped = true;
+			socket.close();
+		};
+	},
+
+	openTerminal(target, options, onEvent) {
+		const encoder = new TextEncoder();
+		let exited = false;
+		let closed = false;
+		const pending: string[] = [];
+		const socket = requestSocket('/terminal', { target, options });
+		socket.onmessage = (msg) => {
+			if (msg.data instanceof ArrayBuffer) {
+				onEvent({ type: 'data', data: new Uint8Array(msg.data) });
+				return;
+			}
+			const event = JSON.parse(msg.data) as TerminalEvent;
+			if (event.type === 'ready') {
+				for (const data of pending.splice(0)) socket.send(encoder.encode(data));
+			}
+			if (event.type === 'exit') exited = true;
+			onEvent(event);
+		};
+		socket.onclose = () => {
+			if (!exited && !closed) onEvent({ type: 'exit', message: 'Lost connection to kubri-server' });
+		};
+		const open = () => socket.readyState === WebSocket.OPEN;
+		return {
+			write(data) {
+				if (open() && pending.length === 0) socket.send(encoder.encode(data));
+				else pending.push(data);
+			},
+			resize(cols, rows) {
+				if (open()) socket.send(JSON.stringify({ type: 'resize', cols, rows }));
+			},
+			close() {
+				closed = true;
+				socket.close();
+			}
+		};
+	},
+
+	portForwards: () => request('GET', '/portforwards'),
+	startPortForward: (req) => request('POST', '/portforwards', req),
+	stopPortForward: (id) => request('DELETE', `/portforwards/${id}`),
+	cordon: (name, cordoned) => request('POST', '/node/cordon', { name, cordoned }),
+	drain: (name, options) => request('POST', '/node/drain', { name, options })
 };

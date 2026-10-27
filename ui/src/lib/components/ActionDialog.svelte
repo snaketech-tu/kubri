@@ -1,7 +1,9 @@
 <script lang="ts">
-	import { deleteObjects, patchMetadata, restart, scale } from '../actions';
-	import { backend, type DeleteOptions } from '../api';
+	import { tick } from 'svelte';
+	import { deleteObjects, patchMetadata, restart, scale, startPortForward } from '../actions';
+	import { backend, type DeleteOptions, type DrainReport } from '../api';
 	import { errorMessage } from '../format';
+	import { forwardablePorts, suggestedLocalPort, type ForwardablePort } from '../pods';
 	import { app, type Dialog } from '../state.svelte';
 
 	let { dialog }: { dialog: Dialog } = $props();
@@ -23,13 +25,34 @@
 	let annotationsText = $state('');
 	let original = { labels: {} as Record<string, string>, annotations: {} as Record<string, string> };
 
+	// Port-forward
+	let ports = $state<ForwardablePort[] | null>(null);
+	let remotePort = $state<number | null>(null);
+	let localPort = $state<number | null>(null);
+	let address = $state('127.0.0.1');
+
+	// Drain
+	let ignoreDaemonsets = $state(true);
+	let deleteEmptydirData = $state(false);
+	let forceDrain = $state(false);
+	let gracePeriod = $state<number | null>(null);
+	let report = $state<DrainReport | null>(null);
+
+	function pickPort(port: number) {
+		remotePort = port;
+		localPort = suggestedLocalPort(port);
+	}
+
 	$effect(() => {
-		if (dialog.kind === 'scale' || dialog.kind === 'labels') {
+		if (dialog.kind === 'scale' || dialog.kind === 'labels' || dialog.kind === 'portforward') {
 			backend
 				.getObject(dialog.target)
 				.then((obj) => {
 					if (dialog.kind === 'scale') {
 						replicas = typeof obj.spec?.replicas === 'number' ? obj.spec.replicas : 1;
+					} else if (dialog.kind === 'portforward') {
+						ports = forwardablePorts(obj);
+						if (ports.length) pickPort(ports[0].port);
 					} else {
 						original = { labels: obj.metadata.labels ?? {}, annotations: obj.metadata.annotations ?? {} };
 						labelsText = toLines(original.labels);
@@ -107,12 +130,37 @@
 						diff(original.annotations, fromLines(annotationsText))
 					);
 					break;
+				case 'portforward':
+					if (!remotePort || remotePort < 1 || remotePort > 65535) throw new Error('Pick a port between 1 and 65535');
+					if (localPort !== null && (localPort < 0 || localPort > 65535)) throw new Error('Invalid local port');
+					ok = await startPortForward({
+						target: dialog.target,
+						remotePort,
+						localPort: localPort || null,
+						address: address.trim() || null
+					});
+					break;
+				case 'drain':
+					if (report) {
+						ok = true;
+						break;
+					}
+					report = await backend.drain(dialog.target.name, {
+						ignoreDaemonsets,
+						deleteEmptydirData,
+						force: forceDrain,
+						gracePeriodSeconds: gracePeriod
+					});
+					if (report.failed.length === 0) app.toast(`Drained ${dialog.target.name}: ${pods(report.evicted.length)} evicted`);
+					break;
 			}
 		} catch (err) {
 			error = errorMessage(err);
 		}
 		busy = false;
 		if (ok) close();
+		// The button was disabled while working, which moved focus out of the dialog.
+		else tick().then(() => confirmButton?.focus());
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -123,7 +171,15 @@
 			if (e.target instanceof HTMLButtonElement && e.target !== confirmButton) return;
 			e.preventDefault();
 			confirm();
+		} else {
+			return;
 		}
+		// Once the dialog is closed, the list must not handle the same key too.
+		e.stopPropagation();
+	}
+
+	function pods(n: number) {
+		return `${n} ${n === 1 ? 'pod' : 'pods'}`;
 	}
 
 	function name(t: { namespace: string | null; name: string }) {
@@ -135,7 +191,9 @@
 			delete: `Delete ${dialog.resource.kind}`,
 			scale: `Scale ${dialog.resource.kind}`,
 			restart: `Restart ${dialog.resource.kind}`,
-			labels: 'Labels and annotations'
+			labels: 'Labels and annotations',
+			portforward: 'Port-forward',
+			drain: 'Drain node'
 		}[dialog.kind]
 	);
 </script>
@@ -185,14 +243,105 @@
 			Annotations
 			<textarea rows="5" bind:value={annotationsText} spellcheck="false"></textarea>
 		</label>
+	{:else if dialog.kind === 'portforward'}
+		<p>Forward a local port to <strong>{name(dialog.target)}</strong>.</p>
+		{#if ports === null}
+			<p class="muted">Loading ports…</p>
+		{:else if ports.length}
+			<div class="ports">
+				{#each ports as p (p.port + p.detail)}
+					<button class="port" class:active={remotePort === p.port} onclick={() => pickPort(p.port)}>
+						<strong>{p.port}</strong>
+						{#if p.name}<span>{p.name}</span>{/if}
+						<span class="muted">{p.detail}</span>
+					</button>
+				{/each}
+			</div>
+		{:else}
+			<p class="muted">No ports are declared; enter one.</p>
+		{/if}
+		<div class="grid">
+			<label class="field">
+				{dialog.resource.kind === 'Service' ? 'Service port' : 'Container port'}
+				<input type="number" min="1" max="65535" bind:value={remotePort} bind:this={firstField} />
+			</label>
+			<label class="field">
+				Local port
+				<input type="number" min="0" max="65535" bind:value={localPort} placeholder="any free port" />
+			</label>
+			<label class="field">
+				Address
+				<input bind:value={address} placeholder="127.0.0.1" />
+			</label>
+		</div>
+		{#if address.trim() && !['127.0.0.1', 'localhost', '::1'].includes(address.trim())}
+			<p class="warn">Other machines on your network will be able to reach this port.</p>
+		{/if}
+	{:else if dialog.kind === 'drain'}
+		{#if report}
+			{#if report.failed.length && !report.evicted.length}
+				<p>
+					<strong>{dialog.target.name}</strong> is cordoned, but no pods were evicted because
+					{report.failed.length === 1 ? 'this pod blocks' : 'these pods block'} the drain:
+				</p>
+			{:else}
+				<p>
+					Evicted {pods(report.evicted.length)} from <strong>{dialog.target.name}</strong>.
+					{report.failed.length ? 'These could not be evicted:' : ''}
+				</p>
+			{/if}
+			{#if report.failed.length}
+				<ul class="issues bad">
+					{#each report.failed as issue (issue.pod)}<li><code>{issue.pod}</code> {issue.reason}</li>{/each}
+				</ul>
+			{/if}
+			{#if report.skipped.length}
+				<details>
+					<summary class="muted">{pods(report.skipped.length)} left running</summary>
+					<ul class="issues">
+						{#each report.skipped as issue (issue.pod)}<li><code>{issue.pod}</code> {issue.reason}</li>{/each}
+					</ul>
+				</details>
+			{/if}
+		{:else}
+			<p>
+				Cordon <strong>{dialog.target.name}</strong> and evict its pods. PodDisruptionBudgets are respected.
+			</p>
+			<label class="row"><input type="checkbox" bind:checked={ignoreDaemonsets} /> Ignore DaemonSet pods</label>
+			<label class="row"><input type="checkbox" bind:checked={deleteEmptydirData} /> Delete emptyDir data</label>
+			<label class="row">
+				<input type="checkbox" bind:checked={forceDrain} /> Force: also evict pods no controller will recreate
+			</label>
+			<label class="row">
+				Grace period
+				<input class="grace" type="number" min="0" bind:value={gracePeriod} placeholder="pod default" /> seconds
+			</label>
+		{/if}
 	{/if}
 
 	{#if error}<p class="error">{error}</p>{/if}
 
 	<div class="buttons">
-		<button class="secondary" onclick={close}>Cancel</button>
-		<button class="primary" class:danger={dialog.kind === 'delete'} bind:this={confirmButton} disabled={busy} onclick={confirm}>
-			{busy ? 'Working…' : { delete: 'Delete', scale: 'Scale', restart: 'Restart', labels: 'Save' }[dialog.kind]}
+		{#if !report}<button class="secondary" onclick={close}>Cancel</button>{/if}
+		<button
+			class="primary"
+			class:danger={dialog.kind === 'delete' || (dialog.kind === 'drain' && !report)}
+			bind:this={confirmButton}
+			disabled={busy}
+			onclick={confirm}
+		>
+			{busy
+				? 'Working…'
+				: report
+					? 'Close'
+					: {
+							delete: 'Delete',
+							scale: 'Scale',
+							restart: 'Restart',
+							labels: 'Save',
+							portforward: 'Start',
+							drain: 'Drain'
+						}[dialog.kind]}
 		</button>
 	</div>
 </div>
@@ -260,6 +409,54 @@
 	.replicas {
 		width: 120px;
 		font-size: 18px;
+	}
+	.ports {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-bottom: 6px;
+	}
+	.port {
+		display: flex;
+		gap: 6px;
+		align-items: baseline;
+		padding: 4px 10px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface-1);
+		font-size: 12.5px;
+	}
+	.port.active {
+		border-color: var(--accent);
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr 1.3fr;
+		gap: 10px;
+	}
+	.grid input {
+		width: 100%;
+	}
+	.grace {
+		width: 110px;
+	}
+	.warn {
+		color: var(--warn);
+		font-size: 13px;
+	}
+	.issues {
+		margin: 6px 0 10px;
+		padding-left: 18px;
+		font-size: 13px;
+	}
+	.issues.bad {
+		color: var(--bad);
+	}
+	.issues code {
+		font-family: var(--mono);
+		font-size: 12px;
+		color: var(--text);
 	}
 	.error {
 		color: var(--bad);

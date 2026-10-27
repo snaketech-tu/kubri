@@ -1,4 +1,11 @@
-import { backend, type DeleteOptions, type KubeObject, type ObjectRef, type ResourceInfo } from './api';
+import {
+	backend,
+	type DeleteOptions,
+	type KubeObject,
+	type ObjectRef,
+	type PortForwardRequest,
+	type ResourceInfo
+} from './api';
 import { errorMessage } from './format';
 import { app } from './state.svelte';
 
@@ -67,4 +74,26 @@ export function patchMetadata(
 	return run(`Updated ${label(target)}`, () =>
 		backend.patchObject(target, { metadata: { labels, annotations } })
 	);
+}
+
+export function cordon(node: string, cordoned: boolean) {
+	return run(cordoned ? `Cordoned ${node}` : `Uncordoned ${node}`, () => backend.cordon(node, cordoned));
+}
+
+export async function startPortForward(request: PortForwardRequest) {
+	try {
+		const f = await backend.startPortForward(request);
+		app.toast(`Forwarding ${f.address}:${f.localPort} to ${f.pod}:${f.podPort}`);
+		app.refreshForwards();
+		return true;
+	} catch (err) {
+		app.toast(errorMessage(err), 'bad');
+		return false;
+	}
+}
+
+export async function stopPortForward(id: number) {
+	const ok = await run('Stopped the port-forward', () => backend.stopPortForward(id));
+	app.refreshForwards();
+	return ok;
 }

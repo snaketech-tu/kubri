@@ -7,9 +7,11 @@
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
+	import PortForwardsView from '#lib/components/PortForwardsView.svelte';
 	import ResourceView from '#lib/components/ResourceView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
+	import { canPortForward, hasLogs, isNodes, isPods } from '#lib/pods.js';
 	import { app } from '#lib/state.svelte.js';
 	import { LiveTable } from '#lib/watch.svelte.js';
 
@@ -26,6 +28,13 @@
 
 	$effect(() => {
 		app.namespaces = namespaces.rows.map((r) => r.name).sort();
+	});
+
+	// Port-forwards outlive context switches; keep the sidebar count current.
+	$effect(() => {
+		app.refreshForwards();
+		const timer = setInterval(() => app.refreshForwards(), 5000);
+		return () => clearInterval(timer);
 	});
 
 	function onkeydown(e: KeyboardEvent) {
@@ -45,6 +54,14 @@
 	}
 
 	const hints = $derived.by(() => {
+		if (app.page === 'portforwards') {
+			return [
+				[':', 'command'],
+				['c', 'copy url'],
+				['^d', 'stop'],
+				['?', 'help']
+			] as [string, string][];
+		}
 		const r = app.selected;
 		const h: [string, string][] = [
 			[':', 'command'],
@@ -53,11 +70,16 @@
 			['y', 'yaml']
 		];
 		if (!r) return h;
+		if (hasLogs(r)) h.push(['l', 'logs']);
+		if (isPods(r)) h.push(['s', 'shell'], ['a', 'attach']);
+		if (canPortForward(r)) h.push(['⇧f', 'port-forward']);
+		if (isNodes(r)) h.push(['c', 'cordon'], ['u', 'uncordon'], ['r', 'drain']);
 		if (canEdit(r)) h.push(['e', 'edit']);
 		if (canDelete(r)) h.push(['^d', 'delete']);
-		if (canScale(r)) h.push(['s', 'scale']);
+		if (canScale(r) && !isPods(r)) h.push(['s', 'scale']);
 		if (canRestart(r)) h.push(['r', 'restart']);
-		h.push(['space', 'select'], ['?', 'help']);
+		if (app.details) h.push(['f', app.maximized ? 'restore' : 'maximize']);
+		h.push(['?', 'help']);
 		return h;
 	});
 </script>
@@ -85,9 +107,11 @@
 		</div>
 	{/if}
 
-	<main class:with-details={app.details}>
+	<main class:with-details={app.details} class:maximized={app.details && app.maximized}>
 		<Sidebar />
-		{#if app.selected}
+		{#if app.page === 'portforwards'}
+			<PortForwardsView />
+		{:else if app.selected}
 			{#key `${app.cluster?.context}/${app.selected.group}/${app.selected.version}/${app.selected.plural}`}
 				<ResourceView resource={app.selected} namespace={app.namespace} />
 			{/key}
@@ -181,6 +205,13 @@
 	}
 	main.with-details {
 		grid-template-columns: 240px minmax(0, 1fr) minmax(380px, 44%);
+	}
+	/* The list stays mounted so its shortcuts keep working. */
+	main.maximized {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	main.maximized > :global(:not(aside)) {
+		display: none;
 	}
 	.placeholder {
 		display: grid;

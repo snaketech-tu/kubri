@@ -116,6 +116,96 @@ export interface Usage {
 	memory: number;
 }
 
+export interface LogOptions {
+	/** Only this container; all containers when unset. */
+	container?: string | null;
+	follow?: boolean;
+	previous?: boolean;
+	timestamps?: boolean;
+	tailLines?: number | null;
+	sinceSeconds?: number | null;
+}
+
+export interface LogSource {
+	pod: string;
+	container: string;
+}
+
+export interface LogLine {
+	/** Index into the sources of the stream. */
+	source: number;
+	text: string;
+}
+
+export type LogEvent =
+	| { type: 'sources'; sources: LogSource[] }
+	| { type: 'lines'; lines: LogLine[] }
+	| { type: 'error'; source: number | null; message: string }
+	| { type: 'end' };
+
+export type TerminalMode = 'shell' | 'attach';
+
+export interface TerminalOptions {
+	container?: string | null;
+	mode?: TerminalMode;
+	command?: string[] | null;
+	cols: number;
+	rows: number;
+}
+
+export type TerminalEvent =
+	| { type: 'ready'; container: string }
+	| { type: 'data'; data: Uint8Array }
+	| { type: 'exit'; message: string | null };
+
+export interface TerminalSession {
+	write(data: string): void;
+	resize(cols: number, rows: number): void;
+	close(): void;
+}
+
+export interface PortForwardRequest {
+	target: ObjectRef;
+	/** The container port, or the Service port for Services. */
+	remotePort: number;
+	/** Empty picks a free port. */
+	localPort?: number | null;
+	address?: string | null;
+}
+
+export interface PortForwardInfo {
+	id: number;
+	context: string;
+	target: ObjectRef;
+	namespace: string;
+	pod: string;
+	remotePort: number;
+	podPort: number;
+	address: string;
+	localPort: number;
+	started: string;
+	connections: number;
+	error: string | null;
+}
+
+export interface DrainOptions {
+	ignoreDaemonsets?: boolean;
+	deleteEmptydirData?: boolean;
+	force?: boolean;
+	gracePeriodSeconds?: number | null;
+}
+
+export interface PodIssue {
+	pod: string;
+	reason: string;
+}
+
+export interface DrainReport {
+	evicted: string[];
+	skipped: PodIssue[];
+	failed: PodIssue[];
+}
+
 /** The operations both the desktop app and kubri-server offer to the UI. */
 export interface Backend {
 	contexts(): Promise<ContextList>;
@@ -133,4 +223,13 @@ export interface Backend {
 	restart(target: ObjectRef): Promise<void>;
 	events(namespace: string | null, uid: string): Promise<EventInfo[]>;
 	metrics(kind: MetricsKind, namespace: string | null): Promise<Usage[]>;
+	/** Streams logs of a pod, workload or Service and returns a function that stops it. */
+	streamLogs(target: ObjectRef, options: LogOptions, onEvent: (event: LogEvent) => void): () => void;
+	/** Opens a shell or attaches to a container. */
+	openTerminal(target: ObjectRef, options: TerminalOptions, onEvent: (event: TerminalEvent) => void): TerminalSession;
+	portForwards(): Promise<PortForwardInfo[]>;
+	startPortForward(request: PortForwardRequest): Promise<PortForwardInfo>;
+	stopPortForward(id: number): Promise<void>;
+	cordon(node: string, cordoned: boolean): Promise<void>;
+	drain(node: string, options: DrainOptions): Promise<DrainReport>;
 }

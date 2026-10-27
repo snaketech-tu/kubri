@@ -32,6 +32,11 @@
 <nav>
 	<input class="filter" bind:value={filter} placeholder="Filter resources…" />
 	<div class="scroll">
+		<h3>Tools</h3>
+		<button class:active={app.page === 'portforwards'} onclick={() => app.showPortForwards()} title=":pf">
+			<span>Port-forwards</span>
+			{#if app.forwards.length}<span class="badge">{app.forwards.length}</span>{/if}
+		</button>
 		{#if pinned.length}
 			<h3>Workloads & config</h3>
 			{#each pinned as r (r.group + r.plural)}
@@ -49,7 +54,7 @@
 
 {#snippet item(r: ResourceInfo)}
 	<button
-		class:active={app.selected && sameResource(r, app.selected)}
+		class:active={app.page === 'resources' && app.selected && sameResource(r, app.selected)}
 		onclick={() => app.open(r)}
 		title={r.shortNames.length ? `:${r.shortNames[0]}` : `:${r.plural}`}
 	>
@@ -98,6 +103,15 @@
 	button.active {
 		background: color-mix(in srgb, var(--accent) 18%, transparent);
 		color: var(--accent-strong);
+		font-weight: 600;
+	}
+	.badge {
+		margin-left: auto;
+		padding: 0 7px;
+		border-radius: 999px;
+		background: var(--accent);
+		color: white;
+		font-size: 11px;
 		font-weight: 600;
 	}
 	.group {

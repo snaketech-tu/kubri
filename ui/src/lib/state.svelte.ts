@@ -3,27 +3,37 @@ import {
 	type ClusterInfo,
 	type ContextInfo,
 	type ObjectRef,
+	type PortForwardInfo,
 	type ResourceInfo,
-	type ResourceRef
+	type ResourceRef,
+	type TerminalMode
 } from './api';
 import { errorMessage } from './format';
 
 export const ALL_NAMESPACES = '';
 
-export type DetailsTab = 'describe' | 'yaml';
+export type DetailsTab = 'describe' | 'yaml' | 'logs' | 'shell';
 
 export interface Details {
 	target: ObjectRef;
 	resource: ResourceInfo;
 	tab: DetailsTab;
 	editing: boolean;
+	/** Start the logs with the previous container instance. */
+	previous?: boolean;
+	/** How the shell tab connects. */
+	mode?: TerminalMode;
 }
+
+export type Page = 'resources' | 'portforwards';
 
 export type Dialog =
 	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[] }
 	| { kind: 'scale'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'restart'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'labels'; resource: ResourceInfo; target: ObjectRef };
+	| { kind: 'labels'; resource: ResourceInfo; target: ObjectRef }
+	| { kind: 'portforward'; resource: ResourceInfo; target: ObjectRef }
+	| { kind: 'drain'; resource: ResourceInfo; target: ObjectRef };
 
 export interface Toast {
 	id: number;
@@ -42,8 +52,12 @@ class AppState {
 	connecting = $state<string | null>(null);
 	error = $state<string | null>(null);
 
+	page = $state<Page>('resources');
 	details = $state<Details | null>(null);
+	/** The details panel fills the window, for logs and shells. */
+	maximized = $state(false);
 	dialog = $state<Dialog | null>(null);
+	forwards = $state<PortForwardInfo[]>([]);
 	paletteOpen = $state(false);
 	helpOpen = $state(false);
 	contextMenuOpen = $state(false);
@@ -90,13 +104,33 @@ class AppState {
 
 	/** Shows a resource list, optionally switching namespace, like k9s `:pods kube-system`. */
 	open(resource: ResourceInfo, namespace?: string) {
+		this.page = 'resources';
 		this.selected = resource;
 		if (namespace !== undefined) this.namespace = namespace === 'all' ? ALL_NAMESPACES : namespace;
 		this.details = null;
 	}
 
-	showDetails(resource: ResourceInfo, target: ObjectRef, tab: DetailsTab = 'describe', editing = false) {
-		this.details = { resource, target, tab, editing };
+	showDetails(
+		resource: ResourceInfo,
+		target: ObjectRef,
+		tab: DetailsTab = 'describe',
+		extra: Partial<Pick<Details, 'editing' | 'previous' | 'mode'>> = {}
+	) {
+		this.details = { resource, target, tab, editing: false, ...extra };
+	}
+
+	showPortForwards() {
+		this.page = 'portforwards';
+		this.details = null;
+		this.refreshForwards();
+	}
+
+	async refreshForwards() {
+		try {
+			this.forwards = await backend.portForwards();
+		} catch {
+			// Keep the last list; the next refresh tries again.
+		}
 	}
 
 	toast(text: string, tone: Toast['tone'] = 'ok') {
