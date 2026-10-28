@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
-	import { deleteObjects, patchMetadata, restart, scale, startPortForward } from '../actions';
+	import { deleteObjects, launchPlugin, patchMetadata, restart, scale, startPortForward } from '../actions';
 	import { parseHeaders } from '../bench';
 	import { backend, type DeleteOptions, type DrainReport } from '../api';
 	import { errorMessage } from '../format';
@@ -190,6 +190,13 @@
 					dialog.done();
 					ok = true;
 					break;
+				case 'plugin': {
+					// Closed first: a terminal plugin opens over the window.
+					const { plugin, run } = dialog;
+					close();
+					await launchPlugin(plugin, run);
+					return;
+				}
 				case 'drain':
 					if (report) {
 						ok = true;
@@ -261,11 +268,16 @@
 				return 'Roll back release';
 			case 'helmUninstall':
 				return 'Uninstall release';
+			case 'plugin':
+				return dialog.plugin.description || dialog.plugin.name;
 		}
 	});
 	const hasBody = $derived(['POST', 'PUT', 'PATCH'].includes(method));
 	const danger = $derived(
-		dialog.kind === 'delete' || dialog.kind === 'helmUninstall' || (dialog.kind === 'drain' && !report)
+		dialog.kind === 'delete' ||
+			dialog.kind === 'helmUninstall' ||
+			(dialog.kind === 'drain' && !report) ||
+			(dialog.kind === 'plugin' && dialog.plugin.dangerous)
 	);
 </script>
 
@@ -441,6 +453,19 @@
 		<p>
 			Uninstall <strong>{name(dialog.release)}</strong>? This deletes every object of the release and its history.
 		</p>
+	{:else if dialog.kind === 'plugin'}
+		{@const subject = dialog.run.target ?? dialog.run.release}
+		<p>
+			{#if subject}
+				Run the plugin <strong>{dialog.plugin.name}</strong> on <strong>{name(subject)}</strong>?
+			{:else}
+				Run the plugin <strong>{dialog.plugin.name}</strong>?
+			{/if}
+		</p>
+		<pre class="command">{dialog.command}</pre>
+		{#if dialog.plugin.dangerous}
+			<p class="muted">Its k9s configuration marks it as dangerous.</p>
+		{/if}
 	{/if}
 
 	{#if error}<p class="error">{error}</p>{/if}
@@ -467,7 +492,8 @@
 							drain: 'Drain',
 							benchmark: 'Start',
 							helmRollback: 'Roll back',
-							helmUninstall: 'Uninstall'
+							helmUninstall: 'Uninstall',
+							plugin: 'Run'
 						}[dialog.kind]}
 		</button>
 	</div>
@@ -636,6 +662,16 @@
 		font-size: 12px;
 		color: var(--text);
 	}
+	.command {
+		margin: 0 0 12px;
+		padding: 8px 10px;
+		border-radius: 6px;
+		background: var(--surface-2);
+		font-family: var(--mono);
+		font-size: 12.5px;
+		white-space: pre-wrap;
+		word-break: break-all;
+	}
 	.error {
 		color: var(--bad);
 	}
@@ -655,7 +691,7 @@
 	.primary {
 		border: 1px solid var(--accent);
 		background: var(--accent);
-		color: white;
+		color: var(--on-accent);
 	}
 	.primary.danger {
 		border-color: var(--bad);

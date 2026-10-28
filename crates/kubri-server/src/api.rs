@@ -9,9 +9,9 @@ use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
     BenchInfo, BenchRequest, ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo,
-    HelmRelease, HelmReleaseDetails, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions,
-    PortForwardInfo, PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef, SanitizerReport, Terminal,
-    TerminalOptions, TerminalOutput, Usage, XrayNode,
+    HelmRelease, HelmReleaseDetails, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
+    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef,
+    SanitizerReport, Terminal, TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -46,6 +46,10 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/helm/version", get(helm_version))
         .route("/helm/rollback", post(helm_rollback))
         .route("/helm/uninstall", post(helm_uninstall))
+        .route("/k9s", get(k9s_config))
+        .route("/k9s/skins/{name}", get(k9s_skin))
+        .route("/plugins/run", post(run_plugin))
+        .route("/plugins/terminal", any(plugin_terminal))
         .route("/logs", any(logs))
         .route("/terminal", any(terminal))
         .route("/portforwards", get(port_forwards).post(start_port_forward))
@@ -448,19 +452,47 @@ async fn terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Resp
                 .map_err(|e| e.to_string()),
             Err(err) => Err(err),
         };
-        match opened {
-            Ok(terminal) => run_terminal(socket, terminal).await,
-            Err(message) => {
-                let exit = TerminalOutput::Exit {
-                    message: Some(message),
-                };
-                send_json(&mut socket, &exit).await;
-            }
-        }
+        run_terminal(socket, opened).await;
     })
 }
 
-async fn run_terminal(mut socket: WebSocket, terminal: Terminal) {
+async fn k9s_config(State(kubri): State<Arc<Kubri>>) -> Json<K9sConfig> {
+    Json(kubri.k9s_config().await)
+}
+
+async fn k9s_skin(State(kubri): State<Arc<Kubri>>, Path(name): Path<String>) -> ApiResult<Value> {
+    Ok(Json(kubri.k9s_skin(&name).await?))
+}
+
+/// Starts a background plugin; Kubri does not wait for it to finish.
+async fn run_plugin(State(kubri): State<Arc<Kubri>>, Json(run): Json<PluginRun>) -> ApiResult<()> {
+    Ok(Json(kubri.run_plugin(&run).await?))
+}
+
+/// A plugin in a terminal: the client sends a [`PluginRun`] first, then it works like
+/// [`terminal`].
+async fn plugin_terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(move |mut socket| async move {
+        let opened = match first_message::<PluginRun>(&mut socket).await {
+            Ok(run) => kubri.open_plugin(&run).await.map_err(|e| e.to_string()),
+            Err(err) => Err(err),
+        };
+        run_terminal(socket, opened).await;
+    })
+}
+
+/// Connects the socket to the terminal, or tells why it could not be opened.
+async fn run_terminal(mut socket: WebSocket, opened: Result<Terminal, String>) {
+    let terminal = match opened {
+        Ok(terminal) => terminal,
+        Err(message) => {
+            let exit = TerminalOutput::Exit {
+                message: Some(message),
+            };
+            send_json(&mut socket, &exit).await;
+            return;
+        }
+    };
     let Terminal {
         container,
         mut input,
@@ -721,6 +753,21 @@ mod tests {
         let remove = Request::delete("/benchmarks/4").body(Body::empty()).unwrap();
         let (status, _) = send(disconnected(), remove).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn k9s_and_plugin_routes() {
+        let (status, body) = send(disconnected(), get("/k9s")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body["plugins"].is_array());
+        let (status, _) = send(disconnected(), get("/k9s/skins/..%2Fconfig")).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let run = post_json(
+            "/plugins/run",
+            r#"{"plugin":"fred","target":{"resource":{"group":"","version":"v1","plural":"pods"},"namespace":"shop","name":"web"}}"#,
+        );
+        let (status, _) = send(disconnected(), run).await;
+        assert_eq!(status, StatusCode::CONFLICT);
     }
 
     #[tokio::test]

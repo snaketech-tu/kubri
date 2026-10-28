@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 use futures::{Stream, StreamExt};
 use kubri_core::{
     BenchInfo, BenchRequest, ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo,
-    HelmRelease, HelmReleaseDetails, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions,
-    PortForwardInfo, PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef, SanitizerReport, TableEvent,
-    Terminal, TerminalInput, TerminalOptions, TerminalOutput, Usage, XrayNode,
+    HelmRelease, HelmReleaseDetails, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
+    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef,
+    SanitizerReport, TableEvent, Terminal, TerminalInput, TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde_json::Value;
 use tauri::State;
@@ -138,16 +138,50 @@ async fn terminal_open(
     options: Option<TerminalOptions>,
     on_event: Channel<InvokeResponseBody>,
 ) -> CommandResult<u32> {
+    let terminal = kubri
+        .open_terminal(&target, options.unwrap_or_default())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(register(&terminals, terminal, on_event))
+}
+
+/// Runs a k9s plugin in a terminal; it is written to and closed like [`terminal_open`].
+#[tauri::command]
+async fn plugin_open(
+    kubri: State<'_, Arc<Kubri>>,
+    terminals: State<'_, Arc<Terminals>>,
+    run: PluginRun,
+    on_event: Channel<InvokeResponseBody>,
+) -> CommandResult<u32> {
+    let terminal = kubri.open_plugin(&run).await.map_err(|e| e.to_string())?;
+    Ok(register(&terminals, terminal, on_event))
+}
+
+/// Starts a background k9s plugin without waiting for it.
+#[tauri::command]
+async fn plugin_run(kubri: State<'_, Arc<Kubri>>, run: PluginRun) -> CommandResult<()> {
+    kubri.run_plugin(&run).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn k9s_config(kubri: State<'_, Arc<Kubri>>) -> CommandResult<K9sConfig> {
+    Ok(kubri.k9s_config().await)
+}
+
+#[tauri::command]
+async fn k9s_skin(kubri: State<'_, Arc<Kubri>>, name: String) -> CommandResult<Value> {
+    kubri.k9s_skin(&name).await.map_err(|e| e.to_string())
+}
+
+/// Sends a terminal's output to the channel and keeps its input for `terminal_write`.
+fn register(terminals: &Arc<Terminals>, terminal: Terminal, on_event: Channel<InvokeResponseBody>) -> u32 {
     let Terminal {
         container,
         input,
         mut output,
-    } = kubri
-        .open_terminal(&target, options.unwrap_or_default())
-        .await
-        .map_err(|e| e.to_string())?;
+    } = terminal;
     let id = terminals.next_id.fetch_add(1, Ordering::Relaxed);
-    let registry = Arc::clone(&terminals);
+    let registry = Arc::clone(terminals);
     let mut sessions = terminals.sessions.lock().unwrap();
     let task = tauri::async_runtime::spawn(async move {
         let ready = serde_json::json!({ "type": "ready", "container": container });
@@ -172,7 +206,7 @@ async fn terminal_open(
             task,
         },
     );
-    Ok(id)
+    id
 }
 
 #[tauri::command]
@@ -447,6 +481,10 @@ pub fn run() {
             logs,
             unwatch,
             terminal_open,
+            plugin_open,
+            plugin_run,
+            k9s_config,
+            k9s_skin,
             terminal_write,
             terminal_resize,
             terminal_close,

@@ -8,6 +8,8 @@
 	--text-muted: #6b7486;
 	--accent: #326ce5;
 	--accent-strong: #2456c4;
+	/* Text on an accent background. */
+	--on-accent: #ffffff;
 	--ok: #1f9d55;
 	--warn: #c27c0e;
 	--bad: #d64545;
@@ -22,7 +24,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-	:root {
+	:root:not(.light) {
 		--bg: #0f131a;
 		--surface-1: #151a23;
 		--surface-2: #1e2531;
@@ -42,6 +44,40 @@
 		--syntax-literal: #f0b46b;
 		color-scheme: dark;
 	}
+}
+
+/* A skin picks light or dark itself; this repeats the dark colors above for it. */
+:root.dark {
+	--bg: #0f131a;
+	--surface-1: #151a23;
+	--surface-2: #1e2531;
+	--border: #2a3240;
+	--border-subtle: #1c222d;
+	--text: #e4e8ef;
+	--text-muted: #8b94a7;
+	--accent: #5b8def;
+	--accent-strong: #8fb1f5;
+	--ok: #3ccf7e;
+	--warn: #e5a73b;
+	--bad: #f06b6b;
+	--warn-mark: #e5a73b;
+	--shadow: 0 12px 32px rgb(0 0 0 / 45%);
+	--syntax-key: #8fb1f5;
+	--syntax-string: #7fd4a0;
+	--syntax-literal: #f0b46b;
+	color-scheme: dark;
+}
+
+/* Under a skin, surfaces, borders and muted text follow its background and text colors. */
+:root.skinned {
+	--surface-1: color-mix(in srgb, var(--bg) 95%, var(--text));
+	--surface-2: color-mix(in srgb, var(--bg) 89%, var(--text));
+	--border: color-mix(in srgb, var(--bg) 78%, var(--text));
+	--border-subtle: color-mix(in srgb, var(--bg) 88%, var(--text));
+	--text-muted: color-mix(in srgb, var(--text) 62%, var(--bg));
+	--accent-strong: color-mix(in srgb, var(--accent) 78%, var(--text));
+	--warn-mark: var(--warn);
+	--syntax-literal: var(--warn);
 }
 
 * {

@@ -1,6 +1,7 @@
 //! Runs Kubri in the browser: serves the UI and the API it talks to.
 
 mod api;
+mod guard;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -45,6 +46,10 @@ async fn main() -> std::io::Result<()> {
     let app = Router::new()
         .nest("/api", api::router(kubri))
         .fallback_service(spa)
+        .layer(axum::middleware::from_fn_with_state(
+            args.addr.ip().is_loopback(),
+            guard::check,
+        ))
         .layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(args.addr).await?;

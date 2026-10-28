@@ -1,4 +1,4 @@
-import type { Backend, ObjectRef, TerminalEvent } from './types';
+import type { Backend, ObjectRef, TerminalEvent, TerminalSession } from './types';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
 	const response = await fetch(`/api${path}`, {
@@ -33,6 +33,44 @@ function requestSocket(path: string, request: unknown) {
 	socket.binaryType = 'arraybuffer';
 	socket.onopen = () => socket.send(JSON.stringify(request));
 	return socket;
+}
+
+/** A terminal over a socket: raw bytes both ways, control messages as JSON. */
+function terminalSocket(path: string, request: unknown, onEvent: (event: TerminalEvent) => void): TerminalSession {
+	const encoder = new TextEncoder();
+	let exited = false;
+	let closed = false;
+	const pending: string[] = [];
+	const socket = requestSocket(path, request);
+	socket.onmessage = (msg) => {
+		if (msg.data instanceof ArrayBuffer) {
+			onEvent({ type: 'data', data: new Uint8Array(msg.data) });
+			return;
+		}
+		const event = JSON.parse(msg.data) as TerminalEvent;
+		if (event.type === 'ready') {
+			for (const data of pending.splice(0)) socket.send(encoder.encode(data));
+		}
+		if (event.type === 'exit') exited = true;
+		onEvent(event);
+	};
+	socket.onclose = () => {
+		if (!exited && !closed) onEvent({ type: 'exit', message: 'Lost connection to kubri-server' });
+	};
+	const open = () => socket.readyState === WebSocket.OPEN;
+	return {
+		write(data) {
+			if (open() && pending.length === 0) socket.send(encoder.encode(data));
+			else pending.push(data);
+		},
+		resize(cols, rows) {
+			if (open()) socket.send(JSON.stringify({ type: 'resize', cols, rows }));
+		},
+		close() {
+			closed = true;
+			socket.close();
+		}
+	};
 }
 
 /** Talks to kubri-server over HTTP and WebSockets. */
@@ -89,42 +127,7 @@ export const httpBackend: Backend = {
 		};
 	},
 
-	openTerminal(target, options, onEvent) {
-		const encoder = new TextEncoder();
-		let exited = false;
-		let closed = false;
-		const pending: string[] = [];
-		const socket = requestSocket('/terminal', { target, options });
-		socket.onmessage = (msg) => {
-			if (msg.data instanceof ArrayBuffer) {
-				onEvent({ type: 'data', data: new Uint8Array(msg.data) });
-				return;
-			}
-			const event = JSON.parse(msg.data) as TerminalEvent;
-			if (event.type === 'ready') {
-				for (const data of pending.splice(0)) socket.send(encoder.encode(data));
-			}
-			if (event.type === 'exit') exited = true;
-			onEvent(event);
-		};
-		socket.onclose = () => {
-			if (!exited && !closed) onEvent({ type: 'exit', message: 'Lost connection to kubri-server' });
-		};
-		const open = () => socket.readyState === WebSocket.OPEN;
-		return {
-			write(data) {
-				if (open() && pending.length === 0) socket.send(encoder.encode(data));
-				else pending.push(data);
-			},
-			resize(cols, rows) {
-				if (open()) socket.send(JSON.stringify({ type: 'resize', cols, rows }));
-			},
-			close() {
-				closed = true;
-				socket.close();
-			}
-		};
-	},
+	openTerminal: (target, options, onEvent) => terminalSocket('/terminal', { target, options }, onEvent),
 
 	portForwards: () => request('GET', '/portforwards'),
 	startPortForward: (req) => request('POST', '/portforwards', req),
@@ -150,5 +153,9 @@ export const httpBackend: Backend = {
 	helmHistory: (namespace, name) => request('GET', `/helm/history?${new URLSearchParams({ namespace, name })}`),
 	helmVersion: () => request<{ version: string | null }>('GET', '/helm/version').then((r) => r.version),
 	helmRollback: (namespace, name, revision) => request('POST', '/helm/rollback', { namespace, name, revision }),
-	helmUninstall: (namespace, name) => request('POST', '/helm/uninstall', { namespace, name })
+	helmUninstall: (namespace, name) => request('POST', '/helm/uninstall', { namespace, name }),
+	k9sConfig: () => request('GET', '/k9s'),
+	k9sSkin: (name) => request('GET', `/k9s/skins/${encodeURIComponent(name)}`),
+	runPlugin: (run) => request('POST', '/plugins/run', run),
+	openPlugin: (run, onEvent) => terminalSocket('/plugins/terminal', run, onEvent)
 };

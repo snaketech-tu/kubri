@@ -9,10 +9,12 @@ mod discovery;
 mod error;
 mod health;
 mod helm;
+mod k9s;
 mod logs;
 mod metrics;
 mod node;
 mod objects;
+mod plugin;
 mod portforward;
 mod pulse;
 mod rbac;
@@ -46,10 +48,12 @@ pub use context::ContextInfo;
 pub use error::{Error, Result};
 pub use health::Health;
 pub use helm::{HelmRelease, HelmReleaseDetails};
+pub use k9s::{Alias, ConfigFile, Hotkey, K9sConfig, Plugin};
 pub use logs::{LogEvent, LogLine, LogOptions, LogSource};
 pub use metrics::{MetricsKind, Usage, parse_quantity};
 pub use node::{DrainOptions, DrainReport, PodIssue};
 pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
+pub use plugin::{Cell, PluginRun, Release};
 pub use portforward::{PortForwardInfo, PortForwardRequest};
 pub use pulse::{EventPulse, KindPulse, Pulse, RecentEvent, Utilization};
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
@@ -390,6 +394,140 @@ impl Kubri {
     pub async fn helm_uninstall(&self, namespace: &str, name: &str) -> Result<String> {
         let context = self.session().await?.info.context.clone();
         helm::uninstall(&context, namespace, name).await
+    }
+
+    /// The k9s aliases, hotkeys, plugins and skins, with those of the connected context.
+    pub async fn k9s_config(&self) -> K9sConfig {
+        let Some(dirs) = k9s::Dirs::from_env() else {
+            return K9sConfig::default();
+        };
+        let context = self.context_info().await;
+        let key = context.as_ref().map(|c| k9s::ContextKey {
+            cluster: c.cluster.clone().unwrap_or_default(),
+            context: c.name.clone(),
+        });
+        let env_skin = std::env::var("K9S_SKIN").ok();
+        tokio::task::spawn_blocking(move || k9s::load(&dirs, key.as_ref(), env_skin))
+            .await
+            .unwrap_or_default()
+    }
+
+    /// A k9s skin by name, as JSON.
+    pub async fn k9s_skin(&self, name: &str) -> Result<Value> {
+        let dirs = k9s::Dirs::from_env().ok_or_else(|| Error::NotFound("the k9s config directory".into()))?;
+        let name = name.to_owned();
+        tokio::task::spawn_blocking(move || k9s::skin(&dirs, &name))
+            .await
+            .map_err(|e| Error::Unsupported(e.to_string()))?
+    }
+
+    /// Runs a k9s plugin in a terminal, for interactive commands.
+    pub async fn open_plugin(&self, run: &PluginRun) -> Result<Terminal> {
+        let (plugin, prepared) = self.prepare_plugin(run).await?;
+        if plugin.background {
+            return Err(Error::Unsupported(format!(
+                "plugin {} runs in the background",
+                plugin.name
+            )));
+        }
+        let title = if plugin.description.is_empty() {
+            plugin.name.clone()
+        } else {
+            plugin.description.clone()
+        };
+        tracing::info!(plugin = plugin.name, program = prepared.program, "running plugin");
+        plugin::open(&prepared, title, run.cols, run.rows)
+    }
+
+    /// Starts a background k9s plugin without waiting for it.
+    pub async fn run_plugin(&self, run: &PluginRun) -> Result<()> {
+        let (plugin, prepared) = self.prepare_plugin(run).await?;
+        if !plugin.background {
+            return Err(Error::Unsupported(format!(
+                "plugin {} needs a terminal",
+                plugin.name
+            )));
+        }
+        tracing::info!(
+            plugin = plugin.name,
+            program = prepared.program,
+            "starting background plugin"
+        );
+        plugin::spawn_background(&prepared)
+    }
+
+    /// Finds the plugin in the configuration on disk, never trusting a command from the
+    /// caller, and checks that the target exists and is in the plugin's scope.
+    async fn prepare_plugin(&self, run: &PluginRun) -> Result<(Plugin, plugin::Prepared)> {
+        let session = self.session().await?;
+        let context = self.context_info().await.ok_or(Error::NotConnected)?;
+        let config = self.k9s_config().await;
+        let plugin = config
+            .plugins
+            .into_iter()
+            .find(|p| p.name == run.plugin)
+            .ok_or_else(|| Error::NotFound(format!("plugin {}", run.plugin)))?;
+        // The selected object's resource, or the view's when nothing is selected.
+        let reference = run.target.as_ref().map(|t| &t.resource).or(run.resource.as_ref());
+        let resource = match reference {
+            Some(reference) => {
+                let info = session.info_for(reference)?;
+                if !plugin::applies(&plugin, info) {
+                    return Err(Error::Unsupported(format!(
+                        "plugin {} is not for {}",
+                        plugin.name, info.kind
+                    )));
+                }
+                Some(info)
+            }
+            None if run.release.is_some() => {
+                if !plugin::applies_to_helm(&plugin) {
+                    return Err(Error::Unsupported(format!(
+                        "plugin {} is not for Helm releases",
+                        plugin.name
+                    )));
+                }
+                None
+            }
+            None => None,
+        };
+        let mut container = None;
+        if let (Some(target), Some(info)) = (&run.target, resource)
+            && plugin::is_pods(info)
+        {
+            let object = session
+                .api(&target.resource, target.namespace.as_deref())?
+                .get(&target.name)
+                .await?;
+            let pod: Pod = serde_json::from_value(serde_json::to_value(object)?)?;
+            container = match &run.container {
+                Some(name) if terminal::containers(&pod).contains(name) => Some(name.clone()),
+                Some(name) => return Err(Error::NotFound(format!("container {name}"))),
+                None => terminal::default_container(&pod),
+            };
+        }
+        let kubeconfig = std::env::var("KUBECONFIG")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.join(".kube").join("config").display().to_string())
+                    .unwrap_or_default()
+            });
+        let variables = plugin::variables(&context, kubeconfig, run, resource, container);
+        let prepared = plugin::prepare(&plugin, &variables, &run.columns)?;
+        Ok((plugin, prepared))
+    }
+
+    /// The kubeconfig entry of the connected context.
+    async fn context_info(&self) -> Option<ContextInfo> {
+        let name = self.cluster().await?.context;
+        match &*self.kubeconfig.read().await {
+            Ok(kubeconfig) => context::list_contexts(kubeconfig)
+                .into_iter()
+                .find(|c| c.name == name),
+            Err(_) => None,
+        }
     }
 
     /// Streams container logs of a pod, or of every pod a workload or Service selects.

@@ -274,7 +274,7 @@
 		border: 1px solid var(--accent);
 		border-radius: 999px;
 		background: var(--accent);
-		color: white;
+		color: var(--on-accent);
 		box-shadow: var(--shadow);
 		font-size: 12px;
 	}

@@ -65,6 +65,13 @@ pub struct TerminalInput {
 }
 
 impl TerminalInput {
+    pub(crate) fn new(
+        stdin: Option<Box<dyn AsyncWrite + Send + Unpin>>,
+        resize: Option<futures_mpsc::Sender<TerminalSize>>,
+    ) -> Self {
+        Self { stdin, resize }
+    }
+
     pub async fn write(&mut self, data: &[u8]) -> Result<()> {
         let stdin = self
             .stdin
@@ -86,6 +93,17 @@ impl TerminalInput {
             });
         }
     }
+}
+
+/// The names of every container of a pod: init, regular and ephemeral.
+pub(crate) fn containers(pod: &Pod) -> Vec<String> {
+    let Some(spec) = &pod.spec else {
+        return Vec::new();
+    };
+    let init = spec.init_containers.iter().flatten().map(|c| c.name.clone());
+    let main = spec.containers.iter().map(|c| c.name.clone());
+    let debug = spec.ephemeral_containers.iter().flatten().map(|c| c.name.clone());
+    init.chain(main).chain(debug).collect()
 }
 
 /// The container a terminal opens in when none is chosen.
