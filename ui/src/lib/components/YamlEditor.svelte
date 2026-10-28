@@ -22,11 +22,14 @@
 		value: string;
 		readonly: boolean;
 		onsave?: (text: string) => void;
-		oncancel?: () => void;
+		/** Esc while editing; `changed` tells whether the text differs from where editing began. */
+		oncancel?: (changed: boolean) => void;
 	} = $props();
 
 	let host = $state<HTMLDivElement>();
 	let view: EditorView | undefined;
+	/** The text when editing began. */
+	let original = '';
 	const editable = new Compartment();
 
 	const highlight = HighlightStyle.define([
@@ -59,6 +62,13 @@
 		return true;
 	}
 
+	/** Reading, Esc hands the keys back to the list; editing, it cancels. */
+	function escape(v: EditorView) {
+		if (v.state.readOnly) v.contentDOM.blur();
+		else oncancel?.(v.state.doc.toString() !== original);
+		return true;
+	}
+
 	$effect(() => {
 		if (!host) return;
 		const [doc, ro] = untrack(() => [value, readonly] as const);
@@ -78,7 +88,7 @@
 					editable.of([EditorState.readOnly.of(ro), EditorView.editable.of(!ro)]),
 					keymap.of([
 						{ key: 'Mod-s', run: save, preventDefault: true },
-						{ key: 'Escape', run: () => (oncancel?.(), true) },
+						{ key: 'Escape', run: escape },
 						indentWithTab,
 						...defaultKeymap,
 						...historyKeymap,
@@ -104,7 +114,10 @@
 		view.dispatch({
 			effects: editable.reconfigure([EditorState.readOnly.of(ro), EditorView.editable.of(!ro)])
 		});
-		if (!ro) view.focus();
+		if (!ro) {
+			original = view.state.doc.toString();
+			view.focus();
+		}
 	});
 </script>
 

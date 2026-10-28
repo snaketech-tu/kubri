@@ -124,6 +124,11 @@ pub(crate) async fn open(api: Api<Pod>, pod: &Pod, options: TerminalOptions) -> 
         .clone()
         .or_else(|| default_container(pod))
         .ok_or_else(|| Error::Unsupported(format!("pod {name} has no containers")))?;
+    if let Some(reason) = not_running(pod, &container) {
+        return Err(Error::Unsupported(format!(
+            "container {container} is not running ({reason}), so there is nothing to connect to"
+        )));
+    }
 
     let (mut process, tty) = match options.mode {
         TerminalMode::Shell => {
@@ -158,6 +163,37 @@ pub(crate) async fn open(api: Api<Pod>, pod: &Pod, options: TerminalOptions) -> 
         container,
         input,
         output: output(process, tty),
+    })
+}
+
+/// Why `container` is not running, from the pod's status. `None` while it runs, or when the
+/// status does not say, leaving the answer to the API server.
+fn not_running(pod: &Pod, container: &str) -> Option<String> {
+    let status = pod.status.as_ref()?;
+    let state = [
+        &status.init_container_statuses,
+        &status.container_statuses,
+        &status.ephemeral_container_statuses,
+    ]
+    .into_iter()
+    .flatten()
+    .flatten()
+    .find(|s| s.name == container)?
+    .state
+    .as_ref()?;
+    if state.running.is_some() {
+        return None;
+    }
+    if let Some(waiting) = &state.waiting {
+        return Some(match &waiting.reason {
+            Some(reason) => format!("waiting: {reason}"),
+            None => "waiting".into(),
+        });
+    }
+    let terminated = state.terminated.as_ref()?;
+    Some(match &terminated.reason {
+        Some(reason) => format!("terminated: {reason}"),
+        None => format!("exited with code {}", terminated.exit_code),
     })
 }
 
@@ -278,6 +314,39 @@ mod tests {
         assert_eq!(attach_flags(&pod, "repl"), (true, true));
         assert_eq!(attach_flags(&pod, "app"), (false, false));
         assert_eq!(attach_flags(&pod, "debugger"), (true, false));
+    }
+
+    #[test]
+    fn only_running_containers_take_a_terminal() {
+        let pod = pod(json!({ "status": {
+            "containerStatuses": [
+                { "name": "web", "image": "", "imageID": "", "ready": true, "restartCount": 0,
+                  "state": { "running": {} } },
+                { "name": "app", "image": "", "imageID": "", "ready": false, "restartCount": 5,
+                  "state": { "waiting": { "reason": "CrashLoopBackOff" } } },
+                { "name": "job", "image": "", "imageID": "", "ready": false, "restartCount": 0,
+                  "state": { "terminated": { "exitCode": 0, "reason": "Completed" } } },
+                { "name": "odd", "image": "", "imageID": "", "ready": false, "restartCount": 0,
+                  "state": { "terminated": { "exitCode": 3 } } }
+            ],
+            "initContainerStatuses": [
+                { "name": "init", "image": "", "imageID": "", "ready": false, "restartCount": 0,
+                  "state": { "terminated": { "exitCode": 0, "reason": "Completed" } } }
+            ]
+        } }));
+        assert_eq!(not_running(&pod, "web"), None);
+        assert_eq!(
+            not_running(&pod, "app").as_deref(),
+            Some("waiting: CrashLoopBackOff")
+        );
+        assert_eq!(not_running(&pod, "job").as_deref(), Some("terminated: Completed"));
+        assert_eq!(not_running(&pod, "odd").as_deref(), Some("exited with code 3"));
+        assert_eq!(
+            not_running(&pod, "init").as_deref(),
+            Some("terminated: Completed")
+        );
+        // Unknown: the API server decides.
+        assert_eq!(not_running(&pod, "sidecar"), None);
     }
 
     #[test]

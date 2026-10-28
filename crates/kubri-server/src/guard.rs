@@ -6,7 +6,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderName, HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
@@ -31,6 +31,24 @@ pub async fn check(State(policy): State<Arc<Policy>>, request: Request, next: Ne
             (StatusCode::FORBIDDEN, reason).into_response()
         }
     }
+}
+
+/// Keeps other sites from showing Kubri in a frame, where a page could get clicks on its
+/// buttons (clickjacking), and from learning Kubri's addresses through links.
+pub async fn headers(request: Request, next: Next) -> Response {
+    const HEADERS: [(HeaderName, &str); 4] = [
+        (header::X_FRAME_OPTIONS, "DENY"),
+        (header::CONTENT_SECURITY_POLICY, "frame-ancestors 'none'"),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        (header::REFERRER_POLICY, "no-referrer"),
+    ];
+    let mut response = next.run(request).await;
+    for (name, value) in HEADERS {
+        response
+            .headers_mut()
+            .insert(name, HeaderValue::from_static(value));
+    }
+    response
 }
 
 impl Policy {
@@ -147,5 +165,24 @@ mod tests {
             Some("kubri.example.com"),
             Some("https://evil.example")
         ));
+    }
+
+    #[tokio::test]
+    async fn never_in_a_frame() {
+        use axum::body::Body;
+        use tower::ServiceExt;
+        let app = axum::Router::new()
+            .route("/", axum::routing::get(|| async { "Kubri" }))
+            .layer(axum::middleware::from_fn(headers));
+        let response = app
+            .oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.headers()[header::X_FRAME_OPTIONS], "DENY");
+        assert_eq!(
+            response.headers()[header::CONTENT_SECURITY_POLICY],
+            "frame-ancestors 'none'"
+        );
+        assert_eq!(response.headers()[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
     }
 }

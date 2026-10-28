@@ -120,7 +120,17 @@
 		}
 	}
 
-	function cancel() {
+	/** When Esc last warned about unsaved changes. */
+	let warnedAt = 0;
+
+	/** Stops editing. Esc with changes only warns, and throws them away when pressed again. */
+	function cancel(changed = false) {
+		if (changed && Date.now() - warnedAt > 3000) {
+			warnedAt = Date.now();
+			saveError = 'Your changes are not saved. Press Esc again to throw them away, or Ctrl+S to save.';
+			return;
+		}
+		warnedAt = 0;
 		details.editing = false;
 		saveError = null;
 	}
@@ -161,7 +171,7 @@
 		{#if details.tab === 'yaml'}
 			<label class="managed"><input type="checkbox" bind:checked={showManaged} disabled={details.editing} /> managed fields</label>
 			{#if details.editing}
-				<button class="secondary" onclick={cancel}>Cancel</button>
+				<button class="secondary" onclick={() => cancel()}>Cancel</button>
 				<button class="primary" disabled={saving} onclick={() => editor && onsave(editor.text())}>
 					{saving ? 'Saving…' : 'Save'} <kbd>Ctrl+S</kbd>
 				</button>
