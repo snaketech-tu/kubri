@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { forControl } from '#lib/keys.js';
 	import logo from '#lib/assets/logo.svg';
 	import { canDelete, canEdit, canRestart, canScale } from '#lib/actions.js';
@@ -22,7 +23,18 @@
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
 	import { parseShortcut, pluginApplies, shortcutLabel } from '#lib/k9s.js';
-	import { canPortForward, hasLogs, isNodes, isPods } from '#lib/pods.js';
+	import {
+		canPortForward,
+		hasImages,
+		hasLogs,
+		hasUsers,
+		isCronJobs,
+		isNamespaces,
+		isNodes,
+		isPods,
+		isReplicaSets,
+		isSecrets
+	} from '#lib/pods.js';
 	import { session } from '#lib/session.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 	import { LiveTable } from '#lib/watch.svelte.js';
@@ -45,6 +57,12 @@
 
 	$effect(() => {
 		app.namespaces = namespaces.rows.map((r) => r.name).sort();
+	});
+
+	// Every place Kubri shows goes into the history, for `[`, `]` and `-`.
+	$effect(() => {
+		const view = app.view;
+		untrack(() => app.remember(view));
 	});
 
 	// Port-forwards and benchmarks outlive context switches; keep the sidebar counts current.
@@ -70,7 +88,22 @@
 		} else if (!typing && e.key === '?') {
 			e.preventDefault();
 			app.helpOpen = true;
+		} else if (!typing && !e.ctrlKey && !e.metaKey && (e.key === '[' || e.key === ']' || e.key === '-')) {
+			// Back, forward and the last view, as in k9s.
+			e.preventDefault();
+			if (e.key === '-') app.toggleLast();
+			else app.go(e.key === '[' ? -1 : 1);
+		} else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+			e.preventDefault();
+			app.go(e.key === 'ArrowLeft' ? -1 : 1);
 		}
+	}
+
+	// The back and forward buttons of a mouse.
+	function onmouseup(e: MouseEvent) {
+		if ((e.button !== 3 && e.button !== 4) || app.overlayOpen) return;
+		e.preventDefault();
+		app.go(e.button === 3 ? -1 : 1);
 	}
 
 	const viewHints = $derived.by(() => {
@@ -136,18 +169,28 @@
 		const h: [string, string][] = [
 			[':', 'command'],
 			['/', 'filter'],
+			['enter', 'open'],
 			['d', 'describe'],
 			['y', 'yaml']
 		];
 		if (!r) return h;
+		const writable = !app.readOnly;
 		if (hasLogs(r)) h.push(['l', 'logs']);
-		if (isPods(r)) h.push(['s', 'shell'], ['a', 'attach']);
+		if (isPods(r) && writable) h.push(['s', 'shell'], ['a', 'attach']);
+		if (isPods(r)) h.push(['o', 'node']);
+		if (isSecrets(r)) h.push(['x', 'decode']);
+		if (isNamespaces(r)) h.push(['u', 'use']);
+		if (hasUsers(r)) h.push(['u', 'used by']);
 		if (canPortForward(r)) h.push(['⇧f', 'port-forward']);
-		if (isNodes(r)) h.push(['c', 'cordon'], ['u', 'uncordon'], ['r', 'drain']);
-		if (canEdit(r)) h.push(['e', 'edit']);
-		if (canDelete(r)) h.push(['^d', 'delete']);
-		if (canScale(r) && !isPods(r)) h.push(['s', 'scale']);
-		if (canRestart(r)) h.push(['r', 'restart']);
+		if (isNodes(r) && writable) h.push(['c', 'cordon'], ['u', 'uncordon'], ['r', 'drain']);
+		if (isCronJobs(r) && writable) h.push(['t', 'trigger'], ['s', 'suspend']);
+		if (hasImages(r) && writable) h.push(['i', 'image']);
+		if (isReplicaSets(r) && writable) h.push(['^l', 'roll back']);
+		if (canEdit(r) && writable) h.push(['e', 'edit']);
+		if (canDelete(r) && writable) h.push(['^d', 'delete']);
+		if (canScale(r) && !isPods(r) && writable) h.push(['s', 'scale']);
+		if (canRestart(r) && writable) h.push(['r', 'restart']);
+		if (app.scope) h.push(['esc', 'back']);
 		if (app.details) h.push(['f', app.maximized ? 'restore' : 'maximize']);
 		h.push(['?', 'help']);
 		return h;
@@ -171,7 +214,7 @@
 	const hints = $derived([...viewHints.slice(0, -1), ...pluginHints, ...viewHints.slice(-1)]);
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} {onmouseup} />
 
 <div class="shell">
 	<header>
@@ -181,6 +224,9 @@
 		</div>
 		<ContextSwitcher />
 		<NamespacePicker />
+		{#if app.readOnly}
+			<span class="read-only" title="Kubri does not change this cluster: no edits, deletes, scaling or shells">Read-only</span>
+		{/if}
 		<button class="palette-button" onclick={() => (app.paletteOpen = true)}>
 			<span>Go to resource or command…</span>
 			<kbd>:</kbd>
@@ -226,8 +272,8 @@
 				<HelmView />
 			{/key}
 		{:else if app.selected}
-			{#key `${app.cluster?.context}/${app.selected.group}/${app.selected.version}/${app.selected.plural}`}
-				<ResourceView resource={app.selected} namespace={app.namespace} />
+			{#key `${app.cluster?.context}/${app.selected.group}/${app.selected.version}/${app.selected.plural}/${JSON.stringify(app.scope)}`}
+				<ResourceView resource={app.selected} namespace={app.namespace} scope={app.scope} />
 			{/key}
 		{:else}
 			<div class="placeholder">
@@ -282,6 +328,16 @@
 		font-size: 17px;
 		font-weight: 700;
 		letter-spacing: -0.01em;
+	}
+	.read-only {
+		padding: 2px 9px;
+		border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--warn) 12%, transparent);
+		color: var(--warn);
+		font-size: 12px;
+		font-weight: 600;
+		white-space: nowrap;
 	}
 	.palette-button {
 		display: flex;

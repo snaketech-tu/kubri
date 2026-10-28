@@ -15,7 +15,7 @@ use serde::Deserialize;
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc;
 
-use crate::k9s::Plugin;
+use crate::k9s::{MAX_INPUTS, Plugin};
 use crate::terminal::{Terminal, TerminalInput, TerminalOutput};
 use crate::{Error, ObjectRef, ResourceInfo, ResourceRef, Result};
 
@@ -35,6 +35,8 @@ pub struct PluginRun {
     pub filter: Option<String>,
     /// The selected row's cells, in column order, for `$COL-<NAME>`.
     pub columns: Vec<Cell>,
+    /// Values for the plugin's inputs, by name, as `$INPUT_<NAME>`.
+    pub inputs: BTreeMap<String, String>,
     pub cols: u16,
     pub rows: u16,
 }
@@ -342,6 +344,48 @@ impl AsyncWrite for Keys {
     }
 }
 
+/// The plugin's inputs as `INPUT_<NAME>` variables: the values given, or the defaults, checked
+/// against their type the way k9s checks them in its form.
+pub(crate) fn input_values(
+    plugin: &Plugin,
+    given: &BTreeMap<String, String>,
+) -> Result<Vec<(String, String)>> {
+    let inputs = &plugin.inputs[..plugin.inputs.len().min(MAX_INPUTS)];
+    if let Some(unknown) = given.keys().find(|name| !inputs.iter().any(|i| &i.name == *name)) {
+        return Err(Error::Unsupported(format!(
+            "plugin {} has no input {unknown}",
+            plugin.name
+        )));
+    }
+    inputs
+        .iter()
+        .map(|input| {
+            let label = if input.label.is_empty() {
+                &input.name
+            } else {
+                &input.label
+            };
+            let value = given.get(&input.name).unwrap_or(&input.default).trim().to_owned();
+            let invalid = |why: &str| Err(Error::Unsupported(format!("{label} {why}")));
+            if value.is_empty() {
+                if input.required {
+                    return invalid("is required");
+                }
+            } else {
+                match input.kind.as_str() {
+                    "number" if value.parse::<f64>().is_err() => return invalid("must be a number"),
+                    "bool" if value != "true" && value != "false" => return invalid("must be true or false"),
+                    "dropdown" if !input.options.contains(&value) => {
+                        return invalid(&format!("must be one of {}", input.options.join(", ")));
+                    }
+                    _ => {}
+                }
+            }
+            Ok((format!("INPUT_{}", input.name.to_uppercase()), value))
+        })
+        .collect()
+}
+
 /// The variables of a plugin run, for the object it runs on.
 pub(crate) fn variables(
     context: &crate::ContextInfo,
@@ -411,6 +455,7 @@ mod tests {
             confirm: false,
             dangerous: false,
             override_: false,
+            inputs: Vec::new(),
         }
     }
 
@@ -563,6 +608,54 @@ mod tests {
         };
         assert!(seen.contains("got yes"), "{seen:?}");
         assert_eq!(exit, None);
+    }
+
+    #[test]
+    fn inputs_become_checked_variables() {
+        use crate::k9s::PluginInput;
+        let input = |name: &str, kind: &str, required: bool, default: &str, options: &[&str]| PluginInput {
+            name: name.into(),
+            label: String::new(),
+            kind: kind.into(),
+            required,
+            default: default.into(),
+            options: options.iter().map(|o| o.to_string()).collect(),
+        };
+        let mut p = plugin(&["po"], &["--tail", "$INPUT_LINES", "--level=${INPUT_LEVEL}"]);
+        p.inputs = vec![
+            input("lines", "number", true, "100", &[]),
+            input("level", "dropdown", false, "", &["info", "debug"]),
+            input("follow", "bool", false, "false", &[]),
+        ];
+        let given = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
+            pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        };
+        let values = input_values(&p, &given(&[("level", "debug")])).unwrap();
+        assert_eq!(
+            values,
+            [
+                ("INPUT_LINES".to_owned(), "100".to_owned()),
+                ("INPUT_LEVEL".to_owned(), "debug".to_owned()),
+                ("INPUT_FOLLOW".to_owned(), "false".to_owned())
+            ]
+        );
+        let prepared = prepare(&p, &Variables(values), &[]).unwrap();
+        assert_eq!(prepared.args, ["--tail", "100", "--level=debug"]);
+        assert!(
+            prepared
+                .env
+                .contains(&("INPUT_LEVEL".to_owned(), "debug".to_owned()))
+        );
+
+        let err = |pairs: &[(&str, &str)]| input_values(&p, &given(pairs)).unwrap_err().to_string();
+        assert_eq!(err(&[("lines", " ")]), "lines is required");
+        assert_eq!(err(&[("lines", "many")]), "lines must be a number");
+        assert_eq!(err(&[("level", "trace")]), "level must be one of info, debug");
+        assert_eq!(err(&[("follow", "yes")]), "follow must be true or false");
+        assert_eq!(err(&[("color", "red")]), "plugin test has no input color");
     }
 
     #[cfg(unix)]

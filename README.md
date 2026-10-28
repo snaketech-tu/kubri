@@ -13,10 +13,11 @@ A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9
 ## Features
 
 - Uses your existing kubeconfig and switches contexts from anywhere.
-- Live lists of every resource type, including CRDs, with the same columns as `kubectl get` (press <kbd>w</kbd> for the wide view), sorting, filtering (`-l app=web` for labels) and CPU/memory from metrics-server.
+- Live lists of every resource type, including CRDs, with the same columns as `kubectl get` (press <kbd>w</kbd> for the wide view), sorting, k9s filters (regular expressions, `!` to invert, `-f` fuzzy, `-l app=web` for labels), faulty rows only, CSV export, and CPU/memory from metrics-server with usage against requests, limits and node capacity.
+- <kbd>Enter</kbd> drills down like k9s, from a Deployment, Service or node to its pods or from a CronJob to its Jobs, or wherever your `jumps.yaml` says; <kbd>Shift</kbd>+<kbd>J</kbd> jumps to the owner, and <kbd>[</kbd> <kbd>]</kbd> <kbd>-</kbd> go back and forth.
 - A command palette like k9s: <kbd>:</kbd> then `pods`, `deploy kube-system`, `po shop app=web`, `apps/v1/deployments`, `ctx prod`, `ns default` or any short name.
 - Describe view with containers, conditions and events; YAML view and editor.
-- Delete (also several at once), scale, rollout restart, and edit labels and annotations.
+- Delete (also several at once), scale, rollout restart, set images, roll back to a ReplicaSet, run or suspend CronJobs, and edit labels and annotations. Secrets show their decoded values on request, and ConfigMaps, Secrets and the like show what uses them.
 - Live logs of a pod, or of every pod behind a deployment, service or other workload, with all containers merged, previous logs, timestamps and a regex filter.
 - Shell into any container or attach to its main process, in a real terminal (xterm.js).
 - Port-forwards to pods, workloads and services (named target ports included), listed under `:pf`.
@@ -27,7 +28,8 @@ A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9
 - Helm (`:helm`): the releases in the cluster with their status, chart and app version; their notes, values (as given or merged with the chart defaults), manifest, objects and history, including older revisions. Rolling back and uninstalling use the `helm` command, so they need it installed where Kubri runs.
 - Sanitizer (`:popeye`): checks the namespace (or the whole cluster) for common problems like Popeye does, such as missing probes or resource limits, `latest` image tags, crash-looping pods, services without endpoints, unused ConfigMaps, Secrets and roles, and bindings to missing roles. Every kind gets a score and the cluster a grade from A to F.
 - HTTP benchmarks (`:bench`, or <kbd>b</kbd> on a port-forward): load-test a forwarded port with a set number of requests or for a set time, then see requests per second, latency percentiles, a histogram of response times, status codes and errors.
-- Your k9s setup (`:config`): aliases, hotkeys, plugins and skins from your k9s files work as they are, per context. Plugins run on the machine Kubri runs on, in a terminal over the window or in the background, with the same variables as in k9s. See [Using your k9s configuration](docs/K9S.md).
+- Your k9s setup (`:config`): aliases, hotkeys, plugins (with inputs), skins, jumps and settings such as `readOnly`, `defaultView`, thresholds and the log defaults work as they are, per context. Plugins run on the machine Kubri runs on, in a terminal over the window or in the background, with the same variables as in k9s. See [Using your k9s configuration](docs/K9S.md).
+- A read-only mode, from k9s `readOnly` or `KUBRI_READ_ONLY=true`, that never changes the cluster.
 - In the browser with a password sign-in, from a Docker image or inside the cluster with its service account. See [Running Kubri in the browser](docs/WEB.md).
 - Fully usable from the keyboard. Press <kbd>?</kbd> in the app for all shortcuts.
 

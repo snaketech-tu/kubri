@@ -1560,6 +1560,7 @@ mod tests {
             name: "worker-1".into(),
             cpu: 3600.0,
             memory: 1024.0,
+            ..Usage::default()
         };
         let issues = node(&n, Some(&usage));
         assert_eq!(

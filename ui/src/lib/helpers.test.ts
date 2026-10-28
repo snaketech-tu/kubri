@@ -3,7 +3,7 @@ import type { ContextInfo, ResourceInfo, Row } from './api';
 import { matchResources, suggest } from './commands';
 import { age, cpu, memory } from './format';
 import { cellTone } from './status';
-import { filterRows, sortRows } from './table';
+import { filterRows, isFaulty, sortRows, toCsv } from './table';
 
 function resource(kind: string, plural: string, group = '', shortNames: string[] = []): ResourceInfo {
 	return {
@@ -132,7 +132,7 @@ describe('status colors', () => {
 });
 
 function row(name: string, namespace: string, cells: unknown[], created = '2026-10-01T00:00:00Z'): Row {
-	return { key: `${namespace}/${name}`, name, namespace, created, labels: { app: name }, cells };
+	return { key: `${namespace}/${name}`, name, namespace, created, labels: { app: name }, owners: [], cells };
 }
 
 describe('table rows', () => {
@@ -187,5 +187,41 @@ describe('table rows', () => {
 	it('filters by text and by label', () => {
 		expect(filterRows(rows, 'y').map((r) => r.name)).toEqual(['a']);
 		expect(filterRows(rows, '-l app=c').map((r) => r.name)).toEqual(['c']);
+	});
+
+	it('filters like k9s: regular expressions, inverse and fuzzy', () => {
+		const names = (filter: string, list = rows) => filterRows(list, filter).map((r) => r.name);
+		expect(names('^[ab]$')).toEqual(['b', 'a']);
+		expect(names('2D')).toEqual(['a']);
+		expect(names('!x')).toEqual(['a']);
+		expect(names('! ^c$')).toEqual(['b', 'a']);
+		// Not a valid expression yet, as while typing: taken literally.
+		expect(names('10 (')).toEqual(['b']);
+		const pods = [row('web-7d4f9', 'shop', []), row('worker-1', 'shop', []), row('api', 'shop', [])];
+		expect(names('-f wb', pods)).toEqual(['web-7d4f9']);
+		expect(names('-fwr', pods)).toEqual(['worker-1']);
+	});
+
+	it('finds faulty rows', () => {
+		const columns = ['Name', 'Ready', 'Status'].map((name) => ({
+			name,
+			type: 'string',
+			format: '',
+			description: '',
+			priority: 0
+		}));
+		const faulty = (cells: string[]) => isFaulty(columns, row(cells[0], 'x', cells));
+		expect(faulty(['a', '1/1', 'Running'])).toBe(false);
+		expect(faulty(['a', '0/1', 'Running'])).toBe(true);
+		expect(faulty(['a', '0/1', 'CrashLoopBackOff'])).toBe(true);
+		expect(faulty(['a', '0/1', 'Pending'])).toBe(true);
+		// A finished pod is not ready, and that is fine.
+		expect(faulty(['a', '0/1', 'Completed'])).toBe(false);
+	});
+
+	it('writes CSV', () => {
+		expect(toCsv(['Name', 'Labels'], [['web', 'a=1,b=2'], ['say "hi"', '']])).toBe(
+			'Name,Labels\nweb,"a=1,b=2"\n"say ""hi""",\n'
+		);
 	});
 });

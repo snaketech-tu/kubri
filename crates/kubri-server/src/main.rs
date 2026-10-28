@@ -52,6 +52,10 @@ struct Args {
     /// separated by commas.
     #[arg(long, env = "KUBRI_ALLOWED_HOSTS", value_delimiter = ',')]
     allowed_hosts: Vec<String>,
+    /// Never change anything in a cluster: no edits, deletes, scaling, shells or dangerous
+    /// plugins. Lists, logs and port-forwards still work.
+    #[arg(long, env = "KUBRI_READ_ONLY", value_parser = clap::builder::BoolishValueParser::new())]
+    read_only: bool,
     /// How long signing in lasts, in hours (up to ten years).
     #[arg(
         long,
@@ -109,6 +113,10 @@ async fn serve(args: Args) -> ExitCode {
     });
 
     let kubri = Arc::new(Kubri::load());
+    if args.read_only {
+        kubri.set_read_only();
+        tracing::info!("read-only: Kubri does not change clusters");
+    }
     if !args.ui_dir.join("index.html").exists() {
         tracing::warn!(dir = %args.ui_dir.display(), "UI not found, only the API is served");
     }

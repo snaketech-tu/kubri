@@ -3,13 +3,23 @@
 	import { backend, type ObjectRef, type TerminalMode } from '../api';
 	import { mountTerminal, TERMINAL_BACKGROUND } from '../terminal';
 
-	let { target, containers, mode: startMode = 'shell' }: {
+	let {
+		target,
+		containers,
+		mode: startMode = 'shell',
+		container: wanted = null
+	}: {
 		target: ObjectRef;
 		containers: string[];
 		mode?: TerminalMode;
+		/** A container to connect to, asked for from Describe; a new object each time. */
+		container?: { name: string } | null;
 	} = $props();
 
-	let container = $state('');
+	let container = $state(untrack(() => wanted?.name ?? ''));
+	$effect(() => {
+		if (wanted) container = wanted.name;
+	});
 	let mode = $state<TerminalMode>(untrack(() => startMode));
 	let status = $state<'connecting' | 'open' | 'exited'>('connecting');
 	let connectedTo = $state('');

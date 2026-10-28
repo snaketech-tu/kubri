@@ -10,8 +10,12 @@
 				['Ctrl+Shift+C', 'Switch context'],
 				['j / k  or  ↑ / ↓', 'Move'],
 				['g / G', 'First / last row'],
-				['/', 'Filter (-l key=value for labels)'],
+				['/', 'Filter: regex, !inverse, -f fuzzy, -l app=web'],
 				['0', 'All namespaces'],
+				['[ / ]  or  Alt+← / →', 'Back / forward'],
+				['-', 'Last view, and back again'],
+				['Shift+W', 'Warp to the namespace of the row'],
+				['Shift+J', 'Jump to the owner'],
 				[':pulses', 'Cluster overview'],
 				[':xray deploy [ns]', 'XRay: what each object depends on'],
 				[':rbac', 'Who may do what'],
@@ -22,26 +26,42 @@
 				[':config', 'k9s aliases, hotkeys, plugins and skins'],
 				[':skin name', 'Switch skin; :skin kubri for the built-in colors'],
 				['w', 'Wide columns'],
-				['Shift+N / Shift+A', 'Sort by name / age'],
-				['Esc', 'Close, clear selection or filter']
+				['Shift+N / A / S / P', 'Sort by name / age / status / namespace'],
+				['Ctrl+Z', 'Only faulty rows'],
+				['Esc', 'Close, clear selection or filter, go back']
 			]
 		],
 		[
 			'Inspect',
 			[
-				['Enter  or  d', 'Describe'],
+				['Enter', 'Open: pods of a workload, jobs of a CronJob, … (jumps.yaml)'],
+				['d', 'Describe'],
 				['y', 'YAML'],
 				['e', 'Edit YAML (Ctrl+S saves)'],
 				['l', 'Logs of a pod, workload or service'],
 				['p', 'Logs of the previous container'],
-				['f', 'Maximize or restore the panel']
+				['f', 'Maximize or restore the panel'],
+				['c / n', 'Copy names / namespaces'],
+				['Ctrl+S', 'Save the list as CSV']
+			]
+		],
+		[
+			'Logs',
+			[
+				['0 – 6', 'Tail, all, 1m, 5m, 15m, 30m, 1h'],
+				['t / w', 'Timestamps / wrap'],
+				['s', 'Autoscroll'],
+				['m', 'Mark: a line across the log'],
+				['c / Ctrl+S', 'Copy / save'],
+				['Shift+C', 'Clear']
 			]
 		],
 		[
 			'Act',
 			[
 				['Space', 'Select row'],
-				['Ctrl+A', 'Select all'],
+				['Ctrl+Space', 'Select up to here'],
+				['Ctrl+A / Ctrl+\\', 'Select all / none'],
 				['Ctrl+D  or  Delete', 'Delete'],
 				['s', 'Scale'],
 				['r', 'Rollout restart'],
@@ -54,6 +74,9 @@
 			[
 				['s', 'Shell'],
 				['a', 'Attach'],
+				['o', 'Show the node'],
+				['i', 'Set image (also workloads)'],
+				['z', 'Delete completed and failed pods'],
 				['Shift+F', 'Port-forward (also deployments, services)']
 			]
 		],
@@ -64,6 +87,18 @@
 				['o', 'Open in the browser'],
 				['c  or  Enter', 'Copy URL'],
 				['Ctrl+D', 'Stop']
+			]
+		],
+		[
+			'Workloads',
+			[
+				['Enter', 'Pods (Deployments, StatefulSets, DaemonSets, Jobs, Services)'],
+				['z', 'ReplicaSets of a Deployment'],
+				['Ctrl+L', 'Roll back to a ReplicaSet'],
+				['t', 'Run a CronJob now'],
+				['s', 'Suspend or resume a CronJob'],
+				['x', 'Show the values of a Secret'],
+				['u', 'Use a namespace; what uses a ConfigMap, Secret, PVC or ServiceAccount']
 			]
 		],
 		[

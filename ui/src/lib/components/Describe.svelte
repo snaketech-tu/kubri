@@ -1,11 +1,42 @@
 <script lang="ts">
-	import type { EventInfo, KubeObject } from '../api';
+	import { copyLines } from '../actions';
+	import type { EventInfo, KubeObject, Reference } from '../api';
 	import { age } from '../format';
+	import { secretValue } from '../pods';
 	import { rulesOf } from '../rbac';
 	import { cellTone } from '../status';
+	import { app, findResource } from '../state.svelte';
 	import RulesMatrix from './RulesMatrix.svelte';
 
-	let { object, events, now }: { object: KubeObject; events: EventInfo[]; now: number } = $props();
+	let {
+		object,
+		events,
+		now,
+		decoded = false,
+		ondecode,
+		oncontainer,
+		shell = false,
+		usedBy
+	}: {
+		object: KubeObject;
+		events: EventInfo[];
+		now: number;
+		/** Shows the values of a Secret. */
+		decoded?: boolean;
+		ondecode?: () => void;
+		/** Opens the logs or a shell of one container. */
+		oncontainer?: (name: string, tab: 'logs' | 'shell') => void;
+		/** Whether shells are on offer. */
+		shell?: boolean;
+		/** What uses a ConfigMap, Secret, PVC, ServiceAccount or PriorityClass. */
+		usedBy?: Reference[] | { error: string } | 'loading';
+	} = $props();
+
+	/** Shows a user in its list, with the cursor on it. */
+	function showUser(ref: Reference) {
+		const resource = findResource(app.resources, ref.resource);
+		if (resource) app.openAt(resource, ref.namespace, ref.name);
+	}
 
 	const meta = $derived(object.metadata);
 	const spec = $derived(object.spec ?? {});
@@ -104,6 +135,16 @@
 		return f;
 	});
 
+	/** The data of a Secret, decoded from base64. */
+	const secretData = $derived(
+		object.kind === 'Secret'
+			? Object.entries((object.data as Record<string, string> | undefined) ?? {}).map(([key, value]) => ({
+					key,
+					...secretValue(value)
+				}))
+			: []
+	);
+
 	const isRole = $derived(object.kind === 'Role' || object.kind === 'ClusterRole');
 	const subjects = $derived<any[]>(Array.isArray((object as any).subjects) ? (object as any).subjects : []);
 
@@ -143,7 +184,7 @@
 	{#if containers.length}
 		<h3>Containers</h3>
 		<table>
-			<thead><tr><th>Name</th><th>Image</th><th>Ready</th><th>Restarts</th><th>State</th></tr></thead>
+			<thead><tr><th>Name</th><th>Image</th><th>Ready</th><th>Restarts</th><th>State</th><th></th></tr></thead>
 			<tbody>
 				{#each containers as c (c.name)}
 					<tr>
@@ -152,10 +193,70 @@
 						<td class={c.ready ? 'ok' : 'warn'}>{c.ready ? 'yes' : 'no'}</td>
 						<td class={c.restarts > 0 ? 'warn' : ''}>{c.restarts}</td>
 						<td>{c.state}</td>
+						<td class="actions">
+							{#if oncontainer}
+								<button onclick={() => oncontainer(c.name, 'logs')} title="Logs of {c.name}">Logs</button>
+								{#if shell && !c.init}
+									<button onclick={() => oncontainer(c.name, 'shell')} title="Shell in {c.name}">Shell</button>
+								{/if}
+							{/if}
+						</td>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
+	{/if}
+
+	{#if object.kind === 'Secret'}
+		<h3 class="with-tool">
+			Data
+			{#if secretData.length && ondecode}
+				<button onclick={ondecode} title="Show or hide the values (x)">{decoded ? 'Hide values' : 'Show values'}</button>
+			{/if}
+		</h3>
+		{#if secretData.length}
+			<dl class="facts small secret">
+				{#each secretData as d (d.key)}
+					<dt title={d.key}>{d.key}</dt>
+					<dd>
+						{#if !decoded}
+							<span class="muted">{d.bytes} {d.bytes === 1 ? 'byte' : 'bytes'}</span>
+						{:else if d.text === null}
+							<span class="muted">binary, {d.bytes} {d.bytes === 1 ? 'byte' : 'bytes'}</span>
+						{:else}
+							<span class="value">{d.text}</span>
+							<button class="copy" onclick={() => copyLines([d.text ?? ''], ['value', 'values'])} title="Copy the value">Copy</button>
+						{/if}
+					</dd>
+				{/each}
+			</dl>
+		{:else}
+			<p class="muted">No data.</p>
+		{/if}
+	{/if}
+
+	{#if usedBy !== undefined}
+		<h3>Used by</h3>
+		{#if usedBy === 'loading'}
+			<p class="muted">Looking for workloads and pods that use it…</p>
+		{:else if 'error' in usedBy}
+			<p class="bad">{usedBy.error}</p>
+		{:else if usedBy.length}
+			<table>
+				<thead><tr><th>Kind</th><th>Name</th><th>Namespace</th></tr></thead>
+				<tbody>
+					{#each usedBy as ref (ref.kind + ref.namespace + ref.name)}
+						<tr>
+							<td>{ref.kind}</td>
+							<td class="mono"><button class="link" onclick={() => showUser(ref)} title="Show it in its list">{ref.name}</button></td>
+							<td class="muted">{ref.namespace ?? ''}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{:else}
+			<p class="muted">No workload or pod uses it.</p>
+		{/if}
 	{/if}
 
 	{#if isRole}
@@ -255,6 +356,56 @@
 	}
 	.facts.small dt {
 		max-width: 260px;
+	}
+	.facts.secret dd {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		white-space: normal;
+	}
+	.value {
+		white-space: pre-wrap;
+		word-break: break-all;
+	}
+	h3.with-tool {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	h3 button,
+	.actions button,
+	.copy {
+		padding: 1px 8px;
+		border: 1px solid var(--border);
+		border-radius: 5px;
+		background: var(--surface-1);
+		color: var(--text);
+		font-size: 11.5px;
+		font-weight: 500;
+		letter-spacing: normal;
+		text-transform: none;
+	}
+	h3 button:hover,
+	.actions button:hover,
+	.copy:hover {
+		border-color: var(--accent);
+	}
+	.actions {
+		text-align: right;
+	}
+	.link {
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent-strong);
+		font: inherit;
+		text-align: left;
+	}
+	.link:hover {
+		text-decoration: underline;
+	}
+	.actions button + button {
+		margin-left: 4px;
 	}
 	.chips {
 		display: flex;

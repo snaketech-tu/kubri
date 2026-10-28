@@ -53,7 +53,44 @@ export interface Row {
 	namespace: string | null;
 	created: string | null;
 	labels: Record<string, string>;
+	/** The objects this one belongs to, such as the ReplicaSet of a pod. */
+	owners: Owner[];
 	cells: unknown[];
+}
+
+export interface Owner {
+	apiVersion: string;
+	kind: string;
+	name: string;
+	uid: string;
+	/** The owner that manages the object. */
+	controller: boolean;
+}
+
+/** Narrows a list on the server, like `kubectl get -l` and `--field-selector`. */
+export interface TableScope {
+	labelSelector?: string | null;
+	fieldSelector?: string | null;
+}
+
+/** Where Enter leads from an object: a list of what belongs to it. */
+/** An object that uses a ConfigMap, Secret, PVC, ServiceAccount or PriorityClass. */
+export interface Reference {
+	resource: ResourceRef;
+	kind: string;
+	namespace: string | null;
+	name: string;
+}
+
+export interface Drill {
+	resource: ResourceRef;
+	/** Null lists all namespaces. */
+	namespace: string | null;
+	scope: TableScope;
+	/** Keeps only what this UID owns, like the Jobs of a CronJob. */
+	ownerUid: string | null;
+	/** Such as `Pods of Deployment web`. */
+	title: string;
 }
 
 export type TableEvent =
@@ -114,6 +151,17 @@ export interface Usage {
 	cpu: number;
 	/** Bytes. */
 	memory: number;
+	/** What a pod's containers request and may use at most; a limit only when all set one. */
+	requests?: Limits;
+	limits?: Limits;
+	/** What a node can give to pods. */
+	allocatable?: Limits;
+}
+
+/** Millicores and bytes, where set. */
+export interface Limits {
+	cpu?: number;
+	memory?: number;
 }
 
 export interface LogOptions {
@@ -450,6 +498,43 @@ export interface Plugin {
 	confirm: boolean;
 	dangerous: boolean;
 	override: boolean;
+	/** Values asked for before it runs, as `$INPUT_<NAME>`. */
+	inputs: PluginInput[];
+}
+
+export interface PluginInput {
+	name: string;
+	label: string;
+	type: 'string' | 'number' | 'bool' | 'dropdown';
+	required: boolean;
+	default: string;
+	/** The choices of a dropdown. */
+	options: string[];
+}
+
+/** Percentages at which %CPU and %MEM show as a warning and as critical. */
+export interface Threshold {
+	warn: number;
+	critical: number;
+}
+
+export interface LoggerSettings {
+	/** Lines to start with. */
+	tail: number;
+	/** How far back to start, in seconds; -1 for the tail only. */
+	sinceSeconds: number;
+	textWrap: boolean;
+	showTime: boolean;
+	disableAutoscroll: boolean;
+}
+
+/** A rule of `jumps.yaml`: where Enter leads from a resource. */
+export interface Jump {
+	source: string;
+	targetGVR: string;
+	labelSelector: string;
+	fieldSelector: string;
+	targetNamespace: string;
 }
 
 /** The k9s aliases, hotkeys, plugins and skins for the connected context. */
@@ -464,6 +549,15 @@ export interface K9sConfig {
 	skins: string[];
 	/** The skin k9s uses for the context. */
 	skin: string | null;
+	/** Nothing in the cluster may be changed: k9s `readOnly`, or Kubri started read-only. */
+	readOnly: boolean;
+	/** The command to open after connecting, such as `pods`. */
+	defaultView: string | null;
+	thresholds: { cpu: Threshold; memory: Threshold };
+	logger: LoggerSettings;
+	/** Where port-forwards listen by default. */
+	portForwardAddress: string | null;
+	jumps: Jump[];
 }
 
 export interface Cell {
@@ -484,6 +578,8 @@ export interface PluginRun {
 	filter?: string | null;
 	/** The selected row's cells, for `$COL-<NAME>`. */
 	columns?: Cell[];
+	/** Values for the plugin's inputs, by name. */
+	inputs?: Record<string, string>;
 	cols?: number;
 	rows?: number;
 }
@@ -495,7 +591,12 @@ export interface Backend {
 	switchContext(name: string): Promise<ClusterInfo>;
 	resources(): Promise<ResourceInfo[]>;
 	/** Starts a live table and returns a function that stops it. */
-	watchTable(resource: ResourceRef, namespace: string | null, onEvent: (event: TableEvent) => void): () => void;
+	watchTable(
+		resource: ResourceRef,
+		namespace: string | null,
+		scope: TableScope | null,
+		onEvent: (event: TableEvent) => void
+	): () => void;
 	getObject(target: ObjectRef): Promise<KubeObject>;
 	replaceObject(target: ObjectRef, value: KubeObject): Promise<KubeObject>;
 	/** JSON merge patch. */
@@ -503,6 +604,16 @@ export interface Backend {
 	deleteObject(target: ObjectRef, options?: DeleteOptions): Promise<void>;
 	scale(target: ObjectRef, replicas: number): Promise<void>;
 	restart(target: ObjectRef): Promise<void>;
+	/** Where Enter leads from an object; null when it has nowhere to go but its details. */
+	drill(target: ObjectRef): Promise<Drill | null>;
+	/** What uses a ConfigMap, Secret, PVC, ServiceAccount or PriorityClass, like k9s `u`. */
+	usedBy(target: ObjectRef): Promise<Reference[]>;
+	/** Runs a CronJob now; returns the Job's name. */
+	triggerCronJob(target: ObjectRef): Promise<string>;
+	suspendCronJob(target: ObjectRef, suspend: boolean): Promise<void>;
+	setImages(target: ObjectRef, images: ContainerImage[]): Promise<void>;
+	/** Rolls a ReplicaSet's Deployment back to it; returns the Deployment's name. */
+	rollback(target: ObjectRef): Promise<string>;
 	events(namespace: string | null, uid: string): Promise<EventInfo[]>;
 	metrics(kind: MetricsKind, namespace: string | null): Promise<Usage[]>;
 	/** Streams logs of a pod, workload or Service and returns a function that stops it. */
@@ -549,4 +660,11 @@ export interface Backend {
 	openUrl(url: string): Promise<void>;
 	/** Saves text as a file. Returns the path when the desktop app saved it to Downloads. */
 	saveText(name: string, text: string): Promise<string | null>;
+}
+
+export interface ContainerImage {
+	name: string;
+	image: string;
+	/** An init container. */
+	init?: boolean;
 }

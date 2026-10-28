@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { parse, stringify } from 'yaml';
 	import { canEdit, save } from '../actions';
-	import { backend, type EventInfo, type KubeObject } from '../api';
+	import { backend, type EventInfo, type KubeObject, type Reference } from '../api';
 	import { errorMessage } from '../format';
-	import { containerNames, hasLogs, isPods } from '../pods';
+	import { containerNames, hasLogs, hasUsers, isPods } from '../pods';
 	import { app, type Details } from '../state.svelte';
 	import Describe from './Describe.svelte';
 	import LogView from './LogView.svelte';
@@ -48,18 +48,43 @@
 		return () => clearInterval(timer);
 	});
 
+	/** What uses the object, as k9s `u` finds it, looked up when Describe shows; or why not. */
+	let usedBy = $state<Reference[] | { error: string } | 'loading'>('loading');
+	$effect(() => {
+		const target = details.target;
+		usedBy = 'loading';
+		if (!hasUsers(details.resource) || details.tab !== 'describe') return;
+		let current = true;
+		backend
+			.usedBy(target)
+			.then((refs) => current && (usedBy = refs))
+			.catch((err) => current && (usedBy = { error: errorMessage(err) }));
+		return () => {
+			current = false;
+		};
+	});
+
 	// Logs and shells keep running in the background once opened, until another object is shown.
 	let opened = $state({ logs: false, shell: false });
+	/** Containers picked in Describe, for the logs and the shell to switch to. */
+	let picked = $state<{ logs: { name: string } | null; shell: { name: string } | null }>({ logs: null, shell: null });
 	$effect(() => {
 		void details.target;
 		opened = { logs: false, shell: false };
+		picked = { logs: null, shell: null };
 	});
+
+	function openContainer(name: string, tab: 'logs' | 'shell') {
+		picked[tab] = { name };
+		details.tab = tab;
+	}
 	$effect(() => {
 		if (details.tab === 'logs' || details.tab === 'shell') opened[details.tab] = true;
 	});
 
 	const logs = $derived(hasLogs(details.resource, object));
-	const shell = $derived(isPods(details.resource));
+	// Shells change what runs in the cluster, so read-only leaves them out.
+	const shell = $derived(isPods(details.resource) && !app.readOnly);
 	const containers = $derived(containerNames(object));
 	const targetKey = $derived(JSON.stringify(details.target));
 
@@ -140,7 +165,7 @@
 				<button class="primary" disabled={saving} onclick={() => editor && onsave(editor.text())}>
 					{saving ? 'Saving…' : 'Save'} <kbd>Ctrl+S</kbd>
 				</button>
-			{:else if canEdit(details.resource)}
+			{:else if canEdit(details.resource) && !app.readOnly}
 				<button class="secondary" onclick={() => (details.editing = true)} disabled={!object}>Edit <kbd>e</kbd></button>
 			{/if}
 		{/if}
@@ -157,12 +182,18 @@
 		{#key targetKey}
 			{#if opened.logs && logs}
 				<div class="tool" class:hidden={details.tab !== 'logs'}>
-					<LogView target={details.target} {containers} previous={details.previous} />
+					<LogView
+						target={details.target}
+						{containers}
+						previous={details.previous}
+						container={picked.logs}
+						active={details.tab === 'logs'}
+					/>
 				</div>
 			{/if}
 			{#if opened.shell && shell}
 				<div class="tool" class:hidden={details.tab !== 'shell'}>
-					<TerminalView target={details.target} {containers} mode={details.mode} />
+					<TerminalView target={details.target} {containers} mode={details.mode} container={picked.shell} />
 				</div>
 			{/if}
 		{/key}
@@ -171,7 +202,16 @@
 		{:else if !object}
 			{#if !error}<p class="muted">Loading…</p>{/if}
 		{:else if details.tab === 'describe'}
-			<Describe {object} {events} {now} />
+			<Describe
+				{object}
+				{events}
+				{now}
+				decoded={details.decoded ?? false}
+				ondecode={() => (details.decoded = !details.decoded)}
+				oncontainer={openContainer}
+				{shell}
+				usedBy={hasUsers(details.resource) ? usedBy : undefined}
+			/>
 		{:else}
 			{#key showManaged}
 				<YamlEditor

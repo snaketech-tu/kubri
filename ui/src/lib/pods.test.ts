@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { KubeObject, ResourceInfo } from './api';
 import { writeQueue } from './api/queue';
 import {
+	AUTO_PORT_FORWARDS_KEY,
+	PORT_FORWARDS_KEY,
+	annotatedForwards,
+	annotatedPorts,
+	containerImages,
 	containerNames,
 	forwardablePorts,
 	hasLogs,
 	logMatcher,
+	logRanges,
+	secretValue,
 	sourceLabels,
 	stripAnsi,
 	suggestedLocalPort
@@ -92,6 +99,76 @@ describe('port-forwards', () => {
 	it('suggests unprivileged local ports', () => {
 		expect(suggestedLocalPort(8080)).toBe(8080);
 		expect(suggestedLocalPort(80)).toBe(null);
+	});
+});
+
+describe('k9s port-forward annotations', () => {
+	it('reads the forms k9s takes', () => {
+		expect(annotatedPorts('8080, 9090:http, nginx::8443:443, bad entry')).toEqual([
+			{ container: null, local: null, port: 8080 },
+			{ container: null, local: 9090, port: 'http' },
+			{ container: 'nginx', local: 8443, port: 443 }
+		]);
+		expect(annotatedPorts(undefined)).toEqual([]);
+	});
+
+	it('looks port names up in the containers, of pods and pod templates', () => {
+		const annotated = (annotations: Record<string, string>) => ({ ...pod, metadata: { name: 'web-1', annotations } });
+		expect(annotatedForwards(annotated({ [PORT_FORWARDS_KEY]: '9000:http,proxy::15001' }), PORT_FORWARDS_KEY)).toEqual([
+			{ remote: 8080, local: 9000 },
+			{ remote: 15001, local: null }
+		]);
+		// A name the container does not have is left out.
+		expect(annotatedForwards(annotated({ [PORT_FORWARDS_KEY]: 'proxy::http' }), PORT_FORWARDS_KEY)).toEqual([]);
+		const deployment: KubeObject = {
+			kind: 'Deployment',
+			metadata: { name: 'web' },
+			spec: {
+				template: {
+					metadata: { annotations: { [AUTO_PORT_FORWARDS_KEY]: 'http' } },
+					spec: { containers: [{ name: 'app', ports: [{ name: 'http', containerPort: 80 }] }] }
+				}
+			}
+		};
+		expect(annotatedForwards(deployment, AUTO_PORT_FORWARDS_KEY)).toEqual([{ remote: 80, local: null }]);
+		expect(annotatedForwards(deployment, PORT_FORWARDS_KEY)).toEqual([]);
+	});
+});
+
+describe('container images', () => {
+	it('lists containers with their images, init containers marked', () => {
+		const p: KubeObject = {
+			kind: 'Pod',
+			metadata: { name: 'p' },
+			spec: { initContainers: [{ name: 'init', image: 'busybox' }], containers: [{ name: 'app', image: 'nginx:1.27' }] }
+		};
+		expect(containerImages(p)).toEqual([
+			{ name: 'app', image: 'nginx:1.27', init: false },
+			{ name: 'init', image: 'busybox', init: true }
+		]);
+	});
+});
+
+describe('log ranges', () => {
+	it('start with the k9s logger tail, or its sinceSeconds', () => {
+		const tail = logRanges(100, -1);
+		expect(tail.start).toBe('tail');
+		expect([...tail.ranges.keys()]).toEqual(['tail', '500', '2000', '1m', '5m', '15m', '30m', '1h', 'all']);
+		expect(tail.ranges.get('tail')).toEqual({ label: 'Last 100 lines', options: { tailLines: 100 } });
+		expect(logRanges(500, 300).start).toBe('5m');
+		expect([...logRanges(500, 300).ranges.keys()]).not.toContain('500');
+		const custom = logRanges(100, 7200);
+		expect(custom.start).toBe('since');
+		expect(custom.ranges.get('since')?.label).toBe('Last 2 hours');
+	});
+});
+
+describe('secret values', () => {
+	it('decodes text and tells binary apart', () => {
+		expect(secretValue(btoa('s3cret'))).toEqual({ bytes: 6, text: 's3cret' });
+		expect(secretValue(btoa(String.fromCharCode(0xc3, 0xa9)))).toEqual({ bytes: 2, text: 'é' });
+		expect(secretValue(btoa(String.fromCharCode(0xff, 0xfe, 0x00)))).toEqual({ bytes: 3, text: null });
+		expect(secretValue('not base64!')).toEqual({ bytes: 0, text: null });
 	});
 });
 

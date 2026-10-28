@@ -24,6 +24,9 @@ pub enum Error {
     Kube(#[from] kube::Error),
     #[error("timed out while connecting to the cluster")]
     Timeout,
+    /// Changes are turned off; the text says why.
+    #[error("Kubri is read-only ({0}), so it does not change the cluster")]
+    ReadOnly(String),
     #[error("{0}")]
     Io(#[from] std::io::Error),
 }

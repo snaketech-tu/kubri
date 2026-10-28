@@ -1,43 +1,61 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
 	import { backend, type LogEvent, type LogOptions, type LogSource, type ObjectRef } from '../api';
-	import { errorMessage } from '../format';
-	import { logMatcher, sourceLabels, stripAnsi } from '../pods';
+	import { copyLines, saveFile } from '../actions';
+	import { forControl } from '../keys';
+	import { logMatcher, logRanges, sourceLabels, stripAnsi } from '../pods';
 	import { app } from '../state.svelte';
 
-	let { target, containers, previous: startPrevious = false }: {
+	let {
+		target,
+		containers,
+		previous: startPrevious = false,
+		container: wanted = null,
+		active = false
+	}: {
 		target: ObjectRef;
 		containers: string[];
 		previous?: boolean;
+		/** A container to show, asked for from Describe; a new object each time. */
+		container?: { name: string } | null;
+		/** The logs are on screen and take the k9s log keys. */
+		active?: boolean;
 	} = $props();
 
 	/** Older lines are dropped beyond this, to keep the view fast. */
 	const MAX_LINES = 10_000;
 	const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#ef4444', '#84cc16'];
-	const RANGES: Record<string, { label: string; options: Pick<LogOptions, 'tailLines' | 'sinceSeconds'> }> = {
-		'100': { label: 'Last 100 lines', options: { tailLines: 100 } },
-		'500': { label: 'Last 500 lines', options: { tailLines: 500 } },
-		'2000': { label: 'Last 2000 lines', options: { tailLines: 2000 } },
-		'5m': { label: 'Last 5 minutes', options: { sinceSeconds: 300 } },
-		'1h': { label: 'Last hour', options: { sinceSeconds: 3600 } },
-		all: { label: 'Everything', options: {} }
-	};
+	// k9s `logger` settings: lines to start with, how far back, wrap, timestamps, autoscroll.
+	const logger = untrack(() => app.k9s?.logger);
+	const { ranges: RANGES, start: startRange } = logRanges(logger?.tail ?? 100, logger?.sinceSeconds ?? -1);
+	/** The ranges k9s puts on 0 to 6: tail, head (here everything), then 1m to 1h. */
+	const RANGE_KEYS = ['tail', 'all', '1m', '5m', '15m', '30m', '1h'];
 
 	interface Line {
 		id: number;
 		source: number | null;
 		text: string;
 		error?: boolean;
+		/** A line drawn with `m`. */
+		mark?: boolean;
 	}
 
-	let container = $state('');
+	let container = $state(untrack(() => wanted?.name ?? ''));
 	let follow = $state(true);
 	// Only the starting value; the checkbox owns it afterwards.
 	let previous = $state(untrack(() => startPrevious));
-	let timestamps = $state(false);
-	let wrap = $state(true);
-	let range = $state('500');
+	let timestamps = $state(logger?.showTime ?? false);
+	let wrap = $state(logger?.textWrap ?? false);
+	let range = $state(startRange);
 	let filter = $state('');
+	/** Keeps the newest line in view; k9s `s`. */
+	let autoscroll = !logger?.disableAutoscroll;
+	/** Ids of mark lines count down, apart from the log's own. */
+	let marks = 0;
+
+	$effect(() => {
+		if (wanted) container = wanted.name;
+	});
 
 	let lines = $state.raw<Line[]>([]);
 	let sources = $state.raw<LogSource[]>([]);
@@ -50,7 +68,7 @@
 	const labels = $derived(sourceLabels(sources));
 	const showSource = $derived(sources.length > 1);
 	const matches = $derived(logMatcher(filter));
-	const visible = $derived(filter ? lines.filter((l) => l.error || matches(l.text)) : lines);
+	const visible = $derived(filter ? lines.filter((l) => l.error || l.mark || matches(l.text)) : lines);
 
 	$effect(() => {
 		void restarts;
@@ -59,12 +77,12 @@
 			follow,
 			previous,
 			timestamps,
-			...RANGES[range].options
+			...RANGES.get(range)?.options
 		};
 		lines = [];
 		sources = [];
 		dropped = 0;
-		stick = true;
+		stick = autoscroll;
 		status = 'connecting';
 
 		// Lines can arrive faster than the screen refreshes: render at most once per frame.
@@ -115,34 +133,79 @@
 	function onscroll() {
 		if (!scroller) return;
 		stick = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 24;
+		autoscroll = stick;
 	}
 
 	function jumpToEnd() {
-		stick = true;
+		stick = autoscroll = true;
 		if (scroller) scroller.scrollTop = scroller.scrollHeight;
 	}
 
-	function asText() {
-		return visible.map((l) => (showSource && l.source !== null ? `[${labels[l.source]}] ` : '') + l.text).join('\n');
+	function shownLines() {
+		return visible.map((l) => (showSource && l.source !== null ? `[${labels[l.source]}] ` : '') + l.text);
 	}
 
-	async function save() {
-		try {
-			const path = await backend.saveText(`${target.name}${container ? `-${container}` : ''}.log`, asText() + '\n');
-			if (path) app.toast(`Saved ${path}`);
-		} catch (err) {
-			app.toast(errorMessage(err), 'bad');
-		}
+	function save() {
+		saveFile(`${target.name}${container ? `-${container}` : ''}.log`, shownLines().join('\n') + '\n');
 	}
 
 	function copy() {
-		const count = visible.length;
-		navigator.clipboard.writeText(asText()).then(
-			() => app.toast(`Copied ${count} ${count === 1 ? 'line' : 'lines'}`),
-			(err) => app.toast(errorMessage(err), 'bad')
-		);
+		copyLines(shownLines(), ['line', 'lines']);
+	}
+
+	/** A line across the log, to tell what came after it; k9s `m`. */
+	function mark() {
+		lines = [...lines, { id: --marks, source: null, text: '', mark: true }];
+		jumpToEnd();
+	}
+
+	/** The k9s log keys, before the list below gets them. */
+	function onkeydown(e: KeyboardEvent) {
+		if (!active || app.overlayOpen || forControl(e) || e.altKey) return;
+		const ctrl = e.ctrlKey || e.metaKey;
+		const handled = (() => {
+			if (ctrl) {
+				if (e.key.toLowerCase() !== 's') return false;
+				save();
+				return true;
+			}
+			const key = RANGE_KEYS[Number(e.key)];
+			if (/^[0-6]$/.test(e.key) && key) {
+				range = key;
+				return true;
+			}
+			switch (e.key) {
+				case 't':
+					timestamps = !timestamps;
+					return true;
+				case 'w':
+					wrap = !wrap;
+					return true;
+				case 'c':
+					copy();
+					return true;
+				case 'C':
+					lines = [];
+					return true;
+				case 's':
+					if (stick) stick = autoscroll = false;
+					else jumpToEnd();
+					app.toast(stick ? 'Autoscroll on' : 'Autoscroll off');
+					return true;
+				case 'm':
+					mark();
+					return true;
+			}
+			return false;
+		})();
+		if (handled) {
+			e.preventDefault();
+			e.stopPropagation();
+		}
 	}
 </script>
+
+<svelte:window onkeydowncapture={onkeydown} />
 
 <div class="logs">
 	<div class="toolbar">
@@ -152,18 +215,19 @@
 				{#each containers as c (c)}<option value={c}>{c}</option>{/each}
 			</select>
 		{/if}
-		<select bind:value={range} title="How far back to start">
-			{#each Object.entries(RANGES) as [key, r] (key)}<option value={key}>{r.label}</option>{/each}
+		<select bind:value={range} title="How far back to start (0–6)">
+			{#each [...RANGES] as [key, r] (key)}<option value={key}>{r.label}</option>{/each}
 		</select>
 		<label><input type="checkbox" bind:checked={follow} /> Follow</label>
-		<label><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
+		<label title="t"><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
 		<label title="Logs of the previous, crashed container"><input type="checkbox" bind:checked={previous} /> Previous</label>
-		<label><input type="checkbox" bind:checked={wrap} /> Wrap</label>
+		<label title="w"><input type="checkbox" bind:checked={wrap} /> Wrap</label>
 		<input class="filter" bind:value={filter} placeholder="Filter…  /regex/" />
 		<span class="spacer"></span>
-		<button onclick={() => (lines = [])} title="Clear the view">Clear</button>
-		<button onclick={copy} title="Copy the shown lines">Copy</button>
-		<button onclick={save} title="Save the shown lines">Save</button>
+		<button onclick={() => (lines = [])} title="Clear the view (Shift+C)">Clear</button>
+		<button onclick={mark} title="Draw a line to tell what comes after it (m)">Mark</button>
+		<button onclick={copy} title="Copy the shown lines (c)">Copy</button>
+		<button onclick={save} title="Save the shown lines (Ctrl+S)">Save</button>
 	</div>
 
 	<div class="body" class:wrap bind:this={scroller} {onscroll}>
@@ -171,7 +235,7 @@
 			<div class="note">{dropped} older lines were dropped to keep the view fast.</div>
 		{/if}
 		{#each visible as line (line.id)}
-			<div class="line" class:error={line.error}>
+			<div class="line" class:error={line.error} class:mark={line.mark}>
 				{#if showSource && line.source !== null}<span class="source" style:color={COLORS[line.source % COLORS.length]}
 						>{labels[line.source]}</span
 					>{/if}{line.text}
@@ -260,6 +324,12 @@
 	}
 	.line.error {
 		color: var(--bad);
+	}
+	.line.mark {
+		height: 0;
+		margin: 6px 16px;
+		padding: 0;
+		border-top: 2px solid var(--accent);
 	}
 	.source {
 		margin-right: 8px;

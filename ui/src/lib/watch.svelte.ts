@@ -1,5 +1,5 @@
 import { SvelteMap } from 'svelte/reactivity';
-import { backend, type Column, type MetricsKind, type ResourceRef, type Row, type Usage } from './api';
+import { backend, type Column, type MetricsKind, type ResourceRef, type Row, type TableScope, type Usage } from './api';
 
 /** A live table of objects. Call `start` from an `$effect` and return its result to clean up. */
 export class LiveTable {
@@ -9,12 +9,13 @@ export class LiveTable {
 	error = $state<string | null>(null);
 	rows = $derived([...this.#rows.values()]);
 
-	start(resource: ResourceRef, namespace: string | null) {
+	/** `scope` narrows the list with selectors, as after Enter on a Deployment. */
+	start(resource: ResourceRef, namespace: string | null, scope: TableScope | null = null) {
 		this.#rows.clear();
 		this.columns = [];
 		this.loading = true;
 		this.error = null;
-		return backend.watchTable(resource, namespace, (event) => {
+		return backend.watchTable(resource, namespace, scope, (event) => {
 			switch (event.type) {
 				case 'reset':
 					this.#rows.clear();

@@ -3,6 +3,7 @@ import {
 	type ClusterInfo,
 	type BenchInfo,
 	type ContextInfo,
+	type Drill,
 	type HelmRelease,
 	type K9sConfig,
 	type ObjectRef,
@@ -11,9 +12,10 @@ import {
 	type PortForwardInfo,
 	type ResourceInfo,
 	type ResourceRef,
+	type TableScope,
 	type TerminalMode
 } from './api';
-import type { Action, ConfigSection, PaletteConfig } from './commands';
+import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import { applyTheme, resolveColor, storeSkin, storedSkin } from './skin';
@@ -31,7 +33,31 @@ export interface Details {
 	previous?: boolean;
 	/** How the shell tab connects. */
 	mode?: TerminalMode;
+	/** Show the decoded values of a Secret, like k9s `x`. */
+	decoded?: boolean;
 }
+
+export type DetailsExtra = Partial<Pick<Details, 'editing' | 'previous' | 'mode' | 'decoded'>>;
+
+/** A resource list narrowed to what belongs to one object, like the pods of a Deployment. */
+export interface ListScope {
+	/** Such as `Pods of Deployment web`. */
+	title: string;
+	scope: TableScope;
+	/** Keeps only what this UID owns. */
+	ownerUid: string | null;
+}
+
+/** A place in Kubri, for going back and forth like k9s `[`, `]` and `-`. */
+interface View {
+	page: Page;
+	resource: ResourceRef | null;
+	namespace: string;
+	scope: ListScope | null;
+	xray: ResourceRef | null;
+}
+
+const HISTORY = 50;
 
 export type Page =
 	| 'resources'
@@ -54,7 +80,11 @@ export type Dialog =
 	| { kind: 'drain'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'helmRollback'; release: HelmRelease; revision: number; done: () => void }
 	| { kind: 'helmUninstall'; release: HelmRelease; done: () => void }
-	| { kind: 'plugin'; plugin: Plugin; run: PluginRun; command: string };
+	| { kind: 'plugin'; plugin: Plugin; run: PluginRun; variables: Record<string, string> }
+	| { kind: 'trigger'; resource: ResourceInfo; target: ObjectRef }
+	| { kind: 'suspend'; resource: ResourceInfo; target: ObjectRef; suspend: boolean }
+	| { kind: 'image'; resource: ResourceInfo; target: ObjectRef }
+	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef };
 
 export interface Toast {
 	id: number;
@@ -104,6 +134,17 @@ class AppState {
 	pluginTerminal = $state<{ plugin: Plugin; run: PluginRun } | null>(null);
 	/** A filter for the resource list to take, from a command like `:pods app=web`. */
 	filterRequest = $state<string | null>(null);
+	/** The object the resource list puts its cursor on once it shows up, as after Shift+J. */
+	cursorRequest = $state<{ namespace: string | null; name: string } | null>(null);
+	/** Narrows the resource list, after Enter on a workload, CronJob or node. */
+	scope = $state<ListScope | null>(null);
+	#history: View[] = [];
+	#historyAt = -1;
+	/** The view before the current one, for `-`. */
+	#lastView: View | null = null;
+	#restoring = false;
+	/** The k9s `defaultView` applies once, when Kubri starts. */
+	#startup = true;
 	/** Set by the current view: what it has under the cursor. */
 	focus: (() => Focus) | null = null;
 
@@ -122,6 +163,18 @@ class AppState {
 	);
 
 	paletteConfig = $derived<PaletteConfig>({ aliases: this.k9s?.aliases ?? [], skins: this.k9s?.skins ?? [] });
+
+	/** k9s `readOnly`, or Kubri started read-only: nothing that changes the cluster is offered. */
+	readOnly = $derived(this.k9s?.readOnly ?? false);
+
+	/** Where Kubri is, for the history. */
+	view = $derived<View>({
+		page: this.page,
+		resource: this.selected && refOf(this.selected),
+		namespace: this.namespace,
+		scope: this.scope,
+		xray: this.xrayResource && refOf(this.xrayResource)
+	});
 
 	async load() {
 		try {
@@ -159,14 +212,79 @@ class AppState {
 	}
 
 	/** Shows a resource list, optionally switching namespace, like k9s `:pods kube-system`. */
-	open(resource: ResourceInfo, namespace?: string, filter?: string) {
+	open(resource: ResourceInfo, namespace?: string, filter?: string, scope: ListScope | null = null) {
 		this.page = 'resources';
 		this.selected = resource;
 		this.setNamespace(namespace);
 		this.details = null;
+		this.scope = scope;
 		if (filter !== undefined) this.filterRequest = filter;
 	}
 
+	/** Follows Enter from an object to the list of what belongs to it. */
+	drill(drill: Drill) {
+		const resource = findResource(this.resources, drill.resource);
+		if (!resource) {
+			this.toast(`The cluster does not serve ${drill.resource.plural}`, 'bad');
+			return;
+		}
+		const scope = { title: drill.title, scope: drill.scope, ownerUid: drill.ownerUid };
+		this.open(resource, drill.namespace ?? 'all', '', scope);
+	}
+
+	/** Shows the list of `resource` with the cursor on one object, as k9s does for owners. */
+	openAt(resource: ResourceInfo, namespace: string | null, name: string) {
+		const keep = resource.namespaced && namespace && this.namespace !== ALL_NAMESPACES;
+		this.open(resource, keep ? namespace : undefined, '');
+		this.cursorRequest = { namespace, name };
+	}
+
+	/** Records a view in the history, unless going back or forth brought it up. */
+	remember(view: View) {
+		if (this.#restoring) {
+			this.#restoring = false;
+			return;
+		}
+		const current = this.#history[this.#historyAt];
+		if (current && sameView(current, view)) return;
+		if (current) this.#lastView = current;
+		this.#history = [...this.#history.slice(0, this.#historyAt + 1), view].slice(-HISTORY);
+		this.#historyAt = this.#history.length - 1;
+	}
+
+	/** Goes back (`[`) or forward (`]`) in the history; false when there is nowhere to go. */
+	go(delta: -1 | 1): boolean {
+		const at = this.#historyAt + delta;
+		const view = this.#history[at];
+		if (!view) return false;
+		this.#lastView = this.#history[this.#historyAt] ?? null;
+		this.#historyAt = at;
+		this.restore(view);
+		return true;
+	}
+
+	/** Returns to the view before this one, and back again (`-`). */
+	toggleLast(): boolean {
+		const last = this.#lastView;
+		if (!last) return false;
+		const at = this.#history.findLastIndex((v) => sameView(v, last));
+		this.#lastView = this.#history[this.#historyAt] ?? null;
+		if (at !== -1) this.#historyAt = at;
+		this.restore(last);
+		return true;
+	}
+
+	private restore(view: View) {
+		const resource = view.resource && findResource(this.resources, view.resource);
+		const xray = view.xray && findResource(this.resources, view.xray);
+		this.#restoring = !sameView(view, this.view);
+		this.page = view.page;
+		if (resource) this.selected = resource;
+		if (xray) this.xrayResource = xray;
+		this.namespace = view.namespace;
+		this.scope = view.scope;
+		this.details = null;
+	}
 	/** Runs a palette command or hotkey. */
 	async run(action: Action) {
 		switch (action.type) {
@@ -227,12 +345,7 @@ class AppState {
 		if (namespace !== undefined) this.namespace = namespace === 'all' ? ALL_NAMESPACES : namespace;
 	}
 
-	showDetails(
-		resource: ResourceInfo,
-		target: ObjectRef,
-		tab: DetailsTab = 'describe',
-		extra: Partial<Pick<Details, 'editing' | 'previous' | 'mode'>> = {}
-	) {
+	showDetails(resource: ResourceInfo, target: ObjectRef, tab: DetailsTab = 'describe', extra: DetailsExtra = {}) {
 		const shown = this.details;
 		if (shown && sameResource(shown.resource, resource) && sameObject(shown.target, target)) {
 			// Same object: switch tabs in place, so running logs and shells survive.
@@ -308,6 +421,13 @@ class AppState {
 			const config = await backend.k9sConfig();
 			if (this.cluster?.context !== context) return;
 			this.k9s = config;
+			// k9s opens its `defaultView` when it starts.
+			const start = this.#startup && config.defaultView;
+			this.#startup = false;
+			if (start) {
+				const [first] = suggest(start, this.resources, this.contexts, this.namespaces, this.paletteConfig);
+				if (first) await this.run(first.action);
+			}
 		} catch (err) {
 			this.k9s = null;
 			this.toast(`Could not read the k9s configuration: ${errorMessage(err)}`, 'bad');
@@ -370,6 +490,11 @@ class AppState {
 		this.resources = resources;
 		this.namespace = ALL_NAMESPACES;
 		this.details = null;
+		this.scope = null;
+		// Views of the last cluster may not exist in this one.
+		this.#history = [];
+		this.#historyAt = -1;
+		this.#lastView = null;
 		this.selected =
 			resources.find((r) => previous && sameResource(r, previous)) ??
 			resources.find((r) => r.group === '' && r.plural === 'pods') ??
@@ -384,6 +509,20 @@ class AppState {
 
 export function sameResource(a: ResourceRef, b: ResourceRef) {
 	return a.group === b.group && a.version === b.version && a.plural === b.plural;
+}
+
+function sameRef(a: ResourceRef | null, b: ResourceRef | null) {
+	return a === b || (!!a && !!b && sameResource(a, b));
+}
+
+function sameView(a: View, b: View) {
+	return (
+		a.page === b.page &&
+		a.namespace === b.namespace &&
+		sameRef(a.resource, b.resource) &&
+		sameRef(a.xray, b.xray) &&
+		JSON.stringify(a.scope) === JSON.stringify(b.scope)
+	);
 }
 
 export function sameObject(a: ObjectRef, b: ObjectRef) {

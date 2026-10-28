@@ -46,10 +46,10 @@ export const tauriBackend: Backend = {
 	switchContext: (name) => invoke('switch_context', { name }),
 	resources: () => invoke('resources'),
 
-	watchTable(resource, namespace, onEvent) {
+	watchTable(resource, namespace, scope, onEvent) {
 		const channel = new Channel<TableEvent>();
 		channel.onmessage = onEvent;
-		const id = invoke<number>('watch_table', { resource, namespace, onEvent: channel }).catch((err) => {
+		const id = invoke<number>('watch_table', { resource, namespace, scope, onEvent: channel }).catch((err) => {
 			onEvent({ type: 'error', message: String(err) });
 			return null;
 		});
@@ -64,6 +64,12 @@ export const tauriBackend: Backend = {
 	deleteObject: (target, options) => invoke('delete_object', { target, options: options ?? null }),
 	scale: (target, replicas) => invoke('scale', { target, replicas }),
 	restart: (target) => invoke('restart', { target }),
+	drill: (target) => invoke('drill', { target }),
+	usedBy: (target) => invoke('used_by', { target }),
+	triggerCronJob: (target) => invoke('trigger_cronjob', { target }),
+	suspendCronJob: (target, suspend) => invoke('suspend_cronjob', { target, suspend }),
+	setImages: (target, images) => invoke('set_images', { target, images }),
+	rollback: (target) => invoke('rollback', { target }),
 	events: (namespace, uid) => invoke('events', { namespace, uid }),
 	metrics: (kind, namespace) => invoke('metrics', { kind, namespace }),
 

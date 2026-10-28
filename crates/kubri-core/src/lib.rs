@@ -19,18 +19,22 @@ mod portforward;
 mod proxy;
 mod pulse;
 mod rbac;
+mod references;
 mod resource;
 mod sanitizer;
 mod selector;
 mod table;
+mod template;
 mod terminal;
 #[cfg(test)]
 mod testing;
 mod typed;
+mod workload;
 mod xray;
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -49,19 +53,23 @@ pub use context::{ContextInfo, write_in_cluster_kubeconfig};
 pub use error::{Error, Result};
 pub use health::Health;
 pub use helm::{HelmRelease, HelmReleaseDetails};
-pub use k9s::{Alias, ConfigFile, Hotkey, K9sConfig, Plugin};
+pub use k9s::{
+    Alias, ConfigFile, Hotkey, Jump, K9sConfig, Logger, Plugin, PluginInput, Threshold, Thresholds,
+};
 pub use logs::{LogEvent, LogLine, LogOptions, LogSource};
-pub use metrics::{MetricsKind, Usage, parse_quantity};
+pub use metrics::{Limits, MetricsKind, Usage, parse_quantity};
 pub use node::{DrainOptions, DrainReport, PodIssue};
 pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
 pub use plugin::{Cell, PluginRun, Release};
 pub use portforward::{PortForwardInfo, PortForwardRequest};
 pub use pulse::{EventPulse, KindPulse, Pulse, RecentEvent, Utilization};
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
+pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
-pub use table::{Column, Row, TableEvent};
+pub use table::{Column, Owner, Row, TableEvent, TableScope};
 pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
+pub use workload::{ContainerImage, Drill};
 pub use xray::XrayNode;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -97,6 +105,8 @@ pub struct Kubri {
     session: RwLock<Option<Arc<Session>>>,
     forwards: std::sync::Mutex<portforward::Forwards>,
     benchmarks: std::sync::Mutex<bench::Benchmarks>,
+    /// Started read-only, whatever the k9s configuration says.
+    read_only: AtomicBool,
 }
 
 impl Kubri {
@@ -116,7 +126,26 @@ impl Kubri {
             session: RwLock::new(None),
             forwards: Default::default(),
             benchmarks: Default::default(),
+            read_only: AtomicBool::new(false),
         }
+    }
+
+    /// Turns changes to clusters off for good, like k9s `--readonly`. The k9s `readOnly`
+    /// setting can turn them off per context too; see [`K9sConfig::read_only`].
+    pub fn set_read_only(&self) {
+        self.read_only.store(true, Ordering::Relaxed);
+    }
+
+    /// Fails with [`Error::ReadOnly`] when changes are turned off. Port-forwards, logs and
+    /// benchmarks only read, so they stay allowed, as in k9s.
+    async fn ensure_writable(&self) -> Result<()> {
+        if self.read_only.load(Ordering::Relaxed) {
+            return Err(Error::ReadOnly("it was started read-only".into()));
+        }
+        if self.k9s_files().await.read_only {
+            return Err(Error::ReadOnly("readOnly is set in the k9s configuration".into()));
+        }
+        Ok(())
     }
 
     /// Re-reads the kubeconfig from disk, keeping the current connection.
@@ -202,12 +231,14 @@ impl Kubri {
         &self,
         resource: &ResourceRef,
         namespace: Option<&str>,
+        scope: TableScope,
     ) -> Result<impl Stream<Item = TableEvent> + Send + 'static> {
         let session = self.session().await?;
         let api = session.api(resource, namespace)?;
         Ok(table::watch_table(
             session.client.clone(),
             api.resource_url().to_owned(),
+            scope,
         ))
     }
 
@@ -223,6 +254,7 @@ impl Kubri {
     /// Replaces an object, as `kubectl edit` does. Fails with a conflict if it changed since
     /// `object` was read.
     pub async fn replace(&self, obj: &ObjectRef, object: Value) -> Result<Value> {
+        self.ensure_writable().await?;
         let api = self
             .session()
             .await?
@@ -234,6 +266,7 @@ impl Kubri {
 
     /// Applies a JSON merge patch, for example to change labels or annotations.
     pub async fn patch(&self, obj: &ObjectRef, patch: Value) -> Result<Value> {
+        self.ensure_writable().await?;
         let api = self
             .session()
             .await?
@@ -245,6 +278,7 @@ impl Kubri {
     }
 
     pub async fn delete(&self, obj: &ObjectRef, options: &DeleteOptions) -> Result<()> {
+        self.ensure_writable().await?;
         let api = self
             .session()
             .await?
@@ -255,6 +289,7 @@ impl Kubri {
 
     /// Sets the replica count through the `scale` subresource, so CRDs that support it work too.
     pub async fn scale(&self, obj: &ObjectRef, replicas: u32) -> Result<()> {
+        self.ensure_writable().await?;
         let session = self.session().await?;
         let info = session.info_for(&obj.resource)?;
         if !info.subresources.iter().any(|s| s == "scale") {
@@ -270,6 +305,7 @@ impl Kubri {
     /// Restarts the pods of a Deployment, StatefulSet or DaemonSet, like
     /// `kubectl rollout restart`.
     pub async fn restart(&self, obj: &ObjectRef) -> Result<()> {
+        self.ensure_writable().await?;
         let session = self.session().await?;
         let info = session.info_for(&obj.resource)?;
         if !matches!(info.kind.as_str(), "Deployment" | "StatefulSet" | "DaemonSet") {
@@ -284,6 +320,149 @@ impl Kubri {
         )
         .await?;
         Ok(())
+    }
+
+    /// Where Enter leads from an object: the rule for its resource in `jumps.yaml`, or the
+    /// pods of a workload, Service or node, or the Jobs of a CronJob. `None` for the rest,
+    /// which Enter describes.
+    pub async fn drill(&self, target: &ObjectRef) -> Result<Option<Drill>> {
+        let session = self.session().await?;
+        let info = session.info_for(&target.resource)?;
+        let config = self.k9s_config().await;
+        let rule = workload::find_jump(&config.jumps, &info.reference);
+        let builtin = workload::Builtin::of(info);
+        if rule.is_none() && builtin.is_none() {
+            return Ok(None);
+        }
+        let object = serde_json::to_value(
+            session
+                .api(&target.resource, target.namespace.as_deref())?
+                .get(&target.name)
+                .await?,
+        )?;
+        if let Some(rule) = rule {
+            let resolve = |path: &str| session.find_path(path).cloned();
+            return workload::jump(rule, info, target, &object, resolve).map(Some);
+        }
+        let pods = session.resolve("v1", "Pod");
+        let jobs = session.resolve("batch/v1", "Job");
+        builtin
+            .map(|b| b.drill(info, target, &object, pods, jobs))
+            .transpose()
+    }
+
+    /// Runs a CronJob now: creates a Job from its template, like `kubectl create job
+    /// --from=cronjob/…`. Returns the Job's name.
+    pub async fn trigger_cronjob(&self, target: &ObjectRef) -> Result<String> {
+        self.ensure_writable().await?;
+        let session = self.session().await?;
+        if session.info_for(&target.resource)?.kind != "CronJob" {
+            return Err(Error::Unsupported("only CronJobs can be triggered".into()));
+        }
+        let cronjob = serde_json::to_value(
+            session
+                .api(&target.resource, target.namespace.as_deref())?
+                .get(&target.name)
+                .await?,
+        )?;
+        let job: DynamicObject = serde_json::from_value(workload::job_from_cronjob(&cronjob)?)?;
+        let jobs = session
+            .resolve("batch/v1", "Job")
+            .ok_or_else(|| Error::UnknownResource("batch/v1/jobs".into()))?;
+        let created = session
+            .api(&jobs, target.namespace.as_deref())?
+            .create(&PostParams::default(), &job)
+            .await?;
+        Ok(created.metadata.name.unwrap_or_default())
+    }
+
+    /// Suspends a CronJob, so it starts no more Jobs, or resumes it.
+    pub async fn suspend_cronjob(&self, target: &ObjectRef, suspend: bool) -> Result<()> {
+        self.ensure_writable().await?;
+        let session = self.session().await?;
+        if session.info_for(&target.resource)?.kind != "CronJob" {
+            return Err(Error::Unsupported("only CronJobs can be suspended".into()));
+        }
+        let patch = serde_json::json!({ "spec": { "suspend": suspend } });
+        session
+            .api(&target.resource, target.namespace.as_deref())?
+            .patch(&target.name, &PatchParams::default(), &Patch::Merge(patch))
+            .await?;
+        Ok(())
+    }
+
+    /// What uses a ConfigMap, Secret, PersistentVolumeClaim, ServiceAccount or
+    /// PriorityClass, like k9s `u`: the workloads, CronJobs and bare pods whose pod spec names
+    /// it, in its namespace (in all of them for a PriorityClass).
+    pub async fn used_by(&self, target: &ObjectRef) -> Result<Vec<Reference>> {
+        let session = self.session().await?;
+        let info = session.info_for(&target.resource)?;
+        let used = references::Used::of(info)
+            .ok_or_else(|| Error::Unsupported(format!("Kubri does not look up what uses a {}", info.kind)))?;
+        let lists = references::USERS.iter().filter_map(|&(version, kind)| {
+            let resource = session.resolve(version, kind)?;
+            let api = session.api(&resource, target.namespace.as_deref()).ok()?;
+            Some(async move { (kind, resource, api.list(&ListParams::default()).await) })
+        });
+        let mut found = Vec::new();
+        for (kind, resource, list) in futures::future::join_all(lists).await {
+            for object in list?.items {
+                let value = serde_json::to_value(&object)?;
+                if used.by(kind, &value, &target.name) {
+                    found.push(Reference {
+                        resource: resource.clone(),
+                        kind: kind.to_owned(),
+                        namespace: object.metadata.namespace.clone(),
+                        name: object.metadata.name.clone().unwrap_or_default(),
+                    });
+                }
+            }
+        }
+        Ok(found)
+    }
+
+    /// Sets container images of a pod, Deployment, StatefulSet or DaemonSet, like
+    /// `kubectl set image`.
+    pub async fn set_images(&self, target: &ObjectRef, images: &[ContainerImage]) -> Result<()> {
+        self.ensure_writable().await?;
+        let session = self.session().await?;
+        let info = session.info_for(&target.resource)?;
+        if !workload::has_images(info) {
+            return Err(Error::Unsupported(format!("{} has no images to set", info.kind)));
+        }
+        let patch = workload::image_patch(info.kind == "Pod", images)?;
+        session
+            .api(&target.resource, target.namespace.as_deref())?
+            .patch(&target.name, &PatchParams::default(), &Patch::Strategic(patch))
+            .await?;
+        Ok(())
+    }
+
+    /// Rolls the Deployment of a ReplicaSet back to the ReplicaSet's pod template, like
+    /// `kubectl rollout undo --to-revision`. Returns the Deployment's name.
+    pub async fn rollback(&self, target: &ObjectRef) -> Result<String> {
+        self.ensure_writable().await?;
+        let session = self.session().await?;
+        let info = session.info_for(&target.resource)?;
+        if (info.reference.group.as_str(), info.kind.as_str()) != ("apps", "ReplicaSet") {
+            return Err(Error::Unsupported("rollbacks start from a ReplicaSet".into()));
+        }
+        let replicaset = serde_json::to_value(
+            session
+                .api(&target.resource, target.namespace.as_deref())?
+                .get(&target.name)
+                .await?,
+        )?;
+        let name = workload::deployment_of(&replicaset)?;
+        let deployments = session
+            .resolve("apps/v1", "Deployment")
+            .ok_or_else(|| Error::UnknownResource("apps/v1/deployments".into()))?;
+        let api = session.api(&deployments, target.namespace.as_deref())?;
+        let deployment = serde_json::to_value(api.get(&name).await?)?;
+        let updated: DynamicObject = serde_json::from_value(workload::rolled_back(deployment, &replicaset)?)?;
+        // Fails with a conflict if the Deployment changed since it was read.
+        api.replace(&name, &PostParams::default(), &updated).await?;
+        Ok(name)
     }
 
     /// Events about the object with `uid`, newest first.
@@ -305,10 +484,31 @@ impl Kubri {
         Ok(events)
     }
 
-    /// Current CPU and memory usage from metrics-server. Fails with
-    /// [`Error::UnknownResource`] when metrics-server is not installed.
+    /// Current CPU and memory usage from metrics-server, with the requests and limits of pods
+    /// and what nodes can give. Fails with [`Error::UnknownResource`] when metrics-server is
+    /// not installed.
     pub async fn metrics(&self, kind: MetricsKind, namespace: Option<&str>) -> Result<Vec<Usage>> {
-        self.session().await?.metrics(kind, namespace).await
+        let session = self.session().await?;
+        let client = session.client.clone();
+        let mut usage = session.metrics(kind, namespace).await?;
+        // Without them the percentages stay empty; the usage itself is still worth showing.
+        match kind {
+            MetricsKind::Pods => {
+                let api: Api<Pod> = match namespace {
+                    Some(ns) => Api::namespaced(client, ns),
+                    None => Api::all(client),
+                };
+                if let Ok(pods) = typed::list(api).await {
+                    metrics::add_pod_limits(&mut usage, &pods);
+                }
+            }
+            MetricsKind::Nodes => {
+                if let Ok(nodes) = typed::list(Api::<Node>::all(client)).await {
+                    metrics::add_node_allocatable(&mut usage, &nodes);
+                }
+            }
+        }
+        Ok(usage)
     }
 
     /// The cluster overview: health counts per kind, recent warnings and CPU and memory use.
@@ -388,18 +588,28 @@ impl Kubri {
 
     /// Rolls a release back to `revision` with `helm rollback`, on the connected context.
     pub async fn helm_rollback(&self, namespace: &str, name: &str, revision: u32) -> Result<String> {
+        self.ensure_writable().await?;
         let context = self.session().await?.info.context.clone();
         helm::rollback(&context, namespace, name, revision).await
     }
 
     /// Uninstalls a release with `helm uninstall`, on the connected context.
     pub async fn helm_uninstall(&self, namespace: &str, name: &str) -> Result<String> {
+        self.ensure_writable().await?;
         let context = self.session().await?.info.context.clone();
         helm::uninstall(&context, namespace, name).await
     }
 
-    /// The k9s aliases, hotkeys, plugins and skins, with those of the connected context.
+    /// The k9s aliases, hotkeys, plugins, skins and settings, with those of the connected
+    /// context. [`K9sConfig::read_only`] is also set when Kubri was started read-only.
     pub async fn k9s_config(&self) -> K9sConfig {
+        let mut config = self.k9s_files().await;
+        config.read_only |= self.read_only.load(Ordering::Relaxed);
+        config
+    }
+
+    /// The k9s configuration as the files have it.
+    async fn k9s_files(&self) -> K9sConfig {
         let Some(dirs) = k9s::Dirs::from_env() else {
             return K9sConfig::default();
         };
@@ -408,8 +618,8 @@ impl Kubri {
             cluster: c.cluster.clone().unwrap_or_default(),
             context: c.name.clone(),
         });
-        let env_skin = std::env::var("K9S_SKIN").ok();
-        tokio::task::spawn_blocking(move || k9s::load(&dirs, key.as_ref(), env_skin))
+        let env = k9s::Env::read();
+        tokio::task::spawn_blocking(move || k9s::load(&dirs, key.as_ref(), &env))
             .await
             .unwrap_or_default()
     }
@@ -469,6 +679,11 @@ impl Kubri {
             .into_iter()
             .find(|p| p.name == run.plugin)
             .ok_or_else(|| Error::NotFound(format!("plugin {}", run.plugin)))?;
+        // Read-only, k9s offers no dangerous plugins.
+        if plugin.dangerous {
+            self.ensure_writable().await?;
+        }
+        let inputs = plugin::input_values(&plugin, &run.inputs)?;
         // The selected object's resource, or the view's when nothing is selected.
         let reference = run.target.as_ref().map(|t| &t.resource).or(run.resource.as_ref());
         let resource = match reference {
@@ -521,7 +736,8 @@ impl Kubri {
                     .map(|h| h.join(".kube").join("config").display().to_string())
                     .unwrap_or_default()
             });
-        let variables = plugin::variables(&context, kubeconfig, run, resource, container);
+        let mut variables = plugin::variables(&context, kubeconfig, run, resource, container);
+        variables.0.extend(inputs);
         let prepared = plugin::prepare(&plugin, &variables, &run.columns)?;
         Ok((plugin, prepared))
     }
@@ -568,6 +784,8 @@ impl Kubri {
 
     /// Opens a shell in a pod's container, or attaches to its main process.
     pub async fn open_terminal(&self, target: &ObjectRef, options: TerminalOptions) -> Result<Terminal> {
+        // A shell can change anything the container can.
+        self.ensure_writable().await?;
         let session = self.session().await?;
         if !session.is_core(&target.resource, "Pod")? {
             return Err(Error::Unsupported("terminals open in pods".into()));
@@ -644,6 +862,7 @@ impl Kubri {
 
     /// Marks a node (un)schedulable, like `kubectl cordon` and `kubectl uncordon`.
     pub async fn cordon(&self, node: &str, cordoned: bool) -> Result<()> {
+        self.ensure_writable().await?;
         let session = self.session().await?;
         let nodes: Api<Node> = Api::all(session.client.clone());
         let patch = serde_json::json!({ "spec": { "unschedulable": cordoned } });
@@ -763,6 +982,25 @@ impl Session {
             best.get_or_insert(r.reference.clone());
         }
         best
+    }
+
+    /// The served resource of `group/version/resource`, `version/resource` or a resource name,
+    /// as `jumps.yaml` names it; another version of the same resource if need be.
+    fn find_path(&self, path: &str) -> Option<&ResourceInfo> {
+        let (group, version, name) = workload::split_gvr(path);
+        let name = name.to_ascii_lowercase();
+        let matches = |r: &&ResourceInfo| {
+            let plural = r.reference.plural.as_str();
+            if version.is_empty() {
+                // A bare name: the plural, singular or a short name, core types first.
+                plural == name || r.singular == name || r.short_names.contains(&name)
+            } else {
+                r.reference.group == group && plural == name
+            }
+        };
+        let mut candidates: Vec<&ResourceInfo> = self.resources.iter().filter(matches).collect();
+        candidates.sort_by_key(|r| (!r.reference.group.is_empty(), r.reference.version != version));
+        candidates.into_iter().next()
     }
 
     fn pod_api(&self, namespace: Option<&str>) -> Result<Api<Pod>> {

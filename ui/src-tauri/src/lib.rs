@@ -9,10 +9,11 @@ use std::sync::{Arc, Mutex};
 
 use futures::{Stream, StreamExt};
 use kubri_core::{
-    BenchInfo, BenchRequest, ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo,
-    HelmRelease, HelmReleaseDetails, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
-    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef,
-    SanitizerReport, TableEvent, Terminal, TerminalInput, TerminalOptions, TerminalOutput, Usage, XrayNode,
+    BenchInfo, BenchRequest, ClusterInfo, ContainerImage, ContextList, DeleteOptions, DrainOptions,
+    DrainReport, Drill, EventInfo, HelmRelease, HelmReleaseDetails, K9sConfig, Kubri, LogEvent, LogOptions,
+    MetricsKind, ObjectRef, Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac,
+    Reference, ResourceInfo, ResourceRef, SanitizerReport, TableEvent, TableScope, Terminal, TerminalInput,
+    TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde_json::Value;
 use tauri::State;
@@ -99,10 +100,11 @@ async fn watch_table(
     streams: State<'_, Arc<Streams>>,
     resource: ResourceRef,
     namespace: Option<String>,
+    scope: Option<TableScope>,
     on_event: Channel<TableEvent>,
 ) -> CommandResult<u32> {
     let events = kubri
-        .watch_table(&resource, namespace.as_deref())
+        .watch_table(&resource, namespace.as_deref(), scope.unwrap_or_default())
         .await
         .map_err(|e| e.to_string())?;
     Ok(streams.spawn(events, on_event))
@@ -336,6 +338,50 @@ async fn restart(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResu
 }
 
 #[tauri::command]
+async fn drill(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Option<Drill>> {
+    kubri.drill(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn used_by(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Vec<Reference>> {
+    kubri.used_by(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn trigger_cronjob(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<String> {
+    kubri.trigger_cronjob(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn suspend_cronjob(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+    suspend: bool,
+) -> CommandResult<()> {
+    kubri
+        .suspend_cronjob(&target, suspend)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn set_images(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+    images: Vec<ContainerImage>,
+) -> CommandResult<()> {
+    kubri
+        .set_images(&target, &images)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn rollback(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<String> {
+    kubri.rollback(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn events(
     kubri: State<'_, Arc<Kubri>>,
     namespace: Option<String>,
@@ -534,6 +580,16 @@ fn save_new(dir: &std::path::Path, name: &str, contents: &[u8]) -> CommandResult
     Err(format!("{name} exists too many times in {}", dir.display()))
 }
 
+/// `KUBRI_READ_ONLY=true` (or 1, yes, on), as for kubri-server.
+fn read_only_requested() -> bool {
+    std::env::var("KUBRI_READ_ONLY").is_ok_and(|v| {
+        matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on" | "y"
+        )
+    })
+}
+
 pub fn run() {
     #[cfg(unix)]
     if shell_env::print_requested() {
@@ -550,8 +606,13 @@ pub fn run() {
     #[cfg(unix)]
     shell_env::load();
 
+    let kubri = Kubri::load();
+    if read_only_requested() {
+        kubri.set_read_only();
+        tracing::info!("read-only: Kubri does not change clusters");
+    }
     tauri::Builder::default()
-        .manage(Arc::new(Kubri::load()))
+        .manage(Arc::new(kubri))
         .manage(Arc::new(Streams::default()))
         .manage(Arc::new(Terminals::default()))
         .invoke_handler(tauri::generate_handler![
@@ -599,7 +660,13 @@ pub fn run() {
             helm_rollback,
             helm_uninstall,
             open_url,
-            save_text
+            save_text,
+            drill,
+            used_by,
+            trigger_cronjob,
+            suspend_cronjob,
+            set_images,
+            rollback
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Kubri");

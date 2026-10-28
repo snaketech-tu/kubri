@@ -82,8 +82,10 @@ export const httpBackend: Backend = {
 	switchContext: (name) => request('PUT', '/context', { name }),
 	resources: () => request('GET', '/resources'),
 
-	watchTable(resource, namespace, onEvent) {
+	watchTable(resource, namespace, scope, onEvent) {
 		const params = new URLSearchParams({ ...resource, namespace: namespace ?? '' });
+		if (scope?.labelSelector) params.set('labelSelector', scope.labelSelector);
+		if (scope?.fieldSelector) params.set('fieldSelector', scope.fieldSelector);
 		let stopped = false;
 		const socket = new WebSocket(socketUrl(`/table?${params}`));
 		socket.onmessage = (msg) => onEvent(JSON.parse(msg.data));
@@ -104,6 +106,12 @@ export const httpBackend: Backend = {
 	deleteObject: (target, options) => request('DELETE', '/object', { target, options: options ?? {} }),
 	scale: (target, replicas) => request('POST', '/object/scale', { target, replicas }),
 	restart: (target) => request('POST', '/object/restart', { target }),
+	drill: (target) => request('POST', '/object/drill', { target }),
+	usedBy: (target) => request('POST', '/object/used-by', { target }),
+	triggerCronJob: async (target) => (await request<{ name: string }>('POST', '/cronjob/trigger', { target })).name,
+	suspendCronJob: (target, suspend) => request('POST', '/cronjob/suspend', { target, suspend }),
+	setImages: (target, images) => request('POST', '/object/images', { target, images }),
+	rollback: async (target) => (await request<{ name: string }>('POST', '/replicaset/rollback', { target })).name,
 	events: (namespace, uid) =>
 		request('GET', `/events?${new URLSearchParams({ namespace: namespace ?? '', uid })}`),
 	metrics: (kind, namespace) =>

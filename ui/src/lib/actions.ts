@@ -1,5 +1,6 @@
 import {
 	backend,
+	type ContainerImage,
 	type DeleteOptions,
 	type Hotkey,
 	type KubeObject,
@@ -12,6 +13,7 @@ import {
 import { suggest } from './commands';
 import { errorMessage } from './format';
 import { expandVariables, focusVariables } from './k9s';
+import { AUTO_PORT_FORWARDS_KEY, annotatedForwards, suggestedLocalPort } from './pods';
 import { app } from './state.svelte';
 
 /** Kinds `kubectl rollout restart` supports. */
@@ -85,6 +87,61 @@ export function cordon(node: string, cordoned: boolean) {
 	return runAction(cordoned ? `Cordoned ${node}` : `Uncordoned ${node}`, () => backend.cordon(node, cordoned));
 }
 
+/** Runs a CronJob now, like k9s `t`. */
+export async function triggerCronJob(target: ObjectRef) {
+	try {
+		const job = await backend.triggerCronJob(target);
+		app.toast(`Started Job ${job}`);
+		return true;
+	} catch (err) {
+		app.toast(errorMessage(err), 'bad');
+		return false;
+	}
+}
+
+export function suspendCronJob(target: ObjectRef, suspend: boolean) {
+	return runAction(suspend ? `Suspended ${label(target)}` : `Resumed ${label(target)}`, () =>
+		backend.suspendCronJob(target, suspend)
+	);
+}
+
+export function setImages(target: ObjectRef, images: ContainerImage[]) {
+	return runAction(`Set ${images.length === 1 ? 'the image' : 'images'} of ${label(target)}`, () =>
+		backend.setImages(target, images)
+	);
+}
+
+/** Rolls the Deployment of a ReplicaSet back to it, like k9s Ctrl+L. */
+export async function rollback(target: ObjectRef) {
+	try {
+		const deployment = await backend.rollback(target);
+		app.toast(`Rolled Deployment ${deployment} back to ${target.name}`);
+		return true;
+	} catch (err) {
+		app.toast(errorMessage(err), 'bad');
+		return false;
+	}
+}
+
+/** Copies lines to the clipboard and says how many, like k9s `c` and `n`. */
+export function copyLines(lines: string[], what: [string, string]) {
+	if (!lines.length) return;
+	navigator.clipboard.writeText(lines.join('\n')).then(
+		() => app.toast(lines.length === 1 ? `Copied ${lines[0]}` : `Copied ${lines.length} ${what[1]}`),
+		(err) => app.toast(errorMessage(err), 'bad')
+	);
+}
+
+/** Saves text as a file: to Downloads in the desktop app, as a download in the browser. */
+export async function saveFile(name: string, text: string) {
+	try {
+		const path = await backend.saveText(name, text);
+		if (path) app.toast(`Saved ${path}`);
+	} catch (err) {
+		app.toast(errorMessage(err), 'bad');
+	}
+}
+
 export async function startPortForward(request: PortForwardRequest) {
 	try {
 		const f = await backend.startPortForward(request);
@@ -94,6 +151,28 @@ export async function startPortForward(request: PortForwardRequest) {
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');
 		return false;
+	}
+}
+
+/**
+ * Port-forwards like k9s Shift+F: at once to the ports a `k9scli.io/auto-port-forwards`
+ * annotation names, otherwise through the dialog.
+ */
+export async function portForward(resource: ResourceInfo, target: ObjectRef) {
+	let object: KubeObject | null = null;
+	try {
+		object = await backend.getObject(target);
+	} catch {
+		// The dialog loads it again and says what is wrong.
+	}
+	const auto = annotatedForwards(object, AUTO_PORT_FORWARDS_KEY);
+	if (!auto.length) {
+		app.dialog = { kind: 'portforward', resource, target };
+		return;
+	}
+	const address = app.k9s?.portForwardAddress ?? null;
+	for (const { remote, local } of auto) {
+		await startPortForward({ target, remotePort: remote, localPort: local ?? suggestedLocalPort(remote), address });
 	}
 }
 
@@ -109,6 +188,10 @@ function contextInfo() {
 
 /** Runs a k9s plugin on what the view has under the cursor, asking first if it wants that. */
 export function startPlugin(plugin: Plugin) {
+	if (plugin.dangerous && app.readOnly) {
+		app.toast(`${plugin.description || plugin.name} changes the cluster, and Kubri is read-only`, 'bad');
+		return;
+	}
 	const focus = app.focus?.() ?? null;
 	const run: PluginRun = {
 		plugin: plugin.name,
@@ -118,16 +201,18 @@ export function startPlugin(plugin: Plugin) {
 		filter: focus?.filter || null,
 		columns: focus?.columns ?? []
 	};
-	if (plugin.confirm) {
+	// Inputs are asked for in the same dialog, which shows the command as they are filled in.
+	if (plugin.confirm || plugin.inputs.length) {
 		// The variables Kubri knows here; the rest, like $CONTAINER, are filled in when it runs.
-		const variables = focusVariables(focus, contextInfo());
-		const command = [plugin.command, ...plugin.args]
-			.map((part) => expandVariables(part, variables, run.columns))
-			.join(' ');
-		app.dialog = { kind: 'plugin', plugin, run, command };
+		app.dialog = { kind: 'plugin', plugin, run, variables: focusVariables(focus, contextInfo()) };
 		return;
 	}
 	launchPlugin(plugin, run);
+}
+
+/** The plugin's command as it will run, for its confirmation. */
+export function pluginCommand(plugin: Plugin, variables: Record<string, string>, run: PluginRun) {
+	return [plugin.command, ...plugin.args].map((part) => expandVariables(part, variables, run.columns)).join(' ');
 }
 
 export async function launchPlugin(plugin: Plugin, run: PluginRun) {

@@ -1,4 +1,5 @@
 import type { Column, Row } from './api';
+import { cellTone } from './status';
 
 export interface SortState {
 	/** Column index, or -1 for the default order (namespace, then name). */
@@ -91,7 +92,11 @@ export function sortRows(rows: Row[], columns: Column[], sort: SortState): Row[]
 	return sort.descending ? sorted.reverse() : sorted;
 }
 
-/** Keeps rows whose name, namespace or labels contain `filter`. `-l key=value` filters by label. */
+/**
+ * Keeps the rows that match `filter`, as k9s filters: a case-insensitive regular expression on
+ * the name, namespace and cells; `!` in front keeps the rows that do not match; `-f` matches
+ * names fuzzily; `-l app=web` filters by label.
+ */
 export function filterRows(rows: Row[], filter: string): Row[] {
 	const f = filter.trim();
 	if (!f) return rows;
@@ -100,11 +105,52 @@ export function filterRows(rows: Row[], filter: string): Row[] {
 		const selectors = label[1].split(',').map((s) => s.trim().split('='));
 		return rows.filter((r) => selectors.every(([k, v]) => (v === undefined ? k in r.labels : r.labels[k] === v)));
 	}
-	const needle = f.toLowerCase();
-	return rows.filter(
-		(r) =>
-			r.name.toLowerCase().includes(needle) ||
-			(r.namespace ?? '').toLowerCase().includes(needle) ||
-			r.cells.some((c) => typeof c === 'string' && c.toLowerCase().includes(needle))
+	const fuzzy = /^-f\s*(.+)$/.exec(f);
+	if (fuzzy) {
+		const needle = fuzzy[1].trim().toLowerCase();
+		return rows.filter((r) => inOrder(needle, r.name.toLowerCase()));
+	}
+	const inverse = f.startsWith('!');
+	const matches = textMatcher(inverse ? f.slice(1).trim() : f);
+	return rows.filter((r) => {
+		const hit =
+			matches(r.name) || matches(r.namespace ?? '') || r.cells.some((c) => typeof c === 'string' && matches(c));
+		return hit !== inverse;
+	});
+}
+
+/** A case-insensitive regular expression, or the text itself while it is not a valid one. */
+function textMatcher(text: string): (value: string) => boolean {
+	try {
+		const re = new RegExp(text, 'i');
+		return (value) => re.test(value);
+	} catch {
+		const needle = text.toLowerCase();
+		return (value) => value.toLowerCase().includes(needle);
+	}
+}
+
+/** Whether the characters of `needle` appear in `text` in the same order. */
+function inOrder(needle: string, text: string): boolean {
+	let at = 0;
+	for (const c of needle) {
+		at = text.indexOf(c, at) + 1;
+		if (at === 0) return false;
+	}
+	return true;
+}
+
+/** A row that needs a look, for k9s Ctrl+Z: a bad status, or a warning on an unfinished one. */
+export function isFaulty(columns: Column[], row: Row): boolean {
+	const cells = columns.map((c, i) => ({ name: c.name, value: row.cells[i], tone: cellTone(c.name, row.cells[i]) }));
+	const done = cells.some(
+		(c) => /^(status|phase)$/i.test(c.name) && /^(Completed|Complete|Succeeded)$/.test(String(c.value))
 	);
+	return cells.some((c) => c.tone === 'bad' || (c.tone === 'warn' && !done));
+}
+
+/** The table as CSV, the way k9s saves it with Ctrl+S. */
+export function toCsv(header: string[], lines: string[][]): string {
+	const field = (value: string) => (/[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
+	return [header, ...lines].map((line) => line.map(field).join(',')).join('\n') + '\n';
 }
