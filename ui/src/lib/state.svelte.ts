@@ -18,6 +18,7 @@ import {
 import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
 import { skinTheme, type Focus, type PluginView } from './k9s';
+import type { Menu } from './menu';
 import { applyTheme, resolveColor, storeSkin, storedSkin } from './skin';
 
 export const ALL_NAMESPACES = '';
@@ -117,6 +118,8 @@ class AppState {
 	paletteOpen = $state(false);
 	helpOpen = $state(false);
 	contextMenuOpen = $state(false);
+	/** The actions menu that is open, from a right click or a ⋯ or More button. */
+	menu = $state<Menu | null>(null);
 	toasts = $state<Toast[]>([]);
 	#toastId = 0;
 
@@ -150,7 +153,12 @@ class AppState {
 
 	/** True while an overlay owns the keyboard. */
 	overlayOpen = $derived(
-		this.paletteOpen || this.helpOpen || this.contextMenuOpen || this.dialog !== null || this.pluginTerminal !== null
+		this.paletteOpen ||
+			this.helpOpen ||
+			this.contextMenuOpen ||
+			this.menu !== null ||
+			this.dialog !== null ||
+			this.pluginTerminal !== null
 	);
 
 	/** Where plugins run now, which decides the plugins on offer. */

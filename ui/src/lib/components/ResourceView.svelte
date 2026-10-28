@@ -2,9 +2,21 @@
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, saveFile } from '../actions';
+	import {
+		canDelete,
+		canEdit,
+		canRestart,
+		canScale,
+		copyLines,
+		cordon,
+		portForward,
+		saveFile,
+		startPlugin
+	} from '../actions';
 	import { backend, type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
 	import { age, cpu, errorMessage, memory } from '../format';
+	import { parseShortcut, pluginApplies, shortcutLabel } from '../k9s';
+	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import {
 		canPortForward,
 		hasImages,
@@ -23,12 +35,14 @@
 		findResource,
 		refOf,
 		type DetailsExtra,
+		type Dialog,
 		type DetailsTab,
 		type ListScope
 	} from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
 	import { filterRows, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
+	import ActionBar from './ActionBar.svelte';
 
 	let {
 		resource,
@@ -199,10 +213,6 @@
 		const chosen = rows.filter((r) => selection.has(r.key));
 		if (chosen.length) return chosen;
 		return current ? [current] : [];
-	}
-
-	function targets(): ObjectRef[] {
-		return chosenRows().map(target);
 	}
 
 	function move(delta: number) {
@@ -392,6 +402,170 @@
 		saveFile(`${resource.plural}${ns ? `-${ns}` : ''}-${stamp}.csv`, toCsv(header, lines));
 	}
 
+	/** What the drill-down of Enter shows for this kind, or null where Enter only describes. */
+	function drillLabel(): string | null {
+		if (isNamespaces(resource)) return 'Show pods';
+		if (isCRDs(resource)) return 'Show objects';
+		if (isPods(resource) || !canDrill()) return null;
+		if (isCronJobs(resource)) return 'Show jobs';
+		const builtin = ['services', 'replicationcontrollers', 'nodes', 'deployments', 'replicasets', 'statefulsets', 'daemonsets', 'jobs'];
+		return builtin.includes(resource.plural) ? 'Show pods' : 'Open';
+	}
+
+	/**
+	 * Everything there is to do on a row, for the action bar, the row menu and the keys alike.
+	 * `chosen` are the rows that copying and deleting work on: the marked ones, or the row itself.
+	 */
+	function actionsFor(row: Row | undefined, chosen: Row[]): MenuAction[] {
+		if (!row) return [];
+		const out: MenuAction[] = [];
+		const add = (group: string, label: string, keys: string[], run: () => void, more: Partial<MenuAction> = {}) =>
+			out.push({ group, label, keys, run, ...more });
+		const show = (tab: DetailsTab, extra: DetailsExtra = {}) => () => void open(row, tab, extra);
+		const dialog = (make: () => Dialog) => () => {
+			cursorKey = row.key;
+			app.dialog = make();
+		};
+		const ref = target(row);
+
+		const drill = drillLabel();
+		if (drill) add('View', drill, [], () => enter(row), { hint: 'enter', primary: 1 });
+		add('View', 'Describe', ['d'], show('describe'), { primary: 5 });
+		add('View', 'YAML', ['y'], show('yaml'), { primary: 6 });
+		if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2 });
+		if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }));
+		if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }));
+		if (hasUsers(resource)) add('View', 'Used by', ['u'], show('describe'));
+
+		if (isPods(resource) && writable) {
+			add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3 });
+			add('Connect', 'Attach', ['a'], show('shell', { mode: 'attach' }));
+		}
+		if (canPortForward(resource)) {
+			add('Connect', 'Port-forward…', ['F'], () => void portForward(resource, ref), { primary: 8 });
+		}
+
+		if (writable) {
+			if (isNodes(resource)) {
+				add('Change', 'Cordon', ['c'], () => void cordon(row.name, true), { primary: 4 });
+				add('Change', 'Uncordon', ['u'], () => void cordon(row.name, false), { primary: 4 });
+				add('Change', 'Drain…', ['r'], dialog(() => ({ kind: 'drain', resource, target: ref })), { primary: 4 });
+			}
+			if (isCronJobs(resource)) {
+				add('Change', 'Trigger now…', ['t'], dialog(() => ({ kind: 'trigger', resource, target: ref })), { primary: 4 });
+				const suspend = cell(row, 'Suspend') !== 'True';
+				add('Change', suspend ? 'Suspend…' : 'Resume…', ['s'], dialog(() => ({ kind: 'suspend', resource, target: ref, suspend })));
+			}
+			if (canEdit(resource)) add('Change', 'Edit', ['e'], show('yaml', { editing: true }), { primary: 7 });
+			if (canScale(resource) && !isPods(resource)) {
+				add('Change', 'Scale…', ['s'], dialog(() => ({ kind: 'scale', resource, target: ref })), { primary: 4 });
+			}
+			if (canRestart(resource)) {
+				add('Change', 'Restart…', ['r'], dialog(() => ({ kind: 'restart', resource, target: ref })), { primary: 4 });
+			}
+			if (hasImages(resource)) add('Change', 'Set image…', ['i'], dialog(() => ({ kind: 'image', resource, target: ref })));
+			if (isReplicaSets(resource)) {
+				add('Change', 'Roll back to this…', ['ctrl+l'], dialog(() => ({ kind: 'rollback', resource, target: ref })));
+			}
+			if (resource.verbs.includes('patch')) {
+				add('Change', 'Labels & annotations…', ['L'], dialog(() => ({ kind: 'labels', resource, target: ref })));
+			}
+		}
+
+		const node = isPods(resource) ? cell(row, 'Node') : null;
+		const nodes = findResource(app.resources, { group: '', version: 'v1', plural: 'nodes' });
+		if (node && node !== '<none>' && nodes) add('Go to', `Node ${node}`, ['o'], () => app.openAt(nodes, null, node));
+		if (row.owners.length) {
+			const owner = row.owners.find((o) => o.controller) ?? row.owners[0];
+			add('Go to', `Owner ${owner.kind} ${owner.name}`, ['J'], () => jumpToOwner(row));
+		}
+		if (resource.group === 'apps' && resource.plural === 'deployments') {
+			add('Go to', 'ReplicaSets', ['z'], () => void showReplicaSets(row));
+		}
+		if (isNamespaces(resource)) {
+			add('Go to', `Switch to ${row.name}`, ['u'], () => {
+				app.namespace = row.name;
+				app.toast(`Namespace ${row.name}`);
+			});
+		} else if (resource.namespaced && row.namespace && row.namespace !== namespace) {
+			const ns = row.namespace;
+			add('Go to', `Switch to namespace ${ns}`, ['W'], () => (app.namespace = ns));
+		}
+
+		const several = chosen.length > 1;
+		add('Copy', several ? `Copy ${chosen.length} names` : 'Copy name', ['c'], () =>
+			copyLines(
+				chosen.map((r) => r.name),
+				['name', 'names']
+			)
+		);
+		if (resource.namespaced) {
+			add('Copy', several ? 'Copy namespaces' : 'Copy namespace', ['n'], () =>
+				copyLines(
+					[...new Set(chosen.map((r) => r.namespace ?? ''))],
+					['namespace', 'namespaces']
+				)
+			);
+		}
+
+		for (const plugin of app.k9s?.plugins ?? []) {
+			const shortcut = parseShortcut(plugin.shortCut);
+			if (!pluginApplies(plugin, app.pluginView) || (plugin.dangerous && !writable)) continue;
+			add('Plugins', plugin.description || plugin.name, [], () => {
+				cursorKey = row.key;
+				startPlugin(plugin);
+			}, { hint: shortcut ? shortcutLabel(shortcut) : undefined });
+		}
+
+		if (writable && isPods(resource) && canDelete(resource)) {
+			add('Delete', 'Delete finished pods…', ['z'], sanitize, { danger: true });
+		}
+		if (writable && canDelete(resource)) {
+			const label = several ? `Delete ${chosen.length}…` : 'Delete…';
+			add('Delete', label, ['ctrl+d', 'Delete'], () => remove(chosen), { danger: true, primary: 0 });
+		}
+		return out;
+	}
+
+	/** What there is to do on the marked rows together. */
+	function markedActions(chosen: Row[]): MenuAction[] {
+		const out: MenuAction[] = [
+			{ group: 'Marked', label: 'Copy names', keys: ['c'], primary: 0, run: () => copyLines(chosen.map((r) => r.name), ['name', 'names']) }
+		];
+		if (resource.namespaced) {
+			out.push({
+				group: 'Marked',
+				label: 'Copy namespaces',
+				keys: ['n'],
+				primary: 0,
+				run: () => copyLines([...new Set(chosen.map((r) => r.namespace ?? ''))], ['namespace', 'namespaces'])
+			});
+		}
+		out.push(
+			{ group: 'Marked', label: 'Mark all', keys: ['ctrl+a'], primary: 0, run: () => rows.forEach((r) => selection.add(r.key)) },
+			{ group: 'Marked', label: 'Unmark all', keys: ['ctrl+\\'], primary: 0, run: () => selection.clear() }
+		);
+		if (writable && canDelete(resource)) {
+			out.push({
+				group: 'Delete',
+				label: `Delete ${chosen.length}…`,
+				keys: ['ctrl+d', 'Delete'],
+				danger: true,
+				primary: 0,
+				run: () => remove(chosen)
+			});
+		}
+		return out;
+	}
+
+	/** The row menu, from a right click or the row's ⋯ button. Marked rows go together. */
+	function openMenu(row: Row, x: number, y: number, align: 'left' | 'right' = 'left') {
+		cursorKey = row.key;
+		const marked = chosenRows();
+		const actions = selection.has(row.key) && marked.length > 1 ? markedActions(marked) : actionsFor(row, [row]);
+		app.menu = { actions, x, y, align };
+	}
+
 	function onkeydown(e: KeyboardEvent) {
 		if (app.overlayOpen) return;
 		const el = e.target as HTMLElement;
@@ -410,8 +584,6 @@
 					case 'a':
 						rows.forEach((r) => selection.add(r.key));
 						return true;
-					case 'd':
-						return writable && remove();
 					case ' ':
 						markRange();
 						return true;
@@ -424,213 +596,105 @@
 					case 'z':
 						faults = !faults;
 						return true;
-					case 'l':
-						if (!writable || !isReplicaSets(resource) || !current) return false;
-						app.dialog = { kind: 'rollback', resource, target: target(current) };
-						return true;
 				}
+			} else if (e.altKey) {
 				return false;
-			}
-			if (e.altKey) return false;
-			switch (e.key) {
-				case 'ArrowDown':
-				case 'j':
-					move(1);
-					return true;
-				case 'ArrowUp':
-				case 'k':
-					move(-1);
-					return true;
-				case 'PageDown':
-					move(20);
-					return true;
-				case 'PageUp':
-					move(-20);
-					return true;
-				case 'Home':
-				case 'g':
-					move(-rows.length);
-					return true;
-				case 'End':
-				case 'G':
-					move(rows.length);
-					return true;
-				case 'Enter':
-					enter(current);
-					return true;
-				case 'd':
-					return open(current);
-				case 'y':
-					return open(current, 'yaml');
-				case 'e':
-					if (!writable || !canEdit(resource)) return false;
-					return open(current, 'yaml', { editing: true });
-				case 'l':
-					return hasLogs(resource) && open(current, 'logs');
-				case 'p':
-					return isPods(resource) && open(current, 'logs', { previous: true });
-				case 'x':
-					return isSecrets(resource) && open(current, 'describe', { decoded: true });
-				case 'f':
-					if (!app.details) return false;
-					app.maximized = !app.maximized;
-					return true;
-				case 'F':
-					if (!canPortForward(resource) || !current) return false;
-					portForward(resource, target(current));
-					return true;
-				case 'c':
-					if (isNodes(resource) && writable) {
-						if (!current) return false;
-						cordon(current.name, true);
-						return true;
-					}
-					copyLines(
-						chosenRows().map((r) => r.name),
-						['name', 'names']
-					);
-					return true;
-				case 'n':
-					if (!resource.namespaced) return false;
-					copyLines(
-						[...new Set(chosenRows().map((r) => r.namespace ?? ''))],
-						['namespace', 'namespaces']
-					);
-					return true;
-				case 'u':
-					// What uses a ConfigMap, Secret and the like is in its description.
-					if (hasUsers(resource)) return open(current);
-					if (isNamespaces(resource) && current) {
-						app.namespace = current.name;
-						app.toast(`Namespace ${current.name}`);
-						return true;
-					}
-					if (!writable || !isNodes(resource) || !current) return false;
-					cordon(current.name, false);
-					return true;
-				case 'W':
-					if (!resource.namespaced || !current?.namespace) return false;
-					app.namespace = current.namespace;
-					return true;
-				case 'o': {
-					const node = current && isPods(resource) ? cell(current, 'Node') : null;
-					const nodes = findResource(app.resources, { group: '', version: 'v1', plural: 'nodes' });
-					if (!node || node === '<none>' || !nodes) return false;
-					app.openAt(nodes, null, node);
-					return true;
-				}
-				case 'J':
-					if (!current) return false;
-					jumpToOwner(current);
-					return true;
-				case 'z':
-					if (!current) return false;
-					if (resource.group === 'apps' && resource.plural === 'deployments') {
-						showReplicaSets(current);
-						return true;
-					}
-					if (!writable || !isPods(resource) || !canDelete(resource)) return false;
-					sanitize();
-					return true;
-				case 't':
-					if (!writable || !isCronJobs(resource) || !current) return false;
-					app.dialog = { kind: 'trigger', resource, target: target(current) };
-					return true;
-				case 'i':
-					if (!writable || !hasImages(resource) || !current) return false;
-					app.dialog = { kind: 'image', resource, target: target(current) };
-					return true;
-				case ' ':
-					if (current) {
-						toggleMark(current);
+			} else {
+				switch (e.key) {
+					case 'ArrowDown':
+					case 'j':
 						move(1);
-					}
-					return true;
-				case 'Delete':
-					return writable && remove();
-				case 's':
-					if (!writable || !current) return false;
-					if (isPods(resource)) return open(current, 'shell', { mode: 'shell' });
-					if (isCronJobs(resource)) {
-						app.dialog = { kind: 'suspend', resource, target: target(current), suspend: cell(current, 'Suspend') !== 'True' };
 						return true;
-					}
-					if (!canScale(resource)) return false;
-					app.dialog = { kind: 'scale', resource, target: target(current) };
-					return true;
-				case 'a':
-					return writable && isPods(resource) && open(current, 'shell', { mode: 'attach' });
-				case 'r':
-					if (!writable || !current) return false;
-					if (isNodes(resource)) {
-						app.dialog = { kind: 'drain', resource, target: target(current) };
+					case 'ArrowUp':
+					case 'k':
+						move(-1);
 						return true;
-					}
-					if (!canRestart(resource)) return false;
-					app.dialog = { kind: 'restart', resource, target: target(current) };
-					return true;
-				case 'L':
-					if (!writable || !resource.verbs.includes('patch') || !current) return false;
-					app.dialog = { kind: 'labels', resource, target: target(current) };
-					return true;
-				case 'w':
-					wide = !wide;
-					return true;
-				case '/':
-					filterInput?.focus();
-					return true;
-				case 'N':
-					return sortByColumn((_, format) => format === 'name');
-				case 'A':
-					return sortByColumn((name, format) => isAgeColumn({ name, format } as never));
-				case 'S':
-					return sortByColumn((name) => /^(status|phase|state)$/i.test(name));
-				case 'P':
-					if (!columns.some((c) => c.kind === 'namespace')) return false;
-					sortBy(-1);
-					return true;
-				case 'R':
-					return sortByColumn(named('ready'));
-				case 'T':
-					return sortByColumn(named('restarts'), true);
-				case 'I':
-					return sortByColumn(named('ip'));
-				case 'O':
-					return sortByColumn(named('node'));
-				case 'C':
-					return sortByMetric('CPU');
-				case 'M':
-					return sortByMetric('Mem');
-				case 'X':
-					return sortByMetric(isNodes(resource) ? '%CPU' : '%CPU/R');
-				case 'Z':
-					return sortByMetric(isNodes(resource) ? '%Mem' : '%Mem/R');
-				case '0':
-					app.namespace = '';
-					return true;
-				case 'Escape':
-					if (app.details) {
-						app.details = null;
-						app.maximized = false;
-					} else if (selection.size) selection.clear();
-					else if (filter) filter = '';
-					else if (faults) faults = false;
-					// Back to the list the scope came from, as in k9s.
-					else if (scope) {
-						if (!app.go(-1)) app.scope = null;
-					} else return false;
-					return true;
+					case 'PageDown':
+						move(20);
+						return true;
+					case 'PageUp':
+						move(-20);
+						return true;
+					case 'Home':
+					case 'g':
+						move(-rows.length);
+						return true;
+					case 'End':
+					case 'G':
+						move(rows.length);
+						return true;
+					case 'Enter':
+						enter(current);
+						return true;
+					case 'f':
+						if (!app.details) return false;
+						app.maximized = !app.maximized;
+						return true;
+					case ' ':
+						if (current) {
+							toggleMark(current);
+							move(1);
+						}
+						return true;
+					case 'w':
+						wide = !wide;
+						return true;
+					case '/':
+						filterInput?.focus();
+						return true;
+					case 'N':
+						return sortByColumn((_, format) => format === 'name');
+					case 'A':
+						return sortByColumn((name, format) => isAgeColumn({ name, format } as never));
+					case 'S':
+						return sortByColumn((name) => /^(status|phase|state)$/i.test(name));
+					case 'P':
+						if (!columns.some((c) => c.kind === 'namespace')) return false;
+						sortBy(-1);
+						return true;
+					case 'R':
+						return sortByColumn(named('ready'));
+					case 'T':
+						return sortByColumn(named('restarts'), true);
+					case 'I':
+						return sortByColumn(named('ip'));
+					case 'O':
+						return sortByColumn(named('node'));
+					case 'C':
+						return sortByMetric('CPU');
+					case 'M':
+						return sortByMetric('Mem');
+					case 'X':
+						return sortByMetric(isNodes(resource) ? '%CPU' : '%CPU/R');
+					case 'Z':
+						return sortByMetric(isNodes(resource) ? '%Mem' : '%Mem/R');
+					case '0':
+						app.namespace = '';
+						return true;
+					case 'Escape':
+						if (app.details) {
+							app.details = null;
+							app.maximized = false;
+						} else if (selection.size) selection.clear();
+						else if (filter) filter = '';
+						else if (faults) faults = false;
+						// Back to the list the scope came from, as in k9s.
+						else if (scope) {
+							if (!app.go(-1)) app.scope = null;
+						} else return false;
+						return true;
+				}
 			}
-			return false;
+			const action = actionFor(actionsFor(current, chosenRows()), keyOf(e));
+			action?.run();
+			return !!action;
 		})();
 		if (handled) e.preventDefault();
 	}
 
-	function remove() {
-		const chosen = targets();
-		if (!canDelete(resource) || !chosen.length) return false;
-		app.dialog = { kind: 'delete', resource, targets: chosen };
-		return true;
+	function remove(chosen: Row[]) {
+		if (!chosen.length) return;
+		app.dialog = { kind: 'delete', resource, targets: chosen.map(target) };
 	}
 
 	const hiddenColumns = $derived(table.columns.filter((c) => c.priority > 0).length);
@@ -656,20 +720,28 @@
 					<button onclick={() => (faults = false)} title="Show all rows (Ctrl+Z)" aria-label="Show all rows">×</button>
 				</span>
 			{/if}
-			{#if selection.size}
-				<span class="selected">{selection.size} selected</span>
-			{/if}
 		</div>
 		<div class="tools">
 			{#if hiddenColumns}
-				<button class="toggle" class:on={wide} onclick={() => (wide = !wide)} title="Wide view (w)">Wide</button>
+				<button class="toggle" class:on={wide} aria-pressed={wide} onclick={() => (wide = !wide)} title="Show all columns (w)">Wide</button>
 			{/if}
+			<button class="toggle" class:on={faults} aria-pressed={faults} onclick={() => (faults = !faults)} title="Only rows that need a look (Ctrl+Z)">
+				Faults
+			</button>
+			<button class="toggle" onclick={exportCsv} title="Save the list as CSV (Ctrl+S)">CSV</button>
 			<input class="filter" bind:this={filterInput} bind:value={filter} placeholder="Filter…  (/)   regex, !, -f, -l app=web" />
 		</div>
 	</header>
 
 	{#if table.error}
 		<div class="banner">{table.error}</div>
+	{/if}
+
+	{#if selection.size}
+		{@const marked = chosenRows()}
+		<ActionBar actions={markedActions(marked)} marked>{marked.length} marked</ActionBar>
+	{:else if current}
+		<ActionBar actions={actionsFor(current, [current])}>{current.name}</ActionBar>
 	{/if}
 
 	<div class="table-wrap" bind:this={scroller}>
@@ -687,6 +759,7 @@
 							{#if sort.column === column.index}<span class="arrow">{sort.descending ? '↓' : '↑'}</span>{/if}
 						</th>
 					{/each}
+					<th class="more" aria-label="Actions"></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -696,6 +769,10 @@
 						class:checked={selection.has(row.key)}
 						onclick={() => (cursorKey = row.key)}
 						ondblclick={() => enter(row)}
+						oncontextmenu={(e) => {
+							e.preventDefault();
+							openMenu(row, e.clientX, e.clientY);
+						}}
 					>
 						<td class="check">
 							<input
@@ -719,6 +796,19 @@
 								{text}
 							</td>
 						{/each}
+						<td class="more">
+							<button
+								tabindex="-1"
+								aria-label="Actions for {row.name}"
+								title="Actions (right click)"
+								onclick={(e) => {
+									e.stopPropagation();
+									const rect = e.currentTarget.getBoundingClientRect();
+									openMenu(row, rect.right, rect.bottom + 4, 'right');
+								}}
+								ondblclick={(e) => e.stopPropagation()}>⋯</button
+							>
+						</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -801,11 +891,6 @@
 	}
 	.chip button:hover {
 		background: color-mix(in srgb, currentColor 15%, transparent);
-	}
-	.selected {
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--accent-strong);
 	}
 	code {
 		color: var(--text-muted);
@@ -890,7 +975,34 @@
 		opacity: 0;
 		margin: 0;
 	}
+	.more {
+		width: 34px;
+		padding: 2px 6px;
+		text-align: right;
+	}
+	.more button {
+		width: 26px;
+		height: 22px;
+		padding: 0;
+		border: 1px solid transparent;
+		border-radius: 6px;
+		background: none;
+		color: var(--text-muted);
+		font-size: 15px;
+		line-height: 1;
+		opacity: 0;
+	}
+	tr:hover .more button,
+	tr.cursor .more button {
+		opacity: 1;
+	}
+	.more button:hover {
+		border-color: var(--border);
+		background: var(--surface-2);
+		color: var(--text);
+	}
 	tr:hover .check input,
+	tr.cursor .check input,
 	tr.checked .check input {
 		opacity: 1;
 	}

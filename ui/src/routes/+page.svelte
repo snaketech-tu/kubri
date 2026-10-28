@@ -5,6 +5,7 @@
 	import { canDelete, canEdit, canRestart, canScale } from '#lib/actions.js';
 	import { listenForBindings } from '#lib/bindings.js';
 	import ActionDialog from '#lib/components/ActionDialog.svelte';
+	import ActionMenu from '#lib/components/ActionMenu.svelte';
 	import BenchmarksView from '#lib/components/BenchmarksView.svelte';
 	import CommandPalette from '#lib/components/CommandPalette.svelte';
 	import ConfigView from '#lib/components/ConfigView.svelte';
@@ -300,6 +301,7 @@
 
 {#if app.paletteOpen}<CommandPalette />{/if}
 {#if app.helpOpen}<HelpOverlay />{/if}
+{#if app.menu}<ActionMenu menu={app.menu} />{/if}
 {#if app.dialog}<ActionDialog dialog={app.dialog} />{/if}
 {#if app.pluginTerminal}
 	<PluginTerminal plugin={app.pluginTerminal.plugin} run={app.pluginTerminal.run} />
