@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionFor, grouped, hintOf, keyLabel, keyOf, type MenuAction } from './menu';
+import { actionFor, grouped, hintOf, keyFromLabel, keyLabel, keyOf, type MenuAction } from './menu';
 
 const action = (label: string, keys: string[], group = 'View', more: Partial<MenuAction> = {}): MenuAction => ({
 	label,
@@ -64,5 +64,29 @@ describe('grouped', () => {
 			['View', [a, c]],
 			['Change', [b]]
 		]);
+	});
+});
+
+describe('keyFromLabel', () => {
+	it('turns hints back into key presses', () => {
+		expect(keyFromLabel(':')).toEqual({ key: ':' });
+		expect(keyFromLabel('enter')).toEqual({ key: 'Enter' });
+		expect(keyFromLabel('esc')).toEqual({ key: 'Escape' });
+		expect(keyFromLabel('^d')).toEqual({ key: 'd', ctrlKey: true });
+		expect(keyFromLabel('⇧f')).toEqual({ key: 'F', shiftKey: true });
+		expect(keyFromLabel('^space')).toEqual({ key: ' ', ctrlKey: true });
+	});
+
+	it('leaves out hints for several keys', () => {
+		expect(keyFromLabel('j/k')).toBeNull();
+		expect(keyFromLabel('h/l')).toBeNull();
+		expect(keyFromLabel('←→')).toBeNull();
+	});
+
+	it('round-trips the labels of keyLabel', () => {
+		for (const key of ['l', 'F', 'ctrl+d', 'Delete', 'Enter']) {
+			const press = keyFromLabel(keyLabel(key))!;
+			expect(keyOf({ key: press.key!, ctrlKey: !!press.ctrlKey, metaKey: false } as KeyboardEvent)).toBe(key);
+		}
 	});
 });

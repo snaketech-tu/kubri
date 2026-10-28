@@ -6,13 +6,19 @@
 	let {
 		actions,
 		children,
-		marked = false
+		marked = false,
+		hints = true,
+		compact = false
 	}: {
 		actions: MenuAction[];
 		/** What the actions work on, shown first. */
-		children: Snippet;
+		children?: Snippet;
 		/** For marked rows rather than the one under the cursor. */
 		marked?: boolean;
+		/** Shows the keys, where they work on what the bar does. */
+		hints?: boolean;
+		/** Without a frame, as in the details panel, whose header names the object. */
+		compact?: boolean;
 	} = $props();
 
 	/** How many buttons the bar shows before the rest go under More. */
@@ -32,12 +38,12 @@
 
 	function openMore(e: MouseEvent) {
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		app.menu = { actions: more, x: rect.left, y: rect.bottom + 4 };
+		app.menu = { actions: more, x: rect.left, y: rect.bottom + 4, hints };
 	}
 </script>
 
-<div class="bar" class:marked role="toolbar" aria-label="Actions">
-	<span class="subject">{@render children()}</span>
+<div class="bar" class:marked class:compact role="toolbar" aria-label="Actions">
+	{#if children}<span class="subject">{@render children()}</span>{/if}
 	{#each buttons as action, i (i)}
 		{@render button(action)}
 	{/each}
@@ -51,7 +57,7 @@
 </div>
 
 {#snippet button(action: MenuAction)}
-	{@const hint = hintOf(actions, action)}
+	{@const hint = hints ? hintOf(actions, action) : null}
 	<button class:danger={action.danger} onclick={() => action.run()} onmousedown={keepFocus} title={hint ? `${action.label} (${hint})` : action.label}>
 		{action.label}
 		{#if hint}<kbd>{hint}</kbd>{/if}
@@ -70,6 +76,12 @@
 		border-radius: 9px;
 		background: var(--surface-1);
 		container-type: inline-size;
+	}
+	.bar.compact {
+		margin: 0;
+		padding: 0 16px 10px 20px;
+		border: none;
+		background: none;
 	}
 	.bar.marked {
 		border-color: color-mix(in srgb, var(--accent) 45%, transparent);

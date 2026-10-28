@@ -2,43 +2,13 @@
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import {
-		canDelete,
-		canEdit,
-		canRestart,
-		canScale,
-		copyLines,
-		cordon,
-		portForward,
-		saveFile,
-		startPlugin
-	} from '../actions';
-	import { backend, type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
-	import { age, cpu, errorMessage, memory } from '../format';
-	import { parseShortcut, pluginApplies, shortcutLabel } from '../k9s';
+	import { canDelete, copyLines, saveFile } from '../actions';
+	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
+	import { age, cpu, memory } from '../format';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
-	import {
-		canPortForward,
-		hasImages,
-		hasLogs,
-		hasUsers,
-		isCRDs,
-		isCronJobs,
-		isNamespaces,
-		isNodes,
-		isPods,
-		isReplicaSets,
-		isSecrets
-	} from '../pods';
-	import {
-		app,
-		findResource,
-		refOf,
-		type DetailsExtra,
-		type Dialog,
-		type DetailsTab,
-		type ListScope
-	} from '../state.svelte';
+	import { drill, objectActions, type Subject } from '../objects';
+	import { isNodes, isPods } from '../pods';
+	import { app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
 	import { filterRows, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
@@ -305,82 +275,11 @@
 		return true;
 	}
 
-	/**
-	 * Enter, as in k9s: from a namespace to its pods, from a CRD to its objects, from a workload,
-	 * CronJob, Service or node to what belongs to it (or where `jumps.yaml` says); else describe.
-	 */
+	/** Enter: what belongs to the row, or else its description. */
 	async function enter(row: Row | undefined) {
 		if (!row) return;
 		cursorKey = row.key;
-		if (isNamespaces(resource)) {
-			const pods = findResource(app.resources, { group: '', version: 'v1', plural: 'pods' });
-			if (pods) return app.open(pods, row.name, '');
-		}
-		if (isCRDs(resource)) {
-			const [plural, ...group] = row.name.split('.');
-			const defined = app.resources.find((r) => r.plural === plural && r.group === group.join('.'));
-			if (defined) return app.open(defined, undefined, '');
-		}
-		if (!isPods(resource) && canDrill()) {
-			try {
-				const drill = await backend.drill(target(row));
-				if (drill) return app.drill(drill);
-			} catch (err) {
-				app.toast(errorMessage(err), 'bad');
-				return;
-			}
-		}
-		open(row);
-	}
-
-	/** Kinds Kubri drills into, and those `jumps.yaml` names. */
-	function canDrill() {
-		const builtin: Record<string, string[]> = {
-			'': ['services', 'replicationcontrollers', 'nodes'],
-			apps: ['deployments', 'replicasets', 'statefulsets', 'daemonsets'],
-			batch: ['jobs', 'cronjobs']
-		};
-		if (builtin[resource.group]?.includes(resource.plural)) return true;
-		return (app.k9s?.jumps ?? []).some((j) => {
-			const parts = j.source.split('/');
-			const [group, plural] = parts.length === 3 ? [parts[0], parts[2]] : ['', parts[1]];
-			return group === resource.group && plural === resource.plural;
-		});
-	}
-
-	/** Shows the controller of the row, like k9s Shift+J. */
-	function jumpToOwner(row: Row) {
-		const owner = row.owners.find((o) => o.controller) ?? row.owners[0];
-		if (!owner) {
-			app.toast(`${row.name} has no owner`, 'bad');
-			return;
-		}
-		const group = owner.apiVersion.includes('/') ? owner.apiVersion.split('/')[0] : '';
-		const kinds = app.resources.filter((r) => r.group === group && r.kind === owner.kind);
-		const version = owner.apiVersion.split('/').pop();
-		const kind = kinds.find((r) => r.version === version) ?? kinds[0];
-		if (!kind) {
-			app.toast(`The cluster does not serve ${owner.kind}`, 'bad');
-			return;
-		}
-		app.openAt(kind, row.namespace, owner.name);
-	}
-
-	/** The ReplicaSets of a Deployment, like k9s `z`. */
-	async function showReplicaSets(row: Row) {
-		const replicasets = findResource(app.resources, { group: 'apps', version: 'v1', plural: 'replicasets' });
-		if (!replicasets) return;
-		try {
-			const uid = (await backend.getObject(target(row))).metadata.uid;
-			if (!uid) return;
-			app.open(replicasets, row.namespace ?? undefined, '', {
-				title: `ReplicaSets of Deployment ${row.name}`,
-				scope: {},
-				ownerUid: uid
-			});
-		} catch (err) {
-			app.toast(errorMessage(err), 'bad');
-		}
+		if (!(await drill(resource, target(row)))) open(row);
 	}
 
 	/** Pods in a state k9s sanitizes away with `z`: done, failed or stuck. */
@@ -402,14 +301,14 @@
 		saveFile(`${resource.plural}${ns ? `-${ns}` : ''}-${stamp}.csv`, toCsv(header, lines));
 	}
 
-	/** What the drill-down of Enter shows for this kind, or null where Enter only describes. */
-	function drillLabel(): string | null {
-		if (isNamespaces(resource)) return 'Show pods';
-		if (isCRDs(resource)) return 'Show objects';
-		if (isPods(resource) || !canDrill()) return null;
-		if (isCronJobs(resource)) return 'Show jobs';
-		const builtin = ['services', 'replicationcontrollers', 'nodes', 'deployments', 'replicasets', 'statefulsets', 'daemonsets', 'jobs'];
-		return builtin.includes(resource.plural) ? 'Show pods' : 'Open';
+	function subject(row: Row): Subject {
+		return {
+			resource,
+			target: target(row),
+			owners: row.owners,
+			node: isPods(resource) ? cell(row, 'Node') : null,
+			suspended: cell(row, 'Suspend') === 'True'
+		};
 	}
 
 	/**
@@ -418,113 +317,18 @@
 	 */
 	function actionsFor(row: Row | undefined, chosen: Row[]): MenuAction[] {
 		if (!row) return [];
-		const out: MenuAction[] = [];
-		const add = (group: string, label: string, keys: string[], run: () => void, more: Partial<MenuAction> = {}) =>
-			out.push({ group, label, keys, run, ...more });
-		const show = (tab: DetailsTab, extra: DetailsExtra = {}) => () => void open(row, tab, extra);
-		const dialog = (make: () => Dialog) => () => {
-			cursorKey = row.key;
-			app.dialog = make();
-		};
-		const ref = target(row);
-
-		const drill = drillLabel();
-		if (drill) add('View', drill, [], () => enter(row), { hint: 'enter', primary: 1 });
-		add('View', 'Describe', ['d'], show('describe'), { primary: 5 });
-		add('View', 'YAML', ['y'], show('yaml'), { primary: 6 });
-		if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2 });
-		if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }));
-		if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }));
-		if (hasUsers(resource)) add('View', 'Used by', ['u'], show('describe'));
-
-		if (isPods(resource) && writable) {
-			add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3 });
-			add('Connect', 'Attach', ['a'], show('shell', { mode: 'attach' }));
-		}
-		if (canPortForward(resource)) {
-			add('Connect', 'Port-forward…', ['F'], () => void portForward(resource, ref), { primary: 8 });
-		}
-
-		if (writable) {
-			if (isNodes(resource)) {
-				add('Change', 'Cordon', ['c'], () => void cordon(row.name, true), { primary: 4 });
-				add('Change', 'Uncordon', ['u'], () => void cordon(row.name, false), { primary: 4 });
-				add('Change', 'Drain…', ['r'], dialog(() => ({ kind: 'drain', resource, target: ref })), { primary: 4 });
-			}
-			if (isCronJobs(resource)) {
-				add('Change', 'Trigger now…', ['t'], dialog(() => ({ kind: 'trigger', resource, target: ref })), { primary: 4 });
-				const suspend = cell(row, 'Suspend') !== 'True';
-				add('Change', suspend ? 'Suspend…' : 'Resume…', ['s'], dialog(() => ({ kind: 'suspend', resource, target: ref, suspend })));
-			}
-			if (canEdit(resource)) add('Change', 'Edit', ['e'], show('yaml', { editing: true }), { primary: 7 });
-			if (canScale(resource) && !isPods(resource)) {
-				add('Change', 'Scale…', ['s'], dialog(() => ({ kind: 'scale', resource, target: ref })), { primary: 4 });
-			}
-			if (canRestart(resource)) {
-				add('Change', 'Restart…', ['r'], dialog(() => ({ kind: 'restart', resource, target: ref })), { primary: 4 });
-			}
-			if (hasImages(resource)) add('Change', 'Set image…', ['i'], dialog(() => ({ kind: 'image', resource, target: ref })));
-			if (isReplicaSets(resource)) {
-				add('Change', 'Roll back to this…', ['ctrl+l'], dialog(() => ({ kind: 'rollback', resource, target: ref })));
-			}
-			if (resource.verbs.includes('patch')) {
-				add('Change', 'Labels & annotations…', ['L'], dialog(() => ({ kind: 'labels', resource, target: ref })));
-			}
-		}
-
-		const node = isPods(resource) ? cell(row, 'Node') : null;
-		const nodes = findResource(app.resources, { group: '', version: 'v1', plural: 'nodes' });
-		if (node && node !== '<none>' && nodes) add('Go to', `Node ${node}`, ['o'], () => app.openAt(nodes, null, node));
-		if (row.owners.length) {
-			const owner = row.owners.find((o) => o.controller) ?? row.owners[0];
-			add('Go to', `Owner ${owner.kind} ${owner.name}`, ['J'], () => jumpToOwner(row));
-		}
-		if (resource.group === 'apps' && resource.plural === 'deployments') {
-			add('Go to', 'ReplicaSets', ['z'], () => void showReplicaSets(row));
-		}
-		if (isNamespaces(resource)) {
-			add('Go to', `Switch to ${row.name}`, ['u'], () => {
-				app.namespace = row.name;
-				app.toast(`Namespace ${row.name}`);
-			});
-		} else if (resource.namespaced && row.namespace && row.namespace !== namespace) {
-			const ns = row.namespace;
-			add('Go to', `Switch to namespace ${ns}`, ['W'], () => (app.namespace = ns));
-		}
-
-		const several = chosen.length > 1;
-		add('Copy', several ? `Copy ${chosen.length} names` : 'Copy name', ['c'], () =>
-			copyLines(
-				chosen.map((r) => r.name),
-				['name', 'names']
-			)
-		);
-		if (resource.namespaced) {
-			add('Copy', several ? 'Copy namespaces' : 'Copy namespace', ['n'], () =>
-				copyLines(
-					[...new Set(chosen.map((r) => r.namespace ?? ''))],
-					['namespace', 'namespaces']
-				)
-			);
-		}
-
-		for (const plugin of app.k9s?.plugins ?? []) {
-			const shortcut = parseShortcut(plugin.shortCut);
-			if (!pluginApplies(plugin, app.pluginView) || (plugin.dangerous && !writable)) continue;
-			add('Plugins', plugin.description || plugin.name, [], () => {
-				cursorKey = row.key;
-				startPlugin(plugin);
-			}, { hint: shortcut ? shortcutLabel(shortcut) : undefined });
-		}
-
-		if (writable && isPods(resource) && canDelete(resource)) {
-			add('Delete', 'Delete finished pods…', ['z'], sanitize, { danger: true });
-		}
-		if (writable && canDelete(resource)) {
-			const label = several ? `Delete ${chosen.length}…` : 'Delete…';
-			add('Delete', label, ['ctrl+d', 'Delete'], () => remove(chosen), { danger: true, primary: 0 });
-		}
-		return out;
+		const cleanUp: MenuAction[] =
+			isPods(resource) && canDelete(resource)
+				? [{ group: 'Delete', label: 'Delete finished pods…', keys: ['z'], danger: true, run: sanitize }]
+				: [];
+		return objectActions(subject(row), {
+			show: (tab, extra) => open(row, tab, extra),
+			enter: () => void enter(row),
+			chosen: chosen.map(target),
+			namespace,
+			plugins: () => (cursorKey = row.key),
+			extraDanger: cleanUp
+		});
 	}
 
 	/** What there is to do on the marked rows together. */
@@ -898,7 +702,8 @@
 	}
 	.tools {
 		display: flex;
-		flex: 1;
+		/* Its own line when the title needs the room, as next to the details panel. */
+		flex: 1 0 auto;
 		justify-content: flex-end;
 		gap: 8px;
 		min-width: 200px;

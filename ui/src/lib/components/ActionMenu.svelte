@@ -68,7 +68,7 @@
 					return true;
 			}
 			// The keys work here too, which is how the menu teaches them.
-			const action = actionFor(flat, keyOf(e));
+			const action = menu.hints === false ? undefined : actionFor(flat, keyOf(e));
 			if (action) run(action);
 			return !!action;
 		})();
@@ -103,7 +103,7 @@
 		{#if g > 0}<div class="separator" role="separator"></div>{/if}
 		<div class="group" aria-hidden="true">{group}</div>
 		{#each actions as action, i (i)}
-			{@const hint = hintOf(flat, action)}
+			{@const hint = menu.hints === false ? null : hintOf(flat, action)}
 			<button
 				role="menuitem"
 				class:danger={action.danger}

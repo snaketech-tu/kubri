@@ -141,8 +141,8 @@ class AppState {
 	cursorRequest = $state<{ namespace: string | null; name: string } | null>(null);
 	/** Narrows the resource list, after Enter on a workload, CronJob or node. */
 	scope = $state<ListScope | null>(null);
-	#history: View[] = [];
-	#historyAt = -1;
+	#history = $state.raw<View[]>([]);
+	#historyAt = $state(-1);
 	/** The view before the current one, for `-`. */
 	#lastView: View | null = null;
 	#restoring = false;
@@ -262,6 +262,14 @@ class AppState {
 	}
 
 	/** Goes back (`[`) or forward (`]`) in the history; false when there is nowhere to go. */
+	get canGoBack() {
+		return this.#historyAt > 0;
+	}
+
+	get canGoForward() {
+		return this.#historyAt < this.#history.length - 1;
+	}
+
 	go(delta: -1 | 1): boolean {
 		const at = this.#historyAt + delta;
 		const view = this.#history[at];

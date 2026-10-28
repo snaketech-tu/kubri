@@ -5,6 +5,8 @@
 	import { errorMessage } from '../format';
 	import { containerNames, hasLogs, hasUsers, isPods } from '../pods';
 	import { app, type Details } from '../state.svelte';
+	import { drill, drillLabel, objectActions, subjectOf } from '../objects';
+	import ActionBar from './ActionBar.svelte';
 	import Describe from './Describe.svelte';
 	import LogView from './LogView.svelte';
 	import TerminalView from './TerminalView.svelte';
@@ -135,6 +137,17 @@
 		saveError = null;
 	}
 
+	/** The tabs show these already. */
+	const TABS = new Set(['describe', 'yaml', 'logs', 'shell', 'usedBy']);
+
+	const actions = $derived(
+		objectActions(subjectOf(details.resource, details.target, object), {
+			show: (tab, extra) => app.showDetails(details.resource, details.target, tab, extra),
+			enter: drillLabel(details.resource) ? () => void drill(details.resource, details.target) : undefined,
+			namespace: app.namespace
+		}).filter((a) => !a.id || !TABS.has(a.id))
+	);
+
 	const title = $derived(
 		details.target.namespace ? `${details.target.namespace}/${details.target.name}` : details.target.name
 	);
@@ -157,6 +170,8 @@
 			<button class="icon close" onclick={close} title="Close (Esc)" aria-label="Close">×</button>
 		</div>
 	</header>
+
+	<ActionBar {actions} hints={false} compact />
 
 	<nav>
 		<button class:active={details.tab === 'describe'} onclick={() => (details.tab = 'describe')}>Describe <kbd>d</kbd></button>

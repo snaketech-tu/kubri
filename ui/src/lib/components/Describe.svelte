@@ -77,19 +77,48 @@
 		];
 	});
 
+	/** Shows an object in its list, with the cursor on it, by its kind and API version. */
+	function showObject(kind: string, apiVersion: string | undefined, namespace: string | null, name: string) {
+		const group = apiVersion?.includes('/') ? apiVersion.split('/')[0] : apiVersion === undefined ? null : '';
+		const kinds = app.resources.filter((r) => r.kind === kind && (group === null || r.group === group));
+		const version = apiVersion?.split('/').pop();
+		const resource = kinds.find((r) => r.version === version) ?? kinds[0];
+		if (resource) app.openAt(resource, resource.namespaced ? namespace : null, name);
+		else app.toast(`The cluster does not serve ${kind}`, 'bad');
+	}
+
+	/** A line of the facts, and where clicking its value goes. */
+	type Fact = [label: string, value: string, go?: () => void];
+
 	const facts = $derived.by(() => {
-		const f: [string, string][] = [];
-		if (meta.namespace) f.push(['Namespace', meta.namespace]);
+		const f: Fact[] = [];
+		const ns = meta.namespace ?? null;
+		if (ns) {
+			f.push([
+				'Namespace',
+				ns,
+				() => {
+					app.namespace = ns;
+					app.toast(`Namespace ${ns}`);
+				}
+			]);
+		}
 		f.push(['Created', `${age(meta.creationTimestamp, now)} ago · ${meta.creationTimestamp ?? ''}`]);
 		if (meta.deletionTimestamp) f.push(['Deleting since', meta.deletionTimestamp]);
 		const owners = meta.ownerReferences ?? [];
-		if (owners.length) f.push(['Controlled by', owners.map((o) => `${o.kind}/${o.name}`).join(', ')]);
+		if (owners.length === 1) {
+			const [o] = owners;
+			f.push(['Controlled by', `${o.kind}/${o.name}`, () => showObject(o.kind, o.apiVersion, ns, o.name)]);
+		} else if (owners.length) {
+			f.push(['Controlled by', owners.map((o) => `${o.kind}/${o.name}`).join(', ')]);
+		}
 		if (object.kind === 'Pod') {
-			if (spec.nodeName) f.push(['Node', spec.nodeName]);
+			if (spec.nodeName) f.push(['Node', spec.nodeName, () => showObject('Node', 'v1', null, spec.nodeName)]);
 			if (status.podIP) f.push(['Pod IP', status.podIP]);
 			if (status.phase) f.push(['Phase', status.phase]);
 			if (status.qosClass) f.push(['QoS class', status.qosClass]);
-			if (spec.serviceAccountName) f.push(['Service account', spec.serviceAccountName]);
+			const account = spec.serviceAccountName;
+			if (account) f.push(['Service account', account, () => showObject('ServiceAccount', 'v1', ns, account)]);
 		}
 		if (typeof spec.replicas === 'number') {
 			const parts = [`${spec.replicas} desired`];
@@ -118,7 +147,10 @@
 			f.push(['Runtime', status.nodeInfo.containerRuntimeVersion]);
 		}
 		const roleRef = (object as any).roleRef;
-		if (roleRef?.kind) f.push(['Role', `${roleRef.kind}/${roleRef.name}`]);
+		if (roleRef?.kind) {
+			const apiVersion = roleRef.apiGroup ? `${roleRef.apiGroup}/v1` : undefined;
+			f.push(['Role', `${roleRef.kind}/${roleRef.name}`, () => showObject(roleRef.kind, apiVersion, ns, roleRef.name)]);
+		}
 		const aggregation = (object as any).aggregationRule?.clusterRoleSelectors;
 		if (Array.isArray(aggregation)) {
 			const selectors = aggregation.map((s: any) =>
@@ -156,9 +188,15 @@
 
 <div class="describe">
 	<dl class="facts">
-		{#each facts as [label, value] (label)}
+		{#each facts as [label, value, go] (label)}
 			<dt>{label}</dt>
-			<dd>{value}</dd>
+			<dd>
+				{#if go}
+					<button class="link" onclick={go} title={label === 'Namespace' ? `Show only namespace ${value}` : `Show ${value}`}>{value}</button>
+				{:else}
+					{value}
+				{/if}
+			</dd>
 		{/each}
 	</dl>
 
