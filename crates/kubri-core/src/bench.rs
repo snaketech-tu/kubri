@@ -458,8 +458,15 @@ async fn worker(
         let exchange = async {
             let response = client.request(request).await.map_err(describe)?;
             let code = response.status().as_u16();
-            let body = response.into_body().collect().await.map_err(|e| e.to_string())?;
-            Ok::<_, String>((code, body.to_bytes().len()))
+            // Counted as it arrives, so a large response is not held in memory.
+            let mut body = response.into_body();
+            let mut bytes = 0;
+            while let Some(frame) = body.frame().await {
+                if let Some(data) = frame.map_err(|e| e.to_string())?.data_ref() {
+                    bytes += data.len();
+                }
+            }
+            Ok::<_, String>((code, bytes))
         };
         let end = async {
             match deadline {

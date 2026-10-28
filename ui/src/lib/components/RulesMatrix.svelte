@@ -15,7 +15,7 @@
 					<th class="resource">Resource</th>
 					<th>Group</th>
 					{#each VERBS as verb (verb)}<th class="verb" title={verb}>{verb === 'deletecollection' ? 'del-all' : verb}</th>{/each}
-					<th>Other</th>
+					<th class="other">Other</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -30,7 +30,7 @@
 							{@const yes = allows(row, verb)}
 							<td class="verb" class:yes aria-label="{verb}: {yes ? 'allowed' : 'not allowed'}">{yes ? '✓' : '·'}</td>
 						{/each}
-						<td class="mono" class:wild={row.verbs.has('*')}>{row.verbs.has('*') ? 'all verbs' : row.extras.join(', ')}</td>
+						<td class="mono other" class:wild={row.verbs.has('*')}>{row.verbs.has('*') ? 'all verbs' : row.extras.join(', ')}</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -70,8 +70,12 @@
 	}
 	.verb {
 		width: 1%;
+		padding-inline: 5px;
 		text-align: center;
 		color: var(--text-muted);
+	}
+	.other {
+		white-space: nowrap;
 	}
 	td.verb.yes {
 		color: var(--ok);

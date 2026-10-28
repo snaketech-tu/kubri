@@ -2,7 +2,9 @@
 
 `kubri-server` serves the same UI as the desktop app, plus the API it talks to, so Kubri runs in any browser: on your own computer, from a Docker image, or inside a cluster for a team.
 
-Whoever can use Kubri can do everything its kubeconfig or service account allows, open shells in containers, open ports on the machine the server runs on, and run your k9s plugins there. Give it a password, serve it over HTTPS when it leaves your computer, and give it only the access its users need.
+Whoever can use Kubri can do everything its kubeconfig or service account allows, open shells in containers, open ports on the machine the server runs on, and run your k9s plugins there, with values from the browser such as `$FILTER` and the columns of a row. Give it a password, serve it over HTTPS when it leaves your computer, and give it only the access its users need.
+
+One kubri-server is one Kubri, shared by everyone who uses it: switching the context switches it for everyone, and everyone sees and can stop the same port-forwards and benchmarks. For people who work on different clusters at the same time, run one server each.
 
 ## On your computer
 
@@ -32,8 +34,9 @@ Signing in lasts a week (`KUBRI_SESSION_HOURS`), until you sign out, or until th
 | `KUBRI_PASSWORD_FILE` | `--password-file` | A file holding the password. A trailing newline is ignored. |
 | `KUBRI_NO_AUTH` | `--no-auth` | `true` lets everyone in without a password, also on other addresses. Only for use behind a proxy that signs people in itself. |
 | `KUBRI_ALLOWED_HOSTS` | `--allowed-hosts` | Without a password, Kubri only answers to localhost and IP addresses. Other host names it should answer to, separated by commas. |
-| `KUBRI_SESSION_HOURS` | `--session-hours` | How long signing in lasts. Default 168 (a week). |
+| `KUBRI_SESSION_HOURS` | `--session-hours` | How long signing in lasts, from 1 hour to 87600 (ten years). Default 168 (a week). |
 | `KUBRI_UI_DIR` | `--ui-dir` | The built UI. Default `ui/build`; the Docker image sets it. |
+| `HTTPS_PROXY`, `NO_PROXY` | | A proxy to reach clusters through, and the hosts to reach without it, as for kubectl. Localhost never goes through the proxy, and a `proxy-url` in the kubeconfig wins. |
 | `RUST_LOG` | | Log levels, such as `kubri_server=debug`. |
 
 ## With Docker

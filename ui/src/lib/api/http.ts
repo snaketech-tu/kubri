@@ -159,5 +159,18 @@ export const httpBackend: Backend = {
 	k9sConfig: () => request('GET', '/k9s'),
 	k9sSkin: (name) => request('GET', `/k9s/skins/${encodeURIComponent(name)}`),
 	runPlugin: (run) => request('POST', '/plugins/run', run),
-	openPlugin: (run, onEvent) => terminalSocket('/plugins/terminal', run, onEvent)
+	openPlugin: (run, onEvent) => terminalSocket('/plugins/terminal', run, onEvent),
+	desktop: false,
+	async openUrl(url) {
+		window.open(url, '_blank', 'noreferrer');
+	},
+	async saveText(name, text) {
+		const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = name;
+		a.click();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+		return null;
+	}
 };

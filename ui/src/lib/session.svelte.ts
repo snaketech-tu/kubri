@@ -53,10 +53,15 @@ class Session {
 		this.signedIn = false;
 	}
 
-	/** The server turned a request away: the session ended, or the server restarted. */
+	#rechecking: Promise<void> | null = null;
+
+	/**
+	 * The server turned a request away: the session ended, or the server restarted. Asks the
+	 * server instead of assuming it, once for a burst of failed requests.
+	 */
 	expired() {
-		this.required = true;
-		this.signedIn = false;
+		if (!this.signedIn) return;
+		this.#rechecking ??= this.check().finally(() => (this.#rechecking = null));
 	}
 }
 

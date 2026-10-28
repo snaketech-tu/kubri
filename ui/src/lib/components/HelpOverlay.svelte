@@ -61,6 +61,7 @@
 			'Port-forwards',
 			[
 				['b', 'HTTP benchmark'],
+				['o', 'Open in the browser'],
 				['c  or  Enter', 'Copy URL'],
 				['Ctrl+D', 'Stop']
 			]

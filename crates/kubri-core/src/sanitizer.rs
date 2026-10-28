@@ -1239,8 +1239,8 @@ fn node(node: &Node, usage: Option<&Usage>) -> Vec<Issue> {
         .into_iter()
         .collect();
     if node.spec.as_ref().and_then(|s| s.unschedulable) == Some(true) {
-        // Cordoned on purpose: say so, without the warning health gives it.
-        issues.retain(|i| i.code != "status" || i.level == Level::Error);
+        // Cordoned on purpose: say so, without the warning health gives it. Pressure stays.
+        issues.retain(|i| !(i.code == "status" && i.message.ends_with("SchedulingDisabled")));
         issues.push(Issue::info("cordoned", "Cordoned, so no new pods are scheduled"));
     }
     let Some(usage) = usage else {
@@ -1567,5 +1567,20 @@ mod tests {
             vec![("cordoned", Level::Info), ("usage", Level::Warning)]
         );
         assert!(issues[1].message.contains("90%"));
+
+        let pressured: Node = from(json!({
+            "metadata": {"name": "worker-2"},
+            "spec": {"unschedulable": true},
+            "status": {"conditions": [
+                {"type": "Ready", "status": "True"},
+                {"type": "MemoryPressure", "status": "True"}
+            ]}
+        }));
+        let issues = node(&pressured, None);
+        assert_eq!(
+            codes(&issues),
+            vec![("status", Level::Warning), ("cordoned", Level::Info)]
+        );
+        assert_eq!(issues[0].message, "MemoryPressure");
     }
 }

@@ -122,6 +122,8 @@
 	}
 
 	async function confirm() {
+		// Enter pressed twice must not start a second port-forward or delete twice.
+		if (busy) return;
 		busy = true;
 		error = null;
 		let ok = false;
@@ -359,6 +361,9 @@
 		</div>
 		{#if address.trim() && !['127.0.0.1', 'localhost', '::1'].includes(address.trim())}
 			<p class="warn">Other machines on your network will be able to reach this port.</p>
+		{/if}
+		{#if !backend.desktop}
+			<p class="muted">The port opens on the computer kubri-server runs on.</p>
 		{/if}
 	{:else if dialog.kind === 'drain'}
 		{#if report}

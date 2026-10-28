@@ -543,4 +543,10 @@ export interface Backend {
 	runPlugin(run: PluginRun): Promise<void>;
 	/** Runs a plugin in a terminal. */
 	openPlugin(run: PluginRun, onEvent: (event: TerminalEvent) => void): TerminalSession;
+	/** The desktop app, where port-forwards and plugins run on this computer. */
+	desktop: boolean;
+	/** Opens a web address in a new tab, or in the default browser from the desktop app. */
+	openUrl(url: string): Promise<void>;
+	/** Saves text as a file. Returns the path when the desktop app saved it to Downloads. */
+	saveText(name: string, text: string): Promise<string | null>;
 }

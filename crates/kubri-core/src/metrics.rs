@@ -57,8 +57,16 @@ pub(crate) fn parse_usage(list: &Value) -> Vec<Usage> {
 /// Parses a Kubernetes quantity such as `250m`, `1.5`, `128Mi` or `2e3` into its base unit.
 pub fn parse_quantity(text: &str) -> Option<f64> {
     let text = text.trim();
-    let split = text
-        .find(|c: char| c.is_ascii_alphabetic() && c != 'e' && c != 'E')
+    let bytes = text.as_bytes();
+    // An `e` followed by a digit or sign is an exponent ("2e3"); otherwise `E` is exa.
+    let exponent = |i: usize| {
+        matches!(bytes[i], b'e' | b'E')
+            && bytes
+                .get(i + 1)
+                .is_some_and(|c| c.is_ascii_digit() || matches!(c, b'+' | b'-'))
+    };
+    let split = (0..bytes.len())
+        .find(|&i| bytes[i].is_ascii_alphabetic() && !exponent(i))
         .unwrap_or(text.len());
     let (number, suffix) = text.split_at(split);
     let number: f64 = number.parse().ok()?;
@@ -96,6 +104,9 @@ mod tests {
         assert_eq!(parse_quantity("128Mi"), Some(134_217_728.0));
         assert_eq!(parse_quantity("1k"), Some(1000.0));
         assert_eq!(parse_quantity("2e3"), Some(2000.0));
+        assert_eq!(parse_quantity("5E-1"), Some(0.5));
+        assert_eq!(parse_quantity("1E"), Some(1e18));
+        assert_eq!(parse_quantity("2Ei"), Some(2.0 * 1024.0_f64.powi(6)));
         assert!((parse_quantity("1500000n").unwrap() - 0.0015).abs() < 1e-12);
         assert_eq!(parse_quantity("12parsecs"), None);
     }

@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
 	import { backend, type LogEvent, type LogOptions, type LogSource, type ObjectRef } from '../api';
+	import { errorMessage } from '../format';
 	import { logMatcher, sourceLabels, stripAnsi } from '../pods';
+	import { app } from '../state.svelte';
 
 	let { target, containers, previous: startPrevious = false }: {
 		target: ObjectRef;
@@ -124,13 +126,21 @@
 		return visible.map((l) => (showSource && l.source !== null ? `[${labels[l.source]}] ` : '') + l.text).join('\n');
 	}
 
-	function download() {
-		const url = URL.createObjectURL(new Blob([asText() + '\n'], { type: 'text/plain' }));
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = `${target.name}${container ? `-${container}` : ''}.log`;
-		a.click();
-		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	async function save() {
+		try {
+			const path = await backend.saveText(`${target.name}${container ? `-${container}` : ''}.log`, asText() + '\n');
+			if (path) app.toast(`Saved ${path}`);
+		} catch (err) {
+			app.toast(errorMessage(err), 'bad');
+		}
+	}
+
+	function copy() {
+		const count = visible.length;
+		navigator.clipboard.writeText(asText()).then(
+			() => app.toast(`Copied ${count} ${count === 1 ? 'line' : 'lines'}`),
+			(err) => app.toast(errorMessage(err), 'bad')
+		);
 	}
 </script>
 
@@ -152,8 +162,8 @@
 		<input class="filter" bind:value={filter} placeholder="Filter…  /regex/" />
 		<span class="spacer"></span>
 		<button onclick={() => (lines = [])} title="Clear the view">Clear</button>
-		<button onclick={() => navigator.clipboard.writeText(asText())} title="Copy the shown lines">Copy</button>
-		<button onclick={download} title="Save the shown lines">Save</button>
+		<button onclick={copy} title="Copy the shown lines">Copy</button>
+		<button onclick={save} title="Save the shown lines">Save</button>
 	</div>
 
 	<div class="body" class:wrap bind:this={scroller} {onscroll}>

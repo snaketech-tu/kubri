@@ -16,6 +16,7 @@ mod node;
 mod objects;
 mod plugin;
 mod portforward;
+mod proxy;
 mod pulse;
 mod rbac;
 mod resource;
@@ -162,8 +163,9 @@ impl Kubri {
             ..Default::default()
         };
         let session = tokio::time::timeout(CONNECT_TIMEOUT, async {
-            let config = Config::from_custom_kubeconfig(kubeconfig, &options).await?;
-            let server = config.cluster_url.to_string();
+            let mut config = Config::from_custom_kubeconfig(kubeconfig.clone(), &options).await?;
+            proxy::skip_proxy_like_kubectl(&mut config, &kubeconfig, context);
+            let server = config.cluster_url.to_string().trim_end_matches('/').to_owned();
             let client = Client::try_from(config)?;
             let version = client.apiserver_version().await?.git_version;
             let resources = discovery::discover(&client).await?;
@@ -492,19 +494,24 @@ impl Kubri {
             None => None,
         };
         let mut container = None;
-        if let (Some(target), Some(info)) = (&run.target, resource)
-            && plugin::is_pods(info)
-        {
+        if let (Some(target), Some(info)) = (&run.target, resource) {
+            // Fetching it also makes sure `$NAME` and `$NAMESPACE` name a real object.
             let object = session
                 .api(&target.resource, target.namespace.as_deref())?
                 .get(&target.name)
                 .await?;
-            let pod: Pod = serde_json::from_value(serde_json::to_value(object)?)?;
-            container = match &run.container {
-                Some(name) if terminal::containers(&pod).contains(name) => Some(name.clone()),
-                Some(name) => return Err(Error::NotFound(format!("container {name}"))),
-                None => terminal::default_container(&pod),
-            };
+            if plugin::is_pods(info) {
+                let pod: Pod = serde_json::from_value(serde_json::to_value(object)?)?;
+                container = match &run.container {
+                    Some(name) if terminal::containers(&pod).contains(name) => Some(name.clone()),
+                    Some(name) => return Err(Error::NotFound(format!("container {name}"))),
+                    None => terminal::default_container(&pod),
+                };
+            }
+        }
+        if let Some(release) = &run.release {
+            helm::validate_name(&release.namespace)?;
+            helm::validate_name(&release.name)?;
         }
         let kubeconfig = std::env::var("KUBECONFIG")
             .ok()

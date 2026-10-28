@@ -463,6 +463,77 @@ async fn helm_uninstall(
         .map_err(|e| e.to_string())
 }
 
+/// Opens a web address in the default browser, such as a port-forward's. Only http and
+/// https, so the UI cannot start other programs through it.
+#[tauri::command]
+fn open_url(url: String) -> CommandResult<()> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err(format!("{url} is not a web address"));
+    }
+    open::that_detached(&url).map_err(|e| format!("cannot open {url}: {e}"))
+}
+
+/// Saves text, such as the shown log lines, in the Downloads folder, since the window cannot
+/// download files. Never replaces a file: `web.log` becomes `web (1).log`. Returns the path.
+#[tauri::command]
+async fn save_text(name: String, text: String) -> CommandResult<String> {
+    let dir = dirs::download_dir()
+        .or_else(dirs::home_dir)
+        .ok_or("there is no Downloads folder")?;
+    tauri::async_runtime::spawn_blocking(move || save_new(&dir, &file_name(&name), text.as_bytes()))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|path| path.display().to_string())
+}
+
+/// `name` with anything but letters, digits, `.`, `-` and `_` replaced, so it stays one file
+/// in the folder.
+fn file_name(name: &str) -> String {
+    let name: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    match name.trim_start_matches('.') {
+        "" => "kubri.txt".to_owned(),
+        name => name.to_owned(),
+    }
+}
+
+fn save_new(dir: &std::path::Path, name: &str, contents: &[u8]) -> CommandResult<std::path::PathBuf> {
+    use std::io::Write;
+    let (stem, extension) = match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => (stem, format!(".{extension}")),
+        _ => (name, String::new()),
+    };
+    for n in 0..1000 {
+        let path = match n {
+            0 => dir.join(name),
+            n => dir.join(format!("{stem} ({n}){extension}")),
+        };
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                return file
+                    .write_all(contents)
+                    .map(|()| path.clone())
+                    .map_err(|e| format!("cannot save {}: {e}", path.display()));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("cannot save {}: {e}", path.display())),
+        }
+    }
+    Err(format!("{name} exists too many times in {}", dir.display()))
+}
+
 pub fn run() {
     #[cfg(unix)]
     if shell_env::print_requested() {
@@ -526,8 +597,41 @@ pub fn run() {
             helm_history,
             helm_version,
             helm_rollback,
-            helm_uninstall
+            helm_uninstall,
+            open_url,
+            save_text
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Kubri");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_names_stay_in_the_folder() {
+        assert_eq!(file_name("web-7d4b9-app.log"), "web-7d4b9-app.log");
+        assert_eq!(file_name("../../etc/passwd"), "_.._etc_passwd");
+        assert_eq!(file_name("a b:c\\d.log"), "a_b_c_d.log");
+        assert_eq!(file_name(".hidden"), "hidden");
+        assert_eq!(file_name(""), "kubri.txt");
+    }
+
+    #[test]
+    fn saving_never_replaces_a_file() {
+        let dir = std::env::temp_dir().join(format!("kubri-save-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = save_new(&dir, "web.log", b"one").unwrap();
+        let second = save_new(&dir, "web.log", b"two").unwrap();
+        let bare = save_new(&dir, "notes", b"three").unwrap();
+        let again = save_new(&dir, "notes", b"four").unwrap();
+        assert_eq!(first, dir.join("web.log"));
+        assert_eq!(second, dir.join("web (1).log"));
+        assert_eq!(std::fs::read(&first).unwrap(), b"one");
+        assert_eq!(std::fs::read(&second).unwrap(), b"two");
+        assert_eq!(bare, dir.join("notes"));
+        assert_eq!(again, dir.join("notes (1)"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
