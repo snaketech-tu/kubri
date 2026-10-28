@@ -23,12 +23,15 @@
 	import XrayView from '#lib/components/XrayView.svelte';
 	import { parseShortcut, pluginApplies, shortcutLabel } from '#lib/k9s.js';
 	import { canPortForward, hasLogs, isNodes, isPods } from '#lib/pods.js';
+	import { session } from '#lib/session.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 	import { LiveTable } from '#lib/watch.svelte.js';
 
 	const namespaces = new LiveTable();
 
 	$effect(() => {
+		// Also after signing in again, when a message from before may still be up.
+		app.error = null;
 		app.load();
 	});
 
@@ -69,7 +72,6 @@
 			app.helpOpen = true;
 		}
 	}
-
 
 	const viewHints = $derived.by(() => {
 		const panel: [string, string][] = app.details ? [['f', app.maximized ? 'restore' : 'maximize'], ['esc', 'close']] : [];
@@ -183,6 +185,9 @@
 			<span>Go to resource or command…</span>
 			<kbd>:</kbd>
 		</button>
+		{#if session.required}
+			<button class="sign-out" onclick={() => session.signOut()}>Sign out</button>
+		{/if}
 	</header>
 
 	{#if app.error}
@@ -294,6 +299,19 @@
 	}
 	.palette-button:hover {
 		border-color: var(--accent);
+	}
+	.sign-out {
+		margin-left: -8px;
+		padding: 6px 10px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: var(--surface-2);
+		color: var(--text-muted);
+		font-size: 13px;
+	}
+	.sign-out:hover {
+		border-color: var(--accent);
+		color: var(--text);
 	}
 	.error {
 		display: flex;

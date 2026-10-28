@@ -44,7 +44,7 @@ use tokio::sync::RwLock;
 pub use bench::{
     BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
 };
-pub use context::ContextInfo;
+pub use context::{ContextInfo, write_in_cluster_kubeconfig};
 pub use error::{Error, Result};
 pub use health::Health;
 pub use helm::{HelmRelease, HelmReleaseDetails};

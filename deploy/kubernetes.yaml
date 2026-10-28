@@ -1,0 +1,118 @@
+# Kubri in a cluster, in the namespace `kubri`. It uses its service account, which may read
+# everything except Secrets (the built-in `view` role). See docs/WEB.md.
+#
+#   kubectl apply -f deploy/kubernetes.yaml
+#   kubectl -n kubri create secret generic kubri-password --from-literal=password='<a long password>'
+#   kubectl -n kubri port-forward svc/kubri 7878:80     # then open http://localhost:7878
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubri
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubri
+  namespace: kubri
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubri
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  # `edit` also lets Kubri change things, open shells and see Secrets and Helm releases;
+  # `cluster-admin` allows everything.
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: kubri
+    namespace: kubri
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubri
+  namespace: kubri
+  labels:
+    app.kubernetes.io/name: kubri
+spec:
+  # Sign-ins and port-forwards live in the pod, so run one.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubri
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubri
+    spec:
+      serviceAccountName: kubri
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kubri
+          image: ghcr.io/snaketech-tu/kubri:latest
+          ports:
+            - name: http
+              containerPort: 7878
+          env:
+            - name: KUBRI_PASSWORD_FILE
+              value: /etc/kubri/password
+          volumeMounts:
+            - name: password
+              mountPath: /etc/kubri
+              readOnly: true
+            - name: home
+              mountPath: /home/kubri
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /api/session
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /api/session
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: password
+          secret:
+            secretName: kubri-password
+        # helm and kubectl keep caches in the home directory; Kubri writes its kubeconfig to /tmp.
+        - name: home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubri
+  namespace: kubri
+  labels:
+    app.kubernetes.io/name: kubri
+spec:
+  selector:
+    app.kubernetes.io/name: kubri
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
