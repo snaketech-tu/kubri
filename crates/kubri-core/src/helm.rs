@@ -6,7 +6,7 @@ use std::io::Read;
 use std::time::Duration;
 
 use base64::Engine;
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use k8s_openapi::api::core::v1::{ConfigMap, Secret};
 use kube::api::ListParams;
 use kube::{Api, Client};
@@ -248,12 +248,33 @@ async fn fetch(client: &Client, stored: &Stored) -> Result<Record> {
     }
 }
 
+/// Reads the given revisions. One that cannot be read, because it was deleted since it was
+/// listed or is damaged, is left out rather than failing the rest, unless none can be read.
 async fn fetch_all(client: &Client, revisions: Vec<Stored>) -> Result<Vec<HelmRelease>> {
-    futures::stream::iter(revisions)
-        .map(|s| async move { fetch(client, &s).await.map(|r| r.summary()) })
+    let results: Vec<Result<HelmRelease>> = futures::stream::iter(revisions)
+        .map(|s| async move {
+            fetch(client, &s).await.map(|r| r.summary()).inspect_err(|err| {
+                tracing::warn!(release = s.name, revision = s.revision, %err, "cannot read Helm release")
+            })
+        })
         .buffer_unordered(FETCH_CONCURRENCY)
-        .try_collect()
-        .await
+        .collect()
+        .await;
+    let total = results.len();
+    let mut first_error = None;
+    let mut read = Vec::with_capacity(total);
+    for result in results {
+        match result {
+            Ok(release) => read.push(release),
+            Err(err) => {
+                first_error.get_or_insert(err);
+            }
+        }
+    }
+    match first_error {
+        Some(err) if read.is_empty() => Err(err),
+        _ => Ok(read),
+    }
 }
 
 /// The latest revision of every release, like `helm list --all`.
@@ -344,7 +365,8 @@ async fn run(args: &[&str], context: &str) -> Result<String> {
     let mut command = tokio::process::Command::new("helm");
     command
         .args(args)
-        .args(["--kube-context", context])
+        // One argument, so a context name starting with a dash cannot pass for a flag.
+        .arg(format!("--kube-context={context}"))
         .kill_on_drop(true);
     let output = tokio::time::timeout(HELM_TIMEOUT, command.output())
         .await
@@ -450,17 +472,18 @@ mod tests {
 
     #[tokio::test]
     async fn lists_the_latest_revision_of_each_release() {
-        let meta = |revision: u32, status: &str| {
+        let meta = |name: &str, revision: u32, status: &str| {
             json!({ "apiVersion": "meta.k8s.io/v1", "kind": "PartialObjectMetadata", "metadata": {
-                "name": format!("sh.helm.release.v1.shop.v{revision}"), "namespace": "apps",
-                "labels": { "owner": "helm", "name": "shop", "version": revision.to_string(), "status": status }
+                "name": format!("sh.helm.release.v1.{name}.v{revision}"), "namespace": "apps",
+                "labels": { "owner": "helm", "name": name, "version": revision.to_string(), "status": status }
             }})
         };
         let (client, requests) = crate::testing::client(move |req| {
             let path = req.uri.split('?').next().unwrap_or_default();
             if path == "/api/v1/secrets" {
                 let list = json!({ "apiVersion": "meta.k8s.io/v1", "kind": "PartialObjectMetadataList",
-                                   "metadata": {}, "items": [meta(1, "superseded"), meta(2, "deployed")] });
+                                   "metadata": {}, "items": [meta("shop", 1, "superseded"), meta("shop", 2, "deployed"),
+                                             meta("gone", 1, "uninstalling")] });
                 return (200, list.to_string());
             }
             if path == "/api/v1/namespaces/apps/secrets/sh.helm.release.v1.shop.v2" {
@@ -471,6 +494,7 @@ mod tests {
                                      "type": "helm.sh/release.v1", "data": { "release": data } });
                 return (200, secret.to_string());
             }
+            // Uninstalled since it was listed: left out instead of failing the list.
             (404, crate::testing::status(404, "not found"))
         });
         let releases = releases(client, None).await.unwrap();
@@ -481,7 +505,7 @@ mod tests {
         );
         let uris: Vec<String> = requests.lock().unwrap().iter().map(|r| r.uri.clone()).collect();
         assert!(uris[0].contains("labelSelector=owner%3Dhelm"), "{uris:?}");
-        // Only the latest revision is read in full.
-        assert_eq!(uris.len(), 2);
+        // Only the latest revision of each release is read in full.
+        assert_eq!(uris.len(), 3);
     }
 }

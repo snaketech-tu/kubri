@@ -19,6 +19,8 @@ A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9
 - XRay (`:xray deploy`): a tree from each deployment, statefulset, daemonset, job, cronjob, service or ingress down to its pods and containers and the ConfigMaps, Secrets, service accounts and volume claims they use. Missing references show up in red; Secrets are only listed by name, never read.
 - RBAC (`:rbac`): every user, group and service account with the roles bound to them and what those roles allow, as a matrix of verbs per resource, plus what your own credentials may do. Roles and bindings also show their rules and subjects in the describe view.
 - Helm (`:helm`): the releases in the cluster with their status, chart and app version; their notes, values (as given or merged with the chart defaults), manifest, objects and history, including older revisions. Rolling back and uninstalling use the `helm` command, so they need it installed where Kubri runs.
+- Sanitizer (`:popeye`): checks the namespace (or the whole cluster) for common problems like Popeye does, such as missing probes or resource limits, `latest` image tags, crash-looping pods, services without endpoints, unused ConfigMaps, Secrets and roles, and bindings to missing roles. Every kind gets a score and the cluster a grade from A to F.
+- HTTP benchmarks (`:bench`, or <kbd>b</kbd> on a port-forward): load-test a forwarded port with a set number of requests or for a set time, then see requests per second, latency percentiles, a histogram of response times, status codes and errors.
 - Fully usable from the keyboard. Press <kbd>?</kbd> in the app for all shortcuts.
 
 ## How it works

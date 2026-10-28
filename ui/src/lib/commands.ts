@@ -10,6 +10,8 @@ export type Action =
 	| { type: 'xray'; resource: ResourceInfo; namespace?: string }
 	| { type: 'rbac'; namespace?: string }
 	| { type: 'helm'; namespace?: string }
+	| { type: 'sanitizer'; namespace?: string }
+	| { type: 'benchmarks' }
 	| { type: 'help' };
 
 export interface Suggestion {
@@ -25,6 +27,8 @@ const PULSE_COMMANDS = ['pu', 'pulse', 'pulses'];
 const XRAY_COMMANDS = ['xray'];
 const RBAC_COMMANDS = ['rbac', 'policy', 'subjects'];
 const HELM_COMMANDS = ['helm', 'hm', 'chart', 'charts'];
+const SANITIZER_COMMANDS = ['popeye', 'pop', 'sanitizer', 'sanitize'];
+const BENCH_COMMANDS = ['be', 'bench', 'benchmark', 'benchmarks'];
 
 /** Groups that win when several resources share a name, e.g. core `events` over events.k8s.io. */
 const PREFERRED_GROUPS = ['', 'apps', 'batch', 'networking.k8s.io', 'rbac.authorization.k8s.io'];
@@ -108,6 +112,20 @@ export function suggest(
 	});
 	if (HELM_COMMANDS.includes(cmd)) return [helm(rest[0])];
 
+	const sanitizer = (namespace?: string): Suggestion => ({
+		label: namespace ? `popeye ${namespace}` : 'popeye',
+		detail: 'Sanitizer: problems and risky settings, scored like Popeye',
+		action: { type: 'sanitizer', namespace }
+	});
+	if (SANITIZER_COMMANDS.includes(cmd)) return [sanitizer(rest[0])];
+
+	const benchmarks: Suggestion = {
+		label: 'bench',
+		detail: 'HTTP benchmarks through port-forwards',
+		action: { type: 'benchmarks' }
+	};
+	if (BENCH_COMMANDS.includes(cmd)) return [benchmarks];
+
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {
 		const roots = xrayResources(resources);
@@ -164,5 +182,7 @@ export function suggest(
 	if (cmd && 'xray'.startsWith(cmd)) extra.push(...xray('').slice(0, 3));
 	if (cmd && RBAC_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(rbac());
 	if (cmd && HELM_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(helm());
+	if (cmd && SANITIZER_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sanitizer());
+	if (cmd && BENCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(benchmarks);
 	return [...resourceSuggestions, ...extra];
 }

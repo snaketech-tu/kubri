@@ -89,6 +89,15 @@ describe('command palette', () => {
 		expect(suggest('he', resources, contexts, []).map((s) => s.label)).toContain('helm');
 	});
 
+	it('opens the sanitizer and the benchmarks', () => {
+		expect(suggest('popeye kube-system', resources, contexts, [])[0].action).toEqual({
+			type: 'sanitizer',
+			namespace: 'kube-system'
+		});
+		expect(suggest(':pop', resources, contexts, [])[0].action).toEqual({ type: 'sanitizer', namespace: undefined });
+		expect(suggest('be', resources, contexts, [])[0].action).toEqual({ type: 'benchmarks' });
+	});
+
 	it('passes a namespace argument to resource commands', () => {
 		const s = suggest('po kube-system', resources, contexts, []);
 		expect(s[0].action).toMatchObject({ type: 'resource', namespace: 'kube-system' });
