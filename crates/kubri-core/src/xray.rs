@@ -570,7 +570,7 @@ fn containers(pod: &Pod, parent: &str) -> Vec<XrayNode> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum RefKind {
+pub(crate) enum RefKind {
     ServiceAccount,
     ConfigMap,
     Secret,
@@ -578,15 +578,15 @@ enum RefKind {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct Reference {
-    kind: RefKind,
-    name: String,
+pub(crate) struct Reference {
+    pub kind: RefKind,
+    pub name: String,
     /// Every use is marked optional, so the pod starts without it.
-    optional: bool,
+    pub optional: bool,
 }
 
 /// The objects a pod spec uses, each once, sorted by kind and name.
-fn references(spec: &PodSpec) -> Vec<Reference> {
+pub(crate) fn references(spec: &PodSpec) -> Vec<Reference> {
     let mut found: BTreeMap<(RefKind, String), bool> = BTreeMap::new();
     let mut add = |kind: RefKind, name: &str, optional: Option<bool>| {
         if name.is_empty() {
@@ -658,14 +658,17 @@ fn references(spec: &PodSpec) -> Vec<Reference> {
 }
 
 /// Whether a Service's selector matches a pod's labels.
-fn selects(selector: &BTreeMap<String, String>, labels: Option<&BTreeMap<String, String>>) -> bool {
+pub(crate) fn selects(
+    selector: &BTreeMap<String, String>,
+    labels: Option<&BTreeMap<String, String>>,
+) -> bool {
     let Some(labels) = labels else {
         return false;
     };
     selector.iter().all(|(k, v)| labels.get(k) == Some(v))
 }
 
-fn is_ready(pod: &Pod) -> bool {
+pub(crate) fn is_ready(pod: &Pod) -> bool {
     pod.status
         .as_ref()
         .and_then(|s| s.conditions.as_ref())

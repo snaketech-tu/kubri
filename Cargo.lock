@@ -2288,9 +2288,13 @@ name = "kubri-core"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "bytes",
  "flate2",
  "futures",
  "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "k8s-openapi",
  "kube",
  "serde",

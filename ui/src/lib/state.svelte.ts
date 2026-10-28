@@ -1,6 +1,7 @@
 import {
 	backend,
 	type ClusterInfo,
+	type BenchInfo,
 	type ContextInfo,
 	type HelmRelease,
 	type ObjectRef,
@@ -26,7 +27,15 @@ export interface Details {
 	mode?: TerminalMode;
 }
 
-export type Page = 'resources' | 'portforwards' | 'pulses' | 'xray' | 'rbac' | 'helm';
+export type Page =
+	| 'resources'
+	| 'portforwards'
+	| 'benchmarks'
+	| 'pulses'
+	| 'xray'
+	| 'rbac'
+	| 'helm'
+	| 'sanitizer';
 
 export type Dialog =
 	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[] }
@@ -34,6 +43,7 @@ export type Dialog =
 	| { kind: 'restart'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'labels'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'portforward'; resource: ResourceInfo; target: ObjectRef }
+	| { kind: 'benchmark'; forward: PortForwardInfo; preset?: BenchInfo }
 	| { kind: 'drain'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'helmRollback'; release: HelmRelease; revision: number; done: () => void }
 	| { kind: 'helmUninstall'; release: HelmRelease; done: () => void };
@@ -63,6 +73,9 @@ class AppState {
 	maximized = $state(false);
 	dialog = $state<Dialog | null>(null);
 	forwards = $state<PortForwardInfo[]>([]);
+	benchmarks = $state<BenchInfo[]>([]);
+	/** The benchmark the benchmarks page shows. */
+	benchmarkId = $state<number | null>(null);
 	paletteOpen = $state(false);
 	helpOpen = $state(false);
 	contextMenuOpen = $state(false);
@@ -161,6 +174,29 @@ class AppState {
 		this.page = 'helm';
 		this.details = null;
 		this.setNamespace(namespace);
+	}
+
+	/** Problems and risky settings, like Popeye; `:popeye kube-system` switches namespace. */
+	showSanitizer(namespace?: string) {
+		this.page = 'sanitizer';
+		this.details = null;
+		this.setNamespace(namespace);
+	}
+
+	/** HTTP benchmarks, optionally showing one of them. */
+	showBenchmarks(id?: number) {
+		this.page = 'benchmarks';
+		this.details = null;
+		if (id !== undefined) this.benchmarkId = id;
+		this.refreshBenchmarks();
+	}
+
+	async refreshBenchmarks() {
+		try {
+			this.benchmarks = await backend.benchmarks();
+		} catch {
+			// Keep the last list; the next refresh tries again.
+		}
 	}
 
 	showPortForwards() {

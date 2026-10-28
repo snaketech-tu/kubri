@@ -6,10 +6,10 @@ use std::sync::{Arc, Mutex};
 
 use futures::{Stream, StreamExt};
 use kubri_core::{
-    ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, HelmRelease,
-    HelmReleaseDetails, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions, PortForwardInfo,
-    PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef, TableEvent, Terminal, TerminalInput,
-    TerminalOptions, TerminalOutput, Usage, XrayNode,
+    BenchInfo, BenchRequest, ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo,
+    HelmRelease, HelmReleaseDetails, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions,
+    PortForwardInfo, PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef, SanitizerReport, TableEvent,
+    Terminal, TerminalInput, TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde_json::Value;
 use tauri::State;
@@ -220,6 +220,27 @@ fn stop_port_forward(kubri: State<'_, Arc<Kubri>>, id: u32) -> CommandResult<()>
 }
 
 #[tauri::command]
+fn benchmarks(kubri: State<'_, Arc<Kubri>>) -> Vec<BenchInfo> {
+    kubri.benchmarks()
+}
+
+// Async, so the benchmark task starts on the async runtime.
+#[tauri::command]
+async fn start_benchmark(kubri: State<'_, Arc<Kubri>>, request: BenchRequest) -> CommandResult<BenchInfo> {
+    kubri.start_benchmark(&request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn stop_benchmark(kubri: State<'_, Arc<Kubri>>, id: u32) -> CommandResult<()> {
+    kubri.stop_benchmark(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn remove_benchmark(kubri: State<'_, Arc<Kubri>>, id: u32) -> CommandResult<()> {
+    kubri.remove_benchmark(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn cordon(kubri: State<'_, Arc<Kubri>>, name: String, cordoned: bool) -> CommandResult<()> {
     kubri.cordon(&name, cordoned).await.map_err(|e| e.to_string())
 }
@@ -314,6 +335,14 @@ async fn xray(
 ) -> CommandResult<Vec<XrayNode>> {
     kubri
         .xray(&resource, namespace.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn sanitize(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<SanitizerReport> {
+    kubri
+        .sanitize(namespace.as_deref())
         .await
         .map_err(|e| e.to_string())
 }
@@ -424,6 +453,10 @@ pub fn run() {
             port_forwards,
             start_port_forward,
             stop_port_forward,
+            benchmarks,
+            start_benchmark,
+            stop_benchmark,
+            remove_benchmark,
             cordon,
             drain,
             get_object,
@@ -436,6 +469,7 @@ pub fn run() {
             metrics,
             pulse,
             xray,
+            sanitize,
             rbac,
             permissions,
             helm_releases,

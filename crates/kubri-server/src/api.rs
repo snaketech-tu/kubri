@@ -8,10 +8,10 @@ use axum::routing::{any, delete, get, post, put};
 use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
-    ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, HelmRelease,
-    HelmReleaseDetails, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions, PortForwardInfo,
-    PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef, Terminal, TerminalOptions, TerminalOutput,
-    Usage, XrayNode,
+    BenchInfo, BenchRequest, ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo,
+    HelmRelease, HelmReleaseDetails, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions,
+    PortForwardInfo, PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef, SanitizerReport, Terminal,
+    TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -38,6 +38,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/pulse", get(pulse))
         .route("/xray", get(xray))
         .route("/rbac", get(rbac))
+        .route("/sanitize", get(sanitize))
         .route("/permissions", get(permissions))
         .route("/helm/releases", get(helm_releases))
         .route("/helm/release", get(helm_release))
@@ -49,6 +50,9 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/terminal", any(terminal))
         .route("/portforwards", get(port_forwards).post(start_port_forward))
         .route("/portforwards/{id}", delete(stop_port_forward))
+        .route("/benchmarks", get(benchmarks).post(start_benchmark))
+        .route("/benchmarks/{id}", delete(remove_benchmark))
+        .route("/benchmarks/{id}/stop", post(stop_benchmark))
         .route("/node/cordon", post(cordon))
         .route("/node/drain", post(drain))
         .with_state(kubri)
@@ -279,6 +283,13 @@ impl NamespaceQuery {
     fn namespace(&self) -> Option<&str> {
         self.namespace.as_deref().filter(|ns| !ns.is_empty())
     }
+}
+
+async fn sanitize(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<NamespaceQuery>,
+) -> ApiResult<SanitizerReport> {
+    Ok(Json(kubri.sanitize(query.namespace()).await?))
 }
 
 async fn rbac(State(kubri): State<Arc<Kubri>>, Query(query): Query<NamespaceQuery>) -> ApiResult<Rbac> {
@@ -516,6 +527,25 @@ async fn stop_port_forward(State(kubri): State<Arc<Kubri>>, Path(id): Path<u32>)
     Ok(Json(kubri.stop_port_forward(id)?))
 }
 
+async fn benchmarks(State(kubri): State<Arc<Kubri>>) -> Json<Vec<BenchInfo>> {
+    Json(kubri.benchmarks())
+}
+
+async fn start_benchmark(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<BenchRequest>,
+) -> ApiResult<BenchInfo> {
+    Ok(Json(kubri.start_benchmark(&req)?))
+}
+
+async fn stop_benchmark(State(kubri): State<Arc<Kubri>>, Path(id): Path<u32>) -> ApiResult<()> {
+    Ok(Json(kubri.stop_benchmark(id)?))
+}
+
+async fn remove_benchmark(State(kubri): State<Arc<Kubri>>, Path(id): Path<u32>) -> ApiResult<()> {
+    Ok(Json(kubri.remove_benchmark(id)?))
+}
+
 #[derive(Deserialize)]
 struct Cordon {
     name: String,
@@ -668,6 +698,29 @@ mod tests {
         let (status, body) = send(disconnected(), stop).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(body["error"], "port-forward 7 does not exist");
+    }
+
+    #[tokio::test]
+    async fn sanitizer_and_benchmark_routes() {
+        let (status, _) = send(disconnected(), get("/sanitize?namespace=shop")).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+
+        let (status, body) = send(disconnected(), get("/benchmarks")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, serde_json::json!([]));
+        let start = post_json(
+            "/benchmarks",
+            r#"{"forwardId":3,"concurrency":2,"requests":100,"headers":{"Host":"shop.acme.io"}}"#,
+        );
+        let (status, body) = send(disconnected(), start).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["error"], "port-forward 3 does not exist");
+        let stop = Request::post("/benchmarks/4/stop").body(Body::empty()).unwrap();
+        let (status, _) = send(disconnected(), stop).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let remove = Request::delete("/benchmarks/4").body(Body::empty()).unwrap();
+        let (status, _) = send(disconnected(), remove).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

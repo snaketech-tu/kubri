@@ -71,6 +71,9 @@
 				case 'c':
 					if (current) copy(current);
 					return true;
+				case 'b':
+					if (current) app.dialog = { kind: 'benchmark', forward: current };
+					return true;
 			}
 			return false;
 		})();
@@ -115,7 +118,10 @@
 							<td class="muted">{f.context}</td>
 							<td class="numeric">{f.connections}</td>
 							<td class="muted">{age(f.started, now)}</td>
-							<td><button class="stop" onclick={() => stopPortForward(f.id)} title="Stop (Ctrl+D)">Stop</button></td>
+							<td class="buttons">
+								<button class="stop" onclick={() => (app.dialog = { kind: 'benchmark', forward: f })} title="HTTP benchmark (b)">Benchmark</button>
+								<button class="stop danger" onclick={() => stopPortForward(f.id)} title="Stop (Ctrl+D)">Stop</button>
+							</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -226,7 +232,15 @@
 		background: var(--surface-1);
 		font-size: 12px;
 	}
+	.buttons {
+		display: flex;
+		gap: 6px;
+		justify-content: flex-end;
+	}
 	.stop:hover {
+		border-color: var(--accent);
+	}
+	.stop.danger:hover {
 		border-color: var(--bad);
 		color: var(--bad);
 	}

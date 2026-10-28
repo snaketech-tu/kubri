@@ -3,6 +3,7 @@
 	import logo from '#lib/assets/logo.svg';
 	import { canDelete, canEdit, canRestart, canScale } from '#lib/actions.js';
 	import ActionDialog from '#lib/components/ActionDialog.svelte';
+	import BenchmarksView from '#lib/components/BenchmarksView.svelte';
 	import CommandPalette from '#lib/components/CommandPalette.svelte';
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
@@ -13,6 +14,7 @@
 	import PulsesView from '#lib/components/PulsesView.svelte';
 	import RbacView from '#lib/components/RbacView.svelte';
 	import ResourceView from '#lib/components/ResourceView.svelte';
+	import SanitizerView from '#lib/components/SanitizerView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
@@ -35,10 +37,14 @@
 		app.namespaces = namespaces.rows.map((r) => r.name).sort();
 	});
 
-	// Port-forwards outlive context switches; keep the sidebar count current.
+	// Port-forwards and benchmarks outlive context switches; keep the sidebar counts current.
 	$effect(() => {
 		app.refreshForwards();
-		const timer = setInterval(() => app.refreshForwards(), 5000);
+		app.refreshBenchmarks();
+		const timer = setInterval(() => {
+			app.refreshForwards();
+			app.refreshBenchmarks();
+		}, 5000);
 		return () => clearInterval(timer);
 	});
 
@@ -63,6 +69,7 @@
 			return [
 				[':', 'command'],
 				['c', 'copy url'],
+				['b', 'benchmark'],
 				['^d', 'stop'],
 				['?', 'help']
 			] as [string, string][];
@@ -83,6 +90,20 @@
 		}
 		if (app.page === 'rbac') {
 			return [[':', 'command'], ['/', 'filter'], ['j/k', 'move'], ...panel, ['?', 'help']] as [string, string][];
+		}
+		if (app.page === 'sanitizer') {
+			return [
+				[':', 'command'],
+				['/', 'filter'],
+				['h/l', 'collapse/expand'],
+				['enter', 'describe'],
+				['⇧r', 'scan again'],
+				...panel,
+				['?', 'help']
+			] as [string, string][];
+		}
+		if (app.page === 'benchmarks') {
+			return [[':', 'command'], ['j/k', 'move'], ['b', 'run again'], ['^d', 'stop/remove'], ['?', 'help']] as [string, string][];
 		}
 		if (app.page === 'helm') {
 			return [
@@ -147,6 +168,12 @@
 		<Sidebar />
 		{#if app.page === 'portforwards'}
 			<PortForwardsView />
+		{:else if app.page === 'benchmarks'}
+			<BenchmarksView />
+		{:else if app.page === 'sanitizer'}
+			{#key `${app.cluster?.context}/${app.namespace}`}
+				<SanitizerView />
+			{/key}
 		{:else if app.page === 'pulses'}
 			{#key `${app.cluster?.context}/${app.namespace}`}
 				<PulsesView />

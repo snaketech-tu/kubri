@@ -56,6 +56,12 @@
 			case 'helm':
 				app.showHelm(action.namespace);
 				break;
+			case 'sanitizer':
+				app.showSanitizer(action.namespace);
+				break;
+			case 'benchmarks':
+				app.showBenchmarks();
+				break;
 			case 'portforwards':
 				app.showPortForwards();
 				break;

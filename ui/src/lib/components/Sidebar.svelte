@@ -29,6 +29,8 @@
 	);
 	const others = $derived(visible.filter((r) => !pinned.includes(r)));
 
+	const running = $derived(app.benchmarks.filter((b) => b.state === 'running').length);
+
 	function showXray() {
 		const resource = app.xrayResource ?? xrayResources(app.resources)[0];
 		if (resource) app.showXray(resource);
@@ -51,9 +53,16 @@
 		<button class:active={app.page === 'helm'} onclick={() => app.showHelm()} title=":helm">
 			<span>Helm</span>
 		</button>
+		<button class:active={app.page === 'sanitizer'} onclick={() => app.showSanitizer()} title=":popeye">
+			<span>Sanitizer</span>
+		</button>
 		<button class:active={app.page === 'portforwards'} onclick={() => app.showPortForwards()} title=":pf">
 			<span>Port-forwards</span>
 			{#if app.forwards.length}<span class="badge">{app.forwards.length}</span>{/if}
+		</button>
+		<button class:active={app.page === 'benchmarks'} onclick={() => app.showBenchmarks()} title=":bench">
+			<span>Benchmarks</span>
+			{#if running}<span class="badge" title="Running">{running}</span>{/if}
 		</button>
 		{#if pinned.length}
 			<h3>Workloads & config</h3>

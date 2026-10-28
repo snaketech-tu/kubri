@@ -3,6 +3,7 @@
 //! [`Kubri`] owns the merged kubeconfig and the connection to the selected context.
 //! Both frontends talk to the cluster only through it.
 
+mod bench;
 mod context;
 mod discovery;
 mod error;
@@ -16,6 +17,7 @@ mod portforward;
 mod pulse;
 mod rbac;
 mod resource;
+mod sanitizer;
 mod selector;
 mod table;
 mod terminal;
@@ -37,6 +39,9 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::RwLock;
 
+pub use bench::{
+    BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
+};
 pub use context::ContextInfo;
 pub use error::{Error, Result};
 pub use health::Health;
@@ -49,6 +54,7 @@ pub use portforward::{PortForwardInfo, PortForwardRequest};
 pub use pulse::{EventPulse, KindPulse, Pulse, RecentEvent, Utilization};
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use resource::{ResourceInfo, ResourceRef};
+pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
 pub use table::{Column, Row, TableEvent};
 pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
 pub use xray::XrayNode;
@@ -85,6 +91,7 @@ pub struct Kubri {
     kubeconfig: RwLock<Result<Kubeconfig, String>>,
     session: RwLock<Option<Arc<Session>>>,
     forwards: std::sync::Mutex<portforward::Forwards>,
+    benchmarks: std::sync::Mutex<bench::Benchmarks>,
 }
 
 impl Kubri {
@@ -103,6 +110,7 @@ impl Kubri {
             kubeconfig: RwLock::new(kubeconfig),
             session: RwLock::new(None),
             forwards: Default::default(),
+            benchmarks: Default::default(),
         }
     }
 
@@ -324,6 +332,14 @@ impl Kubri {
         xray::gather(session.client.clone(), root, namespace).await
     }
 
+    /// Checks the objects of `namespace`, or of the whole cluster with nodes, volumes and
+    /// cluster roles, for problems and risky settings, like Popeye.
+    pub async fn sanitize(&self, namespace: Option<&str>) -> Result<SanitizerReport> {
+        let session = self.session().await?;
+        let usage = session.metrics(MetricsKind::Nodes, None);
+        Ok(sanitizer::scan(session.client.clone(), namespace, usage).await)
+    }
+
     /// Every subject of a role binding with the rules it is granted. `namespace` limits role
     /// bindings to one namespace; cluster role bindings are always included.
     pub async fn rbac(&self, namespace: Option<&str>) -> Result<Rbac> {
@@ -457,6 +473,30 @@ impl Kubri {
         self.forwards.lock().unwrap().stop(id)
     }
 
+    /// HTTP benchmarks, newest first, with live progress while they run.
+    pub fn benchmarks(&self) -> Vec<BenchInfo> {
+        self.benchmarks.lock().unwrap().list()
+    }
+
+    /// Starts an HTTP benchmark through a running port-forward, like k9s does with `hey`.
+    pub fn start_benchmark(&self, request: &BenchRequest) -> Result<BenchInfo> {
+        let forward = self
+            .port_forwards()
+            .into_iter()
+            .find(|f| f.id == request.forward_id)
+            .ok_or_else(|| Error::NotFound(format!("port-forward {}", request.forward_id)))?;
+        bench::start(&self.benchmarks, request, &forward)
+    }
+
+    /// Stops a running benchmark early; it keeps the results of what finished.
+    pub fn stop_benchmark(&self, id: u32) -> Result<()> {
+        self.benchmarks.lock().unwrap().stop(id)
+    }
+
+    pub fn remove_benchmark(&self, id: u32) -> Result<()> {
+        self.benchmarks.lock().unwrap().remove(id)
+    }
+
     /// Marks a node (un)schedulable, like `kubectl cordon` and `kubectl uncordon`.
     pub async fn cordon(&self, node: &str, cordoned: bool) -> Result<()> {
         let session = self.session().await?;
@@ -511,6 +551,9 @@ impl Drop for Kubri {
     fn drop(&mut self) {
         if let Ok(forwards) = self.forwards.get_mut() {
             forwards.stop_all();
+        }
+        if let Ok(benchmarks) = self.benchmarks.get_mut() {
+            benchmarks.stop_all();
         }
     }
 }

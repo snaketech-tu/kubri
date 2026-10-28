@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { deleteObjects, patchMetadata, restart, scale, startPortForward } from '../actions';
+	import { parseHeaders } from '../bench';
 	import { backend, type DeleteOptions, type DrainReport } from '../api';
 	import { errorMessage } from '../format';
 	import { forwardablePorts, suggestedLocalPort, type ForwardablePort } from '../pods';
@@ -31,6 +32,23 @@
 	let localPort = $state<number | null>(null);
 	let address = $state('127.0.0.1');
 
+	// Benchmark: the run to repeat, or the defaults k9s uses (one worker, 200 requests).
+	// A dialog is opened afresh for each run, so its first value is the one to fill in.
+	const preset = untrack(() => (dialog.kind === 'benchmark' ? dialog.preset : undefined));
+	let method = $state(preset?.method ?? 'GET');
+	let path = $state(preset?.path ?? '/');
+	let concurrency = $state<number | null>(preset?.concurrency ?? 1);
+	let byDuration = $state(!!preset?.durationSecs);
+	let requests = $state<number | null>(preset?.requests ?? 200);
+	let seconds = $state<number | null>(preset?.durationSecs ?? 30);
+	let timeout = $state<number | null>(preset?.timeoutSecs ?? 20);
+	let headersText = $state(
+		Object.entries(preset?.headers ?? {})
+			.map(([k, v]) => `${k}: ${v}`)
+			.join('\n')
+	);
+	let body = $state(preset?.body ?? '');
+
 	// Drain
 	let ignoreDaemonsets = $state(true);
 	let deleteEmptydirData = $state(false);
@@ -44,7 +62,9 @@
 	}
 
 	$effect(() => {
-		if (dialog.kind === 'scale' || dialog.kind === 'labels' || dialog.kind === 'portforward') {
+		if (dialog.kind === 'benchmark') {
+			queueMicrotask(() => firstField?.focus());
+		} else if (dialog.kind === 'scale' || dialog.kind === 'labels' || dialog.kind === 'portforward') {
 			backend
 				.getObject(dialog.target)
 				.then((obj) => {
@@ -140,6 +160,26 @@
 						address: address.trim() || null
 					});
 					break;
+				case 'benchmark': {
+					const whole = (n: number | null, what: string, max: number) => {
+						if (n === null || !Number.isInteger(n) || n < 1 || n > max) throw new Error(`${what} must be a whole number from 1 to ${max}`);
+						return n;
+					};
+					const run = await backend.startBenchmark({
+						forwardId: dialog.forward.id,
+						method,
+						path: path.trim() || '/',
+						headers: parseHeaders(headersText),
+						body: hasBody && body ? body : null,
+						concurrency: whole(concurrency, 'Concurrency', 200),
+						requests: byDuration ? null : whole(requests, 'Requests', 1_000_000),
+						durationSecs: byDuration ? whole(seconds, 'Duration', 600) : null,
+						timeoutSecs: whole(timeout, 'Timeout', 120)
+					});
+					app.showBenchmarks(run.id);
+					ok = true;
+					break;
+				}
 				case 'helmRollback':
 					helmOutput(await backend.helmRollback(dialog.release.namespace, dialog.release.name, dialog.revision));
 					dialog.done();
@@ -215,12 +255,15 @@
 				return 'Port-forward';
 			case 'drain':
 				return 'Drain node';
+			case 'benchmark':
+				return 'HTTP benchmark';
 			case 'helmRollback':
 				return 'Roll back release';
 			case 'helmUninstall':
 				return 'Uninstall release';
 		}
 	});
+	const hasBody = $derived(['POST', 'PUT', 'PATCH'].includes(method));
 	const danger = $derived(
 		dialog.kind === 'delete' || dialog.kind === 'helmUninstall' || (dialog.kind === 'drain' && !report)
 	);
@@ -345,6 +388,50 @@
 				<input class="grace" type="number" min="0" bind:value={gracePeriod} placeholder="pod default" /> seconds
 			</label>
 		{/if}
+	{:else if dialog.kind === 'benchmark'}
+		<p>
+			Send requests through the port-forward to <strong>{dialog.forward.pod}</strong> on port
+			{dialog.forward.podPort}, and measure how fast it answers.
+		</p>
+		<div class="request">
+			<select bind:value={method} aria-label="Method">
+				{#each ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as m (m)}<option>{m}</option>{/each}
+			</select>
+			<span class="origin">localhost:{dialog.forward.localPort}</span>
+			<input class="path" bind:value={path} bind:this={firstField} placeholder="/" aria-label="Path" spellcheck="false" />
+		</div>
+		<div class="grid">
+			<label class="field">
+				Concurrency
+				<input type="number" min="1" max="200" bind:value={concurrency} />
+			</label>
+			<div class="field">
+				<span class="mode" role="group" aria-label="Stop after">
+					<button class:active={!byDuration} onclick={() => (byDuration = false)}>Requests</button>
+					<button class:active={byDuration} onclick={() => (byDuration = true)}>Seconds</button>
+				</span>
+				{#if byDuration}
+					<input type="number" min="1" max="600" bind:value={seconds} aria-label="Duration in seconds" />
+				{:else}
+					<input type="number" min="1" max="1000000" bind:value={requests} aria-label="Number of requests" />
+				{/if}
+			</div>
+			<label class="field">
+				Timeout (s)
+				<input type="number" min="1" max="120" bind:value={timeout} />
+			</label>
+		</div>
+		<label class="field">
+			Headers
+			<textarea rows="2" bind:value={headersText} placeholder="Host: shop.example.com" spellcheck="false"></textarea>
+		</label>
+		{#if hasBody}
+			<label class="field">
+				Body
+				<textarea rows="3" bind:value={body} spellcheck="false"></textarea>
+			</label>
+		{/if}
+		<p class="muted">Ctrl+Enter starts it. The pod gets real traffic, so mind production.</p>
 	{:else if dialog.kind === 'helmRollback'}
 		<p>
 			Roll <strong>{name(dialog.release)}</strong> back from revision {dialog.release.revision} to revision
@@ -378,6 +465,7 @@
 							labels: 'Save',
 							portforward: 'Start',
 							drain: 'Drain',
+							benchmark: 'Start',
 							helmRollback: 'Roll back',
 							helmUninstall: 'Uninstall'
 						}[dialog.kind]}
@@ -476,6 +564,57 @@
 	}
 	.grid input {
 		width: 100%;
+	}
+	.request {
+		display: flex;
+		align-items: center;
+		margin: 4px 0 6px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: var(--bg);
+		overflow: hidden;
+	}
+	.request select {
+		padding: 6px 8px;
+		border: none;
+		border-right: 1px solid var(--border);
+		border-radius: 0;
+		background: var(--surface-2);
+		font-family: var(--mono);
+		font-size: 12.5px;
+	}
+	.origin {
+		padding-left: 8px;
+		color: var(--text-muted);
+		font-family: var(--mono);
+		font-size: 12.5px;
+	}
+	.path {
+		flex: 1;
+		min-width: 0;
+		padding: 6px 8px 6px 0;
+		border: none;
+		background: none;
+		font-family: var(--mono);
+		font-size: 12.5px;
+		outline: none;
+	}
+	.mode {
+		display: flex;
+		gap: 2px;
+	}
+	.mode button {
+		padding: 0 6px;
+		border: none;
+		border-radius: 4px;
+		background: none;
+		color: var(--text-muted);
+		font-size: 13px;
+	}
+	.mode button.active {
+		background: var(--surface-2);
+		color: var(--text);
+		font-weight: 600;
 	}
 	.grace {
 		width: 110px;

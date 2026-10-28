@@ -188,6 +188,59 @@ export interface PortForwardInfo {
 	error: string | null;
 }
 
+export interface BenchRequest {
+	forwardId: number;
+	method: string;
+	path: string;
+	/** `Host` replaces the default `localhost:<port>`. */
+	headers: Record<string, string>;
+	body: string | null;
+	concurrency: number;
+	/** Either a number of requests or a duration. */
+	requests: number | null;
+	durationSecs: number | null;
+	timeoutSecs: number | null;
+}
+
+export type BenchState = 'running' | 'done' | 'stopped';
+
+export interface BenchResults {
+	total: number;
+	/** Seconds, like every time here. */
+	duration: number;
+	requestsPerSecond: number;
+	fastest: number | null;
+	slowest: number | null;
+	average: number | null;
+	percentiles: { percent: number; seconds: number }[];
+	histogram: { from: number; to: number; count: number }[];
+	statusCodes: { code: number; count: number }[];
+	errors: { message: string; count: number }[];
+	bytes: number;
+}
+
+export interface BenchInfo {
+	id: number;
+	forwardId: number;
+	target: ObjectRef;
+	pod: string;
+	url: string;
+	method: string;
+	concurrency: number;
+	requests: number | null;
+	durationSecs: number | null;
+	/** What was asked for, so the run can be repeated. */
+	path: string;
+	headers: Record<string, string>;
+	body: string | null;
+	timeoutSecs: number;
+	started: string;
+	state: BenchState;
+	completed: number;
+	elapsed: number;
+	results: BenchResults | null;
+}
+
 export interface DrainOptions {
 	ignoreDaemonsets?: boolean;
 	deleteEmptydirData?: boolean;
@@ -302,6 +355,44 @@ export interface Permissions {
 	error: string | null;
 }
 
+export type Level = 'info' | 'warning' | 'error';
+
+export interface Issue {
+	level: Level;
+	/** A stable name for the check, such as `image-tag`. */
+	code: string;
+	message: string;
+	container: string | null;
+}
+
+export interface Finding {
+	namespace: string | null;
+	name: string;
+	level: Level;
+	issues: Issue[];
+}
+
+export interface SanitizerSection {
+	kind: string;
+	resource: ResourceRef;
+	total: number;
+	/** Objects without warnings or errors. */
+	ok: number;
+	warning: number;
+	error: number;
+	/** 0 to 100; null when the kind could not be listed. */
+	score: number | null;
+	findings: Finding[];
+	failed: string | null;
+}
+
+export interface SanitizerReport {
+	score: number;
+	grade: string;
+	namespace: string | null;
+	sections: SanitizerSection[];
+}
+
 export interface HelmRelease {
 	name: string;
 	namespace: string;
@@ -347,12 +438,19 @@ export interface Backend {
 	portForwards(): Promise<PortForwardInfo[]>;
 	startPortForward(request: PortForwardRequest): Promise<PortForwardInfo>;
 	stopPortForward(id: number): Promise<void>;
+	/** Newest first, with live progress while running. */
+	benchmarks(): Promise<BenchInfo[]>;
+	startBenchmark(request: BenchRequest): Promise<BenchInfo>;
+	stopBenchmark(id: number): Promise<void>;
+	removeBenchmark(id: number): Promise<void>;
 	cordon(node: string, cordoned: boolean): Promise<void>;
 	drain(node: string, options: DrainOptions): Promise<DrainReport>;
 	/** The cluster overview; null covers all namespaces. */
 	pulse(namespace: string | null): Promise<Pulse>;
 	/** The XRay trees of every object of `resource`. */
 	xray(resource: ResourceRef, namespace: string | null): Promise<XrayNode[]>;
+	/** Checks the objects of a namespace, or of the whole cluster, like Popeye. */
+	sanitize(namespace: string | null): Promise<SanitizerReport>;
 	rbac(namespace: string | null): Promise<Rbac>;
 	/** The current user's rules; null uses the context's namespace. */
 	permissions(namespace: string | null): Promise<Permissions>;

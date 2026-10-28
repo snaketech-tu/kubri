@@ -15,6 +15,8 @@
 				[':xray deploy [ns]', 'XRay: what each object depends on'],
 				[':rbac', 'Who may do what'],
 				[':helm', 'Helm releases'],
+				[':popeye', 'Sanitizer: problems, scored'],
+				[':bench', 'HTTP benchmarks'],
 				[':pf', 'Port-forwards'],
 				['w', 'Wide columns'],
 				['Shift+N / Shift+A', 'Sort by name / age'],
@@ -53,6 +55,14 @@
 			]
 		],
 		[
+			'Port-forwards',
+			[
+				['b', 'HTTP benchmark'],
+				['c  or  Enter', 'Copy URL'],
+				['Ctrl+D', 'Stop']
+			]
+		],
+		[
 			'Nodes',
 			[
 				['c', 'Cordon'],
@@ -77,6 +87,14 @@
 				['r', 'Roll back (previous or shown revision)'],
 				['Ctrl+D', 'Uninstall'],
 				['Esc', 'Back to the releases']
+			]
+		],
+		[
+			'Sanitizer',
+			[
+				['h / l', 'Collapse / expand a kind'],
+				['Enter  or  d', 'Describe the object'],
+				['Shift+R', 'Scan again']
 			]
 		]
 	];
