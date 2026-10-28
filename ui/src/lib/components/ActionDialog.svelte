@@ -1,10 +1,30 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
-	import { deleteObjects, launchPlugin, patchMetadata, restart, scale, startPortForward } from '../actions';
+	import {
+		deleteObjects,
+		launchPlugin,
+		patchMetadata,
+		pluginCommand,
+		restart,
+		rollback,
+		scale,
+		setImages,
+		startPortForward,
+		suspendCronJob,
+		triggerCronJob
+	} from '../actions';
 	import { parseHeaders } from '../bench';
-	import { backend, type DeleteOptions, type DrainReport } from '../api';
+	import { backend, type ContainerImage, type DeleteOptions, type DrainReport } from '../api';
 	import { errorMessage } from '../format';
-	import { forwardablePorts, suggestedLocalPort, type ForwardablePort } from '../pods';
+	import { inputError, inputVariables } from '../k9s';
+	import {
+		PORT_FORWARDS_KEY,
+		annotatedForwards,
+		containerImages,
+		forwardablePorts,
+		suggestedLocalPort,
+		type ForwardablePort
+	} from '../pods';
 	import { app, type Dialog } from '../state.svelte';
 
 	let { dialog }: { dialog: Dialog } = $props();
@@ -13,6 +33,7 @@
 	let error = $state<string | null>(null);
 	let confirmButton = $state<HTMLButtonElement>();
 	let firstField = $state<HTMLInputElement | HTMLTextAreaElement>();
+	let box = $state<HTMLDivElement>();
 
 	// Delete
 	let force = $state(false);
@@ -30,7 +51,28 @@
 	let ports = $state<ForwardablePort[] | null>(null);
 	let remotePort = $state<number | null>(null);
 	let localPort = $state<number | null>(null);
-	let address = $state('127.0.0.1');
+	// k9s `portForwardAddress`, or K9S_DEFAULT_PF_ADDRESS.
+	let address = $state(untrack(() => app.k9s?.portForwardAddress) ?? '127.0.0.1');
+
+	// Image: the containers as they are, and the images typed in.
+	let images = $state<ContainerImage[] | null>(null);
+	let newImages = $state<Record<string, string>>({});
+
+	// Plugin inputs, by name, starting with their defaults: off for a switch, the first choice
+	// of a dropdown that needs one.
+	let inputs = $state<Record<string, string>>(
+		untrack(() =>
+			dialog.kind === 'plugin'
+				? Object.fromEntries(
+						dialog.plugin.inputs.map((i) => [
+							i.name,
+							i.default ||
+								(i.type === 'bool' ? 'false' : i.type === 'dropdown' && i.required ? (i.options[0] ?? '') : '')
+						])
+					)
+				: {}
+		)
+	);
 
 	// Benchmark: the run to repeat, or the defaults k9s uses (one worker, 200 requests).
 	// A dialog is opened afresh for each run, so its first value is the one to fill in.
@@ -56,15 +98,22 @@
 	let gracePeriod = $state<number | null>(null);
 	let report = $state<DrainReport | null>(null);
 
-	function pickPort(port: number) {
+	function pickPort(port: number, local = suggestedLocalPort(port)) {
 		remotePort = port;
-		localPort = suggestedLocalPort(port);
+		localPort = local;
 	}
 
 	$effect(() => {
 		if (dialog.kind === 'benchmark') {
 			queueMicrotask(() => firstField?.focus());
-		} else if (dialog.kind === 'scale' || dialog.kind === 'labels' || dialog.kind === 'portforward') {
+		} else if (dialog.kind === 'plugin' && dialog.plugin.inputs.length) {
+			queueMicrotask(focusFirstField);
+		} else if (
+			dialog.kind === 'scale' ||
+			dialog.kind === 'labels' ||
+			dialog.kind === 'portforward' ||
+			dialog.kind === 'image'
+		) {
 			backend
 				.getObject(dialog.target)
 				.then((obj) => {
@@ -72,7 +121,15 @@
 						replicas = typeof obj.spec?.replicas === 'number' ? obj.spec.replicas : 1;
 					} else if (dialog.kind === 'portforward') {
 						ports = forwardablePorts(obj);
-						if (ports.length) pickPort(ports[0].port);
+						// The port the `k9scli.io/port-forwards` annotation names comes first, as in k9s.
+						const [wanted] = annotatedForwards(obj, PORT_FORWARDS_KEY);
+						if (wanted) pickPort(wanted.remote, wanted.local ?? suggestedLocalPort(wanted.remote));
+						else if (ports.length) pickPort(ports[0].port);
+					} else if (dialog.kind === 'image') {
+						images = containerImages(obj);
+						newImages = Object.fromEntries(images.map((c) => [c.name, c.image]));
+						queueMicrotask(focusFirstField);
+						return;
 					} else {
 						original = { labels: obj.metadata.labels ?? {}, annotations: obj.metadata.annotations ?? {} };
 						labelsText = toLines(original.labels);
@@ -85,6 +142,11 @@
 			queueMicrotask(() => confirmButton?.focus());
 		}
 	});
+
+	/** For dialogs whose fields come from the object or the plugin. */
+	function focusFirstField() {
+		box?.querySelector<HTMLElement>('input, select, textarea')?.focus();
+	}
 
 	function toLines(map: Record<string, string>) {
 		return Object.entries(map)
@@ -193,11 +255,31 @@
 					ok = true;
 					break;
 				case 'plugin': {
-					// Closed first: a terminal plugin opens over the window.
 					const { plugin, run } = dialog;
+					const invalid = inputError(plugin, inputs);
+					if (invalid) throw new Error(invalid);
+					// Closed first: a terminal plugin opens over the window.
 					close();
-					await launchPlugin(plugin, run);
+					await launchPlugin(plugin, plugin.inputs.length ? { ...run, inputs: { ...inputs } } : run);
 					return;
+				}
+				case 'trigger':
+					ok = await triggerCronJob(dialog.target);
+					break;
+				case 'suspend':
+					ok = await suspendCronJob(dialog.target, dialog.suspend);
+					break;
+				case 'rollback':
+					ok = await rollback(dialog.target);
+					break;
+				case 'image': {
+					const changed = (images ?? [])
+						.map((c) => ({ ...c, image: newImages[c.name]?.trim() ?? c.image }))
+						.filter((c, i) => c.image !== images?.[i].image);
+					if (changed.some((c) => !c.image)) throw new Error('An image cannot be empty');
+					if (!changed.length) throw new Error('Change an image first');
+					ok = await setImages(dialog.target, changed);
+					break;
 				}
 				case 'drain':
 					if (report) {
@@ -272,8 +354,43 @@
 				return 'Uninstall release';
 			case 'plugin':
 				return dialog.plugin.description || dialog.plugin.name;
+			case 'trigger':
+				return 'Run CronJob now';
+			case 'suspend':
+				return dialog.suspend ? 'Suspend CronJob' : 'Resume CronJob';
+			case 'image':
+				return 'Set image';
+			case 'rollback':
+				return 'Roll back Deployment';
 		}
 	});
+	const confirmLabel = $derived(
+		dialog.kind === 'suspend'
+			? dialog.suspend
+				? 'Suspend'
+				: 'Resume'
+			: {
+					delete: 'Delete',
+					scale: 'Scale',
+					restart: 'Restart',
+					labels: 'Save',
+					portforward: 'Start',
+					drain: 'Drain',
+					benchmark: 'Start',
+					helmRollback: 'Roll back',
+					helmUninstall: 'Uninstall',
+					plugin: 'Run',
+					trigger: 'Run',
+					image: 'Set',
+					rollback: 'Roll back'
+				}[dialog.kind]
+	);
+	/** The plugin's command as it will run, with the inputs as typed. */
+	const command = $derived(
+		dialog.kind === 'plugin'
+			? pluginCommand(dialog.plugin, { ...dialog.variables, ...inputVariables(dialog.plugin, inputs) }, dialog.run)
+			: ''
+	);
 	const hasBody = $derived(['POST', 'PUT', 'PATCH'].includes(method));
 	const danger = $derived(
 		dialog.kind === 'delete' ||
@@ -284,7 +401,7 @@
 </script>
 
 <div class="backdrop" onclick={close} role="presentation"></div>
-<div class="dialog" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" {onkeydown}>
+<div class="dialog" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" {onkeydown} bind:this={box}>
 	<h2>{title}</h2>
 
 	{#if dialog.kind === 'delete'}
@@ -467,9 +584,71 @@
 				Run the plugin <strong>{dialog.plugin.name}</strong>?
 			{/if}
 		</p>
-		<pre class="command">{dialog.command}</pre>
+		{#each dialog.plugin.inputs as input (input.name)}
+			{@const label = input.label || input.name}
+			{#if input.type === 'bool'}
+				<label class="row">
+					<input
+						type="checkbox"
+						checked={inputs[input.name] === 'true'}
+						onchange={(e) => (inputs[input.name] = String(e.currentTarget.checked))}
+					/>
+					{label}
+				</label>
+			{:else if input.type === 'dropdown'}
+				<label class="field">
+					{label}{input.required ? ' *' : ''}
+					<select bind:value={inputs[input.name]}>
+						{#if !input.required}<option value="">(none)</option>{/if}
+						{#each input.options as option (option)}<option>{option}</option>{/each}
+					</select>
+				</label>
+			{:else}
+				<label class="field">
+					{label}{input.required ? ' *' : ''}
+					<input
+						inputmode={input.type === 'number' ? 'decimal' : undefined}
+						bind:value={inputs[input.name]}
+						spellcheck="false"
+					/>
+				</label>
+			{/if}
+		{/each}
+		<pre class="command">{command}</pre>
 		{#if dialog.plugin.dangerous}
 			<p class="muted">Its k9s configuration marks it as dangerous.</p>
+		{/if}
+	{:else if dialog.kind === 'trigger'}
+		<p>Run <strong>{name(dialog.target)}</strong> now? This creates a Job from its template, as kubectl create job --from does.</p>
+	{:else if dialog.kind === 'suspend'}
+		{#if dialog.suspend}
+			<p>Suspend <strong>{name(dialog.target)}</strong>? It starts no new Jobs until it is resumed; running Jobs go on.</p>
+		{:else}
+			<p>Resume <strong>{name(dialog.target)}</strong>? It starts Jobs on its schedule again.</p>
+		{/if}
+	{:else if dialog.kind === 'rollback'}
+		<p>
+			Roll the Deployment of <strong>{name(dialog.target)}</strong> back to this ReplicaSet? Its pods get the
+			template of {dialog.target.name}, as kubectl rollout undo does.
+		</p>
+	{:else if dialog.kind === 'image'}
+		<p>Set the container images of <strong>{name(dialog.target)}</strong>.</p>
+		{#if images === null}
+			<p class="muted">Loading containers…</p>
+		{:else}
+			{#each images as c (c.name)}
+				<label class="field">
+					<span>{c.name}{#if c.init}<span class="muted"> (init)</span>{/if}</span>
+					<input
+						class="mono"
+						bind:value={newImages[c.name]}
+						spellcheck="false"
+					/>
+				</label>
+			{/each}
+			{#if dialog.resource.kind !== 'Pod'}
+				<p class="muted">The pods are replaced with a rolling update.</p>
+			{/if}
 		{/if}
 	{/if}
 
@@ -484,22 +663,7 @@
 			disabled={busy}
 			onclick={confirm}
 		>
-			{busy
-				? 'Working…'
-				: report
-					? 'Close'
-					: {
-							delete: 'Delete',
-							scale: 'Scale',
-							restart: 'Restart',
-							labels: 'Save',
-							portforward: 'Start',
-							drain: 'Drain',
-							benchmark: 'Start',
-							helmRollback: 'Roll back',
-							helmUninstall: 'Uninstall',
-							plugin: 'Run'
-						}[dialog.kind]}
+			{busy ? 'Working…' : report ? 'Close' : confirmLabel}
 		</button>
 	</div>
 </div>
@@ -679,6 +843,10 @@
 	}
 	.error {
 		color: var(--bad);
+	}
+	.mono {
+		font-family: var(--mono);
+		font-size: 12.5px;
 	}
 	.muted {
 		color: var(--text-muted);

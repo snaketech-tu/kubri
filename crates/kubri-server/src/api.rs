@@ -10,10 +10,11 @@ use axum::routing::{any, delete, get, post, put};
 use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
-    BenchInfo, BenchRequest, ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo,
-    HelmRelease, HelmReleaseDetails, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
-    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef,
-    SanitizerReport, Terminal, TerminalOptions, TerminalOutput, Usage, XrayNode,
+    BenchInfo, BenchRequest, ClusterInfo, ContainerImage, ContextList, DeleteOptions, DrainOptions,
+    DrainReport, Drill, EventInfo, HelmRelease, HelmReleaseDetails, K9sConfig, Kubri, LogEvent, LogOptions,
+    MetricsKind, ObjectRef, Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac,
+    Reference, ResourceInfo, ResourceRef, SanitizerReport, TableScope, Terminal, TerminalOptions,
+    TerminalOutput, Usage, XrayNode,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -35,6 +36,12 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         )
         .route("/object/scale", post(scale))
         .route("/object/restart", post(restart))
+        .route("/object/drill", post(drill))
+        .route("/object/used-by", post(used_by))
+        .route("/object/images", post(set_images))
+        .route("/cronjob/trigger", post(trigger_cronjob))
+        .route("/cronjob/suspend", post(suspend_cronjob))
+        .route("/replicaset/rollback", post(rollback))
         .route("/events", get(events))
         .route("/metrics", get(metrics))
         .route("/pulse", get(pulse))
@@ -88,6 +95,7 @@ impl IntoResponse for ApiError {
             NoKubeconfig(_) | NotConnected => StatusCode::CONFLICT,
             Unsupported(_) | InvalidObject(_) => StatusCode::BAD_REQUEST,
             Timeout => StatusCode::GATEWAY_TIMEOUT,
+            ReadOnly(_) => StatusCode::FORBIDDEN,
             Kubeconfig(_) | Kube(_) => StatusCode::BAD_GATEWAY,
             Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
@@ -127,6 +135,8 @@ struct TableQuery {
     #[serde(flatten)]
     resource: ResourceRef,
     namespace: Option<String>,
+    #[serde(flatten)]
+    scope: TableScope,
 }
 
 /// Streams [`kubri_core::TableEvent`]s as JSON text frames until the client disconnects.
@@ -136,7 +146,9 @@ async fn table(
     ws: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
     let namespace = query.namespace.filter(|ns| !ns.is_empty());
-    let events = kubri.watch_table(&query.resource, namespace.as_deref()).await?;
+    let events = kubri
+        .watch_table(&query.resource, namespace.as_deref(), query.scope)
+        .await?;
     Ok(ws.on_upgrade(move |socket| forward(socket, events)))
 }
 
@@ -240,12 +252,55 @@ async fn scale(State(kubri): State<Arc<Kubri>>, Json(req): Json<Scale>) -> ApiRe
 }
 
 #[derive(Deserialize)]
-struct Restart {
+struct Target {
     target: ObjectRef,
 }
 
-async fn restart(State(kubri): State<Arc<Kubri>>, Json(req): Json<Restart>) -> ApiResult<()> {
+async fn restart(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<()> {
     Ok(Json(kubri.restart(&req.target).await?))
+}
+
+async fn drill(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Option<Drill>> {
+    Ok(Json(kubri.drill(&req.target).await?))
+}
+
+async fn used_by(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Vec<Reference>> {
+    Ok(Json(kubri.used_by(&req.target).await?))
+}
+
+#[derive(Serialize)]
+struct Created {
+    name: String,
+}
+
+async fn trigger_cronjob(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Created> {
+    let name = kubri.trigger_cronjob(&req.target).await?;
+    Ok(Json(Created { name }))
+}
+
+#[derive(Deserialize)]
+struct Suspend {
+    target: ObjectRef,
+    suspend: bool,
+}
+
+async fn suspend_cronjob(State(kubri): State<Arc<Kubri>>, Json(req): Json<Suspend>) -> ApiResult<()> {
+    Ok(Json(kubri.suspend_cronjob(&req.target, req.suspend).await?))
+}
+
+#[derive(Deserialize)]
+struct SetImages {
+    target: ObjectRef,
+    images: Vec<ContainerImage>,
+}
+
+async fn set_images(State(kubri): State<Arc<Kubri>>, Json(req): Json<SetImages>) -> ApiResult<()> {
+    Ok(Json(kubri.set_images(&req.target, &req.images).await?))
+}
+
+async fn rollback(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Created> {
+    let name = kubri.rollback(&req.target).await?;
+    Ok(Json(Created { name }))
 }
 
 #[derive(Deserialize)]
@@ -753,6 +808,52 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(body.to_owned()))
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn read_only_turns_changes_away() {
+        let kubri = Arc::new(Kubri::from_kubeconfig(Default::default()));
+        kubri.set_read_only();
+        let target = r#"{"target":{"resource":{"group":"batch","version":"v1","plural":"cronjobs"},
+            "namespace":"ops","name":"backup"}"#;
+        let changes = [
+            ("/object/restart", format!("{target}}}")),
+            ("/cronjob/trigger", format!("{target}}}")),
+            ("/cronjob/suspend", format!(r#"{target},"suspend":true}}"#)),
+            ("/replicaset/rollback", format!("{target}}}")),
+            (
+                "/object/images",
+                format!(r#"{target},"images":[{{"name":"app","image":"web:2"}}]}}"#),
+            ),
+        ];
+        for (uri, body) in changes {
+            let (status, body) = send(router(kubri.clone()), post_json(uri, &body)).await;
+            assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
+            assert!(
+                body["error"].as_str().unwrap().contains("read-only"),
+                "{uri}: {body}"
+            );
+        }
+        // Looking around still works, until it needs the missing connection.
+        for uri in ["/object/drill", "/object/used-by"] {
+            let (status, _) = send(router(kubri.clone()), post_json(uri, &format!("{target}}}"))).await;
+            assert_eq!(status, StatusCode::CONFLICT, "{uri}");
+        }
+    }
+
+    #[test]
+    fn table_queries_take_selectors() {
+        let uri: axum::http::Uri =
+            "/table?group=&version=v1&plural=pods&namespace=shop&labelSelector=app%3Dweb&fieldSelector=spec.nodeName%3Dn1"
+                .parse()
+                .unwrap();
+        let Query(query) = Query::<TableQuery>::try_from_uri(&uri).unwrap();
+        assert_eq!(query.resource.plural, "pods");
+        assert_eq!(query.scope.label_selector.as_deref(), Some("app=web"));
+        assert_eq!(query.scope.field_selector.as_deref(), Some("spec.nodeName=n1"));
+        let uri: axum::http::Uri = "/table?group=apps&version=v1&plural=deployments".parse().unwrap();
+        let Query(query) = Query::<TableQuery>::try_from_uri(&uri).unwrap();
+        assert_eq!(query.scope, TableScope::default());
     }
 
     #[tokio::test]

@@ -77,7 +77,8 @@
 	<ul>
 		{#each suggestions as s, i (s.label + i)}
 			<li>
-				<button class:active={i === active} onmouseenter={() => (active = i)} onclick={() => run(s)}>
+				<!-- Not mouseenter: a list that opens under a resting pointer keeps its first entry. -->
+				<button class:active={i === active} onmousemove={() => (active = i)} onclick={() => run(s)}>
 					<span class="label">{s.label}</span>
 					<span class="detail">{s.detail}</span>
 				</button>

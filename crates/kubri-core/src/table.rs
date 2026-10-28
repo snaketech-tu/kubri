@@ -41,8 +41,55 @@ pub struct Row {
     pub namespace: Option<String>,
     pub created: Option<String>,
     pub labels: serde_json::Map<String, Value>,
+    /// The objects this one belongs to, such as the ReplicaSet of a pod.
+    pub owners: Vec<Owner>,
     /// One value per column, in column order.
     pub cells: Vec<Value>,
+}
+
+/// An owner reference of a row's object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Owner {
+    pub api_version: String,
+    pub kind: String,
+    pub name: String,
+    pub uid: String,
+    /// The owner that manages the object, as opposed to one it only belongs to.
+    #[serde(default)]
+    pub controller: bool,
+}
+
+/// Narrows a list on the server, like `kubectl get -l` and `--field-selector`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TableScope {
+    pub label_selector: Option<String>,
+    pub field_selector: Option<String>,
+}
+
+impl TableScope {
+    fn list_params(&self) -> ListParams {
+        let mut params = ListParams::default();
+        if let Some(labels) = self.label_selector.as_deref().filter(|s| !s.is_empty()) {
+            params = params.labels(labels);
+        }
+        if let Some(fields) = self.field_selector.as_deref().filter(|s| !s.is_empty()) {
+            params = params.fields(fields);
+        }
+        params
+    }
+
+    fn watch_params(&self) -> WatchParams {
+        let mut params = WatchParams::default().disable_bookmarks().timeout(290);
+        if let Some(labels) = self.label_selector.as_deref().filter(|s| !s.is_empty()) {
+            params = params.labels(labels);
+        }
+        if let Some(fields) = self.field_selector.as_deref().filter(|s| !s.is_empty()) {
+            params = params.fields(fields);
+        }
+        params
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -66,11 +113,15 @@ pub enum TableEvent {
 }
 
 /// Streams table updates for the collection at `url` until the stream is dropped.
-pub(crate) fn watch_table(client: Client, url: String) -> impl Stream<Item = TableEvent> + Send + 'static {
+pub(crate) fn watch_table(
+    client: Client,
+    url: String,
+    scope: TableScope,
+) -> impl Stream<Item = TableEvent> + Send + 'static {
     let (tx, rx) = mpsc::channel(256);
     tokio::spawn(async move {
         tokio::select! {
-            _ = run(&client, &url, &tx) => {}
+            _ = run(&client, &url, &scope, &tx) => {}
             _ = tx.closed() => {}
         }
     });
@@ -96,11 +147,11 @@ impl From<kube::Error> for Failure {
     }
 }
 
-async fn run(client: &Client, url: &str, tx: &mpsc::Sender<TableEvent>) {
+async fn run(client: &Client, url: &str, scope: &TableScope, tx: &mpsc::Sender<TableEvent>) {
     let mut backoff = Duration::from_secs(1);
     loop {
         let mut listed = false;
-        let message = match list_and_watch(client, url, tx, &mut listed).await {
+        let message = match list_and_watch(client, url, scope, tx, &mut listed).await {
             Ok(()) => return,
             Err(Failure::Expired) => continue,
             Err(Failure::Error(message)) => message,
@@ -120,10 +171,11 @@ async fn run(client: &Client, url: &str, tx: &mpsc::Sender<TableEvent>) {
 async fn list_and_watch(
     client: &Client,
     url: &str,
+    scope: &TableScope,
     tx: &mpsc::Sender<TableEvent>,
     listed: &mut bool,
 ) -> Result<(), Failure> {
-    let request = with_table_accept(Request::new(url).list(&ListParams::default()));
+    let request = with_table_accept(Request::new(url).list(&scope.list_params()));
     let list: Value = client.request(request).await?;
     let mut version = list
         .pointer("/metadata/resourceVersion")
@@ -137,8 +189,7 @@ async fn list_and_watch(
     *listed = true;
 
     loop {
-        let params = WatchParams::default().disable_bookmarks().timeout(290);
-        let request = with_table_accept(Request::new(url).watch(&params, &version));
+        let request = with_table_accept(Request::new(url).watch(&scope.watch_params(), &version));
         let events = client.request_events::<Value>(request).await?;
         let mut events = std::pin::pin!(events);
         while let Some(event) = events.next().await {
@@ -276,6 +327,11 @@ fn build_row(metadata: &Value, cells: Vec<Value>) -> Row {
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default(),
+        owners: metadata
+            .get("ownerReferences")
+            .cloned()
+            .and_then(|o| serde_json::from_value(o).ok())
+            .unwrap_or_default(),
         cells,
     }
 }
@@ -299,7 +355,9 @@ mod tests {
                 "cells": ["web-1", "1/1", "10.0.0.7"],
                 "object": { "kind": "PartialObjectMetadata", "metadata": {
                     "name": "web-1", "namespace": "shop", "uid": "u-1", "resourceVersion": "99",
-                    "creationTimestamp": "2026-10-01T10:00:00Z", "labels": { "app": "web" } } }
+                    "creationTimestamp": "2026-10-01T10:00:00Z", "labels": { "app": "web" },
+                    "ownerReferences": [{ "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                                          "name": "web-7d4b9", "uid": "rs-1", "controller": true }] } }
             }]
         })
     }
@@ -317,6 +375,35 @@ mod tests {
         assert_eq!(row.created.as_deref(), Some("2026-10-01T10:00:00Z"));
         assert_eq!(row.labels["app"], "web");
         assert_eq!(row.cells, vec![json!("web-1"), json!("1/1"), json!("10.0.0.7")]);
+        assert_eq!(
+            row.owners,
+            vec![Owner {
+                api_version: "apps/v1".into(),
+                kind: "ReplicaSet".into(),
+                name: "web-7d4b9".into(),
+                uid: "rs-1".into(),
+                controller: true
+            }]
+        );
+    }
+
+    #[test]
+    fn scopes_narrow_lists_and_watches() {
+        let scope = TableScope {
+            label_selector: Some("app=web".into()),
+            field_selector: Some("spec.nodeName=n1".into()),
+        };
+        let list = scope.list_params();
+        assert_eq!(list.label_selector.as_deref(), Some("app=web"));
+        assert_eq!(list.field_selector.as_deref(), Some("spec.nodeName=n1"));
+        let watch = scope.watch_params();
+        assert_eq!(watch.label_selector.as_deref(), Some("app=web"));
+        assert_eq!(watch.field_selector.as_deref(), Some("spec.nodeName=n1"));
+        let empty = TableScope {
+            label_selector: Some(String::new()),
+            field_selector: None,
+        };
+        assert_eq!(empty.list_params().label_selector, None);
     }
 
     #[test]

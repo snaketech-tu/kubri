@@ -57,11 +57,16 @@ export function shortcutLabel(shortcut: Shortcut): string {
 
 /** Keys Kubri uses in at least one view; a hotkey or plugin needs `override` to take them there. */
 const KUBRI_KEYS = new Set([
-	...'abcdefghjklmnprsuvwy0'.split(''),
-	...'AFGLNR'.split('').map((k) => `⇧${k.toLowerCase()}`),
+	...'abcdefghijklmnoprstuvwxyz0123456[]-'.split(''),
+	...'ACFGJLNPRSW'.split('').map((k) => `⇧${k.toLowerCase()}`),
 	'^a',
 	'^d',
 	'^k',
+	'^l',
+	'^s',
+	'^z',
+	'^ ',
+	'^\\',
 	'^⇧c'
 ]);
 
@@ -116,6 +121,31 @@ export function expandVariables(text: string, variables: Record<string, string>,
 		}
 		return Object.hasOwn(variables, name) ? variables[name] : match;
 	});
+}
+
+/** The variables of a plugin's inputs, `$INPUT_<NAME>`, with defaults for those not given. */
+export function inputVariables(plugin: Plugin, values: Record<string, string>): Record<string, string> {
+	return Object.fromEntries(
+		plugin.inputs.map((i) => [`INPUT_${i.name.toUpperCase()}`, (values[i.name] ?? i.default).trim()])
+	);
+}
+
+/** What is wrong with the values of a plugin's inputs, checked as Kubri's plugin runner does. */
+export function inputError(plugin: Plugin, values: Record<string, string>): string | null {
+	for (const input of plugin.inputs) {
+		const label = input.label || input.name;
+		const value = (values[input.name] ?? input.default).trim();
+		if (!value) {
+			if (input.required) return `${label} is required`;
+		} else if (input.type === 'number' && (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(value))) {
+			return `${label} must be a number`;
+		} else if (input.type === 'bool' && value !== 'true' && value !== 'false') {
+			return `${label} must be true or false`;
+		} else if (input.type === 'dropdown' && !input.options.includes(value)) {
+			return `${label} must be one of ${input.options.join(', ')}`;
+		}
+	}
+	return null;
 }
 
 /** What the current view has under the cursor, for plugins and hotkeys. */

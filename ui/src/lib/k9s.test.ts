@@ -4,6 +4,8 @@ import { resourceArgs, resourceByPath, suggest } from './commands';
 import {
 	expandVariables,
 	focusVariables,
+	inputError,
+	inputVariables,
 	kubriUses,
 	matchesShortcut,
 	parseShortcut,
@@ -47,6 +49,7 @@ function plugin(scopes: string[], extra: Partial<Plugin> = {}): Plugin {
 		confirm: false,
 		dangerous: false,
 		override: false,
+		inputs: [],
 		...extra
 	};
 }
@@ -86,7 +89,8 @@ describe('k9s shortcuts', () => {
 		expect(shortcutLabel(parseShortcut('Shift-F')!)).toBe('⇧f');
 		expect(kubriUses(parseShortcut('Shift-F')!)).toBe(true);
 		expect(kubriUses(parseShortcut('Ctrl-D')!)).toBe(true);
-		expect(kubriUses(parseShortcut('Ctrl-L')!)).toBe(false);
+		expect(kubriUses(parseShortcut('Ctrl-L')!)).toBe(true);
+		expect(kubriUses(parseShortcut('Ctrl-X')!)).toBe(false);
 		expect(kubriUses(parseShortcut('Shift-0')!)).toBe(false);
 	});
 });
@@ -232,5 +236,32 @@ describe('k9s skins', () => {
 		expect(skinTheme({ k9s: { body: { bgColor: 'black' } } }, (c) => (c === 'black' ? '#000000' : null))?.vars).toEqual({
 			'--bg': '#000000'
 		});
+	});
+});
+
+describe('plugin inputs', () => {
+	const tail = plugin(['pods'], {
+		inputs: [
+			{ name: 'lines', label: 'Lines', type: 'number', required: true, default: '50', options: [] },
+			{ name: 'level', label: '', type: 'dropdown', required: false, default: '', options: ['info', 'debug'] },
+			{ name: 'follow', label: 'Follow', type: 'bool', required: false, default: 'false', options: [] }
+		]
+	});
+
+	it('become variables, with defaults for those not given', () => {
+		expect(inputVariables(tail, { level: 'debug' })).toEqual({
+			INPUT_LINES: '50',
+			INPUT_LEVEL: 'debug',
+			INPUT_FOLLOW: 'false'
+		});
+	});
+
+	it('are checked as the plugin runner checks them', () => {
+		expect(inputError(tail, {})).toBeNull();
+		expect(inputError(tail, { lines: ' ' })).toBe('Lines is required');
+		expect(inputError(tail, { lines: 'ten' })).toBe('Lines must be a number');
+		expect(inputError(tail, { lines: '1.5e3' })).toBeNull();
+		expect(inputError(tail, { level: 'trace' })).toBe('level must be one of info, debug');
+		expect(inputError(tail, { follow: 'yes' })).toBe('Follow must be true or false');
 	});
 });

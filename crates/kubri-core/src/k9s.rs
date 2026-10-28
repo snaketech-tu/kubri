@@ -1,5 +1,6 @@
-//! Reads the k9s configuration: aliases, hotkeys, plugins and skins, from the same files k9s
-//! uses, so a k9s setup works in Kubri as it is.
+//! Reads the k9s configuration: aliases, hotkeys, plugins, skins, jumps and the settings of
+//! `config.yaml` Kubri follows, from the same files k9s uses, so a k9s setup works in Kubri as
+//! it is.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -26,6 +27,120 @@ pub struct K9sConfig {
     pub skins: Vec<String>,
     /// The skin k9s uses for the context: `K9S_SKIN`, the context's, or the default one.
     pub skin: Option<String>,
+    /// `readOnly` in the context's `config.yaml`, or else the global one: nothing in the
+    /// cluster may be changed. Also set when Kubri itself was started read-only.
+    pub read_only: bool,
+    /// `defaultView`: the command to open after connecting, such as `pods`.
+    pub default_view: Option<String>,
+    /// `thresholds`: the %CPU and %MEM levels that show as a warning and as critical.
+    pub thresholds: Thresholds,
+    /// `logger`: how logs start.
+    pub logger: Logger,
+    /// `K9S_DEFAULT_PF_ADDRESS`, or `portForwardAddress`: where port-forwards listen.
+    pub port_forward_address: Option<String>,
+    /// `jumps.yaml`: where Enter leads from a resource, instead of Kubri's own drill-down.
+    pub jumps: Vec<Jump>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Thresholds {
+    pub cpu: Threshold,
+    pub memory: Threshold,
+}
+
+/// Percentages; k9s ignores values outside 1 to 100 and keeps its defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Threshold {
+    pub warn: u32,
+    pub critical: u32,
+}
+
+impl Default for Threshold {
+    fn default() -> Self {
+        Self {
+            warn: 70,
+            critical: 90,
+        }
+    }
+}
+
+impl Threshold {
+    fn validated(self) -> Self {
+        let valid = |v: u32| (1..=100).contains(&v);
+        let defaults = Self::default();
+        Self {
+            warn: if valid(self.warn) {
+                self.warn
+            } else {
+                defaults.warn
+            },
+            critical: if valid(self.critical) {
+                self.critical
+            } else {
+                defaults.critical
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Logger {
+    /// Lines to start with.
+    pub tail: i64,
+    /// How far back to start, in seconds; -1 for the tail only.
+    pub since_seconds: i64,
+    pub text_wrap: bool,
+    pub show_time: bool,
+    pub disable_autoscroll: bool,
+}
+
+impl Default for Logger {
+    fn default() -> Self {
+        Self {
+            tail: 100,
+            since_seconds: -1,
+            text_wrap: false,
+            show_time: false,
+            disable_autoscroll: false,
+        }
+    }
+}
+
+impl Logger {
+    /// The limits k9s applies.
+    fn validated(self) -> Self {
+        Self {
+            tail: if self.tail <= 0 { 100 } else { self.tail.min(5000) },
+            since_seconds: if self.since_seconds == 0 {
+                -1
+            } else {
+                self.since_seconds
+            },
+            ..self
+        }
+    }
+}
+
+/// A rule of `jumps.yaml`. Selectors and the namespace may use Go template fields of the
+/// source object, like `app={{.metadata.labels.app}}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Jump {
+    /// The source resource, as `group/version/resource` or `v1/pods`.
+    #[serde(skip_deserializing)]
+    pub source: String,
+    #[serde(rename = "targetGVR")]
+    pub target: String,
+    #[serde(default)]
+    pub label_selector: String,
+    #[serde(default)]
+    pub field_selector: String,
+    /// Empty for the source's namespace, `all`, a name, or a template.
+    #[serde(default)]
+    pub target_namespace: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -88,6 +203,44 @@ pub struct Plugin {
     pub dangerous: bool,
     #[serde(default, rename = "override")]
     pub override_: bool,
+    /// Values asked for before the plugin runs, as `$INPUT_<NAME>`.
+    #[serde(default)]
+    pub inputs: Vec<PluginInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginInput {
+    pub name: String,
+    #[serde(default)]
+    pub label: String,
+    /// `string`, `number`, `bool` or `dropdown`.
+    #[serde(default = "string_type", rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default, deserialize_with = "scalar")]
+    pub default: String,
+    #[serde(default, deserialize_with = "strings")]
+    pub options: Vec<String>,
+}
+
+fn string_type() -> String {
+    "string".into()
+}
+
+/// k9s allows at most five inputs per plugin.
+pub(crate) const MAX_INPUTS: usize = 5;
+
+/// A scalar as a string, like [`strings`] does for lists.
+fn scalar<'de, D: Deserializer<'de>>(deserializer: D) -> std::result::Result<String, D::Error> {
+    match Option::<Value>::deserialize(deserializer)? {
+        None | Some(Value::Null) => Ok(String::new()),
+        Some(Value::String(s)) => Ok(s),
+        Some(Value::Number(n)) => Ok(n.to_string()),
+        Some(Value::Bool(b)) => Ok(b.to_string()),
+        Some(other) => Err(de::Error::custom(format!("expected a string, got {other}"))),
+    }
 }
 
 /// Scalars as strings: YAML has `- 8080` as a number, but it is an argument like any other.
@@ -263,9 +416,20 @@ struct RootConfig {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct RootK9s {
     #[serde(default)]
     ui: RootUi,
+    #[serde(default)]
+    read_only: bool,
+    #[serde(default)]
+    default_view: Option<String>,
+    #[serde(default)]
+    thresholds: Thresholds,
+    #[serde(default)]
+    logger: Logger,
+    #[serde(default)]
+    port_forward_address: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -281,14 +445,43 @@ struct ContextConfig {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct ContextK9s {
     #[serde(default)]
     skin: Option<String>,
+    /// Wins over the global setting when set.
+    #[serde(default)]
+    read_only: Option<bool>,
+}
+
+#[derive(Deserialize, Default)]
+struct JumpFile {
+    #[serde(default)]
+    jumps: BTreeMap<String, Jump>,
+}
+
+/// What the environment adds to the files.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Env {
+    /// `K9S_SKIN`.
+    pub skin: Option<String>,
+    /// `K9S_DEFAULT_PF_ADDRESS`.
+    pub port_forward_address: Option<String>,
+}
+
+impl Env {
+    pub fn read() -> Self {
+        let var = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
+        Self {
+            skin: var("K9S_SKIN"),
+            port_forward_address: var("K9S_DEFAULT_PF_ADDRESS"),
+        }
+    }
 }
 
 /// Reads the k9s configuration for `context`. Missing files are fine; broken ones are listed
 /// with their error in [`K9sConfig::files`].
-pub(crate) fn load(dirs: &Dirs, context: Option<&ContextKey>, env_skin: Option<String>) -> K9sConfig {
+pub(crate) fn load(dirs: &Dirs, context: Option<&ContextKey>, env: &Env) -> K9sConfig {
     let mut reader = Reader::default();
     let roots = dirs.roots();
     let context_dir = context.and_then(|c| dirs.context_dir(c));
@@ -325,18 +518,29 @@ pub(crate) fn load(dirs: &Dirs, context: Option<&ContextKey>, env_skin: Option<S
         }
     }
 
-    let global_skin = reader
+    let global = reader
         .read::<RootConfig>(&dirs.config.join("config.yaml"))
-        .and_then(|c| c.k9s.ui.skin);
-    let context_skin = context_dir
+        .unwrap_or_default()
+        .k9s;
+    let local = context_dir
         .as_ref()
         .and_then(|dir| reader.read::<ContextConfig>(&dir.join("config.yaml")))
-        .and_then(|c| c.k9s.skin);
-    let skin = [env_skin, context_skin, global_skin]
+        .unwrap_or_default()
+        .k9s;
+    let skin = [env.skin.clone(), local.skin, global.ui.skin]
         .into_iter()
         .flatten()
         .map(|s| s.trim().to_owned())
         .find(|s| !s.is_empty());
+    let nonempty = |s: Option<String>| s.map(|s| s.trim().to_owned()).filter(|s| !s.is_empty());
+
+    let jumps = reader
+        .read::<JumpFile>(&dirs.config.join("jumps.yaml"))
+        .unwrap_or_default()
+        .jumps
+        .into_iter()
+        .map(|(source, jump)| Jump { source, ..jump })
+        .collect();
 
     let mut skins: Vec<String> = roots
         .iter()
@@ -359,10 +563,23 @@ pub(crate) fn load(dirs: &Dirs, context: Option<&ContextKey>, env_skin: Option<S
             .collect(),
         plugins: plugins
             .into_iter()
-            .map(|(name, plugin)| Plugin { name, ..plugin })
+            .map(|(name, mut plugin)| {
+                plugin.inputs.truncate(MAX_INPUTS);
+                Plugin { name, ..plugin }
+            })
             .collect(),
         skins,
         skin,
+        read_only: local.read_only.unwrap_or(global.read_only),
+        default_view: nonempty(global.default_view),
+        thresholds: Thresholds {
+            cpu: global.thresholds.cpu.validated(),
+            memory: global.thresholds.memory.validated(),
+        },
+        logger: global.logger.validated(),
+        port_forward_address: nonempty(env.port_forward_address.clone())
+            .or(nonempty(global.port_forward_address)),
+        jumps,
     }
 }
 
@@ -477,7 +694,7 @@ pub(crate) mod tests {
             cluster: "prod-eu".into(),
             context: "arn:aws:prod".into(),
         };
-        let config = load(&dirs, Some(&context), None);
+        let config = load(&dirs, Some(&context), &Env::default());
         assert_eq!(
             config.aliases,
             vec![
@@ -506,11 +723,111 @@ pub(crate) mod tests {
         assert!(broken[0].path.ends_with("hotkeys.yaml"), "{broken:?}");
 
         // Without the context, the global skin; K9S_SKIN beats both.
-        assert_eq!(load(&dirs, None, None).skin.as_deref(), Some("dracula"));
         assert_eq!(
-            load(&dirs, Some(&context), Some("blue".into())).skin.as_deref(),
+            load(&dirs, None, &Env::default()).skin.as_deref(),
+            Some("dracula")
+        );
+        assert_eq!(
+            load(
+                &dirs,
+                Some(&context),
+                &Env {
+                    skin: Some("blue".into()),
+                    ..Env::default()
+                }
+            )
+            .skin
+            .as_deref(),
             Some("blue")
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reads_settings_jumps_and_plugin_inputs() {
+        let root = scratch("settings");
+        let dirs = Dirs {
+            config: root.join("config"),
+            data: root.join("data"),
+        };
+        write(
+            &dirs.config.join("config.yaml"),
+            "k9s:
+  readOnly: true
+  defaultView: deploy
+  portForwardAddress: 0.0.0.0
+  thresholds:
+    cpu: { critical: 95, warn: 80 }
+    memory: { critical: 0, warn: 101 }
+  logger:
+    tail: 0
+    sinceSeconds: 300
+    textWrap: true
+",
+        );
+        write(
+            &dirs.config.join("jumps.yaml"),
+            "jumps:
+  example.com/v1/patches:
+    targetGVR: batch/v1/jobs
+    labelSelector: patch={{.metadata.name}}
+    targetNamespace: all
+",
+        );
+        write(
+            &dirs.config.join("plugins.yaml"),
+            "plugins:
+  tail:
+    shortCut: Shift-T
+    scopes: [pods]
+    command: kubectl
+    inputs:
+      - { name: lines, type: number, default: 50, required: true }
+      - { name: level, type: dropdown, options: [info, debug] }
+",
+        );
+        let context_dir = dirs.data.join("clusters").join("c").join("dev");
+        write(&context_dir.join("config.yaml"), "k9s:\n  readOnly: false\n");
+        let context = ContextKey {
+            cluster: "c".into(),
+            context: "dev".into(),
+        };
+
+        let config = load(&dirs, None, &Env::default());
+        assert!(config.read_only);
+        assert_eq!(config.default_view.as_deref(), Some("deploy"));
+        assert_eq!(config.port_forward_address.as_deref(), Some("0.0.0.0"));
+        assert_eq!(
+            config.thresholds.cpu,
+            Threshold {
+                warn: 80,
+                critical: 95
+            }
+        );
+        // Out of range: k9s keeps its defaults.
+        assert_eq!(config.thresholds.memory, Threshold::default());
+        assert_eq!((config.logger.tail, config.logger.since_seconds), (100, 300));
+        assert!(config.logger.text_wrap);
+        assert_eq!(config.jumps.len(), 1);
+        assert_eq!(config.jumps[0].source, "example.com/v1/patches");
+        assert_eq!(config.jumps[0].target, "batch/v1/jobs");
+        assert_eq!(config.jumps[0].target_namespace, "all");
+        let inputs = &config.plugins[0].inputs;
+        assert_eq!(
+            (inputs[0].kind.as_str(), inputs[0].default.as_str()),
+            ("number", "50")
+        );
+        assert_eq!(inputs[1].kind, "dropdown");
+        assert_eq!(inputs[1].options, ["info", "debug"]);
+
+        // The context's readOnly wins, and the environment's port-forward address.
+        let env = Env {
+            port_forward_address: Some("::".into()),
+            ..Env::default()
+        };
+        let config = load(&dirs, Some(&context), &env);
+        assert!(!config.read_only);
+        assert_eq!(config.port_forward_address.as_deref(), Some("::"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -521,7 +838,7 @@ pub(crate) mod tests {
             config: root.join("nothing"),
             data: root.join("nothing"),
         };
-        let config = load(&dirs, None, None);
+        let config = load(&dirs, None, &Env::default());
         assert_eq!(config.dirs.len(), 1);
         assert!(config.files.is_empty() && config.plugins.is_empty() && config.skin.is_none());
         std::fs::remove_dir_all(root).unwrap();
