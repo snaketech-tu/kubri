@@ -174,6 +174,14 @@ describe('table rows', () => {
 		]);
 		expect(sorted('CPU', ['1500m', '2', '100m', '1'])).toEqual(['100m', '1', '1500m', '2']);
 		expect(sorted('Mem', ['1Gi', '262144k', '512Mi'])).toEqual(['262144k', '512Mi', '1Gi']);
+		// Values that are not numbers come after the numbers, whatever their text.
+		expect(sorted('Mem', ['<none>', '100', '64Mi', '<unknown>', '2'])).toEqual([
+			'2',
+			'100',
+			'64Mi',
+			'<none>',
+			'<unknown>'
+		]);
 	});
 
 	it('filters by text and by label', () => {

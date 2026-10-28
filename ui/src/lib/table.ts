@@ -76,8 +76,15 @@ export function sortRows(rows: Row[], columns: Column[], sort: SortState): Row[]
 		sorted.sort((a, b) => {
 			const x = sortValue(column, a, sort.column);
 			const y = sortValue(column, b, sort.column);
+			// Numbers before text such as `<none>`, so the order stays the same either way round.
 			const order =
-				typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
+				typeof x === 'number'
+					? typeof y === 'number'
+						? x - y
+						: -1
+					: typeof y === 'number'
+						? 1
+						: x.localeCompare(y);
 			return order || a.name.localeCompare(b.name);
 		});
 	}

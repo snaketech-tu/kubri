@@ -143,9 +143,12 @@ async fn serve(args: Args) -> ExitCode {
 }
 
 /// The built UI, with every unknown path answered by `index.html` for the UI's own routes.
+/// A missing file under `_app` is a 404, so a page from an older version does not get
+/// `index.html` as a script, cached for a year.
 fn ui(dir: &Path) -> Router {
     let files = ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")));
     Router::new()
+        .nest_service("/_app", ServeDir::new(dir.join("_app")))
         .fallback_service(files)
         .layer(axum::middleware::from_fn(cache_control))
 }
@@ -273,6 +276,11 @@ mod tests {
                 StatusCode::OK,
                 Some("public, max-age=31536000, immutable".to_owned())
             )
+        );
+        // A file of an older version.
+        assert_eq!(
+            cache("/_app/immutable/app.0000.js").await,
+            (StatusCode::NOT_FOUND, None)
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }
