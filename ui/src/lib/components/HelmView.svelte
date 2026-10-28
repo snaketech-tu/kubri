@@ -530,7 +530,7 @@
 						<p>No release matches the filter.</p>
 					{:else}
 						<p>No Helm releases{namespace ? ` in ${namespace}` : ''}.</p>
-						<p class="muted">Kubri reads the release records Helm 3 keeps in Secrets or ConfigMaps.</p>
+						<p class="muted">Kubri reads the release records Helm 3 and 4 keep in Secrets or ConfigMaps.</p>
 					{/if}
 				</div>
 			{:else if !error}

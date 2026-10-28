@@ -226,16 +226,29 @@
 		anchorKey = current.key;
 	}
 
-	function sortBy(index: number) {
-		sort = sort.column === index ? { column: index, descending: !sort.descending } : { column: index, descending: false };
+	/** Sorts by a column, or turns its order around. Counts and usage start with the largest, as in k9s. */
+	function sortBy(index: number, largestFirst = false) {
+		sort = sort.column === index ? { column: index, descending: !sort.descending } : { column: index, descending: largestFirst };
 	}
 
-	function sortByColumn(match: (name: string, format: string) => boolean) {
+	function sortByColumn(match: (name: string, format: string) => boolean, largestFirst = false) {
 		const index = table.columns.findIndex((c) => match(c.name, c.format));
 		if (index === -1) return false;
-		sortBy(index);
+		// A column only the wide view shows, like a pod's IP or node.
+		if (table.columns[index].priority > 0) wide = true;
+		sortBy(index, largestFirst);
 		return true;
 	}
+
+	/** Sorts by a metrics-server column, such as `CPU` or `%Mem/R`, when the list shows it. */
+	function sortByMetric(label: string) {
+		const column = columns.find((c) => c.kind === 'metric' && c.label === label);
+		if (!column) return false;
+		sortBy(column.index, true);
+		return true;
+	}
+
+	const named = (wanted: string) => (name: string) => name.toLowerCase() === wanted;
 
 	function cell(row: Row, name: string): string | null {
 		const index = table.columns.findIndex((c) => c.name === name);
@@ -576,6 +589,22 @@
 					if (!columns.some((c) => c.kind === 'namespace')) return false;
 					sortBy(-1);
 					return true;
+				case 'R':
+					return sortByColumn(named('ready'));
+				case 'T':
+					return sortByColumn(named('restarts'), true);
+				case 'I':
+					return sortByColumn(named('ip'));
+				case 'O':
+					return sortByColumn(named('node'));
+				case 'C':
+					return sortByMetric('CPU');
+				case 'M':
+					return sortByMetric('Mem');
+				case 'X':
+					return sortByMetric(isNodes(resource) ? '%CPU' : '%CPU/R');
+				case 'Z':
+					return sortByMetric(isNodes(resource) ? '%Mem' : '%Mem/R');
 				case '0':
 					app.namespace = '';
 					return true;

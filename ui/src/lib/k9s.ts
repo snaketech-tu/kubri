@@ -58,7 +58,7 @@ export function shortcutLabel(shortcut: Shortcut): string {
 /** Keys Kubri uses in at least one view; a hotkey or plugin needs `override` to take them there. */
 const KUBRI_KEYS = new Set([
 	...'abcdefghijklmnoprstuvwxyz0123456[]-'.split(''),
-	...'ACFGJLNPRSW'.split('').map((k) => `⇧${k.toLowerCase()}`),
+	...'ACFGIJLMNOPRSTWXZ'.split('').map((k) => `⇧${k.toLowerCase()}`),
 	'^a',
 	'^d',
 	'^k',

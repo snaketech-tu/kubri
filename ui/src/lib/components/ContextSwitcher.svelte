@@ -11,7 +11,11 @@
 	function toggle() {
 		app.contextMenuOpen = !app.contextMenuOpen;
 		query = '';
-		if (app.contextMenuOpen) queueMicrotask(() => input?.focus());
+		if (app.contextMenuOpen) {
+			queueMicrotask(() => input?.focus());
+			// Picks up contexts added to the kubeconfig since Kubri started.
+			app.reloadContexts(true);
+		}
 	}
 
 	function choose(name: string) {

@@ -27,6 +27,8 @@
 				[':skin name', 'Switch skin; :skin kubri for the built-in colors'],
 				['w', 'Wide columns'],
 				['Shift+N / A / S / P', 'Sort by name / age / status / namespace'],
+				['Shift+R / T / I / O', 'Sort pods by ready / restarts / IP / node'],
+				['Shift+C / M / X / Z', 'Sort by CPU / memory / %CPU / %memory'],
 				['Ctrl+Z', 'Only faulty rows'],
 				['Esc', 'Close, clear selection or filter, go back']
 			]

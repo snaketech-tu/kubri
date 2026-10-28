@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { suggest, type Suggestion } from '../commands';
 	import { app } from '../state.svelte';
 
@@ -24,6 +25,11 @@
 
 	$effect(() => {
 		field?.focus();
+	});
+
+	// `:ctx` offers contexts added to the kubeconfig since Kubri started.
+	onMount(() => {
+		app.reloadContexts(true);
 	});
 
 	function close() {

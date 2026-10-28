@@ -127,6 +127,7 @@ async fn serve(args: Args) -> ExitCode {
         .nest("/api", api)
         .fallback_service(ui(&args.ui_dir))
         .layer(axum::middleware::from_fn_with_state(guard, guard::check))
+        .layer(axum::middleware::from_fn(guard::headers))
         .layer(TraceLayer::new_for_http());
 
     let listener = match tokio::net::TcpListener::bind(args.addr).await {

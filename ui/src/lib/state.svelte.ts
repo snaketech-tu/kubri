@@ -191,11 +191,12 @@ class AppState {
 		}
 	}
 
-	async reloadContexts() {
+	/** Reads the kubeconfig again. `quiet` keeps the old list on errors, for refreshes nobody asked for. */
+	async reloadContexts(quiet = false) {
 		try {
 			this.contexts = (await backend.reloadContexts()).contexts;
 		} catch (err) {
-			this.error = errorMessage(err);
+			if (!quiet) this.error = errorMessage(err);
 		}
 	}
 
