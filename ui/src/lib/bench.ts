@@ -82,6 +82,11 @@ export function pathOf(url: string): string {
 	}
 }
 
+/** Requests that got a response, whatever its status; the rest failed with an error. */
+export function responses(run: BenchInfo): number {
+	return run.results?.statusCodes.reduce((n, s) => n + s.count, 0) ?? 0;
+}
+
 /** The share of failed requests: errors and 5xx responses. */
 export function failureShare(run: BenchInfo): number {
 	const r = run.results;

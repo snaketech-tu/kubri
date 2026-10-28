@@ -162,6 +162,15 @@ struct Run {
     task: JoinHandle<()>,
 }
 
+impl Run {
+    /// Ends the run for good. The workers are tasks of their own, so aborting the run's
+    /// task alone would leave them sending requests.
+    fn end(self) {
+        self.shared.stop.send_replace(true);
+        self.task.abort();
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct Benchmarks {
     next_id: u32,
@@ -187,13 +196,13 @@ impl Benchmarks {
             .iter()
             .position(|r| r.id == id)
             .ok_or_else(|| not_found(id))?;
-        self.runs.remove(i).task.abort();
+        self.runs.remove(i).end();
         Ok(())
     }
 
     pub(crate) fn stop_all(&mut self) {
         for run in self.runs.drain(..) {
-            run.task.abort();
+            run.end();
         }
     }
 
@@ -732,6 +741,26 @@ mod tests {
         assert_eq!(results.status_codes, vec![StatusCount { code: 200, count: 50 }]);
         assert_eq!(results.bytes, 100);
         assert_eq!(hits.load(Ordering::Relaxed), 50);
+    }
+
+    #[tokio::test]
+    async fn removing_a_running_benchmark_stops_its_requests() {
+        let (port, hits) = server().await;
+        let benchmarks = Mutex::new(Benchmarks::default());
+        let info = start(
+            &benchmarks,
+            &request(serde_json::json!({"requests": null, "durationSecs": 60})),
+            &forward(port),
+        )
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        benchmarks.lock().unwrap().remove(info.id).unwrap();
+        // Let requests that were already on the wire land.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let after = hits.load(Ordering::Relaxed);
+        assert!(after > 0);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(hits.load(Ordering::Relaxed), after, "workers kept sending");
     }
 
     #[tokio::test]

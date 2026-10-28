@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { backend, type BenchInfo } from '../api';
-	import { bytes, duration, failureShare, pathOf, progress, rate, statusTone } from '../bench';
+	import { bytes, duration, failureShare, pathOf, progress, rate, responses, statusTone } from '../bench';
 	import { age, errorMessage } from '../format';
 	import { forControl } from '../keys';
 	import { app } from '../state.svelte';
@@ -96,6 +96,13 @@
 		return total ? `${Math.round((100 * n) / total)}%` : '0%';
 	}
 
+	/** What the forward points at, and the pod it reached when that is a workload or service. */
+	function target(run: BenchInfo) {
+		const t = run.target;
+		if (t.resource.plural === 'pods' && t.name === run.pod) return `pod ${run.pod}`;
+		return `${t.resource.plural}/${t.name} → pod ${run.pod}`;
+	}
+
 	function plan(run: BenchInfo) {
 		const amount = run.requests ? `${run.requests.toLocaleString('en-US')} requests` : `${run.durationSecs}s`;
 		return `${run.concurrency} concurrent · ${amount}`;
@@ -151,7 +158,7 @@
 						<h2 title={selected.url}>{selected.url}</h2>
 					</div>
 					<p class="muted facts">
-						{selected.target.resource.plural}/{selected.target.name} → pod {selected.pod} · {plan(selected)} · started
+						{target(selected)} · {plan(selected)} · started
 						{age(selected.started, now)} ago
 					</p>
 					<div class="actions">
@@ -175,6 +182,7 @@
 					{:else if r}
 						{@const p = (n: number) => r.percentiles.find((x) => x.percent === n)?.seconds}
 						{@const failed = failureShare(selected)}
+						{@const answered = responses(selected)}
 						<div class="tiles">
 							<div class="tile"><span class="label">Requests per second</span><span class="value">{rate(r.requestsPerSecond)}</span></div>
 							<div class="tile"><span class="label">Average</span><span class="value">{duration(r.average)}</span></div>
@@ -183,7 +191,7 @@
 							<div class="tile"><span class="label">99th percentile</span><span class="value">{duration(p(99))}</span></div>
 							<div class="tile" class:bad={failed > 0}>
 								<span class="label">Failed</span>
-								<span class="value">{share(Math.round(failed * r.total), r.total)}</span>
+								<span class="value">{Math.round(failed * 100)}%</span>
 							</div>
 						</div>
 
@@ -201,12 +209,12 @@
 										<thead><tr><th>From</th><th>To</th><th class="num">Responses</th><th class="num">Share</th></tr></thead>
 										<tbody>
 											{#each r.histogram as b, i (i)}
-												<tr><td>{duration(b.from)}</td><td>{duration(b.to)}</td><td class="num">{b.count}</td><td class="num">{share(b.count, r.total)}</td></tr>
+												<tr><td>{duration(b.from)}</td><td>{duration(b.to)}</td><td class="num">{b.count.toLocaleString('en-US')}</td><td class="num">{share(b.count, answered)}</td></tr>
 											{/each}
 										</tbody>
 									</table>
 								{:else}
-									<Histogram buckets={r.histogram} total={r.total} />
+									<Histogram buckets={r.histogram} total={answered} />
 								{/if}
 							</div>
 
@@ -255,7 +263,7 @@
 										<tr><td>Requests</td><td class="num">{r.total.toLocaleString('en-US')}</td></tr>
 										<tr><td>Duration</td><td class="num">{duration(r.duration)}</td></tr>
 										<tr><td>Data received</td><td class="num">{bytes(r.bytes)}</td></tr>
-										<tr><td>Per response</td><td class="num">{r.total ? bytes(r.bytes / r.total) : '—'}</td></tr>
+										<tr><td>Per response</td><td class="num">{answered ? bytes(r.bytes / answered) : '—'}</td></tr>
 									</tbody>
 								</table>
 							</div>

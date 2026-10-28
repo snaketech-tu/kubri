@@ -305,9 +305,7 @@ impl Uses {
     fn of(inventory: &Inventory) -> Option<Self> {
         let pods = inventory.pods.as_ref().ok()?;
         let mut uses = Self::default();
-        for pod in pods {
-            let ns = pod.namespace().unwrap_or_default();
-            let Some(spec) = &pod.spec else { continue };
+        let mut add = |ns: String, spec: &PodSpec| {
             for reference in references(spec) {
                 let k = (ns.clone(), reference.name);
                 match reference.kind {
@@ -316,6 +314,43 @@ impl Uses {
                     RefKind::Claim => uses.claims.insert(k),
                     RefKind::ServiceAccount => uses.service_accounts.insert(k),
                 };
+            }
+        };
+        for pod in pods {
+            if let Some(spec) = &pod.spec {
+                add(pod.namespace().unwrap_or_default(), spec);
+            }
+        }
+        // Workloads use their config even while no pod runs: a CronJob between runs, a
+        // Deployment scaled to 0.
+        let templates = inventory
+            .deployments
+            .iter()
+            .flatten()
+            .map(|d| (d.namespace(), d.spec.as_ref().map(|s| &s.template)))
+            .chain(
+                (inventory.stateful_sets.iter().flatten())
+                    .map(|s| (s.namespace(), s.spec.as_ref().map(|s| &s.template))),
+            )
+            .chain(
+                (inventory.daemon_sets.iter().flatten())
+                    .map(|d| (d.namespace(), d.spec.as_ref().map(|s| &s.template))),
+            )
+            .chain(
+                (inventory.replica_sets.iter().flatten())
+                    .map(|r| (r.namespace(), r.spec.as_ref().and_then(|s| s.template.as_ref()))),
+            )
+            .chain(
+                (inventory.jobs.iter().flatten())
+                    .map(|j| (j.namespace(), j.spec.as_ref().map(|s| &s.template))),
+            )
+            .chain((inventory.cron_jobs.iter().flatten()).map(|c| {
+                let job = c.spec.job_template.spec.as_ref();
+                (c.namespace(), job.map(|s| &s.template))
+            }));
+        for (ns, template) in templates {
+            if let Some(spec) = template.and_then(|t| t.spec.as_ref()) {
+                add(ns.unwrap_or_default(), spec);
             }
         }
         for account in inventory.service_accounts.iter().flatten() {
@@ -466,11 +501,13 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
         &inventory.config_maps,
         |m| !system(m.meta()),
         |m| {
+            let managed =
+                m.name_any() == "kube-root-ca.crt" || m.labels().get("owner").is_some_and(|o| o == "helm");
             unused(
                 uses.map(|u| &u.config_maps),
                 m,
-                m.name_any() == "kube-root-ca.crt",
-                "Not used by any pod",
+                managed,
+                "Not used by any workload",
             )
         },
     ));
@@ -484,7 +521,7 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
                 uses.map(|u| &u.secrets),
                 m,
                 managed,
-                "Not used by any pod, service account or ingress",
+                "Not used by any workload, service account or ingress",
             )
         },
     ));
@@ -496,7 +533,7 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
                 uses.map(|u| &u.service_accounts),
                 a,
                 a.name_any() == "default",
-                "Not used by any pod",
+                "Not used by any workload",
             )
         },
     ));
@@ -556,6 +593,7 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
         .ok()
         .map(|a| a.iter().map(key).collect());
     let bound: HashSet<(String, Key)> = bound_roles(inventory);
+    let scanned = inventory.namespace.as_deref();
 
     add(section(
         &inventory.roles,
@@ -581,6 +619,7 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
                 roles.as_ref(),
                 cluster_roles.as_ref(),
                 accounts.as_ref(),
+                scanned,
             )
         },
     ));
@@ -630,6 +669,7 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
                     None,
                     cluster_roles.as_ref(),
                     accounts.as_ref(),
+                    scanned,
                 )
             },
         ));
@@ -932,13 +972,10 @@ fn service(service: &Service, pods: Option<Vec<&Pod>>) -> Vec<Issue> {
             continue;
         };
         let named = |p: &&Pod| {
-            let containers = p
-                .spec
-                .as_ref()
-                .map(|s| s.containers.as_slice())
-                .unwrap_or_default();
-            containers
-                .iter()
+            let Some(spec) = &p.spec else { return false };
+            let sidecars = spec.init_containers.iter().flatten();
+            sidecars
+                .chain(&spec.containers)
                 .flat_map(|c| c.ports.iter().flatten())
                 .any(|cp| cp.name.as_deref() == Some(target))
         };
@@ -1161,6 +1198,7 @@ fn binding(
     roles: Option<&HashSet<Key>>,
     cluster_roles: Option<&HashSet<Key>>,
     accounts: Option<&HashSet<Key>>,
+    scanned: Option<&str>,
 ) -> Vec<Issue> {
     let mut issues = Vec::new();
     let known = match role.kind.as_str() {
@@ -1181,7 +1219,7 @@ fn binding(
         {
             let ns = subject.namespace.clone().unwrap_or_else(|| namespace.to_owned());
             // Accounts of other namespaces are only known when scanning all of them.
-            if !accounts.iter().any(|(n, _)| *n == ns) {
+            if scanned.is_some_and(|scanned| scanned != ns) {
                 continue;
             }
             if !accounts.contains(&(ns.clone(), subject.name.clone())) {
@@ -1448,6 +1486,7 @@ mod tests {
             Some(&roles),
             None,
             Some(&accounts),
+            Some("shop"),
         );
         assert_eq!(
             codes(&issues),
@@ -1455,7 +1494,60 @@ mod tests {
         );
         assert!(issues[1].message.contains("shop/ghost"));
         // Unknown lists check nothing.
-        assert_eq!(binding(&rb.role_ref, None, "shop", None, None, None), vec![]);
+        assert_eq!(
+            binding(&rb.role_ref, None, "shop", None, None, None, None),
+            vec![]
+        );
+
+        // Accounts of a namespace that was not scanned are unknown; with all namespaces
+        // scanned, an account of a deleted namespace is missing.
+        let elsewhere: Vec<Subject> =
+            from(json!([{"kind": "ServiceAccount", "name": "ci", "namespace": "gone"}]));
+        let check = |scanned| {
+            binding(
+                &rb.role_ref,
+                Some(&elsewhere),
+                "shop",
+                None,
+                None,
+                Some(&accounts),
+                scanned,
+            )
+        };
+        assert_eq!(check(Some("shop")), vec![]);
+        assert_eq!(codes(&check(None)), vec![("subject", Level::Warning)]);
+    }
+
+    #[test]
+    fn workload_templates_count_as_uses() {
+        let meta = |name: &str| -> PartialObjectMeta<ConfigMap> {
+            from(
+                json!({"apiVersion": "meta.k8s.io/v1", "kind": "PartialObjectMetadata",
+                "metadata": {"name": name, "namespace": "shop"}}),
+            )
+        };
+        // No job runs right now, but the CronJob uses the ConfigMap on every run.
+        let nightly: CronJob = from(json!({
+            "metadata": {"name": "report", "namespace": "shop"},
+            "spec": {"schedule": "0 3 * * *", "jobTemplate": {"spec": {"template": {"spec": {
+                "serviceAccountName": "reporter", "restartPolicy": "OnFailure",
+                "containers": [container(json!({"envFrom": [{"configMapRef": {"name": "nightly"}}]}))]}}}}}
+        }));
+        let account: ServiceAccount = from(json!({"metadata": {"name": "reporter", "namespace": "shop"}}));
+        let inventory = Inventory {
+            namespace: Some("shop".into()),
+            cron_jobs: Ok(vec![nightly]),
+            config_maps: Ok(vec![meta("nightly"), meta("stale")]),
+            service_accounts: Ok(vec![account]),
+            ..Default::default()
+        };
+        let report = report(&inventory);
+        let findings = |kind: &str| -> Vec<String> {
+            let section = report.sections.iter().find(|s| s.kind == kind).unwrap();
+            section.findings.iter().map(|f| f.name.clone()).collect()
+        };
+        assert_eq!(findings("ConfigMap"), vec!["stale"]);
+        assert_eq!(findings("ServiceAccount"), Vec::<String>::new());
     }
 
     #[test]

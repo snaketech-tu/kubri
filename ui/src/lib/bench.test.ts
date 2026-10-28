@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BenchInfo } from './api';
-import { duration, failureShare, parseHeaders, pathOf, progress, rate, statusTone, ticks } from './bench';
+import { duration, failureShare, parseHeaders, pathOf, progress, rate, responses, statusTone, ticks } from './bench';
 
 function run(extra: Partial<BenchInfo> = {}): BenchInfo {
 	return {
@@ -74,6 +74,7 @@ describe('benchmarks', () => {
 			bytes: 0
 		};
 		expect(failureShare(run({ state: 'done', results }))).toBe(0.06);
+		expect(responses(run({ state: 'done', results }))).toBe(98);
 		expect([statusTone(204), statusTone(301), statusTone(404), statusTone(502)]).toEqual(['ok', 'muted', 'warn', 'bad']);
 		expect(pathOf('http://127.0.0.1:8080/api?x=1')).toBe('/api?x=1');
 	});
