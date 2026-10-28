@@ -45,8 +45,10 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates crates
 # A workspace member; only its manifest and sources are needed, it is not built.
 COPY ui/src-tauri ui/src-tauri
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/src/target \
+# Both architectures build at the same time and share these caches; `locked` keeps their cargo
+# runs from unpacking the same crates at once ("failed to unpack package ... File exists").
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/src/target,sharing=locked \
     cargo build --release --locked -p kubri-server --target "$(cat /target)" \
     && cp "target/$(cat /target)/release/kubri-server" /kubri-server
 
