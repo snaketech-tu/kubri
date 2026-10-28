@@ -4,6 +4,16 @@
 
 	const builtin: [string, [string, string][]][] = [
 		[
+			'Mouse',
+			[
+				['Right click  or  ⋯', 'Everything there is to do on a row'],
+				['Double click', 'Open, like Enter'],
+				['Action bar', 'Above the list, for the row under the cursor or the marked rows'],
+				['‹ ›', 'Back / forward, at the top left'],
+				['Key hints', 'At the bottom: click one to press its key']
+			]
+		],
+		[
 			'Navigate',
 			[
 				[':  or  Ctrl+K', 'Command palette (pods, deploy, ctx, ns …)'],

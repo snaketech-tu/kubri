@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <b>A fast, keyboard-first Kubernetes GUI that does everything k9s does.</b><br>
+  <b>A fast Kubernetes GUI that does everything k9s does, by keyboard or by mouse.</b><br>
   A desktop app for Windows, macOS and Linux, or a web app for your whole team.
 </p>
 
@@ -34,7 +34,7 @@
 <table>
   <tr>
     <td width="33%" valign="top"><b>Everything k9s does</b><br>Every resource and CRD, live. Drill-downs, logs, shells, port-forwards, Pulses, XRay, RBAC, Helm, a sanitizer and benchmarks. Your k9s aliases, hotkeys, plugins and skins work as they are.</td>
-    <td width="33%" valign="top"><b>Built for the keyboard</b><br><kbd>:</kbd> opens the command palette, the keys are the ones you know from k9s, and <kbd>?</kbd> lists them all. The mouse works everywhere too.</td>
+    <td width="33%" valign="top"><b>Keyboard or mouse</b><br>The keys are the ones you know from k9s, <kbd>:</kbd> opens the command palette and <kbd>?</kbd> lists them all. Or click: every action is a button, and a right click on a row lists everything you can do with it, with its key.</td>
     <td width="33%" valign="top"><b>Desktop or browser</b><br>A small native app built with Rust and Tauri, one container for your team with a password sign-in, or a pod in the cluster with its service account.</td>
   </tr>
 </table>

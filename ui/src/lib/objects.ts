@@ -271,3 +271,30 @@ export function subjectOf(resource: ResourceInfo, target: ObjectRef, object: { m
 		suspended: spec.suspend ?? false
 	};
 }
+
+/**
+ * Opens the menu of an object outside the resource list, as in XRay or the sanitizer, whose keys
+ * mean other things: so the menu shows no keys. `before` puts the view's cursor on the object, and
+ * `first` are the view's own actions for it.
+ */
+export function openObjectMenu(
+	resource: ResourceInfo,
+	target: ObjectRef,
+	x: number,
+	y: number,
+	{ before, first = [] }: { before?: () => void; first?: MenuAction[] } = {}
+) {
+	const show = (tab: DetailsTab, extra: DetailsExtra = {}) => {
+		before?.();
+		app.showDetails(resource, target, tab, extra);
+	};
+	const subject: Subject = { resource, target, owners: [], node: null, suspended: false };
+	const enter = drillLabel(resource) ? () => void drill(resource, target) : undefined;
+	const actions = objectActions(subject, { show, enter });
+	// With the other places to go, after viewing and changing it.
+	const at = actions.findIndex((a) => !['View', 'Connect', 'Change'].includes(a.group));
+	const list = { group: 'Go to', label: `Show in ${resource.kind} list`, keys: [], run: () => app.openAt(resource, target.namespace, target.name) };
+	actions.splice(at === -1 ? actions.length : at, 0, list);
+	before?.();
+	app.menu = { actions: [...first, ...actions], x, y, hints: false };
+}

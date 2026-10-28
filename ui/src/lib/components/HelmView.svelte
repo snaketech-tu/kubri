@@ -15,6 +15,7 @@
 		type ManifestObject
 	} from '../helm';
 	import { forControl } from '../keys';
+	import type { MenuAction } from '../menu';
 	import { app } from '../state.svelte';
 	import HealthIcon from './HealthIcon.svelte';
 	import YamlEditor from './YamlEditor.svelte';
@@ -166,6 +167,26 @@
 			historyCursor = 0;
 		}
 		tab = to;
+	}
+
+	/** A release's menu in the list, with the keys the list uses. */
+	function openMenu(e: MouseEvent, release: HelmRelease) {
+		e.preventDefault();
+		cursorKey = releaseKey(release);
+		const actions: MenuAction[] = TABS.map(([to, label, key]) => ({
+			group: 'View',
+			label: to === 'overview' ? 'Open' : label,
+			keys: [key],
+			hint: to === 'overview' ? 'enter' : undefined,
+			run: () => open(release, to)
+		}));
+		if (helm) {
+			actions.push(
+				{ group: 'Change', label: 'Roll back…', keys: ['r'], run: () => void rollback(release) },
+				{ group: 'Delete', label: 'Uninstall…', keys: ['ctrl+d'], danger: true, run: () => uninstall(release) }
+			);
+		}
+		app.menu = { actions, x: e.clientX, y: e.clientY };
 	}
 
 	function back() {
@@ -512,7 +533,12 @@
 					</thead>
 					<tbody>
 						{#each visible as r, i (releaseKey(r))}
-							<tr class:cursor={i === cursor} onclick={() => (cursorKey = releaseKey(r))} ondblclick={() => open(r)}>
+							<tr
+								class:cursor={i === cursor}
+								onclick={() => (cursorKey = releaseKey(r))}
+								ondblclick={() => open(r)}
+								oncontextmenu={(e) => openMenu(e, r)}
+							>
 								<td class="mono name"><button class="link" onclick={() => open(r)}>{r.name}</button></td>
 								{#if !namespace}<td class="muted">{r.namespace}</td>{/if}
 								<td class="numeric">{r.revision}</td>

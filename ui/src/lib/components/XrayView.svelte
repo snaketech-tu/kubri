@@ -4,7 +4,9 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { backend, type ResourceInfo, type XrayNode } from '../api';
 	import { errorMessage } from '../format';
-	import { app, findResource } from '../state.svelte';
+	import type { MenuAction } from '../menu';
+	import { openObjectMenu } from '../objects';
+	import { app, findResource, refOf } from '../state.svelte';
 	import { allIds, initialExpanded, issuesBelow, kindTag, visibleRows, xrayResources, type TreeRow } from '../xray';
 	import HealthIcon from './HealthIcon.svelte';
 
@@ -87,6 +89,23 @@
 		if (!info) return;
 		cursorId = node.id;
 		app.showDetails(info, { resource: info, namespace: node.namespace, name: node.name });
+	}
+
+	/** The row's menu: the object's actions, and opening or closing the tree below it. */
+	function openMenu(e: MouseEvent, row: TreeRow) {
+		e.preventDefault();
+		const node = row.node;
+		cursorId = node.id;
+		const info = node.resource && findResource(app.resources, node.resource);
+		const tree: MenuAction[] = node.children.length
+			? [{ group: 'Tree', label: row.expanded ? 'Collapse' : 'Expand', keys: [], run: () => toggle(row) }]
+			: [];
+		if (!info) {
+			if (tree.length) app.menu = { actions: tree, x: e.clientX, y: e.clientY, hints: false };
+			return;
+		}
+		const target = { resource: refOf(info), namespace: node.namespace, name: node.name };
+		openObjectMenu(info, target, e.clientX, e.clientY, { before: () => (cursorId = node.id), first: tree });
 	}
 
 	function move(delta: number) {
@@ -211,6 +230,7 @@
 				tabindex="-1"
 				onclick={() => (cursorId = node.id)}
 				ondblclick={() => openDetails(row)}
+				oncontextmenu={(e) => openMenu(e, row)}
 				onkeydown={() => {}}
 			>
 				<button

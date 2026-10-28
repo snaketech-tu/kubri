@@ -20,7 +20,8 @@
 		type LevelFilter,
 		type SanitizerRow
 	} from '../sanitizer';
-	import { app, findResource } from '../state.svelte';
+	import { openObjectMenu } from '../objects';
+	import { app, findResource, refOf } from '../state.svelte';
 	import LevelIcon from './LevelIcon.svelte';
 
 	const LEVELS: [LevelFilter, string][] = [
@@ -99,6 +100,15 @@
 	function toggle(id: string) {
 		if (expanded.has(id)) expanded.delete(id);
 		else expanded.add(id);
+	}
+
+	function openMenu(e: MouseEvent, row: SanitizerRow) {
+		if (row.type !== 'finding') return;
+		const resource = findResource(app.resources, row.section.resource);
+		if (!resource) return;
+		e.preventDefault();
+		const target = { resource: refOf(resource), namespace: resource.namespaced ? row.finding.namespace : null, name: row.finding.name };
+		openObjectMenu(resource, target, e.clientX, e.clientY, { before: () => (cursorId = row.id) });
 	}
 
 	function openDetails(row: SanitizerRow | undefined) {
@@ -276,6 +286,7 @@
 					tabindex="-1"
 					onclick={() => (cursorId = row.id)}
 					ondblclick={() => openDetails(row)}
+					oncontextmenu={(e) => openMenu(e, row)}
 					onkeydown={() => {}}
 				>
 					<div class="object">

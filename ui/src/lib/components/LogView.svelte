@@ -141,6 +141,12 @@
 		if (scroller) scroller.scrollTop = scroller.scrollHeight;
 	}
 
+	/** Stops following the latest line, or jumps back to it. */
+	function toggleAutoscroll() {
+		if (stick) stick = autoscroll = false;
+		else jumpToEnd();
+	}
+
 	function shownLines() {
 		return visible.map((l) => (showSource && l.source !== null ? `[${labels[l.source]}] ` : '') + l.text);
 	}
@@ -188,8 +194,7 @@
 					lines = [];
 					return true;
 				case 's':
-					if (stick) stick = autoscroll = false;
-					else jumpToEnd();
+					toggleAutoscroll();
 					app.toast(stick ? 'Autoscroll on' : 'Autoscroll off');
 					return true;
 				case 'm':
@@ -222,6 +227,7 @@
 		<label title="t"><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
 		<label title="Logs of the previous, crashed container"><input type="checkbox" bind:checked={previous} /> Previous</label>
 		<label title="w"><input type="checkbox" bind:checked={wrap} /> Wrap</label>
+		<label title="Keep the latest line in view (s)"><input type="checkbox" checked={stick} onchange={toggleAutoscroll} /> Autoscroll</label>
 		<input class="filter" bind:value={filter} placeholder="Filter…  /regex/" />
 		<span class="spacer"></span>
 		<button onclick={() => (lines = [])} title="Clear the view (Shift+C)">Clear</button>
