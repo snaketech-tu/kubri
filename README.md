@@ -1,37 +1,157 @@
-# Kubri
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kubri-logo-dark.svg">
+    <img src="docs/assets/kubri-logo.svg" alt="Kubri" width="300">
+  </picture>
+</p>
 
-A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9s](https://k9scli.io) can do. It runs as a desktop app or in your browser.
+<p align="center">
+  <b>A fast, keyboard-first Kubernetes GUI that does everything k9s does.</b><br>
+  A desktop app for Windows, macOS and Linux, or a web app for your whole team.
+</p>
 
-> **Status:** early. Every step of the [roadmap](docs/ROADMAP.md) is done; expect rough edges until Kubri has seen more clusters.
+<p align="center">
+  <a href="https://github.com/snaketech-tu/kubri/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/snaketech-tu/kubri/ci.yml?branch=main&label=CI" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/snaketech-tu/kubri?color=0969da" alt="License: Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux%20%C2%B7%20browser-0969da" alt="Runs on Windows, macOS, Linux and in the browser">
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#coming-from-k9s">Coming from k9s</a> ·
+  <a href="#documentation">Docs</a>
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/pods-dark.png">
+  <img src="docs/assets/screenshots/pods-light.png" alt="Kubri listing the pods of a namespace, with CPU and memory against their requests">
+</picture>
+
+## Why Kubri
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><b>Everything k9s does</b><br>Every resource and CRD, live. Drill-downs, logs, shells, port-forwards, Pulses, XRay, RBAC, Helm, a sanitizer and benchmarks. Your k9s aliases, hotkeys, plugins and skins work as they are.</td>
+    <td width="33%" valign="top"><b>Built for the keyboard</b><br><kbd>:</kbd> opens the command palette, the keys are the ones you know from k9s, and <kbd>?</kbd> lists them all. The mouse works everywhere too.</td>
+    <td width="33%" valign="top"><b>Desktop or browser</b><br>A small native app built with Rust and Tauri, one container for your team with a password sign-in, or a pod in the cluster with its service account.</td>
+  </tr>
+</table>
 
 ## Install
 
-- **Desktop app** for Windows, macOS and Linux: download it from the [releases](https://github.com/snaketech-tu/kubri/releases). It uses the kubeconfig on your computer.
-- **In the browser**, on your machine or for a team: run the Docker image `ghcr.io/snaketech-tu/kubri`, or deploy it into a cluster with [`deploy/kubernetes.yaml`](deploy/kubernetes.yaml). See [Running Kubri in the browser](docs/WEB.md).
-- **From source**: see [Development](#development).
+### Desktop app
+
+Download it for Windows, macOS or Linux from the [releases](https://github.com/snaketech-tu/kubri/releases). It uses the kubeconfig on your computer, just like kubectl.
+
+### In the browser
+
+```sh
+docker run --rm -p 127.0.0.1:7878:7878 \
+  --user "$(id -u)" \
+  -v "$HOME/.kube/config:/kubeconfig:ro" -e KUBECONFIG=/kubeconfig \
+  -e KUBRI_PASSWORD='a long password' \
+  ghcr.io/snaketech-tu/kubri
+```
+
+Then open <http://127.0.0.1:7878>. To run it in a cluster for your team, with [`deploy/kubernetes.yaml`](deploy/kubernetes.yaml), see [Running Kubri in the browser](docs/WEB.md).
+
+### From source
+
+See [Development](#development).
 
 ## Features
 
-- Uses your existing kubeconfig and switches contexts from anywhere.
-- Live lists of every resource type, including CRDs, with the same columns as `kubectl get` (press <kbd>w</kbd> for the wide view), sorting, k9s filters (regular expressions, `!` to invert, `-f` fuzzy, `-l app=web` for labels), faulty rows only, CSV export, and CPU/memory from metrics-server with usage against requests, limits and node capacity.
-- <kbd>Enter</kbd> drills down like k9s, from a Deployment, Service or node to its pods or from a CronJob to its Jobs, or wherever your `jumps.yaml` says; <kbd>Shift</kbd>+<kbd>J</kbd> jumps to the owner, and <kbd>[</kbd> <kbd>]</kbd> <kbd>-</kbd> go back and forth.
-- A command palette like k9s: <kbd>:</kbd> then `pods`, `deploy kube-system`, `po shop app=web`, `apps/v1/deployments`, `ctx prod`, `ns default` or any short name.
-- Describe view with containers, conditions and events; YAML view and editor.
-- Delete (also several at once), scale, rollout restart, set images, roll back to a ReplicaSet, run or suspend CronJobs, and edit labels and annotations. Secrets show their decoded values on request, and ConfigMaps, Secrets and the like show what uses them.
-- Live logs of a pod, or of every pod behind a deployment, service or other workload, with all containers merged, previous logs, timestamps and a regex filter.
-- Shell into any container or attach to its main process, in a real terminal (xterm.js).
-- Port-forwards to pods, workloads and services (named target ports included), listed under `:pf`.
-- Node maintenance: cordon, uncordon and drain with the same safety checks as `kubectl drain`.
-- Pulses (`:pulses`): a cluster overview with healthy, warning and failed counts per kind, CPU and memory use against requests and capacity with a 10-minute trend, and the latest warning events.
-- XRay (`:xray deploy`): a tree from each deployment, statefulset, daemonset, job, cronjob, service or ingress down to its pods and containers and the ConfigMaps, Secrets, service accounts and volume claims they use. Missing references show up in red; Secrets are only listed by name, never read.
-- RBAC (`:rbac`): every user, group and service account with the roles bound to them and what those roles allow, as a matrix of verbs per resource, plus what your own credentials may do. Roles and bindings also show their rules and subjects in the describe view.
-- Helm (`:helm`): the releases in the cluster with their status, chart and app version; their notes, values (as given or merged with the chart defaults), manifest, objects and history, including older revisions. Rolling back and uninstalling use the `helm` command, so they need it installed where Kubri runs.
-- Sanitizer (`:popeye`): checks the namespace (or the whole cluster) for common problems like Popeye does, such as missing probes or resource limits, `latest` image tags, crash-looping pods, services without endpoints, unused ConfigMaps, Secrets and roles, and bindings to missing roles. Every kind gets a score and the cluster a grade from A to F.
-- HTTP benchmarks (`:bench`, or <kbd>b</kbd> on a port-forward): load-test a forwarded port with a set number of requests or for a set time, then see requests per second, latency percentiles, a histogram of response times, status codes and errors.
-- Your k9s setup (`:config`): aliases, hotkeys, plugins (with inputs), skins, jumps and settings such as `readOnly`, `defaultView`, thresholds and the log defaults work as they are, per context. Plugins run on the machine Kubri runs on, in a terminal over the window or in the background, with the same variables as in k9s. See [Using your k9s configuration](docs/K9S.md).
-- A read-only mode, from k9s `readOnly` or `KUBRI_READ_ONLY=true`, that never changes the cluster.
-- In the browser with a password sign-in, from a Docker image or inside the cluster with its service account. See [Running Kubri in the browser](docs/WEB.md).
-- Fully usable from the keyboard. Press <kbd>?</kbd> in the app for all shortcuts.
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <b>Browse</b>
+      <ul>
+        <li>Every resource type and CRD, live, with the columns of <code>kubectl get</code> (<kbd>w</kbd> for the wide view)</li>
+        <li>k9s filters: regular expressions, <code>!</code> to invert, <code>-f</code> fuzzy, <code>-l app=web</code></li>
+        <li><kbd>Enter</kbd> drills down, <kbd>Shift</kbd>+<kbd>J</kbd> jumps to the owner, <kbd>[</kbd> <kbd>]</kbd> go back and forth</li>
+        <li>CPU and memory against requests, limits and node capacity</li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <b>Act</b>
+      <ul>
+        <li>Delete, scale, restart, set images and roll back</li>
+        <li>Edit YAML, labels and annotations</li>
+        <li>Run and suspend CronJobs</li>
+        <li>Cordon, uncordon and drain nodes with the checks of <code>kubectl drain</code></li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <b>Debug</b>
+      <ul>
+        <li>Live logs of a pod or a whole workload, all containers merged</li>
+        <li>Shell or attach in a real terminal</li>
+        <li>Port-forwards, with HTTP benchmarks on top</li>
+        <li>Decoded Secrets, and what uses a ConfigMap or Secret</li>
+      </ul>
+    </td>
+    <td valign="top">
+      <b>See the whole cluster</b>
+      <ul>
+        <li>Pulses: health per kind, usage trends and recent warnings</li>
+        <li>XRay: each workload down to its pods, containers and references</li>
+        <li>RBAC: who may do what, as a matrix of verbs</li>
+        <li>Helm releases, and a Popeye-style sanitizer with a grade</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <b>Your k9s setup</b>
+      <ul>
+        <li>Aliases, hotkeys, plugins, skins and jumps work as they are</li>
+        <li><code>readOnly</code>, <code>defaultView</code>, thresholds and log settings, per context</li>
+      </ul>
+    </td>
+    <td valign="top">
+      <b>Run it anywhere</b>
+      <ul>
+        <li>Desktop app for Windows, macOS and Linux</li>
+        <li>In the browser with a password sign-in, from Docker or in the cluster</li>
+        <li>A read-only mode that never changes the cluster</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/assets/screenshots/pulses.png" alt="Pulses: health per kind and CPU and memory trends"><br><b>Pulses</b>: the health of the cluster at a glance</td>
+    <td width="50%" valign="top"><img src="docs/assets/screenshots/xray.png" alt="XRay: deployments down to their pods and containers"><br><b>XRay</b>: from a Deployment down to its containers</td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/describe.png" alt="A pod described next to the list"><br><b>Describe</b>: containers, conditions and events beside the list</td>
+    <td valign="top"><img src="docs/assets/screenshots/palette.png" alt="The command palette suggesting resources"><br><b>Command palette</b>: <kbd>:</kbd> and any resource or command</td>
+  </tr>
+</table>
+
+## Coming from k9s
+
+Kubri reads your k9s configuration and uses the same keys, so you can start right away. The ones you will use most:
+
+| Key | What it does |
+| --- | --- |
+| <kbd>:</kbd> | Go to a resource or run a command, like `:deploy kube-system`, `:po shop app=web` or `:ctx prod` |
+| <kbd>/</kbd> | Filter the list |
+| <kbd>Enter</kbd> | Drill down, from a Deployment to its pods |
+| <kbd>d</kbd> <kbd>y</kbd> <kbd>e</kbd> | Describe, YAML, edit |
+| <kbd>l</kbd> <kbd>s</kbd> | Logs, shell |
+| <kbd>Shift</kbd>+<kbd>F</kbd> | Port-forward |
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> | Delete |
+| <kbd>?</kbd> | All keys |
+
+[Using your k9s configuration](docs/K9S.md) lists what Kubri covers and what it does not.
 
 ## How it works
 
@@ -44,7 +164,17 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 | Desktop app | [`ui/src-tauri`](ui/src-tauri) | [Tauri 2](https://tauri.app) shell that calls the core directly. |
 | UI | [`ui`](ui) | SvelteKit + TypeScript single-page app, used by both. |
 
+## Documentation
+
+- [Running Kubri in the browser](docs/WEB.md): settings, sign-in, the Docker image, running it in a cluster and behind a proxy.
+- [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.
+- [Releasing](docs/RELEASING.md): how a version is published.
+- [Roadmap](docs/ROADMAP.md): the steps toward k9s parity and what each one covered.
+
 ## Development
+
+<details>
+<summary>Build, run and test Kubri from source</summary>
 
 You need Rust (stable), Node.js 22 and pnpm. On Linux the desktop app also needs the [Tauri system dependencies](https://tauri.app/start/prerequisites/).
 
@@ -69,6 +199,8 @@ Checks that CI runs:
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cd ui && pnpm check && pnpm test
 ```
+
+</details>
 
 ## License
 
