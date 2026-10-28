@@ -1,6 +1,8 @@
 /** Something to do on an object, offered as a button, in a menu and on a key. */
 export interface MenuAction {
 	label: string;
+	/** Names the action for views that leave some out, like the details panel its tabs. */
+	id?: string;
 	/** Keys that run it, as `e.key` with `ctrl+` in front for Ctrl or Cmd. The first one is shown. */
 	keys: string[];
 	/** Shown instead of the first key, for keys a view handles itself, like Enter. */
@@ -21,6 +23,8 @@ export interface Menu {
 	y: number;
 	/** The edge of the menu the point is on: left for a click, right for a button at the end of a row. */
 	align?: 'left' | 'right';
+	/** Whether the keys work on what the menu does, so that it shows them. Yes unless false. */
+	hints?: boolean;
 }
 
 /** The key as a key press names it, with `ctrl+` for Ctrl or Cmd. Alt is left out on purpose. */
@@ -59,4 +63,16 @@ export function grouped(actions: MenuAction[]): [string, MenuAction[]][] {
 		else groups.set(action.group, [action]);
 	}
 	return [...groups];
+}
+
+/** The key press a hint stands for, to play it on a click; null for hints like `j/k` or `←→`. */
+export function keyFromLabel(label: string): KeyboardEventInit | null {
+	const named: Record<string, string> = { enter: 'Enter', esc: 'Escape', space: ' ', del: 'Delete', tab: 'Tab' };
+	if (named[label]) return { key: named[label] };
+	if (label.startsWith('^')) {
+		const rest = keyFromLabel(label.slice(1));
+		return rest && { ...rest, ctrlKey: true };
+	}
+	if (label.startsWith('⇧') && label.length === 2) return { key: label[1].toUpperCase(), shiftKey: true };
+	return [...label].length === 1 ? { key: label } : null;
 }

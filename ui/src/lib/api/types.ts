@@ -117,7 +117,7 @@ export interface KubeObject {
 		deletionTimestamp?: string;
 		labels?: Record<string, string>;
 		annotations?: Record<string, string>;
-		ownerReferences?: { kind: string; name: string; controller?: boolean }[];
+		ownerReferences?: { apiVersion?: string; kind: string; name: string; uid?: string; controller?: boolean }[];
 		managedFields?: unknown[];
 		[key: string]: unknown;
 	};

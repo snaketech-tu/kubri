@@ -24,6 +24,7 @@
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
 	import { parseShortcut, pluginApplies, shortcutLabel } from '#lib/k9s.js';
+	import { keyFromLabel } from '#lib/menu.js';
 	import {
 		canPortForward,
 		hasImages,
@@ -211,6 +212,15 @@
 			.slice(0, 4);
 	});
 
+	/** Plays a hint's key, so that the hints work as buttons too. */
+	function press(key: string) {
+		const init = keyFromLabel(key);
+		if (init) window.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true }));
+	}
+
+	/** Keeps the focus where it is, so that the keys work on the list after a click. */
+	const keepFocus = (e: MouseEvent) => e.preventDefault();
+
 	// Help stays last.
 	const hints = $derived([...viewHints.slice(0, -1), ...pluginHints, ...viewHints.slice(-1)]);
 </script>
@@ -223,6 +233,26 @@
 			<img src={logo} alt="" width="26" height="26" />
 			<span>Kubri</span>
 		</div>
+		<div class="history">
+			<button
+				onclick={() => app.go(-1)}
+				onmousedown={keepFocus}
+				disabled={!app.canGoBack}
+				title="Back ([ or Alt+←)"
+				aria-label="Back"
+			>
+				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+			</button>
+			<button
+				onclick={() => app.go(1)}
+				onmousedown={keepFocus}
+				disabled={!app.canGoForward}
+				title="Forward (] or Alt+→)"
+				aria-label="Forward"
+			>
+				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+			</button>
+		</div>
 		<ContextSwitcher />
 		<NamespacePicker />
 		{#if app.readOnly}
@@ -232,6 +262,7 @@
 			<span>Go to resource or command…</span>
 			<kbd>:</kbd>
 		</button>
+		<button class="help" onclick={() => (app.helpOpen = true)} title="Keys and commands (?)" aria-label="Help">?</button>
 		{#if session.required}
 			<button class="sign-out" onclick={() => session.signOut()}>Sign out</button>
 		{/if}
@@ -294,7 +325,11 @@
 
 	<footer>
 		{#each hints as [key, label], i (key + i)}
-			<span><kbd>{key}</kbd>{label}</span>
+			{#if keyFromLabel(key)}
+				<button onclick={() => press(key)} onmousedown={keepFocus} title="{label} ({key})"><kbd>{key}</kbd>{label}</button>
+			{:else}
+				<span><kbd>{key}</kbd>{label}</span>
+			{/if}
 		{/each}
 	</footer>
 </div>
@@ -326,7 +361,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		width: 208px;
+		width: 132px;
 		font-size: 17px;
 		font-weight: 700;
 		letter-spacing: -0.01em;
@@ -357,6 +392,43 @@
 	}
 	.palette-button:hover {
 		border-color: var(--accent);
+	}
+	.history {
+		display: flex;
+		gap: 4px;
+	}
+	.history button,
+	.help {
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		padding: 0;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: var(--surface-2);
+		color: var(--text);
+	}
+	.history button:hover:not(:disabled),
+	.help:hover {
+		border-color: var(--accent);
+	}
+	.history button:disabled {
+		color: var(--text-muted);
+		opacity: 0.5;
+	}
+	.history svg {
+		width: 16px;
+		height: 16px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+	.help {
+		margin-left: -8px;
+		font-weight: 700;
 	}
 	.sign-out {
 		margin-left: -8px;
@@ -409,12 +481,27 @@
 	footer {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 16px;
+		gap: 2px 6px;
 		padding: 6px 16px;
 		border-top: 1px solid var(--border);
 		background: var(--surface-1);
 		font-size: 12px;
 		color: var(--text-muted);
+	}
+	footer > * {
+		display: inline-flex;
+		align-items: center;
+		padding: 2px 6px;
+		border: 1px solid transparent;
+		border-radius: 6px;
+		background: none;
+		color: inherit;
+		font-size: 12px;
+	}
+	footer > button:hover {
+		border-color: var(--border);
+		background: var(--surface-2);
+		color: var(--text);
 	}
 	kbd {
 		margin-right: 5px;
