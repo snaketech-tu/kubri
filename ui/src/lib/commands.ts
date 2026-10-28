@@ -8,6 +8,8 @@ export type Action =
 	| { type: 'portforwards' }
 	| { type: 'pulses'; namespace?: string }
 	| { type: 'xray'; resource: ResourceInfo; namespace?: string }
+	| { type: 'rbac'; namespace?: string }
+	| { type: 'helm'; namespace?: string }
 	| { type: 'help' };
 
 export interface Suggestion {
@@ -21,6 +23,8 @@ const NAMESPACE_COMMANDS = ['ns', 'namespace', 'namespaces'];
 const PORT_FORWARD_COMMANDS = ['pf', 'portforward', 'portforwards'];
 const PULSE_COMMANDS = ['pu', 'pulse', 'pulses'];
 const XRAY_COMMANDS = ['xray'];
+const RBAC_COMMANDS = ['rbac', 'policy', 'subjects'];
+const HELM_COMMANDS = ['helm', 'hm', 'chart', 'charts'];
 
 /** Groups that win when several resources share a name, e.g. core `events` over events.k8s.io. */
 const PREFERRED_GROUPS = ['', 'apps', 'batch', 'networking.k8s.io', 'rbac.authorization.k8s.io'];
@@ -90,6 +94,20 @@ export function suggest(
 	});
 	if (PULSE_COMMANDS.includes(cmd)) return [pulses(rest[0])];
 
+	const rbac = (namespace?: string): Suggestion => ({
+		label: namespace ? `rbac ${namespace}` : 'rbac',
+		detail: 'Who may do what: users, groups, service accounts and your own rights',
+		action: { type: 'rbac', namespace }
+	});
+	if (RBAC_COMMANDS.includes(cmd)) return [rbac(rest[0])];
+
+	const helm = (namespace?: string): Suggestion => ({
+		label: namespace ? `helm ${namespace}` : 'helm',
+		detail: 'Helm releases: values, manifests, history and rollback',
+		action: { type: 'helm', namespace }
+	});
+	if (HELM_COMMANDS.includes(cmd)) return [helm(rest[0])];
+
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {
 		const roots = xrayResources(resources);
@@ -144,5 +162,7 @@ export function suggest(
 	if (cmd && PORT_FORWARD_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(portForwards);
 	if (cmd && PULSE_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(pulses());
 	if (cmd && 'xray'.startsWith(cmd)) extra.push(...xray('').slice(0, 3));
+	if (cmd && RBAC_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(rbac());
+	if (cmd && HELM_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(helm());
 	return [...resourceSuggestions, ...extra];
 }

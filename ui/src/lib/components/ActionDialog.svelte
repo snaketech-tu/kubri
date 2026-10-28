@@ -140,6 +140,16 @@
 						address: address.trim() || null
 					});
 					break;
+				case 'helmRollback':
+					helmOutput(await backend.helmRollback(dialog.release.namespace, dialog.release.name, dialog.revision));
+					dialog.done();
+					ok = true;
+					break;
+				case 'helmUninstall':
+					helmOutput(await backend.helmUninstall(dialog.release.namespace, dialog.release.name));
+					dialog.done();
+					ok = true;
+					break;
 				case 'drain':
 					if (report) {
 						ok = true;
@@ -178,6 +188,11 @@
 		e.stopPropagation();
 	}
 
+	/** helm prints what it did, e.g. "Rollback was a success! Happy Helming!". */
+	function helmOutput(output: string) {
+		app.toast(output.trim().split('\n').pop() || 'Done');
+	}
+
 	function pods(n: number) {
 		return `${n} ${n === 1 ? 'pod' : 'pods'}`;
 	}
@@ -186,15 +201,28 @@
 		return t.namespace ? `${t.namespace}/${t.name}` : t.name;
 	}
 
-	const title = $derived(
-		{
-			delete: `Delete ${dialog.resource.kind}`,
-			scale: `Scale ${dialog.resource.kind}`,
-			restart: `Restart ${dialog.resource.kind}`,
-			labels: 'Labels and annotations',
-			portforward: 'Port-forward',
-			drain: 'Drain node'
-		}[dialog.kind]
+	const title = $derived.by(() => {
+		switch (dialog.kind) {
+			case 'delete':
+				return `Delete ${dialog.resource.kind}`;
+			case 'scale':
+				return `Scale ${dialog.resource.kind}`;
+			case 'restart':
+				return `Restart ${dialog.resource.kind}`;
+			case 'labels':
+				return 'Labels and annotations';
+			case 'portforward':
+				return 'Port-forward';
+			case 'drain':
+				return 'Drain node';
+			case 'helmRollback':
+				return 'Roll back release';
+			case 'helmUninstall':
+				return 'Uninstall release';
+		}
+	});
+	const danger = $derived(
+		dialog.kind === 'delete' || dialog.kind === 'helmUninstall' || (dialog.kind === 'drain' && !report)
 	);
 </script>
 
@@ -317,6 +345,15 @@
 				<input class="grace" type="number" min="0" bind:value={gracePeriod} placeholder="pod default" /> seconds
 			</label>
 		{/if}
+	{:else if dialog.kind === 'helmRollback'}
+		<p>
+			Roll <strong>{name(dialog.release)}</strong> back from revision {dialog.release.revision} to revision
+			{dialog.revision}? Helm records this as a new revision.
+		</p>
+	{:else if dialog.kind === 'helmUninstall'}
+		<p>
+			Uninstall <strong>{name(dialog.release)}</strong>? This deletes every object of the release and its history.
+		</p>
 	{/if}
 
 	{#if error}<p class="error">{error}</p>{/if}
@@ -325,7 +362,7 @@
 		{#if !report}<button class="secondary" onclick={close}>Cancel</button>{/if}
 		<button
 			class="primary"
-			class:danger={dialog.kind === 'delete' || (dialog.kind === 'drain' && !report)}
+			class:danger
 			bind:this={confirmButton}
 			disabled={busy}
 			onclick={confirm}
@@ -340,7 +377,9 @@
 							restart: 'Restart',
 							labels: 'Save',
 							portforward: 'Start',
-							drain: 'Drain'
+							drain: 'Drain',
+							helmRollback: 'Roll back',
+							helmUninstall: 'Uninstall'
 						}[dialog.kind]}
 		</button>
 	</div>

@@ -80,6 +80,15 @@ describe('command palette', () => {
 		expect(suggest('xray', resources, contexts, []).map((s) => s.label)).toEqual(['xray deployments.apps', 'xray pods']);
 	});
 
+	it('opens rbac and helm, optionally in a namespace', () => {
+		expect(suggest('rbac', resources, contexts, [])[0].action).toEqual({ type: 'rbac', namespace: undefined });
+		expect(suggest(':policy shop', resources, contexts, [])[0].action).toEqual({ type: 'rbac', namespace: 'shop' });
+		expect(suggest('helm', resources, contexts, [])[0].action).toEqual({ type: 'helm', namespace: undefined });
+		expect(suggest('charts shop', resources, contexts, [])[0].action).toEqual({ type: 'helm', namespace: 'shop' });
+		// Offered while typed, after resources that match.
+		expect(suggest('he', resources, contexts, []).map((s) => s.label)).toContain('helm');
+	});
+
 	it('passes a namespace argument to resource commands', () => {
 		const s = suggest('po kube-system', resources, contexts, []);
 		expect(s[0].action).toMatchObject({ type: 'resource', namespace: 'kube-system' });

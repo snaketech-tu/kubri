@@ -7,12 +7,14 @@ mod context;
 mod discovery;
 mod error;
 mod health;
+mod helm;
 mod logs;
 mod metrics;
 mod node;
 mod objects;
 mod portforward;
 mod pulse;
+mod rbac;
 mod resource;
 mod selector;
 mod table;
@@ -38,12 +40,14 @@ use tokio::sync::RwLock;
 pub use context::ContextInfo;
 pub use error::{Error, Result};
 pub use health::Health;
+pub use helm::{HelmRelease, HelmReleaseDetails};
 pub use logs::{LogEvent, LogLine, LogOptions, LogSource};
 pub use metrics::{MetricsKind, Usage, parse_quantity};
 pub use node::{DrainOptions, DrainReport, PodIssue};
 pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
 pub use portforward::{PortForwardInfo, PortForwardRequest};
 pub use pulse::{EventPulse, KindPulse, Pulse, RecentEvent, Utilization};
+pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use resource::{ResourceInfo, ResourceRef};
 pub use table::{Column, Row, TableEvent};
 pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
@@ -318,6 +322,58 @@ impl Kubri {
             ))
         })?;
         xray::gather(session.client.clone(), root, namespace).await
+    }
+
+    /// Every subject of a role binding with the rules it is granted. `namespace` limits role
+    /// bindings to one namespace; cluster role bindings are always included.
+    pub async fn rbac(&self, namespace: Option<&str>) -> Result<Rbac> {
+        let session = self.session().await?;
+        Ok(rbac::gather(session.client.clone(), namespace).await)
+    }
+
+    /// What the current user may do in `namespace` (by default the context's), like
+    /// `kubectl auth can-i --list`.
+    pub async fn permissions(&self, namespace: Option<&str>) -> Result<Permissions> {
+        let session = self.session().await?;
+        let namespace = namespace.unwrap_or(&session.info.default_namespace);
+        rbac::permissions(session.client.clone(), namespace).await
+    }
+
+    /// The latest revision of every Helm release, like `helm list --all`.
+    pub async fn helm_releases(&self, namespace: Option<&str>) -> Result<Vec<HelmRelease>> {
+        helm::releases(self.session().await?.client.clone(), namespace).await
+    }
+
+    /// A Helm release with its values, notes and manifest; the latest revision by default.
+    pub async fn helm_release(
+        &self,
+        namespace: &str,
+        name: &str,
+        revision: Option<u32>,
+    ) -> Result<HelmReleaseDetails> {
+        helm::release(self.session().await?.client.clone(), namespace, name, revision).await
+    }
+
+    /// All revisions of a Helm release, newest first.
+    pub async fn helm_history(&self, namespace: &str, name: &str) -> Result<Vec<HelmRelease>> {
+        helm::history(self.session().await?.client.clone(), namespace, name).await
+    }
+
+    /// The version of the `helm` command that rollbacks and uninstalls run, if it is installed.
+    pub async fn helm_version(&self) -> Option<String> {
+        helm::cli_version().await
+    }
+
+    /// Rolls a release back to `revision` with `helm rollback`, on the connected context.
+    pub async fn helm_rollback(&self, namespace: &str, name: &str, revision: u32) -> Result<String> {
+        let context = self.session().await?.info.context.clone();
+        helm::rollback(&context, namespace, name, revision).await
+    }
+
+    /// Uninstalls a release with `helm uninstall`, on the connected context.
+    pub async fn helm_uninstall(&self, namespace: &str, name: &str) -> Result<String> {
+        let context = self.session().await?.info.context.clone();
+        helm::uninstall(&context, namespace, name).await
     }
 
     /// Streams container logs of a pod, or of every pod a workload or Service selects.

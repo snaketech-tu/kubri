@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { EventInfo, KubeObject } from '../api';
 	import { age } from '../format';
+	import { rulesOf } from '../rbac';
 	import { cellTone } from '../status';
+	import RulesMatrix from './RulesMatrix.svelte';
 
 	let { object, events, now }: { object: KubeObject; events: EventInfo[]; now: number } = $props();
 
@@ -84,12 +86,26 @@
 			f.push(['OS', `${status.nodeInfo.osImage} (${status.nodeInfo.architecture})`]);
 			f.push(['Runtime', status.nodeInfo.containerRuntimeVersion]);
 		}
+		const roleRef = (object as any).roleRef;
+		if (roleRef?.kind) f.push(['Role', `${roleRef.kind}/${roleRef.name}`]);
+		const aggregation = (object as any).aggregationRule?.clusterRoleSelectors;
+		if (Array.isArray(aggregation)) {
+			const selectors = aggregation.map((s: any) =>
+				Object.entries(s.matchLabels ?? {})
+					.map(([k, v]) => `${k}=${v}`)
+					.join(',')
+			);
+			f.push(['Aggregates roles labeled', selectors.join(' or ')]);
+		}
 		if (object.kind === 'ConfigMap' || object.kind === 'Secret') {
 			const data = { ...((object.data as object) ?? {}), ...((object.binaryData as object) ?? {}) };
 			f.push(['Keys', Object.keys(data).join(', ') || '(none)']);
 		}
 		return f;
 	});
+
+	const isRole = $derived(object.kind === 'Role' || object.kind === 'ClusterRole');
+	const subjects = $derived<any[]>(Array.isArray((object as any).subjects) ? (object as any).subjects : []);
 
 	const labels = $derived(Object.entries(meta.labels ?? {}));
 	const annotations = $derived(
@@ -136,6 +152,27 @@
 						<td class={c.ready ? 'ok' : 'warn'}>{c.ready ? 'yes' : 'no'}</td>
 						<td class={c.restarts > 0 ? 'warn' : ''}>{c.restarts}</td>
 						<td>{c.state}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	{/if}
+
+	{#if isRole}
+		<h3>Rules</h3>
+		<RulesMatrix rules={rulesOf(object)} />
+	{/if}
+
+	{#if subjects.length}
+		<h3>Subjects</h3>
+		<table>
+			<thead><tr><th>Kind</th><th>Name</th><th>Namespace</th></tr></thead>
+			<tbody>
+				{#each subjects as s, i (i)}
+					<tr>
+						<td>{s.kind}</td>
+						<td class="mono">{s.name}</td>
+						<td class="muted">{s.namespace ?? ''}</td>
 					</tr>
 				{/each}
 			</tbody>

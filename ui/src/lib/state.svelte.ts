@@ -2,6 +2,7 @@ import {
 	backend,
 	type ClusterInfo,
 	type ContextInfo,
+	type HelmRelease,
 	type ObjectRef,
 	type PortForwardInfo,
 	type ResourceInfo,
@@ -25,7 +26,7 @@ export interface Details {
 	mode?: TerminalMode;
 }
 
-export type Page = 'resources' | 'portforwards' | 'pulses' | 'xray';
+export type Page = 'resources' | 'portforwards' | 'pulses' | 'xray' | 'rbac' | 'helm';
 
 export type Dialog =
 	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[] }
@@ -33,7 +34,9 @@ export type Dialog =
 	| { kind: 'restart'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'labels'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'portforward'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'drain'; resource: ResourceInfo; target: ObjectRef };
+	| { kind: 'drain'; resource: ResourceInfo; target: ObjectRef }
+	| { kind: 'helmRollback'; release: HelmRelease; revision: number; done: () => void }
+	| { kind: 'helmUninstall'; release: HelmRelease; done: () => void };
 
 export interface Toast {
 	id: number;
@@ -142,6 +145,20 @@ class AppState {
 	showXray(resource: ResourceInfo, namespace?: string) {
 		this.page = 'xray';
 		this.xrayResource = resource;
+		this.details = null;
+		this.setNamespace(namespace);
+	}
+
+	/** Who may do what, like k9s `:rbac`. */
+	showRbac(namespace?: string) {
+		this.page = 'rbac';
+		this.details = null;
+		this.setNamespace(namespace);
+	}
+
+	/** Helm releases, like k9s `:helm`. */
+	showHelm(namespace?: string) {
+		this.page = 'helm';
 		this.details = null;
 		this.setNamespace(namespace);
 	}

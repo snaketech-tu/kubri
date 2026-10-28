@@ -13,6 +13,8 @@
 				['0', 'All namespaces'],
 				[':pulses', 'Cluster overview'],
 				[':xray deploy [ns]', 'XRay: what each object depends on'],
+				[':rbac', 'Who may do what'],
+				[':helm', 'Helm releases'],
 				[':pf', 'Port-forwards'],
 				['w', 'Wide columns'],
 				['Shift+N / Shift+A', 'Sort by name / age'],
@@ -65,6 +67,16 @@
 				['Space', 'Toggle'],
 				['Enter  or  d', 'Describe'],
 				['/', 'Filter']
+			]
+		],
+		[
+			'Helm',
+			[
+				['Enter  or  n', 'Overview and notes'],
+				['v / m / h', 'Values / manifest / history'],
+				['r', 'Roll back (previous or shown revision)'],
+				['Ctrl+D', 'Uninstall'],
+				['Esc', 'Back to the releases']
 			]
 		]
 	];

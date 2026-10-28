@@ -8,9 +8,10 @@ use axum::routing::{any, delete, get, post, put};
 use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
-    ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, Kubri, LogEvent,
-    LogOptions, MetricsKind, ObjectRef, PortForwardInfo, PortForwardRequest, Pulse, ResourceInfo,
-    ResourceRef, Terminal, TerminalOptions, TerminalOutput, Usage, XrayNode,
+    ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, HelmRelease,
+    HelmReleaseDetails, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions, PortForwardInfo,
+    PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef, Terminal, TerminalOptions, TerminalOutput,
+    Usage, XrayNode,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -36,6 +37,14 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/metrics", get(metrics))
         .route("/pulse", get(pulse))
         .route("/xray", get(xray))
+        .route("/rbac", get(rbac))
+        .route("/permissions", get(permissions))
+        .route("/helm/releases", get(helm_releases))
+        .route("/helm/release", get(helm_release))
+        .route("/helm/history", get(helm_history))
+        .route("/helm/version", get(helm_version))
+        .route("/helm/rollback", post(helm_rollback))
+        .route("/helm/uninstall", post(helm_uninstall))
         .route("/logs", any(logs))
         .route("/terminal", any(terminal))
         .route("/portforwards", get(port_forwards).post(start_port_forward))
@@ -259,6 +268,94 @@ struct XrayQuery {
 async fn xray(State(kubri): State<Arc<Kubri>>, Query(query): Query<XrayQuery>) -> ApiResult<Vec<XrayNode>> {
     let namespace = query.namespace.filter(|ns| !ns.is_empty());
     Ok(Json(kubri.xray(&query.resource, namespace.as_deref()).await?))
+}
+
+#[derive(Deserialize)]
+struct NamespaceQuery {
+    namespace: Option<String>,
+}
+
+impl NamespaceQuery {
+    fn namespace(&self) -> Option<&str> {
+        self.namespace.as_deref().filter(|ns| !ns.is_empty())
+    }
+}
+
+async fn rbac(State(kubri): State<Arc<Kubri>>, Query(query): Query<NamespaceQuery>) -> ApiResult<Rbac> {
+    Ok(Json(kubri.rbac(query.namespace()).await?))
+}
+
+async fn permissions(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<NamespaceQuery>,
+) -> ApiResult<Permissions> {
+    Ok(Json(kubri.permissions(query.namespace()).await?))
+}
+
+async fn helm_releases(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<NamespaceQuery>,
+) -> ApiResult<Vec<HelmRelease>> {
+    Ok(Json(kubri.helm_releases(query.namespace()).await?))
+}
+
+#[derive(Deserialize)]
+struct ReleaseQuery {
+    namespace: String,
+    name: String,
+    revision: Option<u32>,
+}
+
+async fn helm_release(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<ReleaseQuery>,
+) -> ApiResult<HelmReleaseDetails> {
+    Ok(Json(
+        kubri
+            .helm_release(&query.namespace, &query.name, query.revision)
+            .await?,
+    ))
+}
+
+async fn helm_history(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<ReleaseQuery>,
+) -> ApiResult<Vec<HelmRelease>> {
+    Ok(Json(kubri.helm_history(&query.namespace, &query.name).await?))
+}
+
+#[derive(Serialize)]
+struct HelmVersion {
+    version: Option<String>,
+}
+
+async fn helm_version(State(kubri): State<Arc<Kubri>>) -> Json<HelmVersion> {
+    Json(HelmVersion {
+        version: kubri.helm_version().await,
+    })
+}
+
+#[derive(Deserialize)]
+struct ReleaseAction {
+    namespace: String,
+    name: String,
+    revision: Option<u32>,
+}
+
+async fn helm_rollback(State(kubri): State<Arc<Kubri>>, Json(req): Json<ReleaseAction>) -> ApiResult<String> {
+    let revision = req
+        .revision
+        .ok_or_else(|| kubri_core::Error::Unsupported("a revision is required".into()))?;
+    Ok(Json(
+        kubri.helm_rollback(&req.namespace, &req.name, revision).await?,
+    ))
+}
+
+async fn helm_uninstall(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<ReleaseAction>,
+) -> ApiResult<String> {
+    Ok(Json(kubri.helm_uninstall(&req.namespace, &req.name).await?))
 }
 
 /// Reads the JSON request a streaming socket starts with. Parameters go in a message rather
@@ -505,6 +602,31 @@ mod tests {
 
         let (status, _) = send(disconnected(), get("/metrics?kind=pods")).await;
         assert_eq!(status, StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn rbac_and_helm_routes_parse_their_parameters() {
+        for uri in [
+            "/rbac?namespace=shop",
+            "/permissions",
+            "/helm/releases?namespace=",
+            "/helm/release?namespace=apps&name=shop&revision=2",
+            "/helm/history?namespace=apps&name=shop",
+        ] {
+            let (status, _) = send(disconnected(), get(uri)).await;
+            assert_eq!(status, StatusCode::CONFLICT, "{uri}");
+        }
+        let (status, _) = send(disconnected(), get("/helm/release?name=shop")).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let rollback = post_json(
+            "/helm/rollback",
+            r#"{"namespace":"apps","name":"shop","revision":1}"#,
+        );
+        let (status, _) = send(disconnected(), rollback).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, body) = send(disconnected(), get("/helm/version")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.get("version").is_some());
     }
 
     #[tokio::test]

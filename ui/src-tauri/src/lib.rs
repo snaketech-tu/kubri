@@ -6,9 +6,10 @@ use std::sync::{Arc, Mutex};
 
 use futures::{Stream, StreamExt};
 use kubri_core::{
-    ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, Kubri, LogEvent,
-    LogOptions, MetricsKind, ObjectRef, PortForwardInfo, PortForwardRequest, Pulse, ResourceInfo,
-    ResourceRef, TableEvent, Terminal, TerminalInput, TerminalOptions, TerminalOutput, Usage, XrayNode,
+    ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, HelmRelease,
+    HelmReleaseDetails, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions, PortForwardInfo,
+    PortForwardRequest, Pulse, Rbac, ResourceInfo, ResourceRef, TableEvent, Terminal, TerminalInput,
+    TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde_json::Value;
 use tauri::State;
@@ -317,6 +318,85 @@ async fn xray(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn rbac(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<Rbac> {
+    kubri.rbac(namespace.as_deref()).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn permissions(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<Permissions> {
+    kubri
+        .permissions(namespace.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn helm_releases(
+    kubri: State<'_, Arc<Kubri>>,
+    namespace: Option<String>,
+) -> CommandResult<Vec<HelmRelease>> {
+    kubri
+        .helm_releases(namespace.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn helm_release(
+    kubri: State<'_, Arc<Kubri>>,
+    namespace: String,
+    name: String,
+    revision: Option<u32>,
+) -> CommandResult<HelmReleaseDetails> {
+    kubri
+        .helm_release(&namespace, &name, revision)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn helm_history(
+    kubri: State<'_, Arc<Kubri>>,
+    namespace: String,
+    name: String,
+) -> CommandResult<Vec<HelmRelease>> {
+    kubri
+        .helm_history(&namespace, &name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn helm_version(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Option<String>> {
+    Ok(kubri.helm_version().await)
+}
+
+#[tauri::command]
+async fn helm_rollback(
+    kubri: State<'_, Arc<Kubri>>,
+    namespace: String,
+    name: String,
+    revision: u32,
+) -> CommandResult<String> {
+    kubri
+        .helm_rollback(&namespace, &name, revision)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn helm_uninstall(
+    kubri: State<'_, Arc<Kubri>>,
+    namespace: String,
+    name: String,
+) -> CommandResult<String> {
+    kubri
+        .helm_uninstall(&namespace, &name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -355,7 +435,15 @@ pub fn run() {
             events,
             metrics,
             pulse,
-            xray
+            xray,
+            rbac,
+            permissions,
+            helm_releases,
+            helm_release,
+            helm_history,
+            helm_version,
+            helm_rollback,
+            helm_uninstall
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Kubri");

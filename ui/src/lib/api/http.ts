@@ -133,5 +133,17 @@ export const httpBackend: Backend = {
 	drain: (name, options) => request('POST', '/node/drain', { name, options }),
 	pulse: (namespace) => request('GET', `/pulse?${new URLSearchParams({ namespace: namespace ?? '' })}`),
 	xray: (resource, namespace) =>
-		request('GET', `/xray?${new URLSearchParams({ ...resource, namespace: namespace ?? '' })}`)
+		request('GET', `/xray?${new URLSearchParams({ ...resource, namespace: namespace ?? '' })}`),
+	rbac: (namespace) => request('GET', `/rbac?${new URLSearchParams({ namespace: namespace ?? '' })}`),
+	permissions: (namespace) => request('GET', `/permissions?${new URLSearchParams({ namespace: namespace ?? '' })}`),
+	helmReleases: (namespace) => request('GET', `/helm/releases?${new URLSearchParams({ namespace: namespace ?? '' })}`),
+	helmRelease(namespace, name, revision) {
+		const params = new URLSearchParams({ namespace, name });
+		if (revision !== undefined) params.set('revision', String(revision));
+		return request('GET', `/helm/release?${params}`);
+	},
+	helmHistory: (namespace, name) => request('GET', `/helm/history?${new URLSearchParams({ namespace, name })}`),
+	helmVersion: () => request<{ version: string | null }>('GET', '/helm/version').then((r) => r.version),
+	helmRollback: (namespace, name, revision) => request('POST', '/helm/rollback', { namespace, name, revision }),
+	helmUninstall: (namespace, name) => request('POST', '/helm/uninstall', { namespace, name })
 };

@@ -50,6 +50,12 @@
 			case 'xray':
 				app.showXray(action.resource, action.namespace);
 				break;
+			case 'rbac':
+				app.showRbac(action.namespace);
+				break;
+			case 'helm':
+				app.showHelm(action.namespace);
+				break;
 			case 'portforwards':
 				app.showPortForwards();
 				break;

@@ -45,6 +45,12 @@
 		<button class:active={app.page === 'xray'} onclick={showXray} title=":xray deploy">
 			<span>XRay</span>
 		</button>
+		<button class:active={app.page === 'rbac'} onclick={() => app.showRbac()} title=":rbac">
+			<span>RBAC</span>
+		</button>
+		<button class:active={app.page === 'helm'} onclick={() => app.showHelm()} title=":helm">
+			<span>Helm</span>
+		</button>
 		<button class:active={app.page === 'portforwards'} onclick={() => app.showPortForwards()} title=":pf">
 			<span>Port-forwards</span>
 			{#if app.forwards.length}<span class="badge">{app.forwards.length}</span>{/if}
