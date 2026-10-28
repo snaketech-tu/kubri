@@ -2,8 +2,8 @@
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { stopPortForward } from '../actions';
-	import type { PortForwardInfo } from '../api';
-	import { age } from '../format';
+	import { backend, type PortForwardInfo } from '../api';
+	import { age, errorMessage } from '../format';
 	import { app } from '../state.svelte';
 
 	let cursorId = $state<number | null>(null);
@@ -32,8 +32,17 @@
 	});
 
 	function url(f: PortForwardInfo) {
-		const host = f.address === '0.0.0.0' || f.address === '::' ? 'localhost' : f.address;
-		return `http://${host.includes(':') ? `[${host}]` : host}:${f.localPort}`;
+		// Listening on every address: in the browser, the server's own name reaches it.
+		const everywhere = f.address === '0.0.0.0' || f.address === '::';
+		const host = everywhere ? (backend.desktop ? 'localhost' : location.hostname) : f.address;
+		return `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${f.localPort}`;
+	}
+
+	function open(f: PortForwardInfo, e?: MouseEvent) {
+		// The desktop window does not open links itself.
+		if (e && !backend.desktop) return;
+		e?.preventDefault();
+		backend.openUrl(url(f)).catch((err) => app.toast(errorMessage(err), 'bad'));
 	}
 
 	function move(delta: number) {
@@ -71,6 +80,9 @@
 				case 'c':
 					if (current) copy(current);
 					return true;
+				case 'o':
+					if (current) open(current);
+					return true;
 				case 'b':
 					if (current) app.dialog = { kind: 'benchmark', forward: current };
 					return true;
@@ -107,7 +119,7 @@
 					{#each forwards as f, i (f.id)}
 						<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)}>
 							<td class="mono">
-								<a href={url(f)} target="_blank" rel="noreferrer">{f.address}:{f.localPort}</a>
+								<a href={url(f)} target="_blank" rel="noreferrer" onclick={(e) => open(f, e)} title="Open in the browser (o)">{f.address}:{f.localPort}</a>
 								<button class="link" onclick={() => copy(f)} title="Copy URL (c)">copy</button>
 							</td>
 							<td class="mono">{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</td>

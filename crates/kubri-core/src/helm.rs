@@ -16,8 +16,9 @@ use serde_json::Value;
 use crate::typed::scoped;
 use crate::{Error, Result};
 
-/// How long `helm rollback` and `helm uninstall` may take, hooks included.
-const HELM_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+/// How long `helm rollback` and `helm uninstall` may take, hooks included: a little longer
+/// than the `--timeout 5m` they get, so helm can say itself what it was waiting for.
+const HELM_TIMEOUT: Duration = Duration::from_secs(5 * 60 + 30);
 const FETCH_CONCURRENCY: usize = 8;
 
 /// A release revision, as `helm list` and `helm history` show it.
@@ -333,7 +334,7 @@ pub(crate) async fn release(
 
 /// Release and namespace names go on the `helm` command line, so nothing that could be read
 /// as a flag gets through.
-fn validate_name(name: &str) -> Result<()> {
+pub(crate) fn validate_name(name: &str) -> Result<()> {
     let valid = !name.is_empty()
         && name.len() <= 253
         && name
@@ -370,7 +371,7 @@ async fn run(args: &[&str], context: &str) -> Result<String> {
         .kill_on_drop(true);
     let output = tokio::time::timeout(HELM_TIMEOUT, command.output())
         .await
-        .map_err(|_| Error::Unsupported("helm did not finish within 5 minutes".into()))?
+        .map_err(|_| Error::Unsupported("helm did not finish after its 5-minute timeout".into()))?
         .map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => Error::Unsupported("the helm command is not installed".into()),
             _ => Error::Io(e),

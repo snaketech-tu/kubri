@@ -156,6 +156,26 @@ describe('table rows', () => {
 		expect(sortRows(rows, columns, { column: 2, descending: false }).map((r) => r.name)).toEqual(['c', 'b', 'a']);
 	});
 
+	it('sorts durations and quantities by their size', () => {
+		const column = (name: string) => ({ name, type: 'string', format: '', description: '', priority: 0 });
+		const sorted = (name: string, values: string[]) =>
+			sortRows(
+				values.map((v) => row(v, 'x', [v])),
+				[column(name)],
+				{ column: 0, descending: false }
+			).map((r) => r.name);
+		expect(sorted('Last Seen', ['13m', '5m52s', '45s', '2d', '1h', '3y120d'])).toEqual([
+			'45s',
+			'5m52s',
+			'13m',
+			'1h',
+			'2d',
+			'3y120d'
+		]);
+		expect(sorted('CPU', ['1500m', '2', '100m', '1'])).toEqual(['100m', '1', '1500m', '2']);
+		expect(sorted('Mem', ['1Gi', '262144k', '512Mi'])).toEqual(['262144k', '512Mi', '1Gi']);
+	});
+
 	it('filters by text and by label', () => {
 		expect(filterRows(rows, 'y').map((r) => r.name)).toEqual(['a']);
 		expect(filterRows(rows, '-l app=c').map((r) => r.name)).toEqual(['c']);

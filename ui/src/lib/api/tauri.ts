@@ -105,5 +105,8 @@ export const tauriBackend: Backend = {
 	k9sConfig: () => invoke('k9s_config'),
 	k9sSkin: (name) => invoke('k9s_skin', { name }),
 	runPlugin: (run) => invoke('plugin_run', { run }),
-	openPlugin: (run, onEvent) => terminalChannel('plugin_open', { run }, onEvent)
+	openPlugin: (run, onEvent) => terminalChannel('plugin_open', { run }, onEvent),
+	desktop: true,
+	openUrl: (url) => invoke('open_url', { url }),
+	saveText: (name, text) => invoke('save_text', { name, text })
 };

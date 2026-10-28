@@ -393,7 +393,10 @@ impl<'a> Tree<'a> {
         let status = if missing > 0 {
             Status {
                 health: Health::Warning,
-                detail: format!("{hosts} · {missing} backend missing"),
+                detail: match missing {
+                    1 => format!("{hosts} · 1 backend missing"),
+                    n => format!("{hosts} · {n} backends missing"),
+                },
             }
         } else {
             Status {

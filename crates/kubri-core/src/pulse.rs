@@ -254,7 +254,6 @@ fn tally_events(
     warnings.sort_by_key(|w| std::cmp::Reverse(w.0));
     pulse.recent = warnings
         .into_iter()
-        .take(RECENT_WARNINGS)
         .filter_map(|(_, event)| {
             let involved = event.involved_object.clone();
             let kind = involved.kind.unwrap_or_default();
@@ -269,6 +268,7 @@ fn tally_events(
                 event: EventInfo::from_event(event),
             })
         })
+        .take(RECENT_WARNINGS)
         .collect();
     pulse
 }
@@ -326,6 +326,34 @@ mod tests {
             )
         };
         assert_eq!(allocatable(&[node("2"), node("1500m")], "cpu"), 3.5);
+    }
+
+    #[test]
+    fn keeps_as_many_warnings_as_can_link() {
+        let event = |kind: &str, minute: usize| -> Event {
+            from(json!({
+                "metadata": { "name": format!("e{minute}") },
+                "involvedObject": { "apiVersion": "example.com/v1", "kind": kind, "name": format!("o{minute}") },
+                "type": "Warning", "reason": "Failed",
+                "lastTimestamp": format!("2026-10-28T07:{minute:02}:00Z")
+            }))
+        };
+        // The newest warnings are about a kind the cluster does not serve any more.
+        let events = (0..20)
+            .map(|minute| event(if minute >= 15 { "Gone" } else { "Thing" }, minute))
+            .collect();
+        let now: Timestamp = "2026-10-28T08:00:00Z".parse().unwrap();
+        let resolve = |_: &str, kind: &str| {
+            (kind == "Thing").then(|| ResourceRef {
+                group: "example.com".into(),
+                version: "v1".into(),
+                plural: "things".into(),
+            })
+        };
+        let pulse = tally_events(events, now, &resolve);
+        assert_eq!(pulse.warning, 20);
+        assert_eq!(pulse.recent.len(), RECENT_WARNINGS);
+        assert_eq!(pulse.recent[0].object.name, "o14");
     }
 
     #[test]

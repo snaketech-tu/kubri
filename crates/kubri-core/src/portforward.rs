@@ -161,6 +161,8 @@ async fn serve(listener: TcpListener, destination: Destination, info: Arc<Mutex<
                 Err(err) => {
                     tracing::warn!(%err, "port-forward accept failed");
                     info.lock().unwrap().error = Some(err.to_string());
+                    // Out of file handles, say: wait instead of spinning while they are gone.
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                 }
             },
             Some(_) = connections.join_next(), if !connections.is_empty() => {}

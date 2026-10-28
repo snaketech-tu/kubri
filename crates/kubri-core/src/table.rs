@@ -88,7 +88,11 @@ enum Failure {
 
 impl From<kube::Error> for Failure {
     fn from(err: kube::Error) -> Self {
-        Failure::Error(err.to_string())
+        // The API server may also answer a watch from an old version with an HTTP 410.
+        match crate::Error::from(err) {
+            err if err.api_status() == Some(410) => Failure::Expired,
+            err => Failure::Error(err.to_string()),
+        }
     }
 }
 

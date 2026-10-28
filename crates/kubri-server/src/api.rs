@@ -76,6 +76,9 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         use kubri_core::Error::*;
         let status = match &self.0 {
+            // The cluster turned down the kubeconfig's credentials. Not passed on as 401,
+            // which the UI takes to mean that the browser's session with Kubri ended.
+            err @ Kube(_) if err.api_status() == Some(401) => StatusCode::BAD_GATEWAY,
             // Pass on what the API server said: 403, 404, 409 conflict, 422 invalid…
             err @ Kube(_) if err.api_status().is_some() => err
                 .api_status()
@@ -662,6 +665,18 @@ mod tests {
         assert_eq!(body["contexts"][0]["name"], "kind");
         assert_eq!(body["contexts"][0]["isDefault"], true);
         assert!(body["cluster"].is_null());
+    }
+
+    #[test]
+    fn cluster_errors_keep_their_status_except_401() {
+        let status = |code| {
+            let status = kube::core::Status::failure("", "").with_code(code).boxed();
+            ApiError(kube::Error::Api(status).into()).into_response().status()
+        };
+        assert_eq!(status(403), StatusCode::FORBIDDEN);
+        assert_eq!(status(422), StatusCode::UNPROCESSABLE_ENTITY);
+        // 401 tells the UI to sign in to Kubri again, which would not help.
+        assert_eq!(status(401), StatusCode::BAD_GATEWAY);
     }
 
     #[tokio::test]

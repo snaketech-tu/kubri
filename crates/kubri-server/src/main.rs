@@ -5,12 +5,16 @@ mod auth;
 mod guard;
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
+use axum::extract::Request;
+use axum::http::{HeaderValue, StatusCode, header};
+use axum::middleware::Next;
+use axum::response::Response;
 use clap::Parser;
 use kubri_core::Kubri;
 use tower_http::services::{ServeDir, ServeFile};
@@ -48,8 +52,13 @@ struct Args {
     /// separated by commas.
     #[arg(long, env = "KUBRI_ALLOWED_HOSTS", value_delimiter = ',')]
     allowed_hosts: Vec<String>,
-    /// How long signing in lasts, in hours.
-    #[arg(long, env = "KUBRI_SESSION_HOURS", default_value_t = 168)]
+    /// How long signing in lasts, in hours (up to ten years).
+    #[arg(
+        long,
+        env = "KUBRI_SESSION_HOURS",
+        default_value_t = 168,
+        value_parser = clap::value_parser!(u64).range(1..=87_600)
+    )]
     session_hours: u64,
 }
 
@@ -103,13 +112,12 @@ async fn serve(args: Args) -> ExitCode {
     if !args.ui_dir.join("index.html").exists() {
         tracing::warn!(dir = %args.ui_dir.display(), "UI not found, only the API is served");
     }
-    let spa = ServeDir::new(&args.ui_dir).fallback(ServeFile::new(args.ui_dir.join("index.html")));
     let api = api::router(kubri)
         .layer(axum::middleware::from_fn_with_state(auth.clone(), auth::require))
         .merge(auth::router(auth));
     let app = Router::new()
         .nest("/api", api)
-        .fallback_service(spa)
+        .fallback_service(ui(&args.ui_dir))
         .layer(axum::middleware::from_fn_with_state(guard, guard::check))
         .layer(TraceLayer::new_for_http());
 
@@ -132,6 +140,33 @@ async fn serve(args: Args) -> ExitCode {
         }
         () = shutdown() => ExitCode::SUCCESS,
     }
+}
+
+/// The built UI, with every unknown path answered by `index.html` for the UI's own routes.
+fn ui(dir: &Path) -> Router {
+    let files = ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")));
+    Router::new()
+        .fallback_service(files)
+        .layer(axum::middleware::from_fn(cache_control))
+}
+
+/// Files under `_app/immutable` have a hash in their names and never change. The rest,
+/// `index.html` first, is checked again on every load, so a new version shows at once.
+async fn cache_control(request: Request, next: Next) -> Response {
+    let immutable = request.uri().path().starts_with("/_app/immutable/");
+    let mut response = next.run(request).await;
+    let status = response.status();
+    if status.is_success() || status == StatusCode::NOT_MODIFIED {
+        let value = if immutable {
+            "public, max-age=31536000, immutable"
+        } else {
+            "no-cache"
+        };
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static(value));
+    }
+    response
 }
 
 /// Decides whether people sign in, and with which password.
@@ -192,5 +227,53 @@ async fn shutdown() {
     tokio::select! {
         () = ctrl_c => {}
         () = terminate => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use tower::ServiceExt;
+
+    #[test]
+    fn session_hours_stay_in_range() {
+        let hours = |value: &str| {
+            Args::try_parse_from(["kubri-server", "--session-hours", value]).map(|a| a.session_hours)
+        };
+        assert_eq!(hours("1").unwrap(), 1);
+        assert_eq!(hours("87600").unwrap(), 87_600);
+        assert!(hours("0").is_err());
+        assert!(hours("18446744073709551615").is_err());
+    }
+
+    #[tokio::test]
+    async fn only_hashed_files_are_cached_for_long() {
+        let dir = std::env::temp_dir().join(format!("kubri-ui-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("_app/immutable")).unwrap();
+        std::fs::write(dir.join("index.html"), "<html></html>").unwrap();
+        std::fs::write(dir.join("_app/immutable/app.1234.js"), "").unwrap();
+        let cache = |path: &'static str| {
+            let ui = ui(&dir);
+            async move {
+                let request = Request::get(path).body(Body::empty()).unwrap();
+                let response = ui.oneshot(request).await.unwrap();
+                let value = response.headers().get(header::CACHE_CONTROL).cloned();
+                (response.status(), value.map(|v| v.to_str().unwrap().to_owned()))
+            }
+        };
+        let no_cache = (StatusCode::OK, Some("no-cache".to_owned()));
+        assert_eq!(cache("/").await, no_cache);
+        assert_eq!(cache("/index.html").await, no_cache);
+        // A route of the UI, answered with index.html.
+        assert_eq!(cache("/pods").await, no_cache);
+        assert_eq!(
+            cache("/_app/immutable/app.1234.js").await,
+            (
+                StatusCode::OK,
+                Some("public, max-age=31536000, immutable".to_owned())
+            )
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
