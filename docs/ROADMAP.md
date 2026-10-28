@@ -27,7 +27,8 @@ Kubri aims for feature parity with k9s. The work is split into four steps that b
 
 ## 4. Advanced features and release
 
-- XRay (resource relationships), Pulses (cluster dashboard), cluster sanitizer (Popeye), HTTP benchmarks.
+- ✅ XRay (resource relationships) and Pulses (cluster dashboard).
+- Cluster sanitizer (Popeye), HTTP benchmarks.
 - RBAC view, Helm releases.
 - Plugins, hotkeys, aliases and skins, compatible with k9s configuration files.
 - Packages for Windows, macOS and Linux; Docker image for the web mode with login; documentation.

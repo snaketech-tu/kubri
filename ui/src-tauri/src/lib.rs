@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use futures::{Stream, StreamExt};
 use kubri_core::{
     ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, Kubri, LogEvent,
-    LogOptions, MetricsKind, ObjectRef, PortForwardInfo, PortForwardRequest, ResourceInfo, ResourceRef,
-    TableEvent, Terminal, TerminalInput, TerminalOptions, TerminalOutput, Usage,
+    LogOptions, MetricsKind, ObjectRef, PortForwardInfo, PortForwardRequest, Pulse, ResourceInfo,
+    ResourceRef, TableEvent, Terminal, TerminalInput, TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde_json::Value;
 use tauri::State;
@@ -300,6 +300,23 @@ async fn metrics(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn pulse(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<Pulse> {
+    kubri.pulse(namespace.as_deref()).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn xray(
+    kubri: State<'_, Arc<Kubri>>,
+    resource: ResourceRef,
+    namespace: Option<String>,
+) -> CommandResult<Vec<XrayNode>> {
+    kubri
+        .xray(&resource, namespace.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -336,7 +353,9 @@ pub fn run() {
             scale,
             restart,
             events,
-            metrics
+            metrics,
+            pulse,
+            xray
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Kubri");

@@ -9,8 +9,8 @@ use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
     ClusterInfo, ContextList, DeleteOptions, DrainOptions, DrainReport, EventInfo, Kubri, LogEvent,
-    LogOptions, MetricsKind, ObjectRef, PortForwardInfo, PortForwardRequest, ResourceInfo, ResourceRef,
-    Terminal, TerminalOptions, TerminalOutput, Usage,
+    LogOptions, MetricsKind, ObjectRef, PortForwardInfo, PortForwardRequest, Pulse, ResourceInfo,
+    ResourceRef, Terminal, TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,8 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/object/restart", post(restart))
         .route("/events", get(events))
         .route("/metrics", get(metrics))
+        .route("/pulse", get(pulse))
+        .route("/xray", get(xray))
         .route("/logs", any(logs))
         .route("/terminal", any(terminal))
         .route("/portforwards", get(port_forwards).post(start_port_forward))
@@ -235,6 +237,28 @@ async fn metrics(
 ) -> ApiResult<Vec<Usage>> {
     let namespace = query.namespace.filter(|ns| !ns.is_empty());
     Ok(Json(kubri.metrics(query.kind, namespace.as_deref()).await?))
+}
+
+#[derive(Deserialize)]
+struct PulseQuery {
+    namespace: Option<String>,
+}
+
+async fn pulse(State(kubri): State<Arc<Kubri>>, Query(query): Query<PulseQuery>) -> ApiResult<Pulse> {
+    let namespace = query.namespace.filter(|ns| !ns.is_empty());
+    Ok(Json(kubri.pulse(namespace.as_deref()).await?))
+}
+
+#[derive(Deserialize)]
+struct XrayQuery {
+    #[serde(flatten)]
+    resource: ResourceRef,
+    namespace: Option<String>,
+}
+
+async fn xray(State(kubri): State<Arc<Kubri>>, Query(query): Query<XrayQuery>) -> ApiResult<Vec<XrayNode>> {
+    let namespace = query.namespace.filter(|ns| !ns.is_empty());
+    Ok(Json(kubri.xray(&query.resource, namespace.as_deref()).await?))
 }
 
 /// Reads the JSON request a streaming socket starts with. Parameters go in a message rather
@@ -481,6 +505,20 @@ mod tests {
 
         let (status, _) = send(disconnected(), get("/metrics?kind=pods")).await;
         assert_eq!(status, StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn overview_routes_parse_their_parameters() {
+        let (status, _) = send(disconnected(), get("/pulse?namespace=")).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _) = send(
+            disconnected(),
+            get("/xray?group=apps&version=v1&plural=deployments&namespace=shop"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        let (status, _) = send(disconnected(), get("/xray?namespace=shop")).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     fn post_json(uri: &str, body: &str) -> Request<Body> {

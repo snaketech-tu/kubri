@@ -130,5 +130,8 @@ export const httpBackend: Backend = {
 	startPortForward: (req) => request('POST', '/portforwards', req),
 	stopPortForward: (id) => request('DELETE', `/portforwards/${id}`),
 	cordon: (name, cordoned) => request('POST', '/node/cordon', { name, cordoned }),
-	drain: (name, options) => request('POST', '/node/drain', { name, options })
+	drain: (name, options) => request('POST', '/node/drain', { name, options }),
+	pulse: (namespace) => request('GET', `/pulse?${new URLSearchParams({ namespace: namespace ?? '' })}`),
+	xray: (resource, namespace) =>
+		request('GET', `/xray?${new URLSearchParams({ ...resource, namespace: namespace ?? '' })}`)
 };

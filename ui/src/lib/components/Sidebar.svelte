@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ResourceInfo } from '../api';
 	import { app, sameResource } from '../state.svelte';
+	import { xrayResources } from '../xray';
 
 	// Shown first, in this order, like the views k9s users jump to most.
 	const PINNED = [
@@ -27,12 +28,23 @@
 		)
 	);
 	const others = $derived(visible.filter((r) => !pinned.includes(r)));
+
+	function showXray() {
+		const resource = app.xrayResource ?? xrayResources(app.resources)[0];
+		if (resource) app.showXray(resource);
+	}
 </script>
 
 <nav>
 	<input class="filter" bind:value={filter} placeholder="Filter resources…" />
 	<div class="scroll">
 		<h3>Tools</h3>
+		<button class:active={app.page === 'pulses'} onclick={() => app.showPulses()} title=":pulses">
+			<span>Pulses</span>
+		</button>
+		<button class:active={app.page === 'xray'} onclick={showXray} title=":xray deploy">
+			<span>XRay</span>
+		</button>
 		<button class:active={app.page === 'portforwards'} onclick={() => app.showPortForwards()} title=":pf">
 			<span>Port-forwards</span>
 			{#if app.forwards.length}<span class="badge">{app.forwards.length}</span>{/if}

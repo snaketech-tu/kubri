@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { forControl } from '#lib/keys.js';
 	import logo from '#lib/assets/logo.svg';
 	import { canDelete, canEdit, canRestart, canScale } from '#lib/actions.js';
 	import ActionDialog from '#lib/components/ActionDialog.svelte';
@@ -8,9 +9,11 @@
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
 	import PortForwardsView from '#lib/components/PortForwardsView.svelte';
+	import PulsesView from '#lib/components/PulsesView.svelte';
 	import ResourceView from '#lib/components/ResourceView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
+	import XrayView from '#lib/components/XrayView.svelte';
 	import { canPortForward, hasLogs, isNodes, isPods } from '#lib/pods.js';
 	import { app } from '#lib/state.svelte.js';
 	import { LiveTable } from '#lib/watch.svelte.js';
@@ -39,8 +42,7 @@
 
 	function onkeydown(e: KeyboardEvent) {
 		if (app.overlayOpen) return;
-		const el = e.target as HTMLElement;
-		const typing = el.closest('input, textarea, select, .cm-editor, [contenteditable="true"]');
+		const typing = forControl(e);
 		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
 			e.preventDefault();
 			app.paletteOpen = true;
@@ -54,11 +56,26 @@
 	}
 
 	const hints = $derived.by(() => {
+		const panel: [string, string][] = app.details ? [['f', app.maximized ? 'restore' : 'maximize'], ['esc', 'close']] : [];
 		if (app.page === 'portforwards') {
 			return [
 				[':', 'command'],
 				['c', 'copy url'],
 				['^d', 'stop'],
+				['?', 'help']
+			] as [string, string][];
+		}
+		if (app.page === 'pulses') {
+			return [[':', 'command'], ['←→', 'move'], ['enter', 'open list'], ...panel, ['?', 'help']] as [string, string][];
+		}
+		if (app.page === 'xray') {
+			return [
+				[':', 'command'],
+				['/', 'filter'],
+				['h/l', 'collapse/expand'],
+				['space', 'toggle'],
+				['enter', 'describe'],
+				...panel,
 				['?', 'help']
 			] as [string, string][];
 		}
@@ -111,6 +128,14 @@
 		<Sidebar />
 		{#if app.page === 'portforwards'}
 			<PortForwardsView />
+		{:else if app.page === 'pulses'}
+			{#key `${app.cluster?.context}/${app.namespace}`}
+				<PulsesView />
+			{/key}
+		{:else if app.page === 'xray' && app.xrayResource}
+			{#key `${app.cluster?.context}/${app.namespace}/${app.xrayResource.plural}`}
+				<XrayView resource={app.xrayResource} />
+			{/key}
 		{:else if app.selected}
 			{#key `${app.cluster?.context}/${app.selected.group}/${app.selected.version}/${app.selected.plural}`}
 				<ResourceView resource={app.selected} namespace={app.namespace} />

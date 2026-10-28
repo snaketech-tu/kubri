@@ -15,6 +15,8 @@ A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9
 - Shell into any container or attach to its main process, in a real terminal (xterm.js).
 - Port-forwards to pods, workloads and services (named target ports included), listed under `:pf`.
 - Node maintenance: cordon, uncordon and drain with the same safety checks as `kubectl drain`.
+- Pulses (`:pulses`): a cluster overview with healthy, warning and failed counts per kind, CPU and memory use against requests and capacity with a 10-minute trend, and the latest warning events.
+- XRay (`:xray deploy`): a tree from each deployment, statefulset, daemonset, job, cronjob, service or ingress down to its pods and containers and the ConfigMaps, Secrets, service accounts and volume claims they use. Missing references show up in red; Secrets are only listed by name, never read.
 - Fully usable from the keyboard. Press <kbd>?</kbd> in the app for all shortcuts.
 
 ## How it works

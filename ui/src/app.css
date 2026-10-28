@@ -11,6 +11,8 @@
 	--ok: #1f9d55;
 	--warn: #c27c0e;
 	--bad: #d64545;
+	/* Amber for chart marks: --warn is darkened for text and sits too close to --bad as a fill. */
+	--warn-mark: #e9a219;
 	--shadow: 0 12px 32px rgb(16 24 40 / 14%);
 	--syntax-key: #2456c4;
 	--syntax-string: #1f7a45;
@@ -33,6 +35,7 @@
 		--ok: #3ccf7e;
 		--warn: #e5a73b;
 		--bad: #f06b6b;
+		--warn-mark: #e5a73b;
 		--shadow: 0 12px 32px rgb(0 0 0 / 45%);
 		--syntax-key: #8fb1f5;
 		--syntax-string: #7fd4a0;

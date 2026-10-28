@@ -25,7 +25,7 @@ export interface Details {
 	mode?: TerminalMode;
 }
 
-export type Page = 'resources' | 'portforwards';
+export type Page = 'resources' | 'portforwards' | 'pulses' | 'xray';
 
 export type Dialog =
 	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[] }
@@ -53,6 +53,8 @@ class AppState {
 	error = $state<string | null>(null);
 
 	page = $state<Page>('resources');
+	/** The kind the XRay page starts its trees from. */
+	xrayResource = $state<ResourceInfo | null>(null);
 	details = $state<Details | null>(null);
 	/** The details panel fills the window, for logs and shells. */
 	maximized = $state(false);
@@ -106,8 +108,12 @@ class AppState {
 	open(resource: ResourceInfo, namespace?: string) {
 		this.page = 'resources';
 		this.selected = resource;
-		if (namespace !== undefined) this.namespace = namespace === 'all' ? ALL_NAMESPACES : namespace;
+		this.setNamespace(namespace);
 		this.details = null;
+	}
+
+	private setNamespace(namespace: string | undefined) {
+		if (namespace !== undefined) this.namespace = namespace === 'all' ? ALL_NAMESPACES : namespace;
 	}
 
 	showDetails(
@@ -123,6 +129,21 @@ class AppState {
 			return;
 		}
 		this.details = { resource, target, tab, editing: false, ...extra };
+	}
+
+	/** The cluster overview, optionally switching namespace like `:pulses kube-system`. */
+	showPulses(namespace?: string) {
+		this.page = 'pulses';
+		this.details = null;
+		this.setNamespace(namespace);
+	}
+
+	/** The XRay trees of `resource`, like k9s `:xray deploy`. */
+	showXray(resource: ResourceInfo, namespace?: string) {
+		this.page = 'xray';
+		this.xrayResource = resource;
+		this.details = null;
+		this.setNamespace(namespace);
 	}
 
 	showPortForwards() {
@@ -156,6 +177,9 @@ class AppState {
 			resources.find((r) => previous && sameResource(r, previous)) ??
 			resources.find((r) => r.group === '' && r.plural === 'pods') ??
 			null;
+		const xray = this.xrayResource;
+		this.xrayResource = resources.find((r) => xray && sameResource(r, xray)) ?? null;
+		if (this.page === 'xray' && !this.xrayResource) this.page = 'resources';
 	}
 }
 
@@ -165,6 +189,14 @@ export function sameResource(a: ResourceRef, b: ResourceRef) {
 
 export function sameObject(a: ObjectRef, b: ObjectRef) {
 	return sameResource(a.resource, b.resource) && a.namespace === b.namespace && a.name === b.name;
+}
+
+/** The served resource type `ref` names, ignoring the version if the cluster serves another. */
+export function findResource(resources: ResourceInfo[], ref: ResourceRef): ResourceInfo | undefined {
+	return (
+		resources.find((r) => sameResource(r, ref)) ??
+		resources.find((r) => r.group === ref.group && r.plural === ref.plural)
+	);
 }
 
 export function refOf(resource: ResourceRef): ResourceRef {

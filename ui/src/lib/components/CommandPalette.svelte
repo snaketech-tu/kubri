@@ -44,6 +44,12 @@
 			case 'namespace':
 				app.namespace = action.name;
 				break;
+			case 'pulses':
+				app.showPulses(action.namespace);
+				break;
+			case 'xray':
+				app.showXray(action.resource, action.namespace);
+				break;
 			case 'portforwards':
 				app.showPortForwards();
 				break;

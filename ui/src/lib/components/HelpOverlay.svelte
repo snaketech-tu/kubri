@@ -11,6 +11,8 @@
 				['g / G', 'First / last row'],
 				['/', 'Filter (-l key=value for labels)'],
 				['0', 'All namespaces'],
+				[':pulses', 'Cluster overview'],
+				[':xray deploy [ns]', 'XRay: what each object depends on'],
 				[':pf', 'Port-forwards'],
 				['w', 'Wide columns'],
 				['Shift+N / Shift+A', 'Sort by name / age'],
@@ -54,6 +56,15 @@
 				['c', 'Cordon'],
 				['u', 'Uncordon'],
 				['r', 'Drain']
+			]
+		],
+		[
+			'XRay',
+			[
+				['h / l  or  ← / →', 'Collapse / expand'],
+				['Space', 'Toggle'],
+				['Enter  or  d', 'Describe'],
+				['/', 'Filter']
 			]
 		]
 	];
