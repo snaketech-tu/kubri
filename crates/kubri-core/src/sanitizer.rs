@@ -895,9 +895,7 @@ fn pod_spec(spec: &PodSpec, batch: bool) -> Vec<Issue> {
             issues.push(Issue::info("port-name", "Has a port without a name").in_container(name));
         }
         let security = container.security_context.as_ref();
-        let non_root = security
-            .and_then(|s| s.run_as_non_root)
-            .map_or(pod_non_root, |n| n)
+        let non_root = security.and_then(|s| s.run_as_non_root).unwrap_or(pod_non_root)
             || security.and_then(|s| s.run_as_user).is_some_and(|u| u > 0);
         if !non_root {
             issues.push(Issue::info("root", "May run as root").in_container(name));
