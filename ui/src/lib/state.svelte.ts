@@ -4,13 +4,19 @@ import {
 	type BenchInfo,
 	type ContextInfo,
 	type HelmRelease,
+	type K9sConfig,
 	type ObjectRef,
+	type Plugin,
+	type PluginRun,
 	type PortForwardInfo,
 	type ResourceInfo,
 	type ResourceRef,
 	type TerminalMode
 } from './api';
+import type { Action, ConfigSection, PaletteConfig } from './commands';
 import { errorMessage } from './format';
+import { skinTheme, type Focus, type PluginView } from './k9s';
+import { applyTheme, resolveColor, storeSkin, storedSkin } from './skin';
 
 export const ALL_NAMESPACES = '';
 
@@ -35,7 +41,8 @@ export type Page =
 	| 'xray'
 	| 'rbac'
 	| 'helm'
-	| 'sanitizer';
+	| 'sanitizer'
+	| 'config';
 
 export type Dialog =
 	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[] }
@@ -46,7 +53,8 @@ export type Dialog =
 	| { kind: 'benchmark'; forward: PortForwardInfo; preset?: BenchInfo }
 	| { kind: 'drain'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'helmRollback'; release: HelmRelease; revision: number; done: () => void }
-	| { kind: 'helmUninstall'; release: HelmRelease; done: () => void };
+	| { kind: 'helmUninstall'; release: HelmRelease; done: () => void }
+	| { kind: 'plugin'; plugin: Plugin; run: PluginRun; command: string };
 
 export interface Toast {
 	id: number;
@@ -82,8 +90,38 @@ class AppState {
 	toasts = $state<Toast[]>([]);
 	#toastId = 0;
 
+	/** The k9s configuration of the connected context. */
+	k9s = $state<K9sConfig | null>(null);
+	/** The skin picked for this context: undefined follows k9s, null is Kubri's own colors. */
+	skinChoice = $state<string | null | undefined>(undefined);
+	/** The skin on screen, and why the wanted one is not. */
+	skin = $state<string | null>(null);
+	skinError = $state<string | null>(null);
+	#skinRequest = 0;
+	/** The section the config page scrolls to. */
+	configSection = $state<ConfigSection | undefined>(undefined);
+	/** A foreground plugin, which gets a terminal over the whole window. */
+	pluginTerminal = $state<{ plugin: Plugin; run: PluginRun } | null>(null);
+	/** A filter for the resource list to take, from a command like `:pods app=web`. */
+	filterRequest = $state<string | null>(null);
+	/** Set by the current view: what it has under the cursor. */
+	focus: (() => Focus) | null = null;
+
 	/** True while an overlay owns the keyboard. */
-	overlayOpen = $derived(this.paletteOpen || this.helpOpen || this.contextMenuOpen || this.dialog !== null);
+	overlayOpen = $derived(
+		this.paletteOpen || this.helpOpen || this.contextMenuOpen || this.dialog !== null || this.pluginTerminal !== null
+	);
+
+	/** Where plugins run now, which decides the plugins on offer. */
+	pluginView = $derived<PluginView>(
+		this.page === 'resources' && this.selected
+			? { kind: 'resource', resource: this.selected }
+			: this.page === 'helm'
+				? { kind: 'helm' }
+				: { kind: 'other' }
+	);
+
+	paletteConfig = $derived<PaletteConfig>({ aliases: this.k9s?.aliases ?? [], skins: this.k9s?.skins ?? [] });
 
 	async load() {
 		try {
@@ -121,11 +159,68 @@ class AppState {
 	}
 
 	/** Shows a resource list, optionally switching namespace, like k9s `:pods kube-system`. */
-	open(resource: ResourceInfo, namespace?: string) {
+	open(resource: ResourceInfo, namespace?: string, filter?: string) {
 		this.page = 'resources';
 		this.selected = resource;
 		this.setNamespace(namespace);
 		this.details = null;
+		if (filter !== undefined) this.filterRequest = filter;
+	}
+
+	/** Runs a palette command or hotkey. */
+	async run(action: Action) {
+		switch (action.type) {
+			case 'resource': {
+				let resource: ResourceInfo | undefined = action.resource;
+				if (action.context && action.context !== this.cluster?.context) {
+					await this.switchContext(action.context);
+					if (this.cluster?.context !== action.context) return;
+					resource = findResource(this.resources, action.resource);
+					if (!resource) {
+						this.toast(`${action.context} has no ${action.resource.plural}`, 'bad');
+						return;
+					}
+				}
+				this.open(resource, action.namespace, action.filter);
+				break;
+			}
+			case 'context':
+				if (action.name !== this.cluster?.context) await this.switchContext(action.name);
+				break;
+			case 'namespace':
+				this.namespace = action.name;
+				break;
+			case 'pulses':
+				this.showPulses(action.namespace);
+				break;
+			case 'xray':
+				this.showXray(action.resource, action.namespace);
+				break;
+			case 'rbac':
+				this.showRbac(action.namespace);
+				break;
+			case 'helm':
+				this.showHelm(action.namespace);
+				break;
+			case 'sanitizer':
+				this.showSanitizer(action.namespace);
+				break;
+			case 'benchmarks':
+				this.showBenchmarks();
+				break;
+			case 'portforwards':
+				this.showPortForwards();
+				break;
+			case 'config':
+				this.showConfig(action.section);
+				break;
+			case 'skin':
+				this.setSkin(action.name);
+				break;
+			case 'help':
+				this.helpOpen = true;
+				break;
+		}
 	}
 
 	private setNamespace(namespace: string | undefined) {
@@ -199,6 +294,55 @@ class AppState {
 		}
 	}
 
+	/** The k9s configuration: skins, hotkeys, plugins and aliases. */
+	showConfig(section?: ConfigSection) {
+		this.page = 'config';
+		this.details = null;
+		this.configSection = section;
+	}
+
+	/** Reads the k9s configuration of the connected context and puts on its skin. */
+	async loadK9s() {
+		const context = this.cluster?.context;
+		try {
+			const config = await backend.k9sConfig();
+			if (this.cluster?.context !== context) return;
+			this.k9s = config;
+		} catch (err) {
+			this.k9s = null;
+			this.toast(`Could not read the k9s configuration: ${errorMessage(err)}`, 'bad');
+		}
+		this.skinChoice = context ? storedSkin(context) : undefined;
+		await this.applySkin();
+	}
+
+	/** Picks a skin for this context: a name, null for Kubri's colors, undefined to follow k9s. */
+	async setSkin(name: string | null | undefined) {
+		this.skinChoice = name;
+		if (this.cluster) storeSkin(this.cluster.context, name);
+		await this.applySkin();
+	}
+
+	private async applySkin() {
+		const request = ++this.#skinRequest;
+		const name = this.skinChoice === undefined ? (this.k9s?.skin ?? null) : this.skinChoice;
+		let theme = null;
+		let error = null;
+		if (name) {
+			try {
+				theme = skinTheme(await backend.k9sSkin(name), resolveColor);
+				if (!theme) error = `The skin ${name} sets no colors Kubri can use.`;
+			} catch (err) {
+				error = `Could not load the skin ${name}: ${errorMessage(err)}`;
+			}
+		}
+		// A later choice may have finished first.
+		if (request !== this.#skinRequest) return;
+		applyTheme(theme);
+		this.skin = theme ? name : null;
+		this.skinError = error;
+	}
+
 	showPortForwards() {
 		this.page = 'portforwards';
 		this.details = null;
@@ -233,6 +377,8 @@ class AppState {
 		const xray = this.xrayResource;
 		this.xrayResource = resources.find((r) => xray && sameResource(r, xray)) ?? null;
 		if (this.page === 'xray' && !this.xrayResource) this.page = 'resources';
+		// Hotkeys, plugins and skins can differ per context.
+		this.loadK9s();
 	}
 }
 

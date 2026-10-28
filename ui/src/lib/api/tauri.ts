@@ -1,6 +1,43 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { writeQueue } from './queue';
-import type { Backend, LogEvent, TableEvent, TerminalEvent } from './types';
+import type { Backend, LogEvent, TableEvent, TerminalEvent, TerminalSession } from './types';
+
+/** Opens a terminal with `command`; all terminals share the write, resize and close commands. */
+function terminalChannel(
+	command: string,
+	args: Record<string, unknown>,
+	onEvent: (event: TerminalEvent) => void
+): TerminalSession {
+	// Output arrives as raw bytes, control messages as JSON.
+	const channel = new Channel<ArrayBuffer | Exclude<TerminalEvent, { type: 'data' }>>();
+	channel.onmessage = (msg) => {
+		onEvent(msg instanceof ArrayBuffer ? { type: 'data', data: new Uint8Array(msg) } : msg);
+	};
+	let id: number | null = null;
+	let closed = false;
+	const input = writeQueue(
+		(data) => invoke('terminal_write', { id, data }),
+		() => {}
+	);
+	invoke<number>(command, { ...args, onEvent: channel }).then(
+		(opened) => {
+			id = opened;
+			if (closed) invoke('terminal_close', { id });
+			else input.start();
+		},
+		(err) => onEvent({ type: 'exit', message: String(err) })
+	);
+	return {
+		write: (data) => input.write(data),
+		resize(cols, rows) {
+			if (id !== null && !closed) invoke('terminal_resize', { id, cols, rows }).catch(() => {});
+		},
+		close() {
+			closed = true;
+			if (id !== null) invoke('terminal_close', { id });
+		}
+	};
+}
 
 /** Talks to the Rust side of the desktop app through Tauri commands. */
 export const tauriBackend: Backend = {
@@ -43,37 +80,7 @@ export const tauriBackend: Backend = {
 		};
 	},
 
-	openTerminal(target, options, onEvent) {
-		// Output arrives as raw bytes, control messages as JSON.
-		const channel = new Channel<ArrayBuffer | Exclude<TerminalEvent, { type: 'data' }>>();
-		channel.onmessage = (msg) => {
-			onEvent(msg instanceof ArrayBuffer ? { type: 'data', data: new Uint8Array(msg) } : msg);
-		};
-		let id: number | null = null;
-		let closed = false;
-		const input = writeQueue(
-			(data) => invoke('terminal_write', { id, data }),
-			() => {}
-		);
-		invoke<number>('terminal_open', { target, options, onEvent: channel }).then(
-			(opened) => {
-				id = opened;
-				if (closed) invoke('terminal_close', { id });
-				else input.start();
-			},
-			(err) => onEvent({ type: 'exit', message: String(err) })
-		);
-		return {
-			write: (data) => input.write(data),
-			resize(cols, rows) {
-				if (id !== null && !closed) invoke('terminal_resize', { id, cols, rows }).catch(() => {});
-			},
-			close() {
-				closed = true;
-				if (id !== null) invoke('terminal_close', { id });
-			}
-		};
-	},
+	openTerminal: (target, options, onEvent) => terminalChannel('terminal_open', { target, options }, onEvent),
 
 	portForwards: () => invoke('port_forwards'),
 	startPortForward: (request) => invoke('start_port_forward', { request }),
@@ -94,5 +101,9 @@ export const tauriBackend: Backend = {
 	helmHistory: (namespace, name) => invoke('helm_history', { namespace, name }),
 	helmVersion: () => invoke('helm_version'),
 	helmRollback: (namespace, name, revision) => invoke('helm_rollback', { namespace, name, revision }),
-	helmUninstall: (namespace, name) => invoke('helm_uninstall', { namespace, name })
+	helmUninstall: (namespace, name) => invoke('helm_uninstall', { namespace, name }),
+	k9sConfig: () => invoke('k9s_config'),
+	k9sSkin: (name) => invoke('k9s_skin', { name }),
+	runPlugin: (run) => invoke('plugin_run', { run }),
+	openPlugin: (run, onEvent) => terminalChannel('plugin_open', { run }, onEvent)
 };

@@ -8,7 +8,7 @@
 
 	const suggestions = $derived(
 		input.trim()
-			? suggest(input, app.resources, app.contexts, app.namespaces)
+			? suggest(input, app.resources, app.contexts, app.namespaces, app.paletteConfig)
 			: [
 					...suggest('ctx', app.resources, app.contexts, app.namespaces).slice(0, 3),
 					...suggest('po', app.resources, app.contexts, app.namespaces).slice(0, 1),
@@ -33,42 +33,7 @@
 	function run(s: Suggestion | undefined) {
 		if (!s) return;
 		close();
-		const action = s.action;
-		switch (action.type) {
-			case 'resource':
-				app.open(action.resource, action.namespace);
-				break;
-			case 'context':
-				if (action.name !== app.cluster?.context) app.switchContext(action.name);
-				break;
-			case 'namespace':
-				app.namespace = action.name;
-				break;
-			case 'pulses':
-				app.showPulses(action.namespace);
-				break;
-			case 'xray':
-				app.showXray(action.resource, action.namespace);
-				break;
-			case 'rbac':
-				app.showRbac(action.namespace);
-				break;
-			case 'helm':
-				app.showHelm(action.namespace);
-				break;
-			case 'sanitizer':
-				app.showSanitizer(action.namespace);
-				break;
-			case 'benchmarks':
-				app.showBenchmarks();
-				break;
-			case 'portforwards':
-				app.showPortForwards();
-				break;
-			case 'help':
-				app.helpOpen = true;
-				break;
-		}
+		app.run(s.action);
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -104,7 +69,7 @@
 			bind:this={field}
 			bind:value={input}
 			{onkeydown}
-			placeholder="pods, deploy kube-system, ctx, ns default, crd…"
+			placeholder="pods, deploy kube-system, po app=web, ctx, ns default, skin…"
 			spellcheck="false"
 			autocomplete="off"
 		/>

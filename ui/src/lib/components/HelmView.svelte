@@ -116,6 +116,31 @@
 		return hasValues(values) ? stringify(values, { lineWidth: 0 }) : '';
 	});
 
+	// Plugins and hotkeys run on the opened release, or else the one under the cursor.
+	$effect(() => {
+		const focus = () => {
+			const row = opened ? latest : current;
+			const release = opened ?? (current ? { namespace: current.namespace, name: current.name } : null);
+			const cell = (name: string, value: string | number) => ({ name, value: String(value) });
+			const columns = row
+				? [
+						...(namespace ? [] : [cell('Namespace', row.namespace)]),
+						cell('Name', row.name),
+						cell('Revision', row.revision),
+						cell('Status', row.status),
+						cell('Chart', chartLabel(row)),
+						cell('App version', row.appVersion),
+						cell('Age', age(row.updated, Date.now()))
+					]
+				: [];
+			return { resource: null, target: null, release, columns, filter };
+		};
+		app.focus = focus;
+		return () => {
+			if (app.focus === focus) app.focus = null;
+		};
+	});
+
 	$effect(() => {
 		void cursorKey;
 		void historyCursor;

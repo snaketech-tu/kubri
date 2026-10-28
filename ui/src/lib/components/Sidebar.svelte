@@ -64,6 +64,9 @@
 			<span>Benchmarks</span>
 			{#if running}<span class="badge" title="Running">{running}</span>{/if}
 		</button>
+		<button class:active={app.page === 'config'} onclick={() => app.showConfig()} title=":config">
+			<span>k9s config</span>
+		</button>
 		{#if pinned.length}
 			<h3>Workloads & config</h3>
 			{#each pinned as r (r.group + r.plural)}
@@ -137,7 +140,7 @@
 		padding: 0 7px;
 		border-radius: 999px;
 		background: var(--accent);
-		color: white;
+		color: var(--on-accent);
 		font-size: 11px;
 		font-weight: 600;
 	}

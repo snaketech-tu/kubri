@@ -414,6 +414,80 @@ export interface HelmReleaseDetails extends HelmRelease {
 	manifest: string;
 }
 
+export interface ConfigFile {
+	path: string;
+	error: string | null;
+}
+
+export interface Alias {
+	name: string;
+	/** What it stands for, such as `v1/pods` or `pod kube-system app=dns`. */
+	command: string;
+}
+
+export interface Hotkey {
+	name: string;
+	shortCut: string;
+	description: string;
+	/** A command as typed after `:`, which may use the plugin variables. */
+	command: string;
+	keepHistory: boolean;
+	/** Takes the key even where Kubri uses it. */
+	override: boolean;
+}
+
+export interface Plugin {
+	name: string;
+	shortCut: string;
+	description: string;
+	/** Resource names the plugin is offered for, or `all`. */
+	scopes: string[];
+	command: string;
+	args: string[];
+	/** Runs without a terminal, and Kubri does not wait for it. */
+	background: boolean;
+	/** Shows the command and asks before running it. */
+	confirm: boolean;
+	dangerous: boolean;
+	override: boolean;
+}
+
+/** The k9s aliases, hotkeys, plugins and skins for the connected context. */
+export interface K9sConfig {
+	/** Where the files were looked for. */
+	dirs: string[];
+	files: ConfigFile[];
+	aliases: Alias[];
+	hotkeys: Hotkey[];
+	plugins: Plugin[];
+	/** Skins in the skins directories, by name. */
+	skins: string[];
+	/** The skin k9s uses for the context. */
+	skin: string | null;
+}
+
+export interface Cell {
+	name: string;
+	value: string;
+}
+
+/** A plugin by name, for the selected object, row or nothing. */
+export interface PluginRun {
+	plugin: string;
+	target?: ObjectRef | null;
+	/** The view's resource, when nothing is selected. */
+	resource?: ResourceRef | null;
+	/** The selected Helm release, in the Helm view. */
+	release?: { namespace: string; name: string } | null;
+	container?: string | null;
+	/** The list filter, as `$FILTER`. */
+	filter?: string | null;
+	/** The selected row's cells, for `$COL-<NAME>`. */
+	columns?: Cell[];
+	cols?: number;
+	rows?: number;
+}
+
 /** The operations both the desktop app and kubri-server offer to the UI. */
 export interface Backend {
 	contexts(): Promise<ContextList>;
@@ -462,4 +536,11 @@ export interface Backend {
 	helmVersion(): Promise<string | null>;
 	helmRollback(namespace: string, name: string, revision: number): Promise<string>;
 	helmUninstall(namespace: string, name: string): Promise<string>;
+	k9sConfig(): Promise<K9sConfig>;
+	/** A skin file as JSON. */
+	k9sSkin(name: string): Promise<unknown>;
+	/** Starts a background plugin. */
+	runPlugin(run: PluginRun): Promise<void>;
+	/** Runs a plugin in a terminal. */
+	openPlugin(run: PluginRun, onEvent: (event: TerminalEvent) => void): TerminalSession;
 }

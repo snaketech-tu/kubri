@@ -8,7 +8,7 @@ A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9
 
 - Uses your existing kubeconfig and switches contexts from anywhere.
 - Live lists of every resource type, including CRDs, with the same columns as `kubectl get` (press <kbd>w</kbd> for the wide view), sorting, filtering (`-l app=web` for labels) and CPU/memory from metrics-server.
-- A command palette like k9s: <kbd>:</kbd> then `pods`, `deploy kube-system`, `ctx prod`, `ns default` or any short name.
+- A command palette like k9s: <kbd>:</kbd> then `pods`, `deploy kube-system`, `po shop app=web`, `apps/v1/deployments`, `ctx prod`, `ns default` or any short name.
 - Describe view with containers, conditions and events; YAML view and editor.
 - Delete (also several at once), scale, rollout restart, and edit labels and annotations.
 - Live logs of a pod, or of every pod behind a deployment, service or other workload, with all containers merged, previous logs, timestamps and a regex filter.
@@ -21,6 +21,7 @@ A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9
 - Helm (`:helm`): the releases in the cluster with their status, chart and app version; their notes, values (as given or merged with the chart defaults), manifest, objects and history, including older revisions. Rolling back and uninstalling use the `helm` command, so they need it installed where Kubri runs.
 - Sanitizer (`:popeye`): checks the namespace (or the whole cluster) for common problems like Popeye does, such as missing probes or resource limits, `latest` image tags, crash-looping pods, services without endpoints, unused ConfigMaps, Secrets and roles, and bindings to missing roles. Every kind gets a score and the cluster a grade from A to F.
 - HTTP benchmarks (`:bench`, or <kbd>b</kbd> on a port-forward): load-test a forwarded port with a set number of requests or for a set time, then see requests per second, latency percentiles, a histogram of response times, status codes and errors.
+- Your k9s setup (`:config`): aliases, hotkeys, plugins and skins from your k9s files work as they are, per context. Plugins run on the machine Kubri runs on, in a terminal over the window or in the background, with the same variables as in k9s. See [Using your k9s configuration](docs/K9S.md).
 - Fully usable from the keyboard. Press <kbd>?</kbd> in the app for all shortcuts.
 
 ## How it works
@@ -51,7 +52,7 @@ pnpm dev                       # in ui/, then open http://localhost:5173
 
 To serve a production build in the browser, run `pnpm build` in `ui/`, then `cargo run --release -p kubri-server` from the repository root and open <http://127.0.0.1:7878>.
 
-The web server has no login yet. Keep it on localhost until authentication lands: anyone who can reach it can open shells in your cluster and port-forwards on the server's machine.
+The web server has no login yet. Keep it on localhost until authentication lands: anyone who can reach it can open shells in your cluster, port-forwards and run your k9s plugins on the server's machine. It does turn away requests from other websites, and while it listens on localhost, requests under any other host name, so a web page you visit cannot use it.
 
 Checks that CI runs:
 

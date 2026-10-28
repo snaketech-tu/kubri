@@ -2,14 +2,17 @@
 	import { forControl } from '#lib/keys.js';
 	import logo from '#lib/assets/logo.svg';
 	import { canDelete, canEdit, canRestart, canScale } from '#lib/actions.js';
+	import { listenForBindings } from '#lib/bindings.js';
 	import ActionDialog from '#lib/components/ActionDialog.svelte';
 	import BenchmarksView from '#lib/components/BenchmarksView.svelte';
 	import CommandPalette from '#lib/components/CommandPalette.svelte';
+	import ConfigView from '#lib/components/ConfigView.svelte';
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
 	import HelmView from '#lib/components/HelmView.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
+	import PluginTerminal from '#lib/components/PluginTerminal.svelte';
 	import PortForwardsView from '#lib/components/PortForwardsView.svelte';
 	import PulsesView from '#lib/components/PulsesView.svelte';
 	import RbacView from '#lib/components/RbacView.svelte';
@@ -18,6 +21,7 @@
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
+	import { parseShortcut, pluginApplies, shortcutLabel } from '#lib/k9s.js';
 	import { canPortForward, hasLogs, isNodes, isPods } from '#lib/pods.js';
 	import { app } from '#lib/state.svelte.js';
 	import { LiveTable } from '#lib/watch.svelte.js';
@@ -27,6 +31,9 @@
 	$effect(() => {
 		app.load();
 	});
+
+	// k9s plugin and hotkey keys.
+	$effect(() => listenForBindings());
 
 	$effect(() => {
 		if (!app.cluster) return;
@@ -63,7 +70,8 @@
 		}
 	}
 
-	const hints = $derived.by(() => {
+
+	const viewHints = $derived.by(() => {
 		const panel: [string, string][] = app.details ? [['f', app.maximized ? 'restore' : 'maximize'], ['esc', 'close']] : [];
 		if (app.page === 'portforwards') {
 			return [
@@ -102,6 +110,9 @@
 				['?', 'help']
 			] as [string, string][];
 		}
+		if (app.page === 'config') {
+			return [[':', 'command'], ['⇧r', 'reload'], ['?', 'help']] as [string, string][];
+		}
 		if (app.page === 'benchmarks') {
 			return [[':', 'command'], ['j/k', 'move'], ['b', 'run again'], ['^d', 'stop/remove'], ['?', 'help']] as [string, string][];
 		}
@@ -139,6 +150,23 @@
 		h.push(['?', 'help']);
 		return h;
 	});
+
+	// The view's plugins, as k9s lists them in its menu; a key the view uses stays the view's.
+	const pluginHints = $derived.by(() => {
+		const taken = new Set(viewHints.map(([key]) => key));
+		return (app.k9s?.plugins ?? [])
+			.filter((p) => pluginApplies(p, app.pluginView))
+			.flatMap((p): [string, string][] => {
+				const shortcut = parseShortcut(p.shortCut);
+				if (!shortcut) return [];
+				const key = shortcutLabel(shortcut);
+				return p.override || !taken.has(key) ? [[key, p.name]] : [];
+			})
+			.slice(0, 4);
+	});
+
+	// Help stays last.
+	const hints = $derived([...viewHints.slice(0, -1), ...pluginHints, ...viewHints.slice(-1)]);
 </script>
 
 <svelte:window {onkeydown} />
@@ -170,6 +198,8 @@
 			<PortForwardsView />
 		{:else if app.page === 'benchmarks'}
 			<BenchmarksView />
+		{:else if app.page === 'config'}
+			<ConfigView />
 		{:else if app.page === 'sanitizer'}
 			{#key `${app.cluster?.context}/${app.namespace}`}
 				<SanitizerView />
@@ -211,7 +241,7 @@
 	</main>
 
 	<footer>
-		{#each hints as [key, label] (key)}
+		{#each hints as [key, label], i (key + i)}
 			<span><kbd>{key}</kbd>{label}</span>
 		{/each}
 	</footer>
@@ -220,6 +250,9 @@
 {#if app.paletteOpen}<CommandPalette />{/if}
 {#if app.helpOpen}<HelpOverlay />{/if}
 {#if app.dialog}<ActionDialog dialog={app.dialog} />{/if}
+{#if app.pluginTerminal}
+	<PluginTerminal plugin={app.pluginTerminal.plugin} run={app.pluginTerminal.run} />
+{/if}
 <Toasts />
 
 <style>

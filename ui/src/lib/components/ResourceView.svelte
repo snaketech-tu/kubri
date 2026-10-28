@@ -96,6 +96,28 @@
 		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
 	});
 
+	// Plugins and hotkeys run on the row under the cursor, with its cells as shown.
+	$effect(() => {
+		const focus = () => ({
+			resource: refOf(resource),
+			target: current ? target(current) : null,
+			release: null,
+			columns: current ? columns.map((c) => ({ name: c.label, value: cellText(current, c) })) : [],
+			filter
+		});
+		app.focus = focus;
+		return () => {
+			if (app.focus === focus) app.focus = null;
+		};
+	});
+
+	// A filter from a command like `:pods app=web`.
+	$effect(() => {
+		if (app.filterRequest === null) return;
+		filter = app.filterRequest;
+		app.filterRequest = null;
+	});
+
 	function target(row: Row): ObjectRef {
 		return { resource: refOf(resource), namespace: row.namespace, name: row.name };
 	}

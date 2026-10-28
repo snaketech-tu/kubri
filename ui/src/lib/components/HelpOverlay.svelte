@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { kubriUses, parseShortcut, pluginApplies, shortcutLabel } from '../k9s';
 	import { app } from '../state.svelte';
 
-	const groups: [string, [string, string][]][] = [
+	const builtin: [string, [string, string][]][] = [
 		[
 			'Navigate',
 			[
@@ -18,6 +19,8 @@
 				[':popeye', 'Sanitizer: problems, scored'],
 				[':bench', 'HTTP benchmarks'],
 				[':pf', 'Port-forwards'],
+				[':config', 'k9s aliases, hotkeys, plugins and skins'],
+				[':skin name', 'Switch skin; :skin kubri for the built-in colors'],
 				['w', 'Wide columns'],
 				['Shift+N / Shift+A', 'Sort by name / age'],
 				['Esc', 'Close, clear selection or filter']
@@ -99,6 +102,34 @@
 		]
 	];
 
+	/** k9s keys as listed in the help, like `Ctrl+L`, and whether Kubri may keep the key. */
+	function keyName(text: string, override: boolean) {
+		const shortcut = parseShortcut(text);
+		if (!shortcut) return null;
+		const name = shortcutLabel(shortcut).replace('^', 'Ctrl+').replace('⌥', 'Alt+').replace('⇧', 'Shift+');
+		return { name, shared: !override && kubriUses(shortcut) };
+	}
+
+	const shared = ' (where the view does not use the key)';
+
+	// The k9s hotkeys, and the plugins of the view the help was opened from.
+	const groups = $derived.by(() => {
+		const all = [...builtin];
+		const hotkeys = (app.k9s?.hotkeys ?? []).flatMap((h): [string, string][] => {
+			const key = keyName(h.shortCut, h.override);
+			return key ? [[key.name, (h.description || `:${h.command}`) + (key.shared ? shared : '')]] : [];
+		});
+		const plugins = (app.k9s?.plugins ?? [])
+			.filter((p) => pluginApplies(p, app.pluginView))
+			.flatMap((p): [string, string][] => {
+				const key = keyName(p.shortCut, p.override);
+				return key ? [[key.name, (p.description || p.name) + (key.shared ? shared : '')]] : [];
+			});
+		if (hotkeys.length) all.push(['k9s hotkeys', hotkeys]);
+		if (plugins.length) all.push(['k9s plugins here', plugins]);
+		return all;
+	});
+
 	function onkeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape' || e.key === '?') {
 			e.preventDefault();
@@ -117,7 +148,7 @@
 			<section>
 				<h3>{title}</h3>
 				<dl>
-					{#each keys as [key, what] (key)}
+					{#each keys as [key, what], i (key + i)}
 						<dt><kbd>{key}</kbd></dt>
 						<dd>{what}</dd>
 					{/each}

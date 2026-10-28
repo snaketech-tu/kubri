@@ -278,7 +278,7 @@
 	.primary {
 		border: 1px solid var(--accent);
 		background: var(--accent);
-		color: white;
+		color: var(--on-accent);
 	}
 	.secondary {
 		border: 1px solid var(--border);

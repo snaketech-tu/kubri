@@ -23,6 +23,9 @@ bytes.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
 http-body-util.workspace = true
+dirs.workspace = true
+portable-pty.workspace = true
+serde-saphyr.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
