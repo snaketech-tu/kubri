@@ -2,7 +2,13 @@
 
 A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9s](https://k9scli.io) can do. It runs as a desktop app or in your browser.
 
-> **Status:** early development. See the [roadmap](docs/ROADMAP.md) for what comes next.
+> **Status:** early. Every step of the [roadmap](docs/ROADMAP.md) is done; expect rough edges until Kubri has seen more clusters.
+
+## Install
+
+- **Desktop app** for Windows, macOS and Linux: download it from the [releases](https://github.com/snaketech-tu/kubri/releases). It uses the kubeconfig on your computer.
+- **In the browser**, on your machine or for a team: run the Docker image `ghcr.io/snaketech-tu/kubri`, or deploy it into a cluster with [`deploy/kubernetes.yaml`](deploy/kubernetes.yaml). See [Running Kubri in the browser](docs/WEB.md).
+- **From source**: see [Development](#development).
 
 ## Features
 
@@ -22,11 +28,12 @@ A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9
 - Sanitizer (`:popeye`): checks the namespace (or the whole cluster) for common problems like Popeye does, such as missing probes or resource limits, `latest` image tags, crash-looping pods, services without endpoints, unused ConfigMaps, Secrets and roles, and bindings to missing roles. Every kind gets a score and the cluster a grade from A to F.
 - HTTP benchmarks (`:bench`, or <kbd>b</kbd> on a port-forward): load-test a forwarded port with a set number of requests or for a set time, then see requests per second, latency percentiles, a histogram of response times, status codes and errors.
 - Your k9s setup (`:config`): aliases, hotkeys, plugins and skins from your k9s files work as they are, per context. Plugins run on the machine Kubri runs on, in a terminal over the window or in the background, with the same variables as in k9s. See [Using your k9s configuration](docs/K9S.md).
+- In the browser with a password sign-in, from a Docker image or inside the cluster with its service account. See [Running Kubri in the browser](docs/WEB.md).
 - Fully usable from the keyboard. Press <kbd>?</kbd> in the app for all shortcuts.
 
 ## How it works
 
-Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, or `~/.kube/config` if that is not set. It connects to your `current-context` on startup, and you can switch contexts at any time from the top bar (or with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>).
+Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, or `~/.kube/config` if that is not set. It connects to your `current-context` on startup, and you can switch contexts at any time from the top bar (or with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>). Started from the Dock, Finder or a desktop launcher, the desktop app takes the environment of your login shell, such as `PATH` and `KUBECONFIG`, so `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin`, and the commands of k9s plugins are found as in a terminal.
 
 | Part | Path | What it is |
 | --- | --- | --- |
@@ -50,9 +57,9 @@ cargo run -p kubri-server      # from the repository root
 pnpm dev                       # in ui/, then open http://localhost:5173
 ```
 
-To serve a production build in the browser, run `pnpm build` in `ui/`, then `cargo run --release -p kubri-server` from the repository root and open <http://127.0.0.1:7878>.
+To serve a production build in the browser, run `pnpm build` in `ui/`, then `cargo run --release -p kubri-server` from the repository root and open <http://127.0.0.1:7878>. On localhost it asks for no password; on other addresses it does. [Running Kubri in the browser](docs/WEB.md) has the settings, the Docker image and how to run it in a cluster.
 
-The web server has no login yet. Keep it on localhost until authentication lands: anyone who can reach it can open shells in your cluster, port-forwards and run your k9s plugins on the server's machine. It does turn away requests from other websites, and while it listens on localhost, requests under any other host name, so a web page you visit cannot use it.
+`docker build -t kubri .` builds the image. [Releasing](docs/RELEASING.md) describes how a version is published.
 
 Checks that CI runs:
 

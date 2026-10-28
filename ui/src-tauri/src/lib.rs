@@ -1,5 +1,8 @@
 //! The desktop app: the shared UI in a native window, backed by kubri-core through Tauri commands.
 
+#[cfg(unix)]
+mod shell_env;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -461,12 +464,20 @@ async fn helm_uninstall(
 }
 
 pub fn run() {
+    #[cfg(unix)]
+    if shell_env::print_requested() {
+        shell_env::print();
+        return;
+    }
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "kubri_desktop_lib=info,kubri_core=info".into()),
         )
         .init();
+    // Before Kubri reads KUBECONFIG, and before Tauri starts any threads.
+    #[cfg(unix)]
+    shell_env::load();
 
     tauri::Builder::default()
         .manage(Arc::new(Kubri::load()))

@@ -25,10 +25,10 @@ Kubri aims for feature parity with k9s. The work is split into four steps that b
 - Port forwarding to pods, workloads and services, with a list of running forwards.
 - Node cordon, uncordon and drain.
 
-## 4. Advanced features and release
+## 4. Advanced features and release ✅
 
 - ✅ XRay (resource relationships) and Pulses (cluster dashboard).
 - ✅ RBAC view, Helm releases.
 - ✅ Cluster sanitizer (Popeye), HTTP benchmarks.
 - ✅ Plugins, hotkeys, aliases and skins, compatible with k9s configuration files.
-- Packages for Windows, macOS and Linux; Docker image for the web mode with login; documentation.
+- ✅ Packages for Windows, macOS and Linux; Docker image for the web mode with login; documentation.

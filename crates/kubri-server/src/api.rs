@@ -1,5 +1,7 @@
 use std::sync::Arc;
+use std::time::Duration;
 
+use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -135,11 +137,26 @@ async fn table(
     Ok(ws.on_upgrade(move |socket| forward(socket, events)))
 }
 
+/// Proxies close sockets that stay quiet, often after a minute; a ping every 30 seconds
+/// keeps them open.
+fn keepalive() -> tokio::time::Interval {
+    const EVERY: Duration = Duration::from_secs(30);
+    let mut interval = tokio::time::interval_at(tokio::time::Instant::now() + EVERY, EVERY);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    interval
+}
+
 async fn forward<T: Serialize>(socket: WebSocket, events: impl Stream<Item = T> + Send + 'static) {
     let (mut tx, mut rx) = socket.split();
     let mut events = std::pin::pin!(events);
+    let mut ping = keepalive();
     loop {
         tokio::select! {
+            _ = ping.tick() => {
+                if tx.send(Message::Ping(Bytes::new())).await.is_err() {
+                    break;
+                }
+            }
             event = events.next() => {
                 let Some(event) = event else { break };
                 let text = match serde_json::to_string(&event) {
@@ -523,7 +540,18 @@ async fn run_terminal(mut socket: WebSocket, opened: Result<Terminal, String>) {
         }
     };
     let screen = async move {
-        while let Some(out) = output.next().await {
+        let mut ping = keepalive();
+        loop {
+            let out = tokio::select! {
+                out = output.next() => out,
+                _ = ping.tick() => {
+                    if tx.send(Message::Ping(Bytes::new())).await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            let Some(out) = out else { break };
             let msg = match &out {
                 TerminalOutput::Data { data } => Message::binary(data.clone()),
                 TerminalOutput::Exit { .. } => match serde_json::to_string(&out) {

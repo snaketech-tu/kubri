@@ -2351,11 +2351,13 @@ name = "kubri-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "clap",
  "futures",
  "http-body-util",
  "kube",
  "kubri-core",
+ "ring",
  "serde",
  "serde_json",
  "tokio",

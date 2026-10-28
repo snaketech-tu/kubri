@@ -1,3 +1,4 @@
+import { session } from '../session.svelte';
 import type { Backend, ObjectRef, TerminalEvent, TerminalSession } from './types';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -6,6 +7,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 		headers: body === undefined ? undefined : { 'content-type': 'application/json' },
 		body: body === undefined ? undefined : JSON.stringify(body)
 	});
+	if (response.status === 401) session.expired();
 	if (!response.ok) {
 		const payload = await response.json().catch(() => null);
 		throw new Error(payload?.error ?? `${response.status} ${response.statusText}`);
