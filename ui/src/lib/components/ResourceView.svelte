@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { canDelete, canEdit, canRestart, canScale, cordon } from '../actions';
@@ -154,7 +155,7 @@
 	function onkeydown(e: KeyboardEvent) {
 		if (app.overlayOpen) return;
 		const el = e.target as HTMLElement;
-		if (el.closest('input, textarea, select, .cm-editor, [contenteditable="true"]')) {
+		if (forControl(e)) {
 			if (el === filterInput && ['Escape', 'Enter', 'ArrowDown'].includes(e.key)) {
 				if (e.key === 'Escape') filter = '';
 				filterInput?.blur();

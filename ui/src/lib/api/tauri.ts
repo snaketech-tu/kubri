@@ -79,5 +79,15 @@ export const tauriBackend: Backend = {
 	startPortForward: (request) => invoke('start_port_forward', { request }),
 	stopPortForward: (id) => invoke('stop_port_forward', { id }),
 	cordon: (name, cordoned) => invoke('cordon', { name, cordoned }),
-	drain: (name, options) => invoke('drain', { name, options })
+	drain: (name, options) => invoke('drain', { name, options }),
+	pulse: (namespace) => invoke('pulse', { namespace }),
+	xray: (resource, namespace) => invoke('xray', { resource, namespace }),
+	rbac: (namespace) => invoke('rbac', { namespace }),
+	permissions: (namespace) => invoke('permissions', { namespace }),
+	helmReleases: (namespace) => invoke('helm_releases', { namespace }),
+	helmRelease: (namespace, name, revision) => invoke('helm_release', { namespace, name, revision: revision ?? null }),
+	helmHistory: (namespace, name) => invoke('helm_history', { namespace, name }),
+	helmVersion: () => invoke('helm_version'),
+	helmRollback: (namespace, name, revision) => invoke('helm_rollback', { namespace, name, revision }),
+	helmUninstall: (namespace, name) => invoke('helm_uninstall', { namespace, name })
 };

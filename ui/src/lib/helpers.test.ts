@@ -66,6 +66,29 @@ describe('command palette', () => {
 		expect(suggest('ns ', resources, contexts, ['default'])[0].action).toEqual({ type: 'namespace', name: '' });
 	});
 
+	it('opens pulses, optionally in a namespace', () => {
+		expect(suggest('pulses', resources, contexts, [])[0].action).toEqual({ type: 'pulses', namespace: undefined });
+		expect(suggest(':pu shop', resources, contexts, [])[0].action).toEqual({ type: 'pulses', namespace: 'shop' });
+	});
+
+	it('opens xray for the kinds it supports', () => {
+		const [first, ...rest] = suggest('xray deploy kube-system', resources, contexts, []);
+		expect(first.action).toMatchObject({ type: 'xray', namespace: 'kube-system' });
+		expect(first.label).toBe('xray deployments.apps kube-system');
+		expect(rest).toHaveLength(0);
+		// Kinds XRay cannot start from are not offered.
+		expect(suggest('xray', resources, contexts, []).map((s) => s.label)).toEqual(['xray deployments.apps', 'xray pods']);
+	});
+
+	it('opens rbac and helm, optionally in a namespace', () => {
+		expect(suggest('rbac', resources, contexts, [])[0].action).toEqual({ type: 'rbac', namespace: undefined });
+		expect(suggest(':policy shop', resources, contexts, [])[0].action).toEqual({ type: 'rbac', namespace: 'shop' });
+		expect(suggest('helm', resources, contexts, [])[0].action).toEqual({ type: 'helm', namespace: undefined });
+		expect(suggest('charts shop', resources, contexts, [])[0].action).toEqual({ type: 'helm', namespace: 'shop' });
+		// Offered while typed, after resources that match.
+		expect(suggest('he', resources, contexts, []).map((s) => s.label)).toContain('helm');
+	});
+
 	it('passes a namespace argument to resource commands', () => {
 		const s = suggest('po kube-system', resources, contexts, []);
 		expect(s[0].action).toMatchObject({ type: 'resource', namespace: 'kube-system' });

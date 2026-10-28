@@ -6,17 +6,23 @@
 mod context;
 mod discovery;
 mod error;
+mod health;
+mod helm;
 mod logs;
 mod metrics;
 mod node;
 mod objects;
 mod portforward;
+mod pulse;
+mod rbac;
 mod resource;
 mod selector;
 mod table;
 mod terminal;
 #[cfg(test)]
 mod testing;
+mod typed;
+mod xray;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,14 +39,19 @@ use tokio::sync::RwLock;
 
 pub use context::ContextInfo;
 pub use error::{Error, Result};
+pub use health::Health;
+pub use helm::{HelmRelease, HelmReleaseDetails};
 pub use logs::{LogEvent, LogLine, LogOptions, LogSource};
 pub use metrics::{MetricsKind, Usage, parse_quantity};
 pub use node::{DrainOptions, DrainReport, PodIssue};
 pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
 pub use portforward::{PortForwardInfo, PortForwardRequest};
+pub use pulse::{EventPulse, KindPulse, Pulse, RecentEvent, Utilization};
+pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use resource::{ResourceInfo, ResourceRef};
 pub use table::{Column, Row, TableEvent};
 pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
+pub use xray::XrayNode;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -283,22 +294,86 @@ impl Kubri {
     /// Current CPU and memory usage from metrics-server. Fails with
     /// [`Error::UnknownResource`] when metrics-server is not installed.
     pub async fn metrics(&self, kind: MetricsKind, namespace: Option<&str>) -> Result<Vec<Usage>> {
+        self.session().await?.metrics(kind, namespace).await
+    }
+
+    /// The cluster overview: health counts per kind, recent warnings and CPU and memory use.
+    /// `None` covers all namespaces; nodes and persistent volumes are always cluster-wide.
+    pub async fn pulse(&self, namespace: Option<&str>) -> Result<Pulse> {
         let session = self.session().await?;
-        let plural = match kind {
-            MetricsKind::Pods => "pods",
-            MetricsKind::Nodes => "nodes",
+        // Usage of the whole cluster comes from the nodes, of one namespace from its pods.
+        let metrics = match namespace {
+            Some(_) => session.metrics(MetricsKind::Pods, namespace),
+            None => session.metrics(MetricsKind::Nodes, None),
         };
-        let resource = session
-            .resources
-            .iter()
-            .find(|r| r.reference.group == "metrics.k8s.io" && r.reference.plural == plural)
-            .ok_or_else(|| Error::UnknownResource(format!("metrics.k8s.io/{plural}")))?;
-        let api = session.api(&resource.reference, namespace)?;
-        let request = kube::core::Request::new(api.resource_url())
-            .list(&ListParams::default())
-            .map_err(|e| Error::Unsupported(e.to_string()))?;
-        let list: Value = session.client.request(request).await?;
-        Ok(metrics::parse_usage(&list))
+        let resolve = |api_version: &str, kind: &str| session.resolve(api_version, kind);
+        Ok(pulse::gather(session.client.clone(), namespace, metrics, resolve).await)
+    }
+
+    /// The XRay tree of every object of `resource` in `namespace`, or in all namespaces.
+    pub async fn xray(&self, resource: &ResourceRef, namespace: Option<&str>) -> Result<Vec<XrayNode>> {
+        let session = self.session().await?;
+        let info = session.info_for(resource)?;
+        let root = xray::Root::of(&resource.group, &info.kind).ok_or_else(|| {
+            Error::Unsupported(format!(
+                "XRay cannot show {}; it supports {}",
+                info.kind,
+                xray::Root::SUPPORTED
+            ))
+        })?;
+        xray::gather(session.client.clone(), root, namespace).await
+    }
+
+    /// Every subject of a role binding with the rules it is granted. `namespace` limits role
+    /// bindings to one namespace; cluster role bindings are always included.
+    pub async fn rbac(&self, namespace: Option<&str>) -> Result<Rbac> {
+        let session = self.session().await?;
+        Ok(rbac::gather(session.client.clone(), namespace).await)
+    }
+
+    /// What the current user may do in `namespace` (by default the context's), like
+    /// `kubectl auth can-i --list`.
+    pub async fn permissions(&self, namespace: Option<&str>) -> Result<Permissions> {
+        let session = self.session().await?;
+        let namespace = namespace.unwrap_or(&session.info.default_namespace);
+        rbac::permissions(session.client.clone(), namespace).await
+    }
+
+    /// The latest revision of every Helm release, like `helm list --all`.
+    pub async fn helm_releases(&self, namespace: Option<&str>) -> Result<Vec<HelmRelease>> {
+        helm::releases(self.session().await?.client.clone(), namespace).await
+    }
+
+    /// A Helm release with its values, notes and manifest; the latest revision by default.
+    pub async fn helm_release(
+        &self,
+        namespace: &str,
+        name: &str,
+        revision: Option<u32>,
+    ) -> Result<HelmReleaseDetails> {
+        helm::release(self.session().await?.client.clone(), namespace, name, revision).await
+    }
+
+    /// All revisions of a Helm release, newest first.
+    pub async fn helm_history(&self, namespace: &str, name: &str) -> Result<Vec<HelmRelease>> {
+        helm::history(self.session().await?.client.clone(), namespace, name).await
+    }
+
+    /// The version of the `helm` command that rollbacks and uninstalls run, if it is installed.
+    pub async fn helm_version(&self) -> Option<String> {
+        helm::cli_version().await
+    }
+
+    /// Rolls a release back to `revision` with `helm rollback`, on the connected context.
+    pub async fn helm_rollback(&self, namespace: &str, name: &str, revision: u32) -> Result<String> {
+        let context = self.session().await?.info.context.clone();
+        helm::rollback(&context, namespace, name, revision).await
+    }
+
+    /// Uninstalls a release with `helm uninstall`, on the connected context.
+    pub async fn helm_uninstall(&self, namespace: &str, name: &str) -> Result<String> {
+        let context = self.session().await?.info.context.clone();
+        helm::uninstall(&context, namespace, name).await
     }
 
     /// Streams container logs of a pod, or of every pod a workload or Service selects.
@@ -467,6 +542,41 @@ impl Session {
         Ok(resource.group.is_empty() && self.info_for(resource)?.kind == kind)
     }
 
+    async fn metrics(&self, kind: MetricsKind, namespace: Option<&str>) -> Result<Vec<Usage>> {
+        let plural = match kind {
+            MetricsKind::Pods => "pods",
+            MetricsKind::Nodes => "nodes",
+        };
+        let resource = self
+            .resources
+            .iter()
+            .find(|r| r.reference.group == "metrics.k8s.io" && r.reference.plural == plural)
+            .ok_or_else(|| Error::UnknownResource(format!("metrics.k8s.io/{plural}")))?;
+        let api = self.api(&resource.reference, namespace)?;
+        let request = kube::core::Request::new(api.resource_url())
+            .list(&ListParams::default())
+            .map_err(|e| Error::Unsupported(e.to_string()))?;
+        let list: Value = self.client.request(request).await?;
+        Ok(metrics::parse_usage(&list))
+    }
+
+    /// The resource type of an object's `apiVersion` and kind, preferring the same version.
+    fn resolve(&self, api_version: &str, kind: &str) -> Option<ResourceRef> {
+        let (group, version) = api_version.rsplit_once('/').unwrap_or(("", api_version));
+        let candidates = self
+            .resources
+            .iter()
+            .filter(|r| r.reference.group == group && r.kind == kind && !r.reference.plural.contains('/'));
+        let mut best = None;
+        for r in candidates {
+            if r.reference.version == version {
+                return Some(r.reference.clone());
+            }
+            best.get_or_insert(r.reference.clone());
+        }
+        best
+    }
+
     fn pod_api(&self, namespace: Option<&str>) -> Result<Api<Pod>> {
         let namespace = namespace.ok_or_else(|| Error::Unsupported("a namespace is required".into()))?;
         Ok(Api::namespaced(self.client.clone(), namespace))
@@ -522,6 +632,174 @@ mod tests {
         assert!(matches!(kubri.contexts().await, Err(Error::NoKubeconfig(_))));
         assert!(matches!(kubri.resources().await, Err(Error::NotConnected)));
         assert!(kubri.cluster().await.is_none());
+    }
+
+    fn resource(group: &str, version: &str, plural: &str, kind: &str, namespaced: bool) -> ResourceInfo {
+        ResourceInfo {
+            reference: ResourceRef {
+                group: group.into(),
+                version: version.into(),
+                plural: plural.into(),
+            },
+            kind: kind.into(),
+            singular: kind.to_lowercase(),
+            short_names: Vec::new(),
+            namespaced,
+            verbs: vec!["list".into(), "watch".into()],
+            subresources: Vec::new(),
+        }
+    }
+
+    /// A Kubri connected to a fake API server.
+    async fn connected(client: Client) -> Kubri {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let resources = vec![
+            resource("", "v1", "pods", "Pod", true),
+            resource("", "v1", "configmaps", "ConfigMap", true),
+            resource("apps", "v1", "deployments", "Deployment", true),
+        ];
+        let info = ClusterInfo {
+            context: "test".into(),
+            server: "https://fake".into(),
+            version: "v1.36.0".into(),
+            default_namespace: "default".into(),
+        };
+        *kubri.session.write().await = Some(Arc::new(Session::new(info, client, resources)));
+        kubri
+    }
+
+    fn list(kind: &str, items: Value) -> String {
+        serde_json::json!({ "apiVersion": "v1", "kind": format!("{kind}List"), "metadata": {}, "items": items })
+            .to_string()
+    }
+
+    #[tokio::test]
+    async fn xray_builds_trees_from_listed_objects() {
+        let (client, requests) = testing::client(|req| {
+            let path = req.uri.split('?').next().unwrap_or_default();
+            let body = match path {
+                "/apis/apps/v1/namespaces/shop/deployments" => list(
+                    "Deployment",
+                    serde_json::json!([{
+                        "metadata": { "name": "web", "namespace": "shop", "uid": "dep" },
+                        "spec": { "replicas": 1, "selector": {}, "template": {} },
+                        "status": { "readyReplicas": 1 }
+                    }]),
+                ),
+                "/apis/apps/v1/namespaces/shop/replicasets" => list(
+                    "ReplicaSet",
+                    serde_json::json!([{
+                        "metadata": { "name": "web-1", "namespace": "shop", "uid": "rs",
+                                      "ownerReferences": [{ "apiVersion": "apps/v1", "kind": "Deployment",
+                                                            "name": "web", "uid": "dep", "controller": true }] },
+                        "spec": { "replicas": 1, "selector": {} }, "status": { "replicas": 1, "readyReplicas": 1 }
+                    }]),
+                ),
+                "/api/v1/namespaces/shop/pods" => list(
+                    "Pod",
+                    serde_json::json!([{
+                        "metadata": { "name": "web-1-a", "namespace": "shop", "uid": "pod",
+                                      "ownerReferences": [{ "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                                                            "name": "web-1", "uid": "rs", "controller": true }] },
+                        "spec": { "containers": [{ "name": "app", "image": "web:1",
+                                  "envFrom": [{ "secretRef": { "name": "web" } }] }] },
+                        "status": { "phase": "Running" }
+                    }]),
+                ),
+                "/api/v1/namespaces/shop/secrets" => serde_json::json!({
+                    "apiVersion": "meta.k8s.io/v1", "kind": "PartialObjectMetadataList", "metadata": {},
+                    "items": [{ "apiVersion": "meta.k8s.io/v1", "kind": "PartialObjectMetadata",
+                                "metadata": { "name": "web", "namespace": "shop" } }]
+                })
+                .to_string(),
+                // Not allowed to list these: references stay unchecked instead of failing.
+                _ => return (403, testing::status(403, "forbidden")),
+            };
+            (200, body)
+        });
+        let kubri = connected(client).await;
+        let deployments = ResourceRef {
+            group: "apps".into(),
+            version: "v1".into(),
+            plural: "deployments".into(),
+        };
+        let trees = kubri.xray(&deployments, Some("shop")).await.unwrap();
+        assert_eq!(trees.len(), 1);
+        let pod = &trees[0].children[0].children[0];
+        assert_eq!(pod.id, "Deployment:shop/web/ReplicaSet:web-1/Pod:web-1-a");
+        let names: Vec<(&str, &str)> = pod
+            .children
+            .iter()
+            .map(|c| (c.kind.as_str(), c.detail.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("Container", "Pending · web:1"),
+                ("ServiceAccount", "not checked"),
+                ("Secret", "")
+            ]
+        );
+        // Everything is listed from the API server's cache.
+        let cached = requests
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|r| r.uri.contains("resourceVersion=0"));
+        assert!(cached);
+
+        let configmaps = ResourceRef {
+            group: String::new(),
+            version: "v1".into(),
+            plural: "configmaps".into(),
+        };
+        let err = kubri.xray(&configmaps, None).await.unwrap_err().to_string();
+        assert!(err.starts_with("XRay cannot show ConfigMap"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn pulse_reports_kinds_it_cannot_list() {
+        let (client, _) = testing::client(|req| {
+            let path = req.uri.split('?').next().unwrap_or_default();
+            match path {
+                "/api/v1/pods" => (
+                    200,
+                    list(
+                        "Pod",
+                        serde_json::json!([
+                            { "metadata": { "name": "a" }, "status": { "phase": "Running" },
+                              "spec": { "containers": [{ "name": "c", "resources": { "requests": { "cpu": "250m" } } }] } },
+                            { "metadata": { "name": "b" }, "status": { "phase": "Failed" }, "spec": { "containers": [] } }
+                        ]),
+                    ),
+                ),
+                "/api/v1/nodes" => (
+                    200,
+                    list(
+                        "Node",
+                        serde_json::json!([{ "metadata": { "name": "n" },
+                        "status": { "allocatable": { "cpu": "2", "memory": "4Gi" },
+                                    "conditions": [{ "type": "Ready", "status": "True" }] } }]),
+                    ),
+                ),
+                "/apis/autoscaling/v2/horizontalpodautoscalers" => {
+                    (403, testing::status(403, "no autoscalers for you"))
+                }
+                _ => (200, list("Thing", serde_json::json!([]))),
+            }
+        });
+        let pulse = connected(client).await.pulse(None).await.unwrap();
+        let kind = |name: &str| pulse.kinds.iter().find(|k| k.kind == name).unwrap();
+        assert_eq!((kind("Pod").total, kind("Pod").ok, kind("Pod").failed), (2, 1, 1));
+        assert_eq!(kind("Node").ok, 1);
+        assert_eq!(
+            kind("HorizontalPodAutoscaler").error.as_deref(),
+            Some("no autoscalers for you")
+        );
+        // No metrics-server: requests and capacity are still known.
+        assert_eq!(pulse.cpu.used, None);
+        assert_eq!(pulse.cpu.requested, Some(250.0));
+        assert_eq!(pulse.cpu.capacity, Some(2000.0));
     }
 
     #[tokio::test]

@@ -206,6 +206,123 @@ export interface DrainReport {
 	failed: PodIssue[];
 }
 
+export type Health = 'ok' | 'warning' | 'failed';
+
+/** How many objects of one kind are healthy. */
+export interface KindPulse {
+	kind: string;
+	resource: ResourceRef;
+	total: number;
+	ok: number;
+	warning: number;
+	failed: number;
+	/** Why the kind could not be listed, for example missing permissions. */
+	error: string | null;
+}
+
+export interface RecentEvent extends EventInfo {
+	objectKind: string;
+	object: ObjectRef;
+}
+
+export interface Utilization {
+	/** Measured by metrics-server; null when it is not installed. */
+	used: number | null;
+	/** Requested by the pods that are not finished. */
+	requested: number | null;
+	/** Allocatable on all nodes. */
+	capacity: number | null;
+}
+
+export interface Pulse {
+	kinds: KindPulse[];
+	/** Events of the last hour. */
+	events: { normal: number; warning: number; recent: RecentEvent[]; error: string | null };
+	/** In millicores. */
+	cpu: Utilization;
+	/** In bytes. */
+	memory: Utilization;
+}
+
+export interface XrayNode {
+	/** Unique in the tree: the path from the root. */
+	id: string;
+	kind: string;
+	name: string;
+	namespace: string | null;
+	/** Set for objects that can be opened. */
+	resource: ResourceRef | null;
+	health: Health;
+	detail: string;
+	children: XrayNode[];
+}
+
+/** One rule of a Role or ClusterRole. */
+export interface Rule {
+	apiGroups: string[];
+	resources: string[];
+	resourceNames: string[];
+	nonResourceUrls: string[];
+	verbs: string[];
+}
+
+/** `missing`: the binding points to a role that does not exist. `unreadable`: roles could not be listed. */
+export type RoleState = 'found' | 'missing' | 'unreadable';
+
+/** What one binding grants one subject. */
+export interface Grant {
+	bindingKind: 'RoleBinding' | 'ClusterRoleBinding';
+	binding: string;
+	roleKind: 'Role' | 'ClusterRole';
+	role: string;
+	/** Where the rules apply; null for the whole cluster. */
+	namespace: string | null;
+	roleState: RoleState;
+	rules: Rule[];
+}
+
+export interface SubjectInfo {
+	kind: 'User' | 'Group' | 'ServiceAccount';
+	name: string;
+	namespace: string | null;
+	grants: Grant[];
+}
+
+export interface Rbac {
+	subjects: SubjectInfo[];
+	/** Lists that failed, for example because of missing permissions. */
+	errors: string[];
+}
+
+/** What the current user may do, like `kubectl auth can-i --list`. */
+export interface Permissions {
+	namespace: string;
+	rules: Rule[];
+	incomplete: boolean;
+	error: string | null;
+}
+
+export interface HelmRelease {
+	name: string;
+	namespace: string;
+	revision: number;
+	status: string;
+	chart: string;
+	chartVersion: string;
+	appVersion: string;
+	updated: string | null;
+	description: string;
+}
+
+export interface HelmReleaseDetails extends HelmRelease {
+	notes: string;
+	/** The values given at install or upgrade. */
+	values: unknown;
+	/** Chart defaults merged with the given values. */
+	allValues: unknown;
+	manifest: string;
+}
+
 /** The operations both the desktop app and kubri-server offer to the UI. */
 export interface Backend {
 	contexts(): Promise<ContextList>;
@@ -232,4 +349,19 @@ export interface Backend {
 	stopPortForward(id: number): Promise<void>;
 	cordon(node: string, cordoned: boolean): Promise<void>;
 	drain(node: string, options: DrainOptions): Promise<DrainReport>;
+	/** The cluster overview; null covers all namespaces. */
+	pulse(namespace: string | null): Promise<Pulse>;
+	/** The XRay trees of every object of `resource`. */
+	xray(resource: ResourceRef, namespace: string | null): Promise<XrayNode[]>;
+	rbac(namespace: string | null): Promise<Rbac>;
+	/** The current user's rules; null uses the context's namespace. */
+	permissions(namespace: string | null): Promise<Permissions>;
+	helmReleases(namespace: string | null): Promise<HelmRelease[]>;
+	/** The latest revision unless `revision` is given. */
+	helmRelease(namespace: string, name: string, revision?: number): Promise<HelmReleaseDetails>;
+	helmHistory(namespace: string, name: string): Promise<HelmRelease[]>;
+	/** The installed helm command's version; rollback and uninstall need it. */
+	helmVersion(): Promise<string | null>;
+	helmRollback(namespace: string, name: string, revision: number): Promise<string>;
+	helmUninstall(namespace: string, name: string): Promise<string>;
 }

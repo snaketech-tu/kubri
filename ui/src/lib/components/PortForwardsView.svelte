@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { stopPortForward } from '../actions';
 	import type { PortForwardInfo } from '../api';
@@ -46,7 +47,7 @@
 
 	function onkeydown(e: KeyboardEvent) {
 		if (app.overlayOpen) return;
-		if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return;
+		if (forControl(e)) return;
 		const ctrl = e.ctrlKey || e.metaKey;
 		const handled = (() => {
 			if (ctrl && e.key.toLowerCase() === 'd') {

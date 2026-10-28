@@ -15,6 +15,10 @@ A fast, simple and good-looking Kubernetes GUI that aims to cover everything [k9
 - Shell into any container or attach to its main process, in a real terminal (xterm.js).
 - Port-forwards to pods, workloads and services (named target ports included), listed under `:pf`.
 - Node maintenance: cordon, uncordon and drain with the same safety checks as `kubectl drain`.
+- Pulses (`:pulses`): a cluster overview with healthy, warning and failed counts per kind, CPU and memory use against requests and capacity with a 10-minute trend, and the latest warning events.
+- XRay (`:xray deploy`): a tree from each deployment, statefulset, daemonset, job, cronjob, service or ingress down to its pods and containers and the ConfigMaps, Secrets, service accounts and volume claims they use. Missing references show up in red; Secrets are only listed by name, never read.
+- RBAC (`:rbac`): every user, group and service account with the roles bound to them and what those roles allow, as a matrix of verbs per resource, plus what your own credentials may do. Roles and bindings also show their rules and subjects in the describe view.
+- Helm (`:helm`): the releases in the cluster with their status, chart and app version; their notes, values (as given or merged with the chart defaults), manifest, objects and history, including older revisions. Rolling back and uninstalling use the `helm` command, so they need it installed where Kubri runs.
 - Fully usable from the keyboard. Press <kbd>?</kbd> in the app for all shortcuts.
 
 ## How it works
