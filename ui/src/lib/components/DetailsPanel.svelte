@@ -408,7 +408,7 @@
 		<div class="title">
 			<span class="kind">{details.resource.kind} inspector</span>
 			<h2 title={details.target.name}>{details.target.name}</h2>
-			<p class="context-path">{app.cluster?.context} / {details.target.namespace ?? 'cluster-scoped'}</p>
+			<p class="context-path">{app.cluster ? app.contextName(app.cluster.context) : ''} / {details.target.namespace ?? 'cluster-scoped'}</p>
 			{#if status}
 				<p class="status {status.tone}">
 					<Icon name={status.tone === 'ok' ? 'ok' : status.tone === 'bad' ? 'critical' : 'pending'} size={15} />

@@ -64,8 +64,7 @@
 			borderRadius: '8px',
 			backgroundColor: 'var(--surface-1)',
 			color: 'var(--text)',
-			boxShadow: 'var(--shadow)',
-			overflow: 'hidden'
+			boxShadow: 'var(--shadow)'
 		},
 		'.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--mono)', maxHeight: '16em' },
 		'.cm-tooltip-autocomplete > ul > li[aria-selected]': { backgroundColor: 'var(--accent)', color: 'var(--on-accent)' },
