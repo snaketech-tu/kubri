@@ -3,7 +3,7 @@ import { dock } from './dock.svelte';
 
 const pods = { group: '', version: 'v1', plural: 'pods', kind: 'Pod', namespaced: true, verbs: [] } as never;
 const at = (name: string, context = 'a') => ({ resource: pods, target: { ...ref(name), context } });
-const ref = (name: string) => ({ group: '', version: 'v1', plural: 'pods', namespace: 'shop', name });
+const ref = (name: string) => ({ resource: { group: '', version: 'v1', plural: 'pods' }, namespace: 'shop', name });
 
 beforeEach(() => {
 	for (const s of [...dock.sessions]) dock.close(s.id);
