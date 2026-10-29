@@ -9,7 +9,7 @@ use kube::{Api, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{Error, Kubri, ObjectRef, ResourceRef, Result, Session, discovery, preview};
+use crate::{Error, Guard, Kubri, ObjectRef, ResourceRef, Result, Session, discovery, preview};
 
 /// The field manager Kubri applies as, so later applies change what it set before.
 const MANAGER: &str = "kubri";
@@ -28,6 +28,10 @@ pub struct ApplyRequest {
     /// Refuse to apply to another context than the one the YAML was written for.
     #[serde(default)]
     pub context: Option<String>,
+    /// Apply in this context instead of the connected one, as when cloning to another
+    /// cluster. Its read-only and locked settings apply.
+    #[serde(default)]
+    pub into: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -225,8 +229,25 @@ impl Kubri {
     /// Applies `request.objects` in dependency order, or with `dry_run` shows what would
     /// change. Each object gets its own result; one that fails does not stop the others.
     pub async fn apply(&self, request: ApplyRequest) -> Result<Vec<ApplyItem>> {
+        let current = self.cluster().await.map(|c| c.context);
+        let elsewhere = request
+            .into
+            .as_ref()
+            .filter(|into| Some(*into) != current.as_ref());
         if !request.dry_run {
-            self.ensure_writable().await?;
+            match elsewhere {
+                Some(into) => {
+                    if let Guard {
+                        read_only: true,
+                        reason,
+                        ..
+                    } = self.guard_for(Some(into)).await
+                    {
+                        return Err(Error::ReadOnly(format!("{into}: {}", reason.unwrap_or_default())));
+                    }
+                }
+                None => self.ensure_writable().await?,
+            }
         }
         let session = self.session().await?;
         if let Some(context) = &request.context
@@ -234,6 +255,10 @@ impl Kubri {
         {
             return Err(Error::ContextChanged(context.clone()));
         }
+        let session = match elsewhere {
+            Some(into) => Arc::new(self.connect(into).await?),
+            None => session,
+        };
         let default_namespace = request
             .namespace
             .clone()
@@ -420,7 +445,7 @@ impl Kubri {
             i.kind == "CustomResourceDefinition"
                 && matches!(i.outcome, ApplyOutcome::Created | ApplyOutcome::Changed)
         });
-        if defined && !request.dry_run {
+        if defined && !request.dry_run && elsewhere.is_none() {
             self.rediscover(&session).await;
         }
         Ok(items)

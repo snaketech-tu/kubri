@@ -451,6 +451,15 @@ impl Kubri {
     /// Connects to `context` and discovers the resource types it serves.
     /// The previous connection stays active if this fails.
     pub async fn switch_context(&self, context: &str) -> Result<ClusterInfo> {
+        let session = self.connect(context).await?;
+        let info = session.info.clone();
+        *self.session.write().await = Some(Arc::new(session));
+        tracing::info!(context, version = %info.version, "connected");
+        Ok(info)
+    }
+
+    /// A connection to `context`, without making it the current one.
+    async fn connect(&self, context: &str) -> Result<Session> {
         let kubeconfig = match &*self.kubeconfig.read().await {
             Ok(kubeconfig) => kubeconfig.clone(),
             Err(err) => return Err(Error::NoKubeconfig(err.clone())),
@@ -485,11 +494,7 @@ impl Kubri {
         })
         .await
         .map_err(|_| Error::Timeout)??;
-
-        let info = session.info.clone();
-        *self.session.write().await = Some(Arc::new(session));
-        tracing::info!(context, version = %info.version, "connected");
-        Ok(info)
+        Ok(session)
     }
 
     /// Whether the current user may do each of `checks`, like `kubectl auth can-i`. `None`

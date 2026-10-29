@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ResourceInfo } from './api';
-import { parseObjects, parseShortForm, skeleton, templateObject, toYaml, workloadOf } from './create';
+import { cloneable, parseObjects, parseShortForm, skeleton, templateObject, toYaml, workloadOf } from './create';
 import type { KindSchema } from './schema';
 
 describe('templates', () => {
@@ -86,6 +86,56 @@ describe('related objects', () => {
 		const web = templateObject('Deployment', { name: 'web', port: 8080 });
 		expect(workloadOf([web, { kind: 'ConfigMap', metadata: { name: 'cfg' } }])).toEqual({ name: 'web', port: 8080 });
 		expect(workloadOf([{ kind: 'ConfigMap', metadata: { name: 'cfg' } }])).toEqual({});
+	});
+});
+
+describe('cloning', () => {
+	it('leaves out what the cluster assigned', () => {
+		const service = {
+			apiVersion: 'v1',
+			kind: 'Service',
+			metadata: {
+				name: 'web',
+				namespace: 'shop',
+				uid: 'u',
+				resourceVersion: '7',
+				creationTimestamp: 't',
+				managedFields: [{}],
+				ownerReferences: [{}],
+				annotations: { 'kubectl.kubernetes.io/last-applied-configuration': '{}', team: 'a' },
+				labels: { 'pod-template-hash': 'x' }
+			},
+			spec: {
+				clusterIP: '10.0.0.1',
+				clusterIPs: ['10.0.0.1'],
+				ports: [{ port: 80, nodePort: 30080 }],
+				selector: { app: 'web' }
+			},
+			status: { loadBalancer: {} }
+		};
+		expect(cloneable(service)).toEqual({
+			apiVersion: 'v1',
+			kind: 'Service',
+			metadata: { name: 'web', annotations: { team: 'a' } },
+			spec: { ports: [{ port: 80 }], selector: { app: 'web' } }
+		});
+		expect(service.metadata.namespace).toBe('shop');
+		const job = cloneable(
+			{
+				kind: 'Job',
+				metadata: { name: 'run' },
+				spec: {
+					selector: { matchLabels: { 'batch.kubernetes.io/controller-uid': 'u' } },
+					template: { metadata: { labels: { 'batch.kubernetes.io/controller-uid': 'u', app: 'run' } } }
+				}
+			},
+			'run-2'
+		);
+		expect(job).toEqual({
+			kind: 'Job',
+			metadata: { name: 'run-2' },
+			spec: { template: { metadata: { labels: { app: 'run' } } } }
+		});
 	});
 });
 
