@@ -10,10 +10,10 @@
 	const context = untrack(() => app.cluster?.context);
 
 	let box = $state<HTMLDialogElement>();
-	let way = $state<'ephemeral' | 'copy'>('ephemeral');
+	let way = $state<'ephemeral' | 'copy'>(d.way ?? 'ephemeral');
 	/** The pod's containers; debug containers aim at one of them. */
 	let containers = $state<string[]>([]);
-	let container = $state('');
+	let container = $state(d.container ?? '');
 	let image = $state(untrack(() => app.settings.debug.image) || 'busybox');
 	let namespace = $state('default');
 	let busy = $state(false);

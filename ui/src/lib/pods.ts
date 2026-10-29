@@ -228,3 +228,10 @@ export function sourceLabels(sources: LogSource[]): string[] {
 export function suggestedLocalPort(remote: number): number | null {
 	return remote >= 1024 ? remote : null;
 }
+
+/** The registry an image is pulled from, as the container runtime reads its name. */
+export function registryOf(image: string): string {
+	const first = image.split('/')[0];
+	const hasHost = image.includes('/') && (first.includes('.') || first.includes(':') || first === 'localhost');
+	return hasHost ? first : 'docker.io';
+}

@@ -10,6 +10,7 @@ import {
 	containerNames,
 	forwardablePorts,
 	hasLogs,
+	registryOf,
 	logMatcher,
 	logRanges,
 	secretValue,
@@ -192,5 +193,15 @@ describe('terminal input', () => {
 		release();
 		await new Promise((r) => setTimeout(r));
 		expect(sent).toEqual(['l', 's -la\r']);
+	});
+});
+
+describe('registryOf', () => {
+	it('reads the registry host, or Docker Hub', () => {
+		expect(registryOf('busybox:1.36')).toBe('docker.io');
+		expect(registryOf('bitnami/redis')).toBe('docker.io');
+		expect(registryOf('ghcr.io/snaketech-tu/kubri:0.4')).toBe('ghcr.io');
+		expect(registryOf('localhost:5000/app')).toBe('localhost:5000');
+		expect(registryOf('registry.local/team/app@sha256:abc')).toBe('registry.local');
 	});
 });

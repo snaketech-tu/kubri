@@ -19,7 +19,7 @@
 	import { backend, type EventInfo, type KubeObject, type Preview, type Reference, type TerminalMode } from '../api';
 	import { errorMessage } from '../format';
 	import { drafts } from '../navigation.svelte';
-	import { containerNames, hasLogs, hasUsers, isPods } from '../pods';
+	import { containerNames, hasLogs, hasUsers, isPods, isServices } from '../pods';
 	import { app, type Details, type DetailsTab } from '../state.svelte';
 	import { cellTone } from '../status';
 	import { drill, drillLabel, objectActions, subjectOf } from '../objects';
@@ -33,6 +33,7 @@
 	import Icon from './Icon.svelte';
 	import LogView from './LogView.svelte';
 	import PodSummary from './PodSummary.svelte';
+	import ServiceSummary from './ServiceSummary.svelte';
 	import TerminalView from './TerminalView.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
@@ -527,7 +528,8 @@
 			{#if !error}<p class="muted">Loading…</p>{/if}
 		{:else if details.tab === 'describe'}
 			<div class="scroll">
-				<PodSummary {object} onlogs={logs ? openLogs : undefined} />
+				<PodSummary {object} target={details.target} onlogs={logs ? openLogs : undefined} />
+				{#if isServices(details.resource)}<ServiceSummary {object} target={details.target} />{/if}
 				<Describe
 					{object}
 					{events}

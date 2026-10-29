@@ -105,6 +105,9 @@
 	);
 	let body = $state(preset?.body ?? '');
 
+	// Memory limit
+	let memory = $state(untrack(() => (dialog.kind === 'memory' ? dialog.fix.suggested : '')));
+
 	// Drain
 	let ignoreDaemonsets = $state(true);
 	let deleteEmptydirData = $state(false);
@@ -118,7 +121,7 @@
 	}
 
 	$effect(() => {
-		if (dialog.kind === 'benchmark') {
+		if (dialog.kind === 'benchmark' || dialog.kind === 'memory') {
 			queueMicrotask(() => firstField?.focus());
 		} else if (dialog.kind === 'plugin' && dialog.plugin.inputs.length) {
 			queueMicrotask(focusFirstField);
@@ -299,6 +302,11 @@
 				case 'rollback':
 					ok = await rollback(dialog.target);
 					break;
+				case 'memory':
+					await backend.setMemoryLimit(dialog.target, dialog.fix.container, memory.trim());
+					app.toast(`Set the memory limit of ${dialog.fix.container} in ${dialog.target.name} to ${memory.trim()}; new pods start with it`);
+					ok = true;
+					break;
 				case 'image': {
 					const changed = changedImages();
 					if (changed.some((c) => !c.image)) throw new Error('An image cannot be empty');
@@ -369,6 +377,9 @@
 				const patch = metadataPatch();
 				return wanted.labels && patch ? { type: 'patch', patch: { metadata: patch } } : null;
 			}
+			case 'memory':
+				// Always: the diff shows the pods will be replaced.
+				return memory.trim() ? { type: 'memory', container: dialog.fix.container, memory: memory.trim() } : null;
 			default:
 				return null;
 		}
@@ -414,6 +425,8 @@
 				return kubectlCommand(ctx, dialog.target, { op: 'image', images: changedImages() });
 			case 'rollback':
 				return kubectlCommand(ctx, dialog.target, { op: 'rollback' });
+			case 'memory':
+				return kubectlCommand(ctx, dialog.target, { op: 'memory', container: dialog.fix.container, memory: memory.trim() });
 			case 'helmRollback':
 				return helmCommand(ctx, dialog.release, { op: 'rollback', revision: dialog.revision });
 			case 'helmUninstall':
@@ -498,6 +511,8 @@
 				return 'Set image';
 			case 'rollback':
 				return 'Roll back Deployment';
+			case 'memory':
+				return 'Raise memory limit';
 		}
 	});
 	const confirmLabel = $derived(
@@ -518,7 +533,8 @@
 					plugin: 'Run',
 					trigger: 'Run',
 					image: 'Set',
-					rollback: 'Roll back'
+					rollback: 'Roll back',
+					memory: 'Set limit'
 				}[dialog.kind]
 	);
 	/** The plugin's command as it will run, with the inputs as typed. */
@@ -797,6 +813,19 @@
 		<p>
 			Roll the Deployment of <strong>{name(dialog.target)}</strong> back to this ReplicaSet? Its pods get the
 			template of {dialog.target.name}, as kubectl rollout undo does.
+		</p>
+	{:else if dialog.kind === 'memory'}
+		<p>
+			<strong>{dialog.fix.container}</strong> ran out of memory{dialog.fix.limit ? ` at its limit of ${dialog.fix.limit}` : ''}. Set a higher
+			limit on <strong>{dialog.resource.kind} {name(dialog.target)}</strong>; its pods are replaced with a rolling update.
+		</p>
+		<label class="field">
+			<span>Memory limit</span>
+			<input class="mono" bind:value={memory} bind:this={firstField} spellcheck="false" />
+		</label>
+		<p class="muted">
+			{dialog.fix.request ? `It requests ${dialog.fix.request}. ` : ''}Kubri suggests about twice the limit. If memory keeps growing, the
+			app may leak it, and a higher limit only buys time.
 		</p>
 	{:else if dialog.kind === 'image'}
 		<p>Set the container images of <strong>{name(dialog.target)}</strong>.</p>

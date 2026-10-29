@@ -18,6 +18,7 @@ use kubri_core::{
     ResourceInfo, ResourceRef, SanitizerReport, Settings, TableEvent, TableScope, Terminal, TerminalInput,
     TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
+use kubri_core::{MemoryFix, NodeFit, ServiceCheck};
 use serde_json::Value;
 use tauri::State;
 use tauri::async_runtime::JoinHandle;
@@ -417,6 +418,41 @@ async fn debug(kubri: State<'_, Arc<Kubri>>, request: DebugRequest) -> CommandRe
 }
 
 #[tauri::command]
+async fn memory_fix(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+    container: String,
+) -> CommandResult<MemoryFix> {
+    kubri
+        .memory_fix(&target, &container)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn set_memory_limit(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+    container: String,
+    memory: String,
+) -> CommandResult<()> {
+    kubri
+        .set_memory_limit(&target, &container, &memory)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn scheduling(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Vec<NodeFit>> {
+    kubri.scheduling(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn service_check(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<ServiceCheck> {
+    kubri.service_check(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn restart(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<()> {
     kubri.restart(&target).await.map_err(|e| e.to_string())
 }
@@ -770,6 +806,10 @@ pub fn run() {
             scale,
             restart,
             debug,
+            memory_fix,
+            set_memory_limit,
+            scheduling,
+            service_check,
             events,
             metrics,
             pulse,
