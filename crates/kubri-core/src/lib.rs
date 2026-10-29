@@ -14,6 +14,7 @@ mod discovery;
 mod error;
 pub mod explain;
 mod fixes;
+mod fleet;
 mod gitops;
 mod grafana;
 mod health;
@@ -75,6 +76,7 @@ pub use debug::{DebugRequest, DebugSession, DebugSettings};
 pub use error::{Error, Result};
 pub use explain::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject, Provider};
 pub use fixes::{MemoryFix, NearMiss, NodeFit, PodMatch, ServiceCheck};
+pub use fleet::FleetCluster;
 pub use gitops::{GitOpsAction, Manager};
 pub use grafana::{DashboardLink, Dashboards};
 pub use health::Health;
@@ -112,6 +114,8 @@ pub use workload::{ContainerImage, Drill};
 pub use xray::XrayNode;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long a connection to another context is kept for reading.
+const OTHER_SESSION_FOR: Duration = Duration::from_secs(5 * 60);
 
 /// The cluster Kubri is currently connected to.
 #[derive(Debug, Clone, Serialize)]
@@ -161,6 +165,8 @@ pub struct Kubri {
     settings: std::sync::RwLock<SettingsFile>,
     /// Locked contexts unlocked until then, by name. Never saved: a restart locks them again.
     unlocks: std::sync::Mutex<HashMap<String, std::time::Instant>>,
+    /// Connections to other contexts, for reading objects there, and when they were made.
+    others: tokio::sync::Mutex<HashMap<String, (std::time::Instant, Arc<Session>)>>,
 }
 
 /// The settings and where they are kept.
@@ -189,7 +195,7 @@ pub struct Guard {
 }
 
 /// The client configuration for `context`, read the way kubectl reads it.
-async fn client_config(kubeconfig: &Kubeconfig, context: &str) -> Result<Config> {
+pub(crate) async fn client_config(kubeconfig: &Kubeconfig, context: &str) -> Result<Config> {
     let mut kubeconfig = kubeconfig.clone();
     kubeconfig::prepare(&mut kubeconfig, context)?;
     let options = KubeConfigOptions {
@@ -259,6 +265,7 @@ impl Kubri {
                 error: None,
             }),
             unlocks: Default::default(),
+            others: Default::default(),
         }
     }
 
@@ -458,6 +465,7 @@ impl Kubri {
     /// Re-reads the kubeconfig from disk, keeping the current connection.
     pub async fn reload(&self) -> Result<ContextList> {
         *self.kubeconfig.write().await = kubeconfig::read();
+        self.others.lock().await.clear();
         self.contexts().await
     }
 
@@ -659,6 +667,17 @@ impl Kubri {
     pub async fn get(&self, obj: &ObjectRef) -> Result<Value> {
         let api = self
             .object_session(obj)
+            .await?
+            .api(&obj.resource, obj.namespace.as_deref())?;
+        Ok(serde_json::to_value(api.get(&obj.name).await?)?)
+    }
+
+    /// Fetches one object from its own context, also one Kubri is not connected to, as Compare
+    /// does. [`Kubri::get`] refuses those, so a view left from the last context cannot show
+    /// another cluster's object as this one's.
+    pub async fn get_elsewhere(&self, obj: &ObjectRef) -> Result<Value> {
+        let api = self
+            .read_session(obj.context.as_deref())
             .await?
             .api(&obj.resource, obj.namespace.as_deref())?;
         Ok(serde_json::to_value(api.get(&obj.name).await?)?)
@@ -1498,6 +1517,23 @@ impl Kubri {
             Some(context) if context != &session.info.context => Err(Error::ContextChanged(context.clone())),
             _ => Ok(session),
         }
+    }
+
+    /// The connection to `context` for reading: the current one, or one kept for a few
+    /// minutes after it was made.
+    async fn read_session(&self, context: Option<&str>) -> Result<Arc<Session>> {
+        let session = self.session().await?;
+        let Some(context) = context.filter(|c| *c != session.info.context) else {
+            return Ok(session);
+        };
+        let mut others = self.others.lock().await;
+        others.retain(|_, (made, _)| made.elapsed() < OTHER_SESSION_FOR);
+        if let Some((_, other)) = others.get(context) {
+            return Ok(other.clone());
+        }
+        let other = Arc::new(self.connect(context).await?);
+        others.insert(context.to_owned(), (std::time::Instant::now(), other.clone()));
+        Ok(other)
     }
 
     async fn session(&self) -> Result<Arc<Session>> {

@@ -230,14 +230,14 @@ fn certificate_pulse(
 }
 
 /// Lists everything, reporting failures as text for [`KindPulse::error`].
-async fn list<K>(api: Api<K>) -> Result<Vec<K>, String>
+pub(crate) async fn list<K>(api: Api<K>) -> Result<Vec<K>, String>
 where
     K: kube::Resource + Clone + DeserializeOwned + Debug,
 {
     crate::typed::list(api).await.map_err(|e| e.to_string())
 }
 
-fn summarize<K: kube::Resource<DynamicType = ()>>(
+pub(crate) fn summarize<K: kube::Resource<DynamicType = ()>>(
     items: Result<Vec<K>, String>,
     check: fn(&K) -> Status,
 ) -> KindPulse {
@@ -268,7 +268,7 @@ fn summarize<K: kube::Resource<DynamicType = ()>>(
 
 /// What the scheduler reserves for pods that still run: the larger of the sum of the
 /// containers and the largest init container, as `kubectl describe node` counts it.
-fn requested(pods: &[Pod], resource: &str) -> f64 {
+pub(crate) fn requested(pods: &[Pod], resource: &str) -> f64 {
     let request = |c: &k8s_openapi::api::core::v1::Container| {
         c.resources
             .as_ref()
@@ -296,7 +296,7 @@ fn requested(pods: &[Pod], resource: &str) -> f64 {
         .sum()
 }
 
-fn allocatable(nodes: &[Node], resource: &str) -> f64 {
+pub(crate) fn allocatable(nodes: &[Node], resource: &str) -> f64 {
     nodes
         .iter()
         .filter_map(|n| n.status.as_ref()?.allocatable.as_ref()?.get(resource))

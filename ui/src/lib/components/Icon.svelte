@@ -2,6 +2,7 @@
 	/** 24×24 outline icons, drawn with the current text color. */
 	const PATHS = {
 		overview: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+		fleet: 'M3 5h8v6H3zM13 5h8v6h-8zM3 15h8v4H3zM13 15h8v4h-8zM7 8h.01M17 8h.01',
 		pod: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9',
 		deployment: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5',
 		statefulset: 'M4 5h16v5H4zM4 14h16v5H4zM8 7.5h.01M8 16.5h.01',

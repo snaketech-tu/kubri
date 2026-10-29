@@ -20,7 +20,7 @@ use kubri_core::{
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
 use kubri_core::{Charts, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
-use kubri_core::{GitOpsAction, Manager, RightSizing};
+use kubri_core::{FleetCluster, GitOpsAction, Manager, RightSizing};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -56,6 +56,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
                 .patch(patch_object)
                 .delete(delete_object),
         )
+        .route("/object/elsewhere", get(get_object_elsewhere))
         .route("/object/preview", post(preview))
         .route("/object/scale", post(scale))
         .route("/object/restart", post(restart))
@@ -80,6 +81,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/events", get(events))
         .route("/metrics", get(metrics))
         .route("/pulse", get(pulse))
+        .route("/fleet", get(fleet))
         .route("/integrations", get(integrations))
         .route("/charts", post(charts))
         .route("/usage-history", get(usage_history))
@@ -411,6 +413,19 @@ async fn get_object(State(kubri): State<Arc<Kubri>>, Query(query): Query<ObjectQ
     Ok(Json(kubri.get(&target).await?))
 }
 
+async fn get_object_elsewhere(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<ObjectQuery>,
+) -> ApiResult<Value> {
+    let target = ObjectRef {
+        context: query.context,
+        resource: query.resource,
+        namespace: query.namespace.filter(|ns| !ns.is_empty()),
+        name: query.name,
+    };
+    Ok(Json(kubri.get_elsewhere(&target).await?))
+}
+
 #[derive(Deserialize)]
 struct Replace {
     target: ObjectRef,
@@ -629,6 +644,15 @@ async fn metrics(
 ) -> ApiResult<Vec<Usage>> {
     let namespace = query.namespace.filter(|ns| !ns.is_empty());
     Ok(Json(kubri.metrics(query.kind, namespace.as_deref()).await?))
+}
+
+#[derive(Deserialize)]
+struct FleetQuery {
+    context: String,
+}
+
+async fn fleet(State(kubri): State<Arc<Kubri>>, Query(query): Query<FleetQuery>) -> ApiResult<FleetCluster> {
+    Ok(Json(kubri.fleet_cluster(&query.context).await?))
 }
 
 #[derive(Deserialize)]

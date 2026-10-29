@@ -26,6 +26,7 @@ export type Action =
 	| { type: 'benchmarks' }
 	| { type: 'integrations' }
 	| { type: 'rightsizing' }
+	| { type: 'fleet' }
 	| { type: 'config'; section?: ConfigSection }
 	| { type: 'skin'; name: string | null }
 	| { type: 'help' };
@@ -48,6 +49,7 @@ const SANITIZER_COMMANDS = ['popeye', 'pop', 'sanitizer', 'sanitize'];
 const BENCH_COMMANDS = ['be', 'bench', 'benchmark', 'benchmarks'];
 const INTEGRATION_COMMANDS = ['integrations', 'integration', 'prometheus', 'grafana', 'loki'];
 const SIZING_COMMANDS = ['rightsizing', 'rightsize', 'sizing'];
+const FLEET_COMMANDS = ['fleet', 'home'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	config: undefined,
 	settings: undefined,
@@ -274,6 +276,13 @@ function builtins(
 	};
 	if (SIZING_COMMANDS.includes(cmd)) return [sizing];
 
+	const fleet: Suggestion = {
+		label: 'fleet',
+		detail: 'Every context at once: reachable, version and health',
+		action: { type: 'fleet' }
+	};
+	if (FLEET_COMMANDS.includes(cmd)) return [fleet];
+
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {
 		const roots = xrayResources(resources);
@@ -361,6 +370,7 @@ function builtins(
 	if (cmd && BENCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(benchmarks);
 	if (cmd.length > 1 && INTEGRATION_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(integrations);
 	if (cmd.length > 2 && SIZING_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sizing);
+	if (cmd.length > 1 && FLEET_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(fleet);
 	if (cmd.length > 1 && 'config'.startsWith(cmd) && cmd !== 'config') {
 		extra.push(...builtins('config', resources, contexts, namespaces, config).slice(0, 1));
 	}

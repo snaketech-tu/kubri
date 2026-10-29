@@ -127,6 +127,7 @@ export const httpBackend: Backend = {
 	},
 
 	getObject: (target) => request('GET', `/object?${objectQuery(target)}`),
+	getObjectElsewhere: (target) => request('GET', `/object/elsewhere?${objectQuery(target)}`),
 	replaceObject: (target, value) => request('PUT', '/object', { target, value }),
 	patchObject: (target, patch) => request('PATCH', '/object', { target, patch }),
 	deleteObject: (target, options) => request('DELETE', '/object', { target, options: options ?? {} }),
@@ -145,6 +146,7 @@ export const httpBackend: Backend = {
 	suspendCronJob: (target, suspend) => request('POST', '/cronjob/suspend', { target, suspend }),
 	gitops: (target, action) => request('POST', '/gitops', { target, action }),
 	renewCertificate: (target) => request('POST', '/certificate/renew', { target }),
+	fleetCluster: (context) => request('GET', `/fleet?${new URLSearchParams({ context })}`),
 	rightSizing: (namespace) => request('GET', `/right-sizing${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 	setResources: (target, container, requests, limits) => request('POST', '/object/resources', { target, container, requests, limits }),
 	managedBy: (target) => request('POST', '/object/managed-by', { target }),

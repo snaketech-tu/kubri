@@ -401,6 +401,11 @@ async fn get_object(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandR
 }
 
 #[tauri::command]
+async fn get_object_elsewhere(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Value> {
+    kubri.get_elsewhere(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn replace_object(
     kubri: State<'_, Arc<Kubri>>,
     target: ObjectRef,
@@ -619,6 +624,14 @@ async fn gitops(
     action: kubri_core::GitOpsAction,
 ) -> CommandResult<()> {
     kubri.gitops(&target, action).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn fleet_cluster(
+    kubri: State<'_, Arc<Kubri>>,
+    context: String,
+) -> CommandResult<kubri_core::FleetCluster> {
+    kubri.fleet_cluster(&context).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -981,6 +994,8 @@ pub fn run() {
             managed_by,
             renew_certificate,
             right_sizing,
+            fleet_cluster,
+            get_object_elsewhere,
             set_resources,
             xray,
             sanitize,

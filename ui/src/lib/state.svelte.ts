@@ -162,6 +162,7 @@ export type Page =
 	| 'sanitizer'
 	| 'integrations'
 	| 'rightsizing'
+	| 'fleet'
 	| 'config';
 
 export type Dialog =
@@ -202,6 +203,8 @@ export type Dialog =
 	| { kind: 'renew'; resource: ResourceInfo; target: ObjectRef }
 	/** A debug container in a pod, a debug copy of it, or a shell on a node. */
 	| { kind: 'debug'; on: 'pod' | 'node'; target: ObjectRef; way?: 'ephemeral' | 'copy'; container?: string }
+	/** The same object in another context or namespace, side by side. */
+	| { kind: 'compare'; resource: ResourceInfo; target: ObjectRef }
 	/** A higher memory limit for a container, on the workload that owns its pod. */
 	| { kind: 'memory'; resource: ResourceInfo; target: ObjectRef; fix: MemoryFix }
 	/** The kubectl commands for an object's actions, to copy. */
@@ -696,6 +699,9 @@ class AppState {
 			case 'rightsizing':
 				this.showRightSizing();
 				break;
+			case 'fleet':
+				this.showFleet();
+				break;
 			case 'portforwards':
 				this.showPortForwards();
 				break;
@@ -730,6 +736,13 @@ class AppState {
 	showIntegrations() {
 		if (drafts.block(() => this.showIntegrations())) return;
 		this.page = 'integrations';
+		this.details = null;
+	}
+
+	/** Every context at once, without connecting to them. */
+	showFleet() {
+		if (drafts.block(() => this.showFleet())) return;
+		this.page = 'fleet';
 		this.details = null;
 	}
 
