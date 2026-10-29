@@ -83,6 +83,8 @@ export const httpBackend: Backend = {
 	switchContext: (name) => request('PUT', '/context', { name }),
 	resources: () => request('GET', '/resources'),
 	preview: (target, change) => request('POST', '/object/preview', { target, change }),
+	schema: (resource) =>
+		request('GET', `/schema?${new URLSearchParams({ group: resource.group, version: resource.version, plural: resource.plural })}`),
 	access: (checks, fresh = false) => request('POST', '/access', { checks, fresh }),
 	whoAmI: () => request('GET', '/whoami'),
 	readableNamespaces: () => request('GET', '/namespaces/readable'),

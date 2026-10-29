@@ -142,6 +142,12 @@ async fn preview(kubri: State<'_, Arc<Kubri>>, target: ObjectRef, change: Change
 }
 
 #[tauri::command]
+async fn schema(kubri: State<'_, Arc<Kubri>>, resource: ResourceRef) -> CommandResult<Value> {
+    let found = kubri.schema(&resource).await.map_err(|e| e.to_string())?;
+    Ok(found.as_ref().clone().unwrap_or(Value::Null))
+}
+
+#[tauri::command]
 async fn access(
     kubri: State<'_, Arc<Kubri>>,
     checks: Vec<AccessCheck>,
@@ -692,6 +698,7 @@ pub fn run() {
             switch_context,
             resources,
             preview,
+            schema,
             access,
             who_am_i,
             readable_namespaces,

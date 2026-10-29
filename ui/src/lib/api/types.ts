@@ -1,5 +1,7 @@
 // Mirrors the serialized types of the kubri-core crate.
 
+import type { KindSchema } from '../schema';
+
 export interface ContextInfo {
 	name: string;
 	cluster: string | null;
@@ -696,6 +698,8 @@ export interface Backend {
 	replaceObject(target: ObjectRef, value: KubeObject): Promise<KubeObject>;
 	/** Runs a change as a dry run, to show what it would do. */
 	preview(target: ObjectRef, change: Change): Promise<Preview>;
+	/** The OpenAPI schema of a resource's kind, or null where the server publishes none. */
+	schema(resource: ResourceRef): Promise<KindSchema | null>;
 	/** JSON merge patch. */
 	patchObject(target: ObjectRef, patch: unknown): Promise<KubeObject>;
 	deleteObject(target: ObjectRef, options?: DeleteOptions): Promise<void>;

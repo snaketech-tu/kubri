@@ -32,6 +32,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/guard", get(guard))
         .route("/guard/unlock", post(unlock))
         .route("/guard/lock", post(lock))
+        .route("/schema", get(schema))
         .route("/access", post(access))
         .route("/whoami", get(who_am_i))
         .route("/namespaces/readable", get(readable_namespaces))
@@ -181,6 +182,17 @@ async fn unlock(State(kubri): State<Arc<Kubri>>) -> ApiResult<Guard> {
 
 async fn lock(State(kubri): State<Arc<Kubri>>) -> ApiResult<Guard> {
     Ok(Json(kubri.lock().await?))
+}
+
+async fn schema(State(kubri): State<Arc<Kubri>>, Query(resource): Query<ResourceRef>) -> ApiResult<Value> {
+    Ok(Json(
+        kubri
+            .schema(&resource)
+            .await?
+            .as_ref()
+            .clone()
+            .unwrap_or(Value::Null),
+    ))
 }
 
 #[derive(Deserialize)]
