@@ -36,3 +36,5 @@ Kubri aims for feature parity with k9s. The work is split into four steps that b
 ## Next: beyond Headlamp
 
 The plan for 0.3 to 1.0 is in [IMPLEMENTATION-PLAN-v2.md](IMPLEMENTATION-PLAN-v2.md).
+
+- ✅ 0.3 Work safely: context names, colors and guard rails, permission-aware actions, copy as kubectl, dry-run diffs, editor help.

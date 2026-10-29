@@ -106,6 +106,25 @@ See [Development](#development).
   </tr>
   <tr>
     <td valign="top">
+      <b>Work safely</b>
+      <ul>
+        <li>A name, color and label per context; production shows a banner and asks for the name before deleting</li>
+        <li>Read-only and locked contexts, unlocked for 15 minutes when needed</li>
+        <li>Actions you may not run say which permission is missing, with a Role to send to an admin</li>
+        <li>Every action as the <code>kubectl</code> command that does the same</li>
+      </ul>
+    </td>
+    <td valign="top">
+      <b>Edit with confidence</b>
+      <ul>
+        <li>Changes run as a server-side dry run first and show what would change</li>
+        <li>Field docs, completion and checks in the YAML editor, from the cluster's own schema</li>
+        <li>Changes others make while you edit are merged with yours, not lost</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
       <b>Your k9s setup</b>
       <ul>
         <li>Aliases, hotkeys, plugins, skins and jumps work as they are</li>
@@ -137,6 +156,10 @@ See [Development](#development).
   <tr>
     <td valign="top"><img src="docs/assets/screenshots/helm.png" alt="A Helm release with its objects, notes and revisions"><br><b>Helm</b>: releases, values, manifests, history and rollback</td>
     <td valign="top"><img src="docs/assets/screenshots/rbac.png" alt="Access: a service account's role bindings and the rules they grant"><br><b>Access</b>: who may do what, from the role bindings (<kbd>:rbac</kbd>)</td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/safety.png" alt="Setting an image on a production context: the banner, and the change as the API server would store it"><br><b>Production guard rails</b>: a colored context, and every change as a dry-run diff first</td>
+    <td valign="top"><img src="docs/assets/screenshots/editor.png" alt="Editing a Deployment's YAML with completion and field docs from the cluster's schema"><br><b>YAML editor</b>: completion and field docs, like <code>kubectl explain</code></td>
   </tr>
 </table>
 
@@ -171,6 +194,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 ## Documentation
 
 - [Running Kubri in the browser](docs/WEB.md): settings, sign-in, the Docker image, running it in a cluster and behind a proxy.
+- [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.
 - [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.
 - [Releasing](docs/RELEASING.md): how a version is published.
 - [Roadmap](docs/ROADMAP.md): the steps toward k9s parity and what each one covered.
