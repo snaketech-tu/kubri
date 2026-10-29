@@ -1,6 +1,7 @@
 //! The desktop app: the shared UI in a native window, backed by kubri-core through Tauri commands.
 
 mod agents;
+mod explain;
 #[cfg(unix)]
 mod shell_env;
 
@@ -729,6 +730,11 @@ pub fn run() {
             agents::agents_pending,
             agents::agents_answer,
             agents::agents_calls,
+            explain::set_explain_settings,
+            explain::explain_key,
+            explain::set_explain_key,
+            explain::explain_prompt,
+            explain::explain,
             guard,
             unlock,
             lock,

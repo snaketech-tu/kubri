@@ -4,13 +4,15 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use kubri_core::{
-    AccessCheck, ContainerImage, DeleteOptions, Kubri, LogEvent, LogOptions, ObjectRef, ResourceInfo,
-    TableEvent, TableScope,
+    AccessCheck, ContainerImage, DeleteOptions, Kubri, LogOptions, ObjectRef, ResourceInfo, TableEvent,
+    TableScope,
 };
 use serde_json::{Value, json};
 
 use crate::hub::Hub;
-use crate::{diagnose, redact, render};
+use kubri_core::redact;
+
+use crate::render;
 
 /// How long a list or log read may take.
 const READ_TIMEOUT: Duration = Duration::from_secs(20);
@@ -673,7 +675,7 @@ async fn get_object(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
 
 async fn get_events(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
     let (target, _) = object(kubri, args, args.need("resource")?).await?;
-    let events = object_events(kubri, &target).await?;
+    let events = kubri.event_lines(&target).await.map_err(text)?;
     if events.is_empty() {
         return Ok(format!(
             "No events about {}; events last an hour by default.",
@@ -681,68 +683,6 @@ async fn get_events(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
         ));
     }
     Ok(events.join("\n"))
-}
-
-/// An object's events as lines: when, type, reason, count and message.
-async fn object_events(kubri: &Kubri, target: &ObjectRef) -> Result<Vec<String>, String> {
-    let value = kubri.get(target).await.map_err(text)?;
-    let uid = value
-        .pointer("/metadata/uid")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let events = kubri
-        .events(target.namespace.as_deref(), uid)
-        .await
-        .map_err(text)?;
-    Ok(events
-        .iter()
-        .map(|e| {
-            let when = e.last_seen.as_deref().or(e.first_seen.as_deref()).unwrap_or("-");
-            let count = if e.count > 1 {
-                format!(" (x{})", e.count)
-            } else {
-                String::new()
-            };
-            format!("{when}  {}  {}{count}: {}", e.kind, e.reason, e.message.trim())
-        })
-        .collect())
-}
-
-/// Log lines of `target`, each marked with its pod and container when there are several.
-async fn read_logs(kubri: &Kubri, target: &ObjectRef, options: LogOptions) -> Result<String, String> {
-    let mut events = Box::pin(kubri.logs(target, options).await.map_err(text)?);
-    let mut sources = Vec::new();
-    let mut lines = Vec::new();
-    let mut errors = Vec::new();
-    let read = tokio::time::timeout(READ_TIMEOUT, async {
-        while let Some(event) = events.next().await {
-            match event {
-                LogEvent::Sources { sources: s } => sources = s,
-                LogEvent::Lines { lines: batch } => lines.extend(batch),
-                LogEvent::Error { message, .. } => errors.push(message),
-                LogEvent::End => break,
-            }
-        }
-    })
-    .await;
-    let several = sources.len() > 1;
-    let mut out: Vec<String> = lines
-        .iter()
-        .map(|line| match sources.get(line.source) {
-            Some(s) if several => format!("[{}/{}] {}", s.pod, s.container, line.text),
-            _ => line.text.clone(),
-        })
-        .collect();
-    if out.is_empty() {
-        out.push("(no log lines)".into());
-    }
-    for error in errors {
-        out.push(format!("Note: {error}"));
-    }
-    if read.is_err() {
-        out.push("Note: stopped reading after 20 seconds.".into());
-    }
-    Ok(out.join("\n"))
 }
 
 fn log_options(args: &Args<'_>, container: Option<String>, previous: bool) -> Result<LogOptions, String> {
@@ -763,7 +703,7 @@ fn log_options(args: &Args<'_>, container: Option<String>, previous: bool) -> Re
 async fn get_logs(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
     let (target, _) = object(kubri, args, args.str("resource").unwrap_or("pods")).await?;
     let options = log_options(args, args.str("container").map(Into::into), args.bool("previous"))?;
-    read_logs(kubri, &target, options).await
+    kubri.log_text(&target, options).await.map_err(text)
 }
 
 async fn diagnose_pod(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
@@ -798,71 +738,7 @@ async fn diagnose_pod(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> 
         }
         Err(err) => return Err(text(err)),
     };
-    let phase = pod
-        .pointer("/status/phase")
-        .and_then(Value::as_str)
-        .unwrap_or("Unknown");
-    let node = pod
-        .pointer("/spec/nodeName")
-        .and_then(Value::as_str)
-        .unwrap_or("not scheduled");
-    let mut out = vec![format!("Pod {} is {phase}, on node {node}.", place(&target))];
-    if let Some(reason) = pod.pointer("/status/reason").and_then(Value::as_str) {
-        let message = pod
-            .pointer("/status/message")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        out.push(format!("Pod status: {reason} {message}").trim_end().to_owned());
-    }
-    let problems = diagnose::container_problems(&pod);
-    let pending = diagnose::pending_reasons(&pod);
-    if problems.is_empty() && pending.is_empty() {
-        out.push("No container is crashing or waiting, and nothing keeps the pod from starting.".into());
-    }
-    for reason in &pending {
-        out.push(format!("Not starting: {reason}"));
-    }
-    for p in &problems {
-        let mut line = format!("Container {}: {}", p.container, p.reason);
-        if let Some(code) = p.exit_code {
-            line.push_str(&format!(", exit code {code}"));
-        }
-        if p.restarts > 0 {
-            line.push_str(&format!(", {} restarts", p.restarts));
-        }
-        if let Some(message) = &p.message {
-            line.push_str(&format!(". {}", message.trim()));
-        }
-        out.push(line);
-    }
-    let events = object_events(kubri, &target).await.unwrap_or_default();
-    let warnings: Vec<_> = events.iter().filter(|e| e.contains("  Warning  ")).collect();
-    if !warnings.is_empty() {
-        out.push(String::new());
-        out.push("Warning events:".into());
-        let skip = warnings.len().saturating_sub(10);
-        out.extend(warnings.into_iter().skip(skip).cloned());
-    }
-    for p in problems.iter().take(3) {
-        // The crashed instance tells why it ended; a failed one that was not restarted is current.
-        let previous = p.has_previous && p.reason != "Error" && p.reason != "Completed";
-        let options = LogOptions {
-            container: Some(p.container.clone()),
-            tail_lines: Some(30),
-            previous,
-            ..Default::default()
-        };
-        if let Ok(logs) = read_logs(kubri, &target, options).await {
-            out.push(String::new());
-            out.push(format!(
-                "Last log lines of {} ({} instance):",
-                p.container,
-                if previous { "previous" } else { "current" }
-            ));
-            out.push(logs);
-        }
-    }
-    Ok(out.join("\n"))
+    Ok(kubri.pod_report(&target, &pod).await)
 }
 
 async fn check_problems(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {

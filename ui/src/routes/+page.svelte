@@ -10,6 +10,7 @@
 	import { listenForBindings } from '#lib/bindings.js';
 	import ActionDialog from '#lib/components/ActionDialog.svelte';
 	import ActionMenu from '#lib/components/ActionMenu.svelte';
+	import ExplainPanel from '#lib/components/ExplainPanel.svelte';
 	import BenchmarksView from '#lib/components/BenchmarksView.svelte';
 	import CommandPalette from '#lib/components/CommandPalette.svelte';
 	import ConfigView from '#lib/components/ConfigView.svelte';
@@ -142,6 +143,7 @@
 				['w', 'wrap'],
 				['s', 'autoscroll'],
 				['m', 'mark'],
+				['x', 'explain'],
 				['c', 'copy'],
 				['^s', 'save'],
 				...panel,
@@ -180,6 +182,7 @@
 				['/', 'filter'],
 				['h/l', 'collapse/expand'],
 				['enter', 'describe'],
+				['⇧e', 'explain'],
 				['⇧r', 'scan again'],
 				...panel,
 				['?', 'help']
@@ -516,6 +519,7 @@
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}
+{#if app.explaining}<ExplainPanel subject={app.explaining} />{/if}
 {#if app.pluginTerminal}
 	<PluginTerminal plugin={app.pluginTerminal.plugin} run={app.pluginTerminal.run} />
 {/if}

@@ -65,6 +65,7 @@
 				['t / w', 'Timestamps / wrap'],
 				['s', 'Autoscroll'],
 				['m', 'Mark: a line across the log'],
+				['x', 'Explain the selected lines, or the last 200'],
 				['c / Ctrl+S', 'Copy / save'],
 				['Shift+C', 'Clear']
 			]
@@ -79,6 +80,7 @@
 				['s', 'Scale'],
 				['r', 'Rollout restart'],
 				['Shift+L', 'Labels and annotations'],
+				['Shift+E', 'Explain with your model (also findings)'],
 				['?', 'This help']
 			]
 		],

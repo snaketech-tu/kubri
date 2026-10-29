@@ -36,6 +36,9 @@ pub enum Error {
     /// RBAC does not allow it; the text names the verb, resource and namespace.
     #[error("not allowed: needs {0}")]
     Forbidden(String),
+    /// The model Explain asked did not answer; the text says why.
+    #[error("Explain: {0}")]
+    Model(String),
     #[error("{0}")]
     Io(#[from] std::io::Error),
 }

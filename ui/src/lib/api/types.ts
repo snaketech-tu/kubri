@@ -54,10 +54,49 @@ export interface AgentSettings {
 	secrets: boolean;
 }
 
+/** Where Explain sends its questions; `none` sends nothing anywhere. */
+export type ExplainProvider = 'none' | 'anthropic' | 'openai';
+
+/** The model Explain asks. The API key is kept apart, never in the settings. */
+export interface ExplainSettings {
+	provider: ExplainProvider;
+	/** Empty for the provider's own address. */
+	baseUrl: string;
+	/** Empty for the default model, where the provider has one. */
+	model: string;
+}
+
 export interface Settings {
 	contexts: Record<string, ContextSettings>;
 	diff: DiffSettings;
 	agents: AgentSettings;
+	explain: ExplainSettings;
+}
+
+/** What to explain. */
+export type ExplainSubject =
+	| { kind: 'object'; target: ObjectRef }
+	| { kind: 'logs'; target: ObjectRef; container: string | null; lines: string }
+	| { kind: 'finding'; target: ObjectRef; issues: string[] }
+	| { kind: 'failure'; action: string; target: ObjectRef | null; error: string };
+
+/** Exactly what Explain would send, to look at first. */
+export interface ExplainPrompt {
+	title: string;
+	system: string;
+	text: string;
+	provider: ExplainProvider;
+	model: string | null;
+	endpoint: string | null;
+	hasKey: boolean;
+}
+
+export interface ExplainAnswer {
+	/** Markdown. */
+	text: string;
+	model: string;
+	/** The answer ended at the length limit. */
+	cutShort: boolean;
 }
 
 /** How to connect an agent. */
@@ -736,6 +775,15 @@ export interface Backend {
 	agentRequests(): Promise<AgentRequest[]>;
 	answerAgent(id: number, allow: boolean): Promise<boolean>;
 	agentCalls(): Promise<AgentCall[]>;
+	setExplainSettings(settings: ExplainSettings): Promise<Settings>;
+	/** Whether an API key for Explain is stored; the key itself never comes back. */
+	explainKey(): Promise<{ hasKey: boolean }>;
+	/** Stores the key, or removes it with null. */
+	setExplainKey(key: string | null): Promise<{ hasKey: boolean }>;
+	/** Gathers what Explain would send; nothing leaves Kubri yet. */
+	explainPrompt(subject: ExplainSubject): Promise<ExplainPrompt>;
+	/** Sends the prompt's text to the model in the settings. */
+	explain(text: string): Promise<ExplainAnswer>;
 	guard(): Promise<Guard>;
 	/** Unlocks a locked context for 15 minutes. */
 	unlock(): Promise<Guard>;
