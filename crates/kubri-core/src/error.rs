@@ -18,6 +18,9 @@ pub enum Error {
     Unsupported(String),
     #[error("invalid object: {0}")]
     InvalidObject(#[from] serde_json::Error),
+    /// A kubeconfig setting kubectl refuses too; the text is kubectl's.
+    #[error("invalid kubeconfig: {0}")]
+    InvalidKubeconfig(String),
     #[error("failed to read kubeconfig: {0}")]
     Kubeconfig(#[from] kube::config::KubeconfigError),
     #[error("{}", kube_message(.0))]

@@ -2341,6 +2341,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "portable-pty",
+ "secrecy",
  "serde",
  "serde-saphyr",
  "serde_json",

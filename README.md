@@ -159,7 +159,7 @@ Kubri reads your k9s configuration and uses the same keys, so you can start righ
 
 ## How it works
 
-Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, or `~/.kube/config` if that is not set. It connects to your `current-context` on startup, and you can switch contexts at any time from the top bar (or with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>). Started from the Dock, Finder or a desktop launcher, the desktop app takes the environment of your login shell, such as `PATH` and `KUBECONFIG`, so `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin`, and the commands of k9s plugins are found as in a terminal.
+Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, or `~/.kube/config` if that is not set. It reads them as kubectl does: listed files that do not exist are skipped, and a context works in Kubri when it works with kubectl, with kubectl's error message when it does not. It connects to your `current-context` on startup, and you can switch contexts at any time from the top bar (or with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>). Started from the Dock, Finder or a desktop launcher, the desktop app takes the environment of your login shell, such as `PATH` and `KUBECONFIG`, so `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin`, and the commands of k9s plugins are found as in a terminal.
 
 | Part | Path | What it is |
 | --- | --- | --- |

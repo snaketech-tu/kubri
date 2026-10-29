@@ -96,7 +96,7 @@ impl IntoResponse for ApiError {
             Unsupported(_) | InvalidObject(_) => StatusCode::BAD_REQUEST,
             Timeout => StatusCode::GATEWAY_TIMEOUT,
             ReadOnly(_) => StatusCode::FORBIDDEN,
-            Kubeconfig(_) | Kube(_) => StatusCode::BAD_GATEWAY,
+            InvalidKubeconfig(_) | Kubeconfig(_) | Kube(_) => StatusCode::BAD_GATEWAY,
             Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let body = Json(serde_json::json!({ "error": self.0.to_string() }));
