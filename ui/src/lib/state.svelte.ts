@@ -63,6 +63,8 @@ const HISTORY = 50;
 
 const READ_ONLY_KEY = 'kubri.readonly.';
 const ENVIRONMENT_KEY = 'kubri.environment.';
+const TOOLS_BESIDE_KEY = 'kubri.toolsBeside';
+const PANEL_WIDTH_KEY = 'kubri.panelWidth';
 
 function stored(key: string): string | null {
 	try {
@@ -149,8 +151,31 @@ class AppState {
 		if (drafts.block(() => (this.details = value))) return;
 		this.#details = value;
 	}
-	/** The details panel fills the window, for logs and shells. */
+	/** The details panel fills the window, sidebar included. */
 	maximized = $state(false);
+	/** Logs and shells take the place of the list, unless asked to stay beside it. */
+	#toolsBeside = $state(stored(TOOLS_BESIDE_KEY) === 'true');
+	get toolsBeside() {
+		return this.#toolsBeside;
+	}
+	set toolsBeside(value: boolean) {
+		this.#toolsBeside = value;
+		store(TOOLS_BESIDE_KEY, value ? 'true' : null);
+	}
+	/** The width the details panel was dragged to beside the list, or null for the default. */
+	#panelWidth = $state(Number(stored(PANEL_WIDTH_KEY)) || null);
+	get panelWidth() {
+		return this.#panelWidth;
+	}
+	set panelWidth(value: number | null) {
+		this.#panelWidth = value;
+		store(PANEL_WIDTH_KEY, value ? String(Math.round(value)) : null);
+	}
+	/** The details panel takes the place of the list: maximized, or showing logs or a shell. */
+	get panelWide(): boolean {
+		const tab = this.#details?.tab;
+		return !!this.#details && (this.maximized || ((tab === 'logs' || tab === 'shell') && !this.#toolsBeside));
+	}
 	dialog = $state<Dialog | null>(null);
 	forwards = $state<PortForwardInfo[]>([]);
 	benchmarks = $state<BenchInfo[]>([]);

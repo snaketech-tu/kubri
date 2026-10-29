@@ -67,6 +67,7 @@
 	let stick = $state(true);
 	let restarts = $state(0);
 	let scroller = $state<HTMLDivElement>();
+	let search = $state<HTMLInputElement>();
 
 	const labels = $derived(sourceLabels(sources));
 	const showSource = $derived(sources.length > 1);
@@ -183,6 +184,14 @@
 		jumpToEnd();
 	}
 
+	/** Esc clears the search, then leaves it for the log keys. */
+	function onsearchkey(e: KeyboardEvent) {
+		if (e.key !== 'Escape') return;
+		e.stopPropagation();
+		if (filter) filter = '';
+		else search?.blur();
+	}
+
 	/** The k9s log keys, before the list below gets them. */
 	function onkeydown(e: KeyboardEvent) {
 		if (!active || app.overlayOpen || forControl(e) || e.altKey) return;
@@ -199,6 +208,9 @@
 				return true;
 			}
 			switch (e.key) {
+				case '/':
+					search?.focus();
+					return true;
 				case 't':
 					timestamps = !timestamps;
 					return true;
@@ -231,17 +243,14 @@
 <svelte:window onkeydowncapture={onkeydown} />
 
 <div class="logs">
-	<div class="log-context">
-		<Icon name="pod" size={16} />
-		<span><strong>{app.cluster?.context}</strong> / {target.namespace ?? 'cluster'} / {target.name}</span>
-		{#if container || containers.length === 1}<span class="container">{container || containers[0]}</span>{/if}
-	</div>
 	<div class="toolbar">
 		{#if containers.length > 1}
 			<select bind:value={container} title="Container" aria-label="Container">
 				<option value="">All containers</option>
 				{#each containers as c (c)}<option value={c}>{c}</option>{/each}
 			</select>
+		{:else if containers.length === 1}
+			<span class="container" title="Container">{containers[0]}</span>
 		{/if}
 		<select
 			value={previous ? 'previous' : 'current'}
@@ -255,26 +264,32 @@
 		<select bind:value={range} title="How far back to start (0–6)" aria-label="Time range">
 			{#each [...RANGES] as [key, r] (key)}<option value={key}>{r.label}</option>{/each}
 		</select>
-		<label class="search">
+		<label class="search" title="Search (/)">
 			<Icon name="search" size={15} />
-			<input bind:value={filter} aria-label="Filter log lines" placeholder="Search these logs… /regex/" />
+			<input
+				bind:this={search}
+				bind:value={filter}
+				onkeydown={onsearchkey}
+				aria-label="Filter log lines"
+				placeholder="Search these logs… /regex/"
+			/>
 		</label>
 		<button class="export" onclick={save} title="Save the shown lines (Ctrl+S)"><Icon name="download" size={15} /> Export</button>
 	</div>
-	<div class="options">
+	<div class="stream-state {streamState.tone}">
+		<span class="state" role="status">
+			<Icon name={streamState.tone === 'ok' ? 'event' : 'pending'} size={15} />
+			{streamState.text}{stick ? '' : ' Autoscroll is paused.'}
+		</span>
 		<label><input type="checkbox" bind:checked={follow} /> Follow</label>
 		<label title="t"><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
 		<label title="w"><input type="checkbox" bind:checked={wrap} /> Wrap</label>
 		<label title="Keep the latest line in view (s)"><input type="checkbox" checked={stick} onchange={toggleAutoscroll} /> Autoscroll</label>
-		<span class="spacer"></span>
-		<button onclick={() => (lines = [])} title="Clear the view (Shift+C)">Clear</button>
-		<button onclick={mark} title="Draw a line to tell what comes after it (m)">Mark</button>
-		<button onclick={copy} title="Copy the shown lines (c)">Copy</button>
-	</div>
-
-	<div class="stream-state {streamState.tone}" role="status">
-		<Icon name={previous ? 'pending' : streamState.tone === 'ok' ? 'event' : 'pending'} size={15} />
-		{streamState.text}{stick ? '' : ' Autoscroll is paused.'}
+		<span class="buttons">
+			<button onclick={mark} title="Draw a line to tell what comes after it (m)">Mark</button>
+			<button onclick={copy} title="Copy the shown lines (c)">Copy</button>
+			<button onclick={() => (lines = [])} title="Clear the view (Shift+C)">Clear</button>
+		</span>
 	</div>
 	<div class="body" class:wrap bind:this={scroller} {onscroll}>
 		{#if dropped}
@@ -310,42 +325,45 @@
 </div>
 
 <style>
-	.log-context {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 10px 16px;
-		border-bottom: 1px solid var(--border-subtle);
-		font-size: 12px;
-		color: var(--text-muted);
-		overflow-wrap: anywhere;
-	}
-	.log-context strong {
-		color: var(--text);
-	}
 	.container {
-		padding: 1px 7px;
+		padding: 3px 8px;
 		border-radius: 5px;
 		background: var(--surface-2);
 		font-family: var(--mono);
-		color: var(--text);
-	}
-	.stream-state {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 8px 16px;
-		background: var(--surface-2);
-		color: var(--text-muted);
 		font-size: 12px;
 	}
-	.stream-state.warn {
-		background: color-mix(in srgb, var(--warn) 14%, var(--surface-1));
-		color: var(--warn);
+	/* Where the lines come from, and how they are shown. */
+	.stream-state {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px 14px;
+		padding: 6px 16px;
+		border-top: 1px solid var(--border-subtle);
+		border-bottom: 1px solid var(--border-subtle);
+		background: var(--surface-2);
+		font-size: 12px;
 	}
-	.stream-state.ok {
-		background: color-mix(in srgb, var(--ok) 10%, var(--surface-1));
+	.state {
+		display: flex;
+		flex: 1 1 260px;
+		align-items: center;
+		gap: 8px;
+		color: var(--text-muted);
+	}
+	.stream-state.warn {
+		background: color-mix(in srgb, var(--warn) 12%, var(--surface-1));
+	}
+	.warn .state {
+		color: var(--warn);
+		font-weight: 600;
+	}
+	.ok .state {
 		color: var(--ok);
+	}
+	.buttons {
+		display: flex;
+		gap: 6px;
 	}
 	.logs {
 		position: relative;
@@ -353,25 +371,21 @@
 		flex-direction: column;
 		min-height: 0;
 	}
-	.toolbar,
-	.options {
+	.toolbar {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 10px;
+		gap: 8px 10px;
 		padding: 8px 16px;
 		font-size: 12.5px;
-	}
-	.options {
-		padding-top: 0;
 	}
 	.toolbar select {
 		padding: 5px 8px;
 		font-size: 12.5px;
 	}
 	.search {
-		flex: 1 1 160px;
-		min-width: 140px;
+		flex: 1 1 220px;
+		min-width: 160px;
 		padding: 0 10px;
 		border: 1px solid var(--border);
 		border-radius: 6px;
@@ -402,11 +416,8 @@
 		color: var(--text-muted);
 		white-space: nowrap;
 	}
-	.spacer {
-		flex: 1;
-	}
 	.toolbar button,
-	.options button,
+	.buttons button,
 	.end button {
 		padding: 4px 10px;
 		border: 1px solid var(--border);
@@ -421,8 +432,8 @@
 		padding: 8px 0 24px;
 		background: var(--bg);
 		font-family: var(--mono);
-		font-size: 12px;
-		line-height: 1.5;
+		font-size: 12.5px;
+		line-height: 1.55;
 	}
 	.line {
 		padding: 0 16px;
