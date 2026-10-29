@@ -38,3 +38,4 @@ Kubri aims for feature parity with k9s. The work is split into four steps that b
 The plan for 0.3 to 1.0 is in [IMPLEMENTATION-PLAN-v2.md](IMPLEMENTATION-PLAN-v2.md).
 
 - ✅ 0.3 Work safely: context names, colors and guard rails, permission-aware actions, copy as kubectl, dry-run diffs, editor help.
+- ✅ 0.4 AI: Kubri as an MCP server for AI agents, and Explain with your own model.

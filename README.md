@@ -163,6 +163,10 @@ See [Development](#development).
     <td valign="top"><img src="docs/assets/screenshots/safety.png" alt="Setting an image on a production context: the banner, and the change as the API server would store it"><br><b>Production guard rails</b>: a colored context, and every change as a dry-run diff first</td>
     <td valign="top"><img src="docs/assets/screenshots/editor.png" alt="Editing a Deployment's YAML with completion and field docs from the cluster's schema"><br><b>YAML editor</b>: completion and field docs, like <code>kubectl explain</code></td>
   </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/explain.png" alt="Explain beside a crash-looping pod: the likely cause and how to fix it"><br><b>Explain</b>: ask your own model why a pod fails, after seeing what is sent</td>
+    <td valign="top"><img src="docs/assets/screenshots/agents.png" alt="Settings for AI agents: the MCP endpoint, the command for Claude Code and the log of tool calls"><br><b>AI agents</b>: Kubri as an MCP server, with every call logged (<kbd>:agents</kbd>)</td>
+  </tr>
 </table>
 
 ## Coming from k9s
