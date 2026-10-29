@@ -136,6 +136,7 @@ async fn serve(args: Args) -> ExitCode {
     });
 
     let kubri = Arc::new(Kubri::load());
+    kubri.record_changes();
     if args.read_only {
         kubri.set_read_only();
         tracing::info!("read-only: Kubri does not change clusters");

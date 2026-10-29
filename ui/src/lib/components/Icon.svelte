@@ -32,6 +32,7 @@
 		resource: 'M4 4h16v16H4zM4 9h16M9 9v11',
 		bookmark: 'M6 3h12v18l-6-4-6 4z',
 		search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
+		history: 'M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 7v5l3 2',
 		chevron: 'M6 9l6 6 6-6',
 		up: 'M6 15l6-6 6 6',
 		back: 'M15 18l-6-6 6-6',

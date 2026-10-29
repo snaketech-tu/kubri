@@ -143,6 +143,30 @@ fn set_context_settings(
 }
 
 #[tauri::command]
+async fn set_history_settings(
+    kubri: State<'_, Arc<Kubri>>,
+    settings: kubri_core::HistorySettings,
+) -> CommandResult<Settings> {
+    kubri
+        .set_history_settings(settings)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn history(
+    kubri: State<'_, Arc<Kubri>>,
+    query: kubri_core::HistoryQuery,
+) -> CommandResult<kubri_core::HistoryPage> {
+    kubri.history(&query).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn history_detail(kubri: State<'_, Arc<Kubri>>, id: i64) -> CommandResult<kubri_core::HistoryDetail> {
+    kubri.history_detail(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_diff_settings(kubri: State<'_, Arc<Kubri>>, settings: DiffSettings) -> CommandResult<Settings> {
     kubri.set_diff_settings(settings).map_err(|e| e.to_string())
 }
@@ -943,6 +967,7 @@ pub fn run() {
     }
 
     let kubri = Arc::new(Kubri::load());
+    kubri.record_changes();
     let read_only = read_only_requested();
     if read_only {
         kubri.set_read_only();
@@ -974,6 +999,9 @@ pub fn run() {
             settings,
             set_context_settings,
             set_diff_settings,
+            set_history_settings,
+            history,
+            history_detail,
             set_column_settings,
             agents::set_agent_settings,
             agents::agents_connection,

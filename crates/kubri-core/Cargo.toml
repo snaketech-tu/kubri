@@ -28,6 +28,8 @@ portable-pty.workspace = true
 serde-saphyr.workspace = true
 secrecy.workspace = true
 regex.workspace = true
+rusqlite.workspace = true
+ring.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
 

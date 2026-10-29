@@ -97,6 +97,10 @@
 			<span class="label">Topology</span>
 			<span class="hint">XRay</span>
 		</button>
+		<button class:active={app.page === 'changes'} onclick={() => app.showChanges()} title=":changes">
+			<Icon name="history" />
+			<span class="label">What changed</span>
+		</button>
 		<button class:active={app.page === 'helm'} onclick={() => app.showHelm()} title=":helm">
 			<Icon name="helm" />
 			<span class="label">Helm</span>

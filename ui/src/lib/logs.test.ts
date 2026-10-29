@@ -166,5 +166,9 @@ describe('rate', () => {
 		]);
 		expect(buckets[1].markers).toEqual(['Pod joined']);
 		expect(rate(rows.slice(0, 1))).toBeNull();
+		const first = Date.parse(rows[0].line.time!);
+		const marked = rate(rows, 2, [{ at: first, text: 'Deployment web: Image' }, { at: first - 60_000, text: 'before' }])!;
+		expect(marked[0].markers).toContain('Deployment web: Image');
+		expect(marked.flatMap((b) => b.markers)).not.toContain('before');
 	});
 });

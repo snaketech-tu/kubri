@@ -38,6 +38,7 @@
 	import FleetView from '#lib/components/FleetView.svelte';
 	import SearchView from '#lib/components/SearchView.svelte';
 	import GraphView from '#lib/components/GraphView.svelte';
+	import ChangesView from '#lib/components/ChangesView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
@@ -479,6 +480,10 @@
 					{:else if app.page === 'graph'}
 						{#key `${app.cluster?.context}/${app.namespace}`}
 							<GraphView />
+						{/key}
+					{:else if app.page === 'changes'}
+						{#key `${app.cluster?.context}/${app.namespace}/${JSON.stringify(app.changesFilter)}`}
+							<ChangesView />
 						{/key}
 					{:else if app.page === 'xray' && app.xrayResource}
 						{#key `${app.cluster?.context}/${app.namespace}/${app.xrayResource.plural}`}

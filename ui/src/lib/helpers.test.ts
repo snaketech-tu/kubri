@@ -80,6 +80,15 @@ describe('command palette', () => {
 		expect(suggest('xray', resources, contexts, []).map((s) => s.label)).toEqual(['xray deployments.apps', 'xray pods']);
 	});
 
+	it('opens What changed for a namespace and a range', () => {
+		expect(suggest(':changes shop 6h', resources, contexts, [])[0]).toEqual(
+			expect.objectContaining({ label: 'changes shop 6h', action: { type: 'changes', filter: { namespace: 'shop', hours: 6 } } })
+		);
+		expect(suggest('history', resources, contexts, []).map((s) => s.label)).toEqual(['changes', 'changes 1h']);
+		expect(suggest('changes 30m', resources, contexts, [])[0].label).toBe('changes 30m');
+		expect(suggest('chan', resources, contexts, []).map((s) => s.label)).toContain('changes 1h');
+	});
+
 	it('searches with everything after the command', () => {
 		expect(suggest(':search web ctx:*', resources, contexts, [])).toEqual([
 			expect.objectContaining({ action: { type: 'search', query: 'web ctx:*' } })

@@ -130,7 +130,36 @@
 	const total = $derived(lines.reduce((n, l) => n + (l.kind === 'line' ? 1 : 0), 0));
 	const names = $derived(fieldNames(lines.slice(-2000)));
 	const columns = $derived(picked ?? defaultColumns(names));
-	const buckets = $derived(rate(visible));
+	/** Rollouts and other changes Kubri recorded, as markers in the rate strip. */
+	let changes = $state.raw<{ at: number; text: string }[]>([]);
+	$effect(() => {
+		const t = target;
+		if (!t.namespace || (t.context && t.context !== app.cluster?.context)) return;
+		const kind = app.resources.find((r) => r.plural === t.resource.plural && r.group === t.resource.group)?.kind;
+		let cancelled = false;
+		const load = async () => {
+			try {
+				const page = await backend.history({
+					namespace: t.namespace ?? undefined,
+					// A pod's own changes are its workload's; a workload has its own.
+					...(kind === 'Pod' ? {} : { kind, name: t.name }),
+					since: Date.now() - 7 * 24 * 3600_000,
+					changes: ['image', 'rollout', 'restarted', 'scaled', 'data'],
+					limit: 100
+				});
+				if (!cancelled) changes = page.entries.map((e) => ({ at: e.at, text: `${e.kind} ${e.name}: ${e.summary}` }));
+			} catch {
+				// Without a change history there are no markers.
+			}
+		};
+		untrack(load);
+		const timer = setInterval(() => document.hidden || load(), 30_000);
+		return () => {
+			cancelled = true;
+			clearInterval(timer);
+		};
+	});
+	const buckets = $derived(rate(visible, 60, changes));
 
 	/** Which instance and stream the lines come from, so that a view never passes for another. */
 	const streamState = $derived.by((): { tone: 'warn' | 'ok' | ''; text: string } => {

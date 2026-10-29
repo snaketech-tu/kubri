@@ -194,6 +194,8 @@ pub struct Settings {
     pub columns: BTreeMap<String, ColumnSettings>,
     /// Searches kept in the sidebar, in their order.
     pub searches: Vec<SavedSearch>,
+    /// What the change history records and keeps.
+    pub history: crate::HistorySettings,
 }
 
 /// A search kept in the sidebar.
