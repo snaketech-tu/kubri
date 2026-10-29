@@ -126,6 +126,13 @@
 			queueMicrotask(() => firstField?.focus());
 		} else if (dialog.kind === 'plugin' && dialog.plugin.inputs.length) {
 			queueMicrotask(focusFirstField);
+		} else if (dialog.kind === 'scaleMany') {
+			// The first one's count, to start from.
+			backend
+				.getObject(dialog.targets[0])
+				.then((obj) => (replicas = typeof obj.spec?.replicas === 'number' ? obj.spec.replicas : 1))
+				.catch(() => (replicas = 1))
+				.finally(() => queueMicrotask(() => firstField?.focus()));
 		} else if (
 			dialog.kind === 'scale' ||
 			dialog.kind === 'labels' ||
@@ -238,6 +245,31 @@
 				case 'restart':
 					ok = await restart(dialog.target);
 					break;
+				case 'scaleMany':
+				case 'restartMany': {
+					const many = dialog;
+					const count = replicas;
+					if (many.kind === 'scaleMany' && (count === null || count < 0 || !Number.isInteger(count))) {
+						throw new Error('Replicas must be a whole number of 0 or more');
+					}
+					const results = await Promise.allSettled(
+						many.targets.map((t) =>
+							many.kind === 'scaleMany' ? backend.scale({ ...t, context }, count!) : backend.restart({ ...t, context })
+						)
+					);
+					const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+					const done = many.targets.length - failed.length;
+					if (failed.length) error = `${failed.length} of ${many.targets.length} failed: ${errorMessage(failed[0].reason)}`;
+					if (done) {
+						app.toast(
+							many.kind === 'scaleMany'
+								? `Scaled ${done} ${many.resource.kind} ${done === 1 ? 'object' : 'objects'} to ${count}`
+								: `Restarting ${done} ${many.resource.kind} ${done === 1 ? 'object' : 'objects'}`
+						);
+					}
+					ok = !failed.length;
+					break;
+				}
 				case 'labels':
 					ok = await patchMetadata(
 						dialog.target,
@@ -490,6 +522,10 @@
 				return `Scale ${dialog.resource.kind}`;
 			case 'restart':
 				return `Restart ${dialog.resource.kind}`;
+			case 'scaleMany':
+				return `Scale ${dialog.targets.length} ${dialog.resource.kind} objects`;
+			case 'restartMany':
+				return `Restart ${dialog.targets.length} ${dialog.resource.kind} objects`;
 			case 'labels':
 				return 'Labels and annotations';
 			case 'portforward':
@@ -525,6 +561,8 @@
 					delete: 'Delete',
 					scale: 'Scale',
 					restart: 'Restart',
+					scaleMany: 'Scale all',
+					restartMany: 'Restart all',
 					labels: 'Save',
 					portforward: 'Start',
 					drain: 'Drain',
@@ -584,7 +622,9 @@
 	<h2>{title}</h2>
 	<p class="action-context">
 		<strong>{context ? app.contextName(context) : ''}</strong>{app.environment ? ` · ${app.environment}` : ''} ·
-		{dialog.kind === 'delete' ? `${dialog.targets.length} selected` : 'Review the target before you continue'}
+		{dialog.kind === 'delete' || dialog.kind === 'scaleMany' || dialog.kind === 'restartMany'
+			? `${dialog.targets.length} selected`
+			: 'Review the target before you continue'}
 	</p>
 
 	{#if dialog.kind === 'delete'}
@@ -607,6 +647,18 @@
 				<option value="orphan">keep (orphan)</option>
 			</select>
 		</label>
+	{:else if dialog.kind === 'scaleMany' || dialog.kind === 'restartMany'}
+		<p>
+			{dialog.kind === 'scaleMany'
+				? 'Set the same number of replicas for each of these:'
+				: 'Roll out new pods for each of these, like kubectl rollout restart:'}
+		</p>
+		<ul class="targets">
+			{#each dialog.targets as t (name(t))}<li>{name(t)}</li>{/each}
+		</ul>
+		{#if dialog.kind === 'scaleMany'}
+			<input class="replicas" type="number" min="0" aria-label="Replicas" bind:value={replicas} bind:this={firstField} />
+		{/if}
 	{:else if dialog.kind === 'scale'}
 		<p>Set the number of replicas for <strong>{name(dialog.target)}</strong>.</p>
 		<input

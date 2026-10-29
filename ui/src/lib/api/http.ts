@@ -91,6 +91,7 @@ export const httpBackend: Backend = {
 	settings: () => request('GET', '/settings'),
 	setContextSettings: (name, settings) => request('PUT', '/settings/context', { name, settings }),
 	setDiffSettings: (settings) => request('PUT', '/settings/diff', settings),
+	setColumnSettings: (kind, columns) => request('PUT', '/settings/columns', { kind, columns }),
 	setAgentSettings: (settings) => request('PUT', '/settings/agents', settings),
 	agentConnection: () => request('GET', '/agents'),
 	newAgentToken: () => request('POST', '/agents/token'),
@@ -110,6 +111,7 @@ export const httpBackend: Backend = {
 		const params = new URLSearchParams({ ...resource, namespace: namespace ?? '' });
 		if (scope?.labelSelector) params.set('labelSelector', scope.labelSelector);
 		if (scope?.fieldSelector) params.set('fieldSelector', scope.fieldSelector);
+		if (scope?.paths) params.set('paths', scope.paths);
 		let stopped = false;
 		const socket = new WebSocket(socketUrl(`/table?${params}`));
 		socket.onmessage = (msg) => onEvent(JSON.parse(msg.data));

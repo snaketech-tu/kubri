@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use crate::jsonpath::JsonPath;
+
 const TABLE_ACCEPT: &str = "application/json;as=Table;v=v1;g=meta.k8s.io,\
                             application/json;as=Table;v=v1beta1;g=meta.k8s.io,application/json";
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
@@ -66,9 +68,30 @@ pub struct Owner {
 pub struct TableScope {
     pub label_selector: Option<String>,
     pub field_selector: Option<String>,
+    /// Extra columns, one JSONPath per line, like `kubectl get -o custom-columns`. Their cells
+    /// follow the server's, and their columns are named by the path with the format `jsonpath`.
+    pub paths: Option<String>,
 }
 
 impl TableScope {
+    /// The extra columns; a path that does not parse is an error.
+    fn extra(&self) -> Result<Extra, String> {
+        let names: Vec<String> = self
+            .paths
+            .as_deref()
+            .unwrap_or_default()
+            .lines()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(str::to_owned)
+            .collect();
+        let parsed = names
+            .iter()
+            .map(|n| JsonPath::parse(n))
+            .collect::<Result<_, _>>()?;
+        Ok(Extra { names, parsed })
+    }
+
     fn list_params(&self) -> ListParams {
         let mut params = ListParams::default();
         if let Some(labels) = self.label_selector.as_deref().filter(|s| !s.is_empty()) {
@@ -114,6 +137,29 @@ pub enum TableEvent {
     Notice {
         message: String,
     },
+}
+
+/// Columns read from each object with a JSONPath, beside the server's.
+#[derive(Debug, Clone, Default)]
+struct Extra {
+    names: Vec<String>,
+    parsed: Vec<JsonPath>,
+}
+
+impl Extra {
+    fn columns(&self) -> impl Iterator<Item = Column> + '_ {
+        self.names.iter().map(|name| Column {
+            name: name.clone(),
+            kind: "string".to_owned(),
+            format: "jsonpath".to_owned(),
+            description: format!("{name} in each object"),
+            priority: 0,
+        })
+    }
+
+    fn cells<'a>(&'a self, object: &'a Value) -> impl Iterator<Item = Value> + 'a {
+        self.parsed.iter().map(move |p| p.cell(object))
+    }
 }
 
 /// Streams one table made of the collections at `urls`, such as the same resource in several
@@ -191,10 +237,17 @@ impl From<kube::Error> for Failure {
 }
 
 async fn run(client: &Client, url: &str, scope: &TableScope, tx: &mpsc::Sender<TableEvent>) {
+    let extra = match scope.extra() {
+        Ok(extra) => extra,
+        Err(message) => {
+            let _ = tx.send(TableEvent::Error { message }).await;
+            return;
+        }
+    };
     let mut backoff = Duration::from_secs(1);
     loop {
         let mut listed = false;
-        let message = match list_and_watch(client, url, scope, tx, &mut listed).await {
+        let message = match list_and_watch(client, url, scope, &extra, tx, &mut listed).await {
             Ok(()) => return,
             Err(Failure::Expired) => continue,
             Err(Failure::Error(message)) => message,
@@ -215,24 +268,26 @@ async fn list_and_watch(
     client: &Client,
     url: &str,
     scope: &TableScope,
+    extra: &Extra,
     tx: &mpsc::Sender<TableEvent>,
     listed: &mut bool,
 ) -> Result<(), Failure> {
-    let request = with_table_accept(Request::new(url).list(&scope.list_params()));
+    let full = !extra.parsed.is_empty();
+    let request = with_table_accept(Request::new(url).list(&scope.list_params()), full);
     let list: Value = client.request(request).await?;
     let mut version = list
         .pointer("/metadata/resourceVersion")
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_owned();
-    let (columns, rows) = parse_list(list);
+    let (columns, rows) = parse_list(list, extra);
     if tx.send(TableEvent::Reset { columns, rows }).await.is_err() {
         return Ok(());
     }
     *listed = true;
 
     loop {
-        let request = with_table_accept(Request::new(url).watch(&scope.watch_params(), &version));
+        let request = with_table_accept(Request::new(url).watch(&scope.watch_params(), &version), full);
         let events = client.request_events::<Value>(request).await?;
         let mut events = std::pin::pin!(events);
         while let Some(event) = events.next().await {
@@ -246,7 +301,7 @@ async fn list_and_watch(
                 WatchEvent::Error(status) if status.code == 410 => return Err(Failure::Expired),
                 WatchEvent::Error(status) => return Err(Failure::Error(status.message)),
             };
-            for row in parse_event(object, &mut version) {
+            for row in parse_event(object, &mut version, extra) {
                 let event = if deleted {
                     TableEvent::Delete { row }
                 } else {
@@ -261,11 +316,24 @@ async fn list_and_watch(
     }
 }
 
+/// Asks for a table; `full` also asks for whole objects in its rows, for JSONPath columns,
+/// instead of only their metadata.
 fn with_table_accept(
     request: Result<http::Request<Vec<u8>>, kube::core::request::Error>,
+    full: bool,
 ) -> http::Request<Vec<u8>> {
     // Building a GET for a valid path cannot fail.
     let mut request = request.expect("valid list/watch request");
+    if full {
+        let uri = request.uri().to_string();
+        let joined = format!(
+            "{uri}{}includeObject=Object",
+            if uri.contains('?') { '&' } else { '?' }
+        );
+        if let Ok(uri) = joined.parse() {
+            *request.uri_mut() = uri;
+        }
+    }
     request
         .headers_mut()
         .insert(http::header::ACCEPT, http::HeaderValue::from_static(TABLE_ACCEPT));
@@ -276,30 +344,32 @@ fn is_table(value: &Value) -> bool {
     value.get("kind").and_then(Value::as_str) == Some("Table")
 }
 
-pub(crate) fn parse_list(list: Value) -> (Vec<Column>, Vec<Row>) {
-    if is_table(&list) {
-        let columns = list
+fn parse_list(list: Value, extra: &Extra) -> (Vec<Column>, Vec<Row>) {
+    let (mut columns, rows) = if is_table(&list) {
+        let columns: Vec<Column> = list
             .get("columnDefinitions")
             .cloned()
             .and_then(|c| serde_json::from_value(c).ok())
             .unwrap_or_default();
-        let rows = table_rows(&list).collect();
+        let rows = table_rows(&list, extra).collect();
         (columns, rows)
     } else {
         let rows = list
             .get("items")
             .and_then(Value::as_array)
-            .map(|items| items.iter().map(fallback_row).collect())
+            .map(|items| items.iter().map(|o| fallback_row(o, extra)).collect())
             .unwrap_or_default();
         (fallback_columns(), rows)
-    }
+    };
+    columns.extend(extra.columns());
+    (columns, rows)
 }
 
-fn parse_event(object: Value, version: &mut String) -> Vec<Row> {
+fn parse_event(object: Value, version: &mut String, extra: &Extra) -> Vec<Row> {
     let rows: Vec<Row> = if is_table(&object) {
-        table_rows(&object).collect()
+        table_rows(&object, extra).collect()
     } else {
-        vec![fallback_row(&object)]
+        vec![fallback_row(&object, extra)]
     };
     let latest = if is_table(&object) {
         object.pointer("/rows/0/object/metadata/resourceVersion")
@@ -312,19 +382,21 @@ fn parse_event(object: Value, version: &mut String) -> Vec<Row> {
     rows
 }
 
-fn table_rows(table: &Value) -> impl Iterator<Item = Row> + '_ {
+fn table_rows<'a>(table: &'a Value, extra: &'a Extra) -> impl Iterator<Item = Row> + 'a {
     table
         .get("rows")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .map(|row| {
-            let cells = row
+        .map(move |row| {
+            let mut cells = row
                 .get("cells")
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default();
-            let metadata = row.pointer("/object/metadata").unwrap_or(&Value::Null);
+            let object = row.get("object").unwrap_or(&Value::Null);
+            cells.extend(extra.cells(object));
+            let metadata = object.get("metadata").unwrap_or(&Value::Null);
             build_row(metadata, cells)
         })
 }
@@ -346,11 +418,13 @@ fn fallback_columns() -> Vec<Column> {
         .collect()
 }
 
-fn fallback_row(object: &Value) -> Row {
+fn fallback_row(object: &Value, extra: &Extra) -> Row {
     let metadata = object.get("metadata").unwrap_or(&Value::Null);
     let name = metadata.get("name").cloned().unwrap_or(Value::Null);
     let created = metadata.get("creationTimestamp").cloned().unwrap_or(Value::Null);
-    build_row(metadata, vec![name, created])
+    let mut cells = vec![name, created];
+    cells.extend(extra.cells(object));
+    build_row(metadata, cells)
 }
 
 fn build_row(metadata: &Value, cells: Vec<Value>) -> Row {
@@ -406,8 +480,38 @@ mod tests {
     }
 
     #[test]
+    fn adds_jsonpath_columns() {
+        let scope = TableScope {
+            paths: Some(".spec.nodeName\n\n .metadata.labels.app \n".into()),
+            ..Default::default()
+        };
+        let extra = scope.extra().unwrap();
+        let mut table = pod_table();
+        table["rows"][0]["object"]["spec"] = json!({ "nodeName": "n1" });
+        let (columns, rows) = parse_list(table, &extra);
+        let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Name", "Ready", "IP", ".spec.nodeName", ".metadata.labels.app"]
+        );
+        assert_eq!(columns[3].format, "jsonpath");
+        assert_eq!(rows[0].cells[3..], [json!("n1"), json!("web")]);
+        // Objects the server sends without a table get them too.
+        let (_, rows) = parse_list(
+            json!({ "items": [{ "metadata": { "name": "a" }, "spec": { "nodeName": "n2" } }] }),
+            &extra,
+        );
+        assert_eq!(rows[0].cells[2..], [json!("n2"), Value::Null]);
+        let bad = TableScope {
+            paths: Some(".a[".into()),
+            ..Default::default()
+        };
+        assert!(bad.extra().is_err());
+    }
+
+    #[test]
     fn parses_server_side_tables() {
-        let (columns, rows) = parse_list(pod_table());
+        let (columns, rows) = parse_list(pod_table(), &Extra::default());
         assert_eq!(columns.len(), 3);
         assert_eq!(columns[2].priority, 1);
         assert_eq!(rows.len(), 1);
@@ -435,6 +539,7 @@ mod tests {
         let scope = TableScope {
             label_selector: Some("app=web".into()),
             field_selector: Some("spec.nodeName=n1".into()),
+            paths: None,
         };
         let list = scope.list_params();
         assert_eq!(list.label_selector.as_deref(), Some("app=web"));
@@ -445,6 +550,7 @@ mod tests {
         let empty = TableScope {
             label_selector: Some(String::new()),
             field_selector: None,
+            paths: None,
         };
         assert_eq!(empty.list_params().label_selector, None);
     }
@@ -452,7 +558,7 @@ mod tests {
     #[test]
     fn watch_events_advance_the_resource_version() {
         let mut version = "1".to_owned();
-        let rows = parse_event(pod_table(), &mut version);
+        let rows = parse_event(pod_table(), &mut version, &Extra::default());
         assert_eq!(rows.len(), 1);
         assert_eq!(version, "99");
     }
@@ -464,7 +570,7 @@ mod tests {
             "items": [{ "metadata": { "name": "a", "namespace": "x",
                                       "creationTimestamp": "2026-10-01T10:00:00Z" } }]
         });
-        let (columns, rows) = parse_list(list);
+        let (columns, rows) = parse_list(list, &Extra::default());
         assert_eq!(
             columns.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
             ["Name", "Age"]

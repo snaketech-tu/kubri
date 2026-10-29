@@ -72,6 +72,24 @@ export interface Settings {
 	agents: AgentSettings;
 	explain: ExplainSettings;
 	debug: DebugSettings;
+	/** By `group/Kind`, `/Pod` for the core group. */
+	columns: Record<string, ColumnSettings>;
+}
+
+/** How a list shows one kind. */
+export interface ColumnSettings {
+	hidden: string[];
+	/** Columns of the wide view shown without it. */
+	shown: string[];
+	/** Names in the order to show them; others follow in their own order. */
+	order: string[];
+	custom: CustomColumn[];
+}
+
+export interface CustomColumn {
+	name: string;
+	/** A JSONPath such as `.spec.nodeName`. */
+	path: string;
 }
 
 export interface DebugSettings {
@@ -315,6 +333,8 @@ export interface Owner {
 export interface TableScope {
 	labelSelector?: string | null;
 	fieldSelector?: string | null;
+	/** Extra columns, one JSONPath per line; each comes back as a column named by its path. */
+	paths?: string | null;
 }
 
 /** Where Enter leads from an object: a list of what belongs to it. */
@@ -897,6 +917,8 @@ export interface Backend {
 	settings(): Promise<SettingsReply>;
 	setContextSettings(name: string, settings: ContextSettings): Promise<Settings>;
 	setDiffSettings(settings: DiffSettings): Promise<Settings>;
+	/** How lists show a kind, by `group/Kind`; the defaults forget it. */
+	setColumnSettings(kind: string, columns: ColumnSettings): Promise<Settings>;
 	setAgentSettings(settings: AgentSettings): Promise<Settings>;
 	agentConnection(): Promise<AgentConnection>;
 	/** Makes a new token; agents with the old one are refused. */

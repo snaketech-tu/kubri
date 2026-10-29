@@ -15,6 +15,7 @@ pub mod explain;
 mod fixes;
 mod health;
 mod helm;
+mod jsonpath;
 mod k9s;
 mod kubeconfig;
 mod logs;
@@ -84,7 +85,7 @@ pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
-pub use settings::{AgentSettings, ContextSettings, DiffSettings, Settings};
+pub use settings::{AgentSettings, ColumnSettings, ContextSettings, CustomColumn, DiffSettings, Settings};
 
 /// Kubri's config folder, where its settings live.
 pub fn config_dir() -> Option<std::path::PathBuf> {
@@ -294,6 +295,11 @@ impl Kubri {
             s.agents = value;
             Ok(())
         })
+    }
+
+    /// Sets how lists show a kind, by `group/Kind`.
+    pub fn set_column_settings(&self, kind: &str, value: ColumnSettings) -> Result<Settings> {
+        self.update_settings(|s| s.set_columns(kind, value))
     }
 
     /// Sets which actions show a dry-run diff.
