@@ -20,7 +20,7 @@ use kubri_core::{
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
 use kubri_core::{Charts, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
-use kubri_core::{FleetCluster, GitOpsAction, Manager, NewContext, RightSizing};
+use kubri_core::{FleetCluster, GitOpsAction, Manager, NewContext, RightSizing, SearchRequest, SearchResult};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings", get(settings))
         .route("/settings/context", put(set_context_settings))
         .route("/settings/diff", put(set_diff_settings))
+        .route("/settings/searches", put(set_saved_searches))
         .route("/settings/columns", put(set_column_settings))
         .route("/settings/agents", put(set_agent_settings))
         .route("/settings/explain", put(set_explain_settings))
@@ -84,6 +85,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/metrics", get(metrics))
         .route("/pulse", get(pulse))
         .route("/fleet", get(fleet))
+        .route("/search", post(search))
         .route("/integrations", get(integrations))
         .route("/charts", post(charts))
         .route("/usage-history", get(usage_history))
@@ -240,6 +242,13 @@ async fn set_context_settings(
     Json(req): Json<SetContextSettings>,
 ) -> ApiResult<Settings> {
     Ok(Json(kubri.set_context_settings(&req.name, req.settings)?))
+}
+
+async fn set_saved_searches(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<Vec<kubri_core::SavedSearch>>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_saved_searches(req)?))
 }
 
 async fn set_diff_settings(
@@ -683,6 +692,13 @@ async fn metrics(
 ) -> ApiResult<Vec<Usage>> {
     let namespace = query.namespace.filter(|ns| !ns.is_empty());
     Ok(Json(kubri.metrics(query.kind, namespace.as_deref()).await?))
+}
+
+async fn search(
+    State(kubri): State<Arc<Kubri>>,
+    Json(request): Json<SearchRequest>,
+) -> ApiResult<SearchResult> {
+    Ok(Json(kubri.search(&request).await?))
 }
 
 #[derive(Deserialize)]

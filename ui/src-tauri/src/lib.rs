@@ -148,6 +148,14 @@ fn set_diff_settings(kubri: State<'_, Arc<Kubri>>, settings: DiffSettings) -> Co
 }
 
 #[tauri::command]
+fn set_saved_searches(
+    kubri: State<'_, Arc<Kubri>>,
+    searches: Vec<kubri_core::SavedSearch>,
+) -> CommandResult<Settings> {
+    kubri.set_saved_searches(searches).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_column_settings(
     kubri: State<'_, Arc<Kubri>>,
     kind: String,
@@ -649,6 +657,14 @@ async fn gitops(
 }
 
 #[tauri::command]
+async fn search(
+    kubri: State<'_, Arc<Kubri>>,
+    request: kubri_core::SearchRequest,
+) -> CommandResult<kubri_core::SearchResult> {
+    kubri.search(&request).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn fleet_cluster(
     kubri: State<'_, Arc<Kubri>>,
     context: String,
@@ -1017,6 +1033,8 @@ pub fn run() {
             renew_certificate,
             right_sizing,
             fleet_cluster,
+            set_saved_searches,
+            search,
             inspect_kubeconfig,
             add_contexts,
             remove_context,

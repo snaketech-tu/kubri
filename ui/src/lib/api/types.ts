@@ -227,6 +227,49 @@ export interface Settings {
 	debug: DebugSettings;
 	/** By `group/Kind`, `/Pod` for the core group. */
 	columns: Record<string, ColumnSettings>;
+	/** Searches kept in the sidebar. */
+	searches: SavedSearch[];
+}
+
+export interface SavedSearch {
+	name: string;
+	/** As typed in the search field. */
+	query: string;
+}
+
+/** A comparison of a field with a value, like `status.phase!=Running`. */
+export interface FieldTest {
+	path: string;
+	op: '=' | '!=' | '~' | '!~' | '>' | '<' | '>=' | '<=';
+	value: string;
+}
+
+export interface SearchRequest {
+	/** Part of the name; `/…/` for a regular expression. */
+	text: string;
+	/** Empty for the common kinds. */
+	kinds: ResourceRef[];
+	allKinds: boolean;
+	namespace: string | null;
+	labels: string;
+	fields: FieldTest[];
+	/** Empty for the connected context. */
+	contexts: string[];
+	limit?: number;
+}
+
+export interface SearchHit {
+	object: ObjectRef;
+	kind: string;
+	created: string | null;
+}
+
+export interface SearchResult {
+	hits: SearchHit[];
+	truncated: boolean;
+	/** Kinds listed, over all contexts. */
+	searched: number;
+	problems: { context: string; kind: string | null; message: string }[];
 }
 
 /** How a list shows one kind. */
@@ -1199,6 +1242,10 @@ export interface Backend {
 	gitops(target: ObjectRef, action: GitOpsAction): Promise<void>;
 	/** Asks cert-manager to issue a Certificate again now, like `cmctl renew`. */
 	renewCertificate(target: ObjectRef): Promise<void>;
+	/** Objects by name, labels and fields, over kinds and contexts. */
+	search(request: SearchRequest): Promise<SearchResult>;
+	/** Replaces the searches kept in the sidebar. */
+	setSavedSearches(searches: SavedSearch[]): Promise<Settings>;
 	/** How a context is doing, without connecting to it. */
 	fleetCluster(context: string): Promise<FleetCluster>;
 	/** Containers whose requests or limits are far from what they use. */

@@ -1,6 +1,6 @@
 # Several clusters
 
-Kubri connects to one context at a time, the one in the top bar. The pages here look at all of them.
+Kubri connects to one context at a time, the one in the top bar. The pages here look at several of them.
 
 ## Clusters
 
@@ -29,6 +29,26 @@ Added contexts have **Remove** on their card. Contexts from your own kubeconfig 
 ## Limiting namespaces
 
 In a context's settings (`:config`), **Only these namespaces** takes a list such as `shop, payments`, and **Or namespaces labeled** a label selector such as `team=shop`. The namespace picker then offers only those, and lists across all namespaces show only them, with one watch per namespace. That also suits users who may list only some namespaces. A namespace you pick or type yourself still opens.
+
+## Search
+
+**Search** (`:search`, also `:find`) finds objects by name, label and field, in the connected context or in several. Type part of a name and narrow it down:
+
+| Part | Means |
+| --- | --- |
+| `web` | the name contains `web`; exact names come first, then names that start with it |
+| `/^api-\d+$/` | the name matches a regular expression, ignoring case |
+| `kind:deploy,svc` | these kinds, named as in the palette; `kind:all` every kind you may list |
+| `ns:shop` or `-n shop` | one namespace |
+| `-l app=web` or `label:app=web` | a label selector |
+| `status.phase!=Running` | a field compared with `=`, `!=`, `~` (contains), `!~`, `>`, `<`, `>=` or `<=`; numbers compare as numbers |
+| `ctx:*` or `ctx:prod,staging` | every context, or some; without it only the connected one |
+
+Without `kind:` Kubri searches the kinds people look for by name: workloads, pods, Services, Ingresses, ConfigMaps, Secrets, volume claims, ServiceAccounts, nodes, namespaces and HTTPRoutes. A context limited to some namespaces is searched in those. Lists that fail, such as a context that is down, are named above the results and do not hold up the others. Up to 300 objects are shown.
+
+Clicking a result opens it, connecting to its context first when it is another one. **Save search** puts the search in the sidebar under Search, kept in Kubri's settings file.
+
+The palette (`:` or `Ctrl K`) also finds objects: it offers the objects opened lately, in any context, and while you type a word of three letters or more it looks for objects in the connected context whose name has it. **search …** at the end of the list opens the search page with what you typed.
 
 ## Compare
 

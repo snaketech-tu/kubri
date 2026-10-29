@@ -192,6 +192,17 @@ pub struct Settings {
     pub debug: crate::DebugSettings,
     /// Per kind, by `group/Kind` (`/Pod` for the core group).
     pub columns: BTreeMap<String, ColumnSettings>,
+    /// Searches kept in the sidebar, in their order.
+    pub searches: Vec<SavedSearch>,
+}
+
+/// A search kept in the sidebar.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SavedSearch {
+    pub name: String,
+    /// As typed in the search field, like `web kind:deploy,svc -l tier=front`.
+    pub query: String,
 }
 
 impl Settings {

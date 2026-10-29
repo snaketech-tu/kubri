@@ -1,4 +1,4 @@
-import type { Alias, ContextInfo, ResourceInfo } from './api';
+import type { Alias, ContextInfo, ObjectRef, ResourceInfo } from './api';
 import { CORE_GROUPS, parseShortForm, TEMPLATE_KINDS, type TemplateParams } from './create';
 import { xrayResources } from './xray';
 
@@ -27,6 +27,9 @@ export type Action =
 	| { type: 'integrations' }
 	| { type: 'rightsizing' }
 	| { type: 'fleet' }
+	| { type: 'search'; query?: string }
+	/** One object, in whichever context it is. */
+	| { type: 'object'; target: ObjectRef; kind?: string }
 	| { type: 'config'; section?: ConfigSection }
 	| { type: 'skin'; name: string | null }
 	| { type: 'help' };
@@ -50,6 +53,7 @@ const BENCH_COMMANDS = ['be', 'bench', 'benchmark', 'benchmarks'];
 const INTEGRATION_COMMANDS = ['integrations', 'integration', 'prometheus', 'grafana', 'loki'];
 const SIZING_COMMANDS = ['rightsizing', 'rightsize', 'sizing'];
 const FLEET_COMMANDS = ['fleet', 'home'];
+const SEARCH_COMMANDS = ['search', 'find', 'grep'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	config: undefined,
 	settings: undefined,
@@ -283,6 +287,15 @@ function builtins(
 	};
 	if (FLEET_COMMANDS.includes(cmd)) return [fleet];
 
+	// `search web kind:deploy ctx:*`: everything after the command is the query.
+	const query = input.trim().replace(/^:/, '').slice(command.length).trim();
+	const search: Suggestion = {
+		label: query ? `${cmd} ${query}` : 'search',
+		detail: query ? 'Search objects by name, label and field' : 'Objects by name, label and field, in one or more contexts',
+		action: { type: 'search', query }
+	};
+	if (SEARCH_COMMANDS.includes(cmd)) return [search];
+
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {
 		const roots = xrayResources(resources);
@@ -371,6 +384,7 @@ function builtins(
 	if (cmd.length > 1 && INTEGRATION_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(integrations);
 	if (cmd.length > 2 && SIZING_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sizing);
 	if (cmd.length > 1 && FLEET_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(fleet);
+	if (cmd.length > 1 && SEARCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push({ ...search, label: 'search' });
 	if (cmd.length > 1 && 'config'.startsWith(cmd) && cmd !== 'config') {
 		extra.push(...builtins('config', resources, contexts, namespaces, config).slice(0, 1));
 	}
