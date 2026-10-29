@@ -54,6 +54,26 @@
 			<span class="label">Clusters</span>
 			<span class="hint">:fleet</span>
 		</button>
+		<button
+			class:active={app.page === 'search' && !app.settings.searches.some((s) => s.query === app.searchQuery)}
+			onclick={() => app.showSearch()}
+			title=":search"
+		>
+			<Icon name="search" />
+			<span class="label">Search</span>
+			<span class="hint">:search</span>
+		</button>
+		{#each app.settings.searches as saved (saved.name)}
+			<button
+				class="saved"
+				class:active={app.page === 'search' && app.searchQuery === saved.query}
+				onclick={() => app.showSearch(saved.query)}
+				title={saved.query}
+			>
+				<Icon name="bookmark" size={16} />
+				<span class="label">{saved.name}</span>
+			</button>
+		{/each}
 		<button class:active={app.page === 'pulses'} onclick={() => app.showPulses()} title=":pulses">
 			<Icon name="overview" />
 			<span class="label">Overview</span>
@@ -191,6 +211,9 @@
 		color: var(--text-muted);
 		font-size: 13px;
 		text-align: left;
+	}
+	.saved {
+		padding-left: 24px;
 	}
 	button:hover {
 		background: var(--surface-2);

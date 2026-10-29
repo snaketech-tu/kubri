@@ -28,12 +28,14 @@ import {
 	type PortForwardInfo,
 	type ResourceInfo,
 	type ResourceRef,
+	type SavedSearch,
 	type Settings,
 	type TableScope,
 	type TerminalMode
 } from './api';
 import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
+import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu } from './menu';
 import { applyScheme, applyTheme, resolveColor, storeSkin, storedScheme, storedSkin, type Scheme } from './skin';
@@ -124,7 +126,8 @@ const DEFAULT_SETTINGS: Settings = {
 	agents: { http: false, port: 7879, secrets: false },
 	explain: { provider: 'none', baseUrl: '', model: '' },
 	debug: { image: 'busybox' },
-	columns: {}
+	columns: {},
+	searches: []
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
@@ -165,6 +168,7 @@ export type Page =
 	| 'integrations'
 	| 'rightsizing'
 	| 'fleet'
+	| 'search'
 	| 'config';
 
 export type Dialog =
@@ -242,6 +246,8 @@ class AppState {
 	error = $state<string | null>(null);
 
 	page = $state<Page>('pulses');
+	/** What the search page searches for, as typed. */
+	searchQuery = $state('');
 	/** The kind the XRay page starts its trees from. */
 	xrayResource = $state<ResourceInfo | null>(null);
 	#details = $state<Details | null>(null);
@@ -414,6 +420,17 @@ class AppState {
 		try {
 			this.settings = await backend.setContextSettings(context, settings);
 			if (context === this.cluster?.context) await this.refreshGuard();
+			return true;
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+			return false;
+		}
+	}
+
+	/** Replaces the searches kept in the sidebar. */
+	async setSavedSearches(searches: SavedSearch[]): Promise<boolean> {
+		try {
+			this.settings = await backend.setSavedSearches(searches);
 			return true;
 		} catch (err) {
 			this.toast(errorMessage(err), 'bad');
@@ -704,6 +721,12 @@ class AppState {
 			case 'fleet':
 				this.showFleet();
 				break;
+			case 'search':
+				this.showSearch(action.query);
+				break;
+			case 'object':
+				await this.openObject(action.target, action.kind);
+				break;
 			case 'portforwards':
 				this.showPortForwards();
 				break;
@@ -732,6 +755,40 @@ class AppState {
 			return;
 		}
 		this.details = { resource, target: { ...target, context: this.cluster?.context }, tab, editing: false, ...extra };
+		if (this.cluster) {
+			this.recent = remember({
+				context: this.cluster.context,
+				kind: resource.kind,
+				...refOf(resource),
+				namespace: target.namespace,
+				name: target.name
+			});
+		}
+	}
+
+	/** Objects opened lately, newest first, in any context. */
+	recent = $state.raw<RecentObject[]>(recentObjects());
+
+	/** Opens an object's details, connecting to its context first if it is another one. */
+	async openObject(target: ObjectRef, kind = target.resource.plural) {
+		if (target.context && target.context !== this.cluster?.context) {
+			await this.switchContext(target.context);
+			if (this.cluster?.context !== target.context) return;
+		}
+		const resource = findResource(this.resources, target.resource);
+		if (!resource) {
+			this.toast(`${this.cluster?.context ?? 'This cluster'} has no ${kind}`, 'bad');
+			return;
+		}
+		this.showDetails(resource, { resource: refOf(resource), namespace: target.namespace, name: target.name });
+	}
+
+	/** Searches objects by name, label and field, here or in several contexts. */
+	showSearch(query?: string) {
+		if (drafts.block(() => this.showSearch(query))) return;
+		this.page = 'search';
+		this.details = null;
+		if (query !== undefined) this.searchQuery = query;
 	}
 
 	/** What the cluster runs that Kubri uses: Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager. */

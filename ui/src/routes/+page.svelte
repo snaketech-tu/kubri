@@ -36,6 +36,7 @@
 	import IntegrationsView from '#lib/components/IntegrationsView.svelte';
 	import RightSizingView from '#lib/components/RightSizingView.svelte';
 	import FleetView from '#lib/components/FleetView.svelte';
+	import SearchView from '#lib/components/SearchView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
@@ -454,6 +455,8 @@
 						<PortForwardsView />
 					{:else if app.page === 'benchmarks'}
 						<BenchmarksView />
+					{:else if app.page === 'search'}
+						<SearchView />
 					{:else if app.page === 'config'}
 						<ConfigView />
 					{:else if app.page === 'integrations'}

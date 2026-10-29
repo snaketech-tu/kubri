@@ -149,6 +149,8 @@ export const httpBackend: Backend = {
 	suspendCronJob: (target, suspend) => request('POST', '/cronjob/suspend', { target, suspend }),
 	gitops: (target, action) => request('POST', '/gitops', { target, action }),
 	renewCertificate: (target) => request('POST', '/certificate/renew', { target }),
+	search: (body) => request('POST', '/search', body),
+	setSavedSearches: (searches) => request('PUT', '/settings/searches', searches),
 	fleetCluster: (context) => request('GET', `/fleet?${new URLSearchParams({ context })}`),
 	rightSizing: (namespace) => request('GET', `/right-sizing${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 	setResources: (target, container, requests, limits) => request('POST', '/object/resources', { target, container, requests, limits }),

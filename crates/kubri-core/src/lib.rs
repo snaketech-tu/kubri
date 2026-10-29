@@ -42,6 +42,7 @@ mod resource;
 mod rightsizing;
 mod sanitizer;
 mod schema;
+mod search;
 mod selector;
 mod settings;
 mod table;
@@ -102,8 +103,10 @@ pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
 pub use rightsizing::{RightSizing, SizeAdvice, SizeReason};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
+pub use search::{FieldTest, SearchHit, SearchProblem, SearchRequest, SearchResult};
 pub use settings::{
-    AgentSettings, ColumnSettings, ContextSettings, CustomColumn, DiffSettings, FavoriteForward, Settings,
+    AgentSettings, ColumnSettings, ContextSettings, CustomColumn, DiffSettings, FavoriteForward, SavedSearch,
+    Settings,
 };
 
 /// Kubri's config folder, where its settings live.
@@ -331,6 +334,18 @@ impl Kubri {
     /// Sets how lists show a kind, by `group/Kind`.
     pub fn set_column_settings(&self, kind: &str, value: ColumnSettings) -> Result<Settings> {
         self.update_settings(|s| s.set_columns(kind, value))
+    }
+
+    /// Replaces the searches kept in the sidebar.
+    pub fn set_saved_searches(&self, value: Vec<SavedSearch>) -> Result<Settings> {
+        let value: Vec<SavedSearch> = value
+            .into_iter()
+            .filter(|s| !s.name.trim().is_empty() && !s.query.trim().is_empty())
+            .collect();
+        self.update_settings(|s| {
+            s.searches = value;
+            Ok(())
+        })
     }
 
     /// Sets which actions show a dry-run diff.

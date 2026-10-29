@@ -1,16 +1,73 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { backend, type SearchHit } from '../api';
 	import { suggest, type Suggestion } from '../commands';
+	import type { RecentObject } from '../search';
 	import { app } from '../state.svelte';
 
 	let input = $state('');
 	let active = $state(0);
 	let field = $state<HTMLInputElement>();
+	/** Objects whose name has what is typed, found as it is typed. */
+	let hits = $state.raw<SearchHit[]>([]);
+	let asked = 0;
+
+	const term = $derived(input.trim().replace(/^:/, ''));
+	/** One word that might be part of an object's name rather than a command. */
+	const lookup = $derived(term.length >= 3 && !/\s/.test(term) && !term.includes(':') ? term : '');
+
+	const where = (namespace: string | null | undefined, context: string | undefined) =>
+		[namespace, context && context !== app.cluster?.context ? context : ''].filter(Boolean).join(' · ');
+	const recentSuggestion = (o: RecentObject): Suggestion => ({
+		label: o.name,
+		detail: [o.kind, where(o.namespace, o.context), 'recent'].filter(Boolean).join(' · '),
+		action: {
+			type: 'object',
+			target: { context: o.context, resource: { group: o.group, version: o.version, plural: o.plural }, namespace: o.namespace, name: o.name },
+			kind: o.kind
+		}
+	});
+
+	const objects = $derived.by((): Suggestion[] => {
+		const recent = app.recent.filter((o) => o.name.toLowerCase().includes(lookup.toLowerCase())).slice(0, 4).map(recentSuggestion);
+		const seen = new Set(recent.map((s) => `${s.detail}/${s.label}`));
+		const found = hits
+			.map((h): Suggestion => ({
+				label: h.object.name,
+				detail: [h.kind, where(h.object.namespace, h.object.context)].filter(Boolean).join(' · '),
+				action: { type: 'object', target: h.object, kind: h.kind }
+			}))
+			.filter((s) => !seen.has(`${s.detail} · recent/${s.label}`));
+		return [...recent, ...found];
+	});
+
+	$effect(() => {
+		const text = lookup;
+		const mine = ++asked;
+		hits = [];
+		if (!text || !app.cluster) return;
+		const timer = setTimeout(async () => {
+			try {
+				const result = await backend.search({ text, kinds: [], allKinds: false, namespace: null, labels: '', fields: [], contexts: [], limit: 8 });
+				if (mine === asked) hits = result.hits;
+			} catch {
+				// The palette still offers commands.
+			}
+		}, 250);
+		return () => clearTimeout(timer);
+	});
 
 	const suggestions = $derived(
 		input.trim()
-			? suggest(input, app.resources, app.contexts, app.namespaces, app.paletteConfig)
+			? [
+					...suggest(input, app.resources, app.contexts, app.namespaces, app.paletteConfig),
+					...(lookup ? objects : []),
+					...(/^(search|find|grep)\b/i.test(term)
+						? []
+						: [{ label: `search ${term}`, detail: 'Search objects by name, label and field', action: { type: 'search', query: term } } as Suggestion])
+				]
 			: [
+					...app.recent.slice(0, 5).map(recentSuggestion),
 					...suggest('ctx', app.resources, app.contexts, app.namespaces).slice(0, 3),
 					...suggest('po', app.resources, app.contexts, app.namespaces).slice(0, 1),
 					...suggest('deploy', app.resources, app.contexts, app.namespaces).slice(0, 1),

@@ -80,6 +80,14 @@ describe('command palette', () => {
 		expect(suggest('xray', resources, contexts, []).map((s) => s.label)).toEqual(['xray deployments.apps', 'xray pods']);
 	});
 
+	it('searches with everything after the command', () => {
+		expect(suggest(':search web ctx:*', resources, contexts, [])).toEqual([
+			expect.objectContaining({ action: { type: 'search', query: 'web ctx:*' } })
+		]);
+		expect(suggest('find', resources, contexts, [])[0].action).toEqual({ type: 'search', query: '' });
+		expect(suggest('sea', resources, contexts, []).map((s) => s.label)).toContain('search');
+	});
+
 	it('opens rbac and helm, optionally in a namespace', () => {
 		expect(suggest('rbac', resources, contexts, [])[0].action).toEqual({ type: 'rbac', namespace: undefined });
 		expect(suggest(':policy shop', resources, contexts, [])[0].action).toEqual({ type: 'rbac', namespace: 'shop' });
