@@ -17,6 +17,7 @@
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
 	import ForbiddenDialog from '#lib/components/ForbiddenDialog.svelte';
+	import AgentRequests from '#lib/components/AgentRequests.svelte';
 	import HelmView from '#lib/components/HelmView.svelte';
 	import KubectlDialog from '#lib/components/KubectlDialog.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
@@ -507,6 +508,7 @@
 {#if app.paletteOpen}<CommandPalette />{/if}
 {#if app.helpOpen}<HelpOverlay />{/if}
 {#if app.menu}<ActionMenu menu={app.menu} />{/if}
+<AgentRequests />
 {#if app.dialog?.kind === 'forbidden'}
 	<ForbiddenDialog dialog={app.dialog} />
 {:else if app.dialog?.kind === 'kubectl'}

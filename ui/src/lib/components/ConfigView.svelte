@@ -6,6 +6,7 @@
 	import { forControl } from '../keys';
 	import { resolveColor } from '../skin';
 	import { app } from '../state.svelte';
+	import AgentSettings from './AgentSettings.svelte';
 	import ContextSettingsForm from './ContextSettingsForm.svelte';
 	import PageHeader from './PageHeader.svelte';
 
@@ -133,6 +134,8 @@
 				{/each}
 			</div>
 		</div>
+
+		<AgentSettings />
 
 		{#if !config}
 			<p class="empty">Reading the k9s configuration…</p>

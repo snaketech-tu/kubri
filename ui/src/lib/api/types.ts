@@ -32,6 +32,8 @@ export interface ContextSettings {
 	locked: boolean;
 	/** The namespace shown after connecting; empty for all. */
 	namespace: string;
+	/** AI agents may change this context, each change confirmed in Kubri. Never on production. */
+	agentWrites: boolean;
 }
 
 /** Which actions show a dry-run diff first. YAML edits always do. */
@@ -42,9 +44,52 @@ export interface DiffSettings {
 	labels: boolean;
 }
 
+/** What AI agents connected over MCP may do. */
+export interface AgentSettings {
+	/** Serve MCP over HTTP on localhost from the running app. */
+	http: boolean;
+	/** The desktop app's port for it. */
+	port: number;
+	/** Agents may read Secret values. */
+	secrets: boolean;
+}
+
 export interface Settings {
 	contexts: Record<string, ContextSettings>;
 	diff: DiffSettings;
+	agents: AgentSettings;
+}
+
+/** How to connect an agent. */
+export interface AgentConnection {
+	/** The HTTP endpoint while it runs. */
+	url: string | null;
+	/** Why it does not run although it is on. */
+	error: string | null;
+	token: string | null;
+	/** The program and arguments for MCP over stdio. */
+	command: string[];
+}
+
+/** A change an agent asked for, waiting for the user. */
+export interface AgentRequest {
+	id: number;
+	tool: string;
+	context: string | null;
+	summary: string;
+	kubectl: string;
+}
+
+/** One tool call of an agent. */
+export interface AgentCall {
+	/** Seconds since the epoch. */
+	time: number;
+	transport: 'stdio' | 'http';
+	tool: string;
+	context: string | null;
+	arguments: Record<string, unknown>;
+	error: string | null;
+	millis: number;
 }
 
 export interface SettingsReply {
@@ -683,6 +728,14 @@ export interface Backend {
 	settings(): Promise<SettingsReply>;
 	setContextSettings(name: string, settings: ContextSettings): Promise<Settings>;
 	setDiffSettings(settings: DiffSettings): Promise<Settings>;
+	setAgentSettings(settings: AgentSettings): Promise<Settings>;
+	agentConnection(): Promise<AgentConnection>;
+	/** Makes a new token; agents with the old one are refused. */
+	newAgentToken(): Promise<AgentConnection>;
+	/** Changes agents wait to have allowed; asking marks the window as open. */
+	agentRequests(): Promise<AgentRequest[]>;
+	answerAgent(id: number, allow: boolean): Promise<boolean>;
+	agentCalls(): Promise<AgentCall[]>;
 	guard(): Promise<Guard>;
 	/** Unlocks a locked context for 15 minutes. */
 	unlock(): Promise<Guard>;

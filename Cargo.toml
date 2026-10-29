@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/kubri-core", "crates/kubri-server", "ui/src-tauri"]
+members = ["crates/kubri-core", "crates/kubri-mcp", "crates/kubri-server", "ui/src-tauri"]
 
 [workspace.package]
 version = "0.3.0"
@@ -11,6 +11,7 @@ rust-version = "1.90"
 
 [workspace.dependencies]
 kubri-core = { path = "crates/kubri-core" }
+kubri-mcp = { path = "crates/kubri-mcp" }
 kube = { version = "4.2", default-features = false, features = ["client", "config", "runtime", "rustls-tls", "ring", "ws", "http-proxy", "socks5", "oidc", "gzip"] }
 k8s-openapi = { version = "0.28", features = ["latest"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "signal", "net", "io-util", "time", "process"] }

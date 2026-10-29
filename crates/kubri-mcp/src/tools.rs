@@ -1,0 +1,1071 @@
+//! The tools agents can call, and what each one does with the core.
+
+use std::time::Duration;
+
+use futures::StreamExt;
+use kubri_core::{
+    AccessCheck, ContainerImage, DeleteOptions, Kubri, LogEvent, LogOptions, ObjectRef, ResourceInfo,
+    TableEvent, TableScope,
+};
+use serde_json::{Value, json};
+
+use crate::hub::Hub;
+use crate::{diagnose, redact, render};
+
+/// How long a list or log read may take.
+const READ_TIMEOUT: Duration = Duration::from_secs(20);
+const DEFAULT_ROWS: usize = 100;
+const MAX_ROWS: usize = 500;
+const DEFAULT_LOG_LINES: i64 = 100;
+const MAX_LOG_LINES: i64 = 1000;
+
+pub(crate) struct Tool {
+    pub name: &'static str,
+    title: &'static str,
+    description: &'static str,
+    /// Changes the cluster: offered only where a person can confirm it.
+    write: bool,
+    /// Deletes or replaces something that cannot be brought back as it was.
+    destructive: bool,
+    params: &'static [Param],
+}
+
+struct Param {
+    name: &'static str,
+    kind: &'static str,
+    description: &'static str,
+    required: bool,
+}
+
+const fn param(name: &'static str, kind: &'static str, description: &'static str, required: bool) -> Param {
+    Param {
+        name,
+        kind,
+        description,
+        required,
+    }
+}
+
+const CONTEXT: Param = param(
+    "context",
+    "string",
+    "The kubeconfig context; the user's current one when left out.",
+    false,
+);
+const RESOURCE: Param = param(
+    "resource",
+    "string",
+    "The resource type as kubectl names it: `pods`, `po`, `deploy`, `deployments.apps` or a kind such as `Deployment`.",
+    true,
+);
+const NAME: Param = param("name", "string", "The object's name.", true);
+const NAMESPACE: Param = param(
+    "namespace",
+    "string",
+    "The namespace; the context's default namespace when left out. Ignored for cluster-wide resources.",
+    false,
+);
+
+const TOOLS: &[Tool] = &[
+    Tool {
+        name: "list_contexts",
+        title: "List contexts",
+        description: "The contexts in the user's kubeconfig, with the current one, the names and labels the user gave them in Kubri, and whether agents may change them.",
+        write: false,
+        destructive: false,
+        params: &[],
+    },
+    Tool {
+        name: "list_resource_types",
+        title: "List resource types",
+        description: "The resource types the cluster serves, custom resources included, with their short names and API groups.",
+        write: false,
+        destructive: false,
+        params: &[
+            param(
+                "filter",
+                "string",
+                "Only types whose name, kind or group contains this text.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "list_objects",
+        title: "List objects",
+        description: "Objects of one resource type with the columns `kubectl get` shows, such as READY, STATUS and RESTARTS for pods.",
+        write: false,
+        destructive: false,
+        params: &[
+            RESOURCE,
+            param(
+                "namespace",
+                "string",
+                "Only this namespace; all namespaces when left out.",
+                false,
+            ),
+            param(
+                "label_selector",
+                "string",
+                "Such as `app=web` or `tier in (api,web)`.",
+                false,
+            ),
+            param(
+                "field_selector",
+                "string",
+                "Such as `status.phase!=Running` or `spec.nodeName=node-1`.",
+                false,
+            ),
+            param(
+                "wide",
+                "boolean",
+                "Add the columns of `kubectl get -o wide`.",
+                false,
+            ),
+            param(
+                "limit",
+                "integer",
+                "Rows to return, 100 by default and 500 at most.",
+                false,
+            ),
+            param(
+                "offset",
+                "integer",
+                "Rows to skip, to page through long lists.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "get_object",
+        title: "Get an object as YAML",
+        description: "One object as YAML, with its status, like `kubectl get -o yaml`. Secret values are hidden unless the user allows them.",
+        write: false,
+        destructive: false,
+        params: &[RESOURCE, NAME, NAMESPACE, CONTEXT],
+    },
+    Tool {
+        name: "get_events",
+        title: "Get an object's events",
+        description: "The events about one object, newest last, like the end of `kubectl describe`.",
+        write: false,
+        destructive: false,
+        params: &[RESOURCE, NAME, NAMESPACE, CONTEXT],
+    },
+    Tool {
+        name: "get_logs",
+        title: "Get logs",
+        description: "The last log lines of a pod, or of every pod of a workload (Deployment, StatefulSet, DaemonSet, Job) or Service, each line marked with its pod and container.",
+        write: false,
+        destructive: false,
+        params: &[
+            param(
+                "resource",
+                "string",
+                "`pods` (the default) or a workload or Service type such as `deploy`.",
+                false,
+            ),
+            NAME,
+            NAMESPACE,
+            param(
+                "container",
+                "string",
+                "Only this container; all containers when left out.",
+                false,
+            ),
+            param(
+                "previous",
+                "boolean",
+                "The logs of the previous instance, the one that crashed.",
+                false,
+            ),
+            param(
+                "tail_lines",
+                "integer",
+                "Lines per container, 100 by default and 1000 at most.",
+                false,
+            ),
+            param(
+                "since_seconds",
+                "integer",
+                "Only lines from the last this many seconds.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "diagnose_pod",
+        title: "Diagnose a pod",
+        description: "Why a pod fails or does not start: containers that crash or wait and why, exit codes, scheduling problems, warning events and the last lines of the crashed container's log. Start here when a pod is not healthy.",
+        write: false,
+        destructive: false,
+        params: &[
+            param("name", "string", "The pod's name.", true),
+            NAMESPACE,
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "check_problems",
+        title: "Check for problems",
+        description: "Kubri's sanitizer, like Popeye: problems and risky settings in pods, workloads, services and more, with a score and a grade.",
+        write: false,
+        destructive: false,
+        params: &[
+            param(
+                "namespace",
+                "string",
+                "Only this namespace; the whole cluster when left out.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "show_tree",
+        title: "Show what belongs together",
+        description: "XRay: each object of a type down to what it owns and uses, such as a Deployment's ReplicaSets, pods, containers, ConfigMaps and Secrets, with their health.",
+        write: false,
+        destructive: false,
+        params: &[
+            param(
+                "resource",
+                "string",
+                "Where the trees start: `deploy` (the default), `sts`, `ds`, `jobs`, `cronjobs`, `svc` or `pods`.",
+                false,
+            ),
+            param(
+                "namespace",
+                "string",
+                "Only this namespace; all namespaces when left out.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "can_i",
+        title: "Check a permission",
+        description: "Whether the user may do something, like `kubectl auth can-i`.",
+        write: false,
+        destructive: false,
+        params: &[
+            param(
+                "verb",
+                "string",
+                "Such as `get`, `list`, `create`, `delete` or `patch`.",
+                true,
+            ),
+            RESOURCE,
+            param(
+                "namespace",
+                "string",
+                "The namespace; all namespaces when left out.",
+                false,
+            ),
+            param("name", "string", "One object's name.", false),
+            param(
+                "subresource",
+                "string",
+                "Such as `log`, `exec` or `scale`.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "cluster_health",
+        title: "Cluster health",
+        description: "Pulses: how many objects of each kind are healthy, failing or pending, CPU and memory use, and the latest warning events.",
+        write: false,
+        destructive: false,
+        params: &[
+            param(
+                "namespace",
+                "string",
+                "Only this namespace; the whole cluster when left out.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "scale",
+        title: "Scale",
+        description: "Sets the replicas of a Deployment, StatefulSet or ReplicaSet. The user confirms it in Kubri first.",
+        write: true,
+        destructive: false,
+        params: &[
+            RESOURCE,
+            NAME,
+            NAMESPACE,
+            param("replicas", "integer", "The new number of replicas.", true),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "restart",
+        title: "Restart",
+        description: "Restarts a Deployment, StatefulSet or DaemonSet with a rolling update, like `kubectl rollout restart`. The user confirms it in Kubri first.",
+        write: true,
+        destructive: false,
+        params: &[RESOURCE, NAME, NAMESPACE, CONTEXT],
+    },
+    Tool {
+        name: "set_image",
+        title: "Set an image",
+        description: "Sets the image of one container of a workload or pod, like `kubectl set image`. The user confirms it in Kubri first.",
+        write: true,
+        destructive: false,
+        params: &[
+            RESOURCE,
+            NAME,
+            NAMESPACE,
+            param("container", "string", "The container's name.", true),
+            param("image", "string", "The new image, such as `nginx:1.27`.", true),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "delete_object",
+        title: "Delete an object",
+        description: "Deletes one object. The user confirms it in Kubri first.",
+        write: true,
+        destructive: true,
+        params: &[RESOURCE, NAME, NAMESPACE, CONTEXT],
+    },
+];
+
+fn definition(tool: &Tool) -> Value {
+    let properties: serde_json::Map<String, Value> = tool
+        .params
+        .iter()
+        .map(|p| {
+            let kind = if p.kind == "integer" {
+                json!({ "type": "integer", "minimum": 0, "description": p.description })
+            } else {
+                json!({ "type": p.kind, "description": p.description })
+            };
+            (p.name.to_owned(), kind)
+        })
+        .collect();
+    let required: Vec<&str> = tool
+        .params
+        .iter()
+        .filter(|p| p.required)
+        .map(|p| p.name)
+        .collect();
+    json!({
+        "name": tool.name,
+        "title": tool.title,
+        "description": tool.description,
+        "inputSchema": { "type": "object", "properties": properties, "required": required, "additionalProperties": false },
+        "annotations": {
+            "title": tool.title,
+            "readOnlyHint": !tool.write,
+            "destructiveHint": tool.destructive,
+            "idempotentHint": !tool.write || tool.name != "restart",
+            "openWorldHint": false,
+        },
+    })
+}
+
+/// The tool definitions; the change tools only with `writes`.
+pub(crate) fn list(writes: bool) -> Vec<Value> {
+    TOOLS
+        .iter()
+        .filter(|t| writes || !t.write)
+        .map(definition)
+        .collect()
+}
+
+pub(crate) fn find(name: &str, writes: bool) -> Option<&'static Tool> {
+    TOOLS.iter().find(|t| t.name == name && (writes || !t.write))
+}
+
+/// The arguments of one call, with readable errors for the agent.
+struct Args<'a>(&'a Value);
+
+impl Args<'_> {
+    fn str(&self, name: &str) -> Option<&str> {
+        self.0.get(name).and_then(Value::as_str).filter(|s| !s.is_empty())
+    }
+
+    fn need(&self, name: &str) -> Result<&str, String> {
+        self.str(name).ok_or_else(|| format!("`{name}` is missing"))
+    }
+
+    fn bool(&self, name: &str) -> bool {
+        self.0.get(name).and_then(Value::as_bool).unwrap_or(false)
+    }
+
+    fn int(&self, name: &str) -> Result<Option<i64>, String> {
+        match self.0.get(name) {
+            None | Some(Value::Null) => Ok(None),
+            Some(v) => v
+                .as_i64()
+                .filter(|n| *n >= 0)
+                .map(Some)
+                .ok_or_else(|| format!("`{name}` must be a whole number, 0 or more")),
+        }
+    }
+}
+
+fn text(err: impl std::fmt::Display) -> String {
+    err.to_string()
+}
+
+/// Connects to the context the call names, or stays where it is; the user's current context
+/// on the first call.
+async fn use_context(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let current = kubri.cluster().await.map(|c| c.context);
+    let wanted = match args.str("context") {
+        Some(context) => context.to_owned(),
+        None => match current {
+            Some(current) => return Ok(current),
+            None => {
+                let list = kubri.contexts().await.map_err(text)?;
+                list.contexts
+                    .iter()
+                    .find(|c| c.is_default)
+                    .or(list.contexts.first())
+                    .map(|c| c.name.clone())
+                    .ok_or("the kubeconfig has no contexts")?
+            }
+        },
+    };
+    if current.as_deref() != Some(&wanted) {
+        kubri.switch_context(&wanted).await.map_err(text)?;
+    }
+    Ok(wanted)
+}
+
+/// The resource type a name stands for, as kubectl resolves `po`, `deploy` or `deployments.apps`.
+async fn resource(kubri: &Kubri, name: &str) -> Result<ResourceInfo, String> {
+    let wanted = name.trim().to_lowercase();
+    let resources = kubri.resources().await.map_err(text)?;
+    let mut matches: Vec<&ResourceInfo> = resources
+        .iter()
+        .filter(|r| !r.reference.plural.contains('/'))
+        .filter(|r| {
+            let group = &r.reference.group;
+            let names = [
+                r.reference.plural.as_str(),
+                r.singular.as_str(),
+                &r.kind.to_lowercase(),
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .chain(r.short_names.iter().map(|s| s.to_lowercase()))
+            .collect::<Vec<_>>();
+            names
+                .iter()
+                .any(|n| *n == wanted || (!group.is_empty() && format!("{n}.{group}") == wanted))
+        })
+        .collect();
+    // The core group wins, as with kubectl: `events` are the core ones.
+    matches.sort_by_key(|r| !r.reference.group.is_empty());
+    matches.first().map(|r| (*r).clone()).ok_or_else(|| {
+        format!("This cluster serves no resource type `{name}`; list_resource_types shows what it serves.")
+    })
+}
+
+/// The object a call names, in the namespace it names or the context's default one.
+async fn object(
+    kubri: &Kubri,
+    args: &Args<'_>,
+    resource_name: &str,
+) -> Result<(ObjectRef, ResourceInfo), String> {
+    let info = resource(kubri, resource_name).await?;
+    let namespace = if info.namespaced {
+        Some(match args.str("namespace") {
+            Some(ns) => ns.to_owned(),
+            None => kubri
+                .cluster()
+                .await
+                .map(|c| c.default_namespace)
+                .unwrap_or_else(|| "default".into()),
+        })
+    } else {
+        None
+    };
+    let target = ObjectRef {
+        context: None,
+        resource: info.reference.clone(),
+        namespace,
+        name: args.need("name")?.to_owned(),
+    };
+    Ok((target, info))
+}
+
+fn place(target: &ObjectRef) -> String {
+    match &target.namespace {
+        Some(ns) => format!("{ns}/{}", target.name),
+        None => target.name.clone(),
+    }
+}
+
+pub(crate) async fn call(tool: &Tool, kubri: &Kubri, hub: &Hub, arguments: &Value) -> Result<String, String> {
+    let args = Args(arguments);
+    if tool.name == "list_contexts" {
+        return list_contexts(kubri).await;
+    }
+    let context = use_context(kubri, &args).await?;
+    match tool.name {
+        "list_resource_types" => list_resource_types(kubri, &args).await,
+        "list_objects" => list_objects(kubri, &args).await,
+        "get_object" => get_object(kubri, &args).await,
+        "get_events" => get_events(kubri, &args).await,
+        "get_logs" => get_logs(kubri, &args).await,
+        "diagnose_pod" => diagnose_pod(kubri, &args).await,
+        "check_problems" => check_problems(kubri, &args).await,
+        "show_tree" => show_tree(kubri, &args).await,
+        "can_i" => can_i(kubri, &args).await,
+        "cluster_health" => {
+            let pulse = kubri.pulse(args.str("namespace")).await.map_err(text)?;
+            Ok(render::yaml(&pulse))
+        }
+        _ => change(tool, kubri, hub, &args, context).await,
+    }
+}
+
+async fn list_contexts(kubri: &Kubri) -> Result<String, String> {
+    let list = kubri.contexts().await.map_err(text)?;
+    let current = kubri.cluster().await.map(|c| c.context);
+    let settings = kubri.settings();
+    let mut lines = Vec::new();
+    for c in &list.contexts {
+        let s = settings.context(&c.name);
+        let mut notes = Vec::new();
+        if current.as_deref() == Some(&c.name) || (current.is_none() && c.is_default) {
+            notes.push("current".to_owned());
+        }
+        if !s.display_name.is_empty() {
+            notes.push(format!("called \"{}\" in Kubri", s.display_name));
+        }
+        if !s.label.is_empty() {
+            notes.push(format!("label \"{}\"", s.label));
+        }
+        if s.production {
+            notes.push("production".into());
+        }
+        notes.push(
+            if s.agent_writes && !s.production && !s.read_only {
+                "agents may change it, with the user's confirmation"
+            } else {
+                "read-only for agents"
+            }
+            .into(),
+        );
+        let ns = c.namespace.as_deref().unwrap_or("default");
+        lines.push(format!("- {} (namespace {ns}; {})", c.name, notes.join(", ")));
+    }
+    if lines.is_empty() {
+        return Err("The kubeconfig has no contexts.".into());
+    }
+    Ok(lines.join("\n"))
+}
+
+async fn list_resource_types(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let filter = args.str("filter").map(str::to_lowercase);
+    let resources = kubri.resources().await.map_err(text)?;
+    let mut lines = vec!["KIND\tNAME\tSHORT NAMES\tAPI VERSION\tNAMESPACED".to_owned()];
+    for r in resources.iter().filter(|r| !r.reference.plural.contains('/')) {
+        let api_version = if r.reference.group.is_empty() {
+            r.reference.version.clone()
+        } else {
+            format!("{}/{}", r.reference.group, r.reference.version)
+        };
+        let line = format!(
+            "{}\t{}\t{}\t{api_version}\t{}",
+            r.kind,
+            r.reference.plural,
+            r.short_names.join(","),
+            r.namespaced
+        );
+        if filter.as_ref().is_none_or(|f| line.to_lowercase().contains(f)) {
+            lines.push(line);
+        }
+    }
+    Ok(lines.join("\n"))
+}
+
+/// A list as the first answer of a table watch: its columns, its rows and a notice, such as
+/// the namespaces it fell back to.
+async fn read_table(
+    kubri: &Kubri,
+    resource: &kubri_core::ResourceRef,
+    namespace: Option<&str>,
+    scope: TableScope,
+) -> Result<(Vec<kubri_core::Column>, Vec<kubri_core::Row>, Option<String>), String> {
+    let mut events = kubri
+        .watch_table(resource, namespace, scope)
+        .await
+        .map_err(text)?;
+    let mut notice = None;
+    let (columns, rows) = tokio::time::timeout(READ_TIMEOUT, async {
+        while let Some(event) = events.next().await {
+            match event {
+                TableEvent::Reset { columns, rows } => return Ok((columns, rows)),
+                TableEvent::Error { message } => return Err(message),
+                TableEvent::Notice { message } => notice = Some(message),
+                _ => {}
+            }
+        }
+        Err("the list ended before it arrived".to_owned())
+    })
+    .await
+    .map_err(|_| "The API server did not answer within 20 seconds.".to_owned())??;
+    Ok((columns, rows, notice))
+}
+
+async fn list_objects(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let info = resource(kubri, args.need("resource")?).await?;
+    let namespace = args.str("namespace").filter(|_| info.namespaced);
+    let scope = TableScope {
+        label_selector: args.str("label_selector").map(Into::into),
+        field_selector: args.str("field_selector").map(Into::into),
+    };
+    let limit = (args.int("limit")?.unwrap_or(DEFAULT_ROWS as i64) as usize).clamp(1, MAX_ROWS);
+    let offset = args.int("offset")?.unwrap_or(0) as usize;
+    let (columns, mut rows, notice) = read_table(kubri, &info.reference, namespace, scope).await?;
+    rows.sort_by(|a, b| (&a.namespace, &a.name).cmp(&(&b.namespace, &b.name)));
+    let total = rows.len();
+    let page: Vec<_> = rows.iter().skip(offset).take(limit).collect();
+    let mut out = String::new();
+    if let Some(notice) = notice {
+        out.push_str(&format!("Note: {notice}.\n\n"));
+    }
+    if page.is_empty() {
+        out.push_str(&match (total, namespace) {
+            (0, Some(ns)) => format!("No {} in namespace {ns}.", info.reference.plural),
+            (0, None) => format!("No {}.", info.reference.plural),
+            _ => format!("No rows after offset {offset}; there are {total}."),
+        });
+        return Ok(out);
+    }
+    out.push_str(&render::table(&columns, &page, args.bool("wide")));
+    if offset > 0 || offset + page.len() < total {
+        out.push_str(&format!(
+            "\n\nRows {} to {} of {total}.",
+            offset + 1,
+            offset + page.len()
+        ));
+        if offset + page.len() < total {
+            out.push_str(&format!(" Pass offset {} for more.", offset + page.len()));
+        }
+    }
+    Ok(out)
+}
+
+async fn get_object(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let (target, _) = object(kubri, args, args.need("resource")?).await?;
+    let mut value = kubri.get(&target).await.map_err(text)?;
+    redact::noise(&mut value);
+    if !kubri.settings().agents.secrets {
+        redact::secret(&mut value);
+    }
+    Ok(render::yaml(&value))
+}
+
+async fn get_events(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let (target, _) = object(kubri, args, args.need("resource")?).await?;
+    let events = object_events(kubri, &target).await?;
+    if events.is_empty() {
+        return Ok(format!(
+            "No events about {}; events last an hour by default.",
+            place(&target)
+        ));
+    }
+    Ok(events.join("\n"))
+}
+
+/// An object's events as lines: when, type, reason, count and message.
+async fn object_events(kubri: &Kubri, target: &ObjectRef) -> Result<Vec<String>, String> {
+    let value = kubri.get(target).await.map_err(text)?;
+    let uid = value
+        .pointer("/metadata/uid")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let events = kubri
+        .events(target.namespace.as_deref(), uid)
+        .await
+        .map_err(text)?;
+    Ok(events
+        .iter()
+        .map(|e| {
+            let when = e.last_seen.as_deref().or(e.first_seen.as_deref()).unwrap_or("-");
+            let count = if e.count > 1 {
+                format!(" (x{})", e.count)
+            } else {
+                String::new()
+            };
+            format!("{when}  {}  {}{count}: {}", e.kind, e.reason, e.message.trim())
+        })
+        .collect())
+}
+
+/// Log lines of `target`, each marked with its pod and container when there are several.
+async fn read_logs(kubri: &Kubri, target: &ObjectRef, options: LogOptions) -> Result<String, String> {
+    let mut events = Box::pin(kubri.logs(target, options).await.map_err(text)?);
+    let mut sources = Vec::new();
+    let mut lines = Vec::new();
+    let mut errors = Vec::new();
+    let read = tokio::time::timeout(READ_TIMEOUT, async {
+        while let Some(event) = events.next().await {
+            match event {
+                LogEvent::Sources { sources: s } => sources = s,
+                LogEvent::Lines { lines: batch } => lines.extend(batch),
+                LogEvent::Error { message, .. } => errors.push(message),
+                LogEvent::End => break,
+            }
+        }
+    })
+    .await;
+    let several = sources.len() > 1;
+    let mut out: Vec<String> = lines
+        .iter()
+        .map(|line| match sources.get(line.source) {
+            Some(s) if several => format!("[{}/{}] {}", s.pod, s.container, line.text),
+            _ => line.text.clone(),
+        })
+        .collect();
+    if out.is_empty() {
+        out.push("(no log lines)".into());
+    }
+    for error in errors {
+        out.push(format!("Note: {error}"));
+    }
+    if read.is_err() {
+        out.push("Note: stopped reading after 20 seconds.".into());
+    }
+    Ok(out.join("\n"))
+}
+
+fn log_options(args: &Args<'_>, container: Option<String>, previous: bool) -> Result<LogOptions, String> {
+    Ok(LogOptions {
+        container,
+        follow: false,
+        previous,
+        timestamps: false,
+        tail_lines: Some(
+            args.int("tail_lines")?
+                .unwrap_or(DEFAULT_LOG_LINES)
+                .clamp(1, MAX_LOG_LINES),
+        ),
+        since_seconds: args.int("since_seconds")?,
+    })
+}
+
+async fn get_logs(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let (target, _) = object(kubri, args, args.str("resource").unwrap_or("pods")).await?;
+    let options = log_options(args, args.str("container").map(Into::into), args.bool("previous"))?;
+    read_logs(kubri, &target, options).await
+}
+
+async fn diagnose_pod(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let (target, info) = object(kubri, args, "pods").await?;
+    let pod = match kubri.get(&target).await {
+        Ok(pod) => pod,
+        Err(err) if err.api_status() == Some(404) => {
+            // Agents often pass the name of the Deployment the pod belongs to.
+            let (_, rows, _) = read_table(
+                kubri,
+                &info.reference,
+                target.namespace.as_deref(),
+                TableScope::default(),
+            )
+            .await
+            .unwrap_or_default();
+            let similar: Vec<&str> = rows
+                .iter()
+                .map(|r| r.name.as_str())
+                .filter(|n| n.starts_with(&target.name.to_lowercase()))
+                .take(10)
+                .collect();
+            return Err(if similar.is_empty() {
+                format!("There is no pod {}.", place(&target))
+            } else {
+                format!(
+                    "There is no pod {}. Pods with that prefix: {}.",
+                    place(&target),
+                    similar.join(", ")
+                )
+            });
+        }
+        Err(err) => return Err(text(err)),
+    };
+    let phase = pod
+        .pointer("/status/phase")
+        .and_then(Value::as_str)
+        .unwrap_or("Unknown");
+    let node = pod
+        .pointer("/spec/nodeName")
+        .and_then(Value::as_str)
+        .unwrap_or("not scheduled");
+    let mut out = vec![format!("Pod {} is {phase}, on node {node}.", place(&target))];
+    if let Some(reason) = pod.pointer("/status/reason").and_then(Value::as_str) {
+        let message = pod
+            .pointer("/status/message")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        out.push(format!("Pod status: {reason} {message}").trim_end().to_owned());
+    }
+    let problems = diagnose::container_problems(&pod);
+    let pending = diagnose::pending_reasons(&pod);
+    if problems.is_empty() && pending.is_empty() {
+        out.push("No container is crashing or waiting, and nothing keeps the pod from starting.".into());
+    }
+    for reason in &pending {
+        out.push(format!("Not starting: {reason}"));
+    }
+    for p in &problems {
+        let mut line = format!("Container {}: {}", p.container, p.reason);
+        if let Some(code) = p.exit_code {
+            line.push_str(&format!(", exit code {code}"));
+        }
+        if p.restarts > 0 {
+            line.push_str(&format!(", {} restarts", p.restarts));
+        }
+        if let Some(message) = &p.message {
+            line.push_str(&format!(". {}", message.trim()));
+        }
+        out.push(line);
+    }
+    let events = object_events(kubri, &target).await.unwrap_or_default();
+    let warnings: Vec<_> = events.iter().filter(|e| e.contains("  Warning  ")).collect();
+    if !warnings.is_empty() {
+        out.push(String::new());
+        out.push("Warning events:".into());
+        let skip = warnings.len().saturating_sub(10);
+        out.extend(warnings.into_iter().skip(skip).cloned());
+    }
+    for p in problems.iter().take(3) {
+        // The crashed instance tells why it ended; a failed one that was not restarted is current.
+        let previous = p.has_previous && p.reason != "Error" && p.reason != "Completed";
+        let options = LogOptions {
+            container: Some(p.container.clone()),
+            tail_lines: Some(30),
+            previous,
+            ..Default::default()
+        };
+        if let Ok(logs) = read_logs(kubri, &target, options).await {
+            out.push(String::new());
+            out.push(format!(
+                "Last log lines of {} ({} instance):",
+                p.container,
+                if previous { "previous" } else { "current" }
+            ));
+            out.push(logs);
+        }
+    }
+    Ok(out.join("\n"))
+}
+
+async fn check_problems(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let report = kubri.sanitize(args.str("namespace")).await.map_err(text)?;
+    let mut out = vec![format!("Score {} of 100, grade {}.", report.score, report.grade)];
+    for section in &report.sections {
+        let score = section.score.map(|s| s.to_string()).unwrap_or_else(|| "-".into());
+        out.push(String::new());
+        out.push(format!(
+            "{} (score {score}): {} checked, {} ok, {} warnings, {} errors",
+            section.kind, section.total, section.ok, section.warning, section.error
+        ));
+        if let Some(error) = &section.failed {
+            out.push(format!("  could not check: {error}"));
+        }
+        for finding in section.findings.iter().take(30) {
+            let name = match &finding.namespace {
+                Some(ns) => format!("{ns}/{}", finding.name),
+                None => finding.name.clone(),
+            };
+            for issue in &finding.issues {
+                let container = issue
+                    .container
+                    .as_deref()
+                    .map(|c| format!(" [{c}]"))
+                    .unwrap_or_default();
+                out.push(format!(
+                    "  {:?} {name}{container}: {}",
+                    issue.level, issue.message
+                ));
+            }
+        }
+        if section.findings.len() > 30 {
+            out.push(format!("  … and {} more", section.findings.len() - 30));
+        }
+    }
+    Ok(out.join("\n"))
+}
+
+async fn show_tree(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let info = resource(kubri, args.str("resource").unwrap_or("deployments")).await?;
+    let nodes = kubri
+        .xray(&info.reference, args.str("namespace"))
+        .await
+        .map_err(text)?;
+    fn walk(node: &kubri_core::XrayNode, depth: usize, out: &mut Vec<String>) {
+        let detail = if node.detail.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", node.detail)
+        };
+        let ns = node
+            .namespace
+            .as_deref()
+            .map(|n| format!("{n}/"))
+            .unwrap_or_default();
+        out.push(format!(
+            "{}{} {ns}{} [{:?}]{detail}",
+            "  ".repeat(depth),
+            node.kind,
+            node.name,
+            node.health
+        ));
+        for child in &node.children {
+            walk(child, depth + 1, out);
+        }
+    }
+    let mut out = Vec::new();
+    for node in &nodes {
+        walk(node, 0, &mut out);
+    }
+    if out.is_empty() {
+        return Ok(format!("No {}.", info.reference.plural));
+    }
+    Ok(out.join("\n"))
+}
+
+async fn can_i(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
+    let info = resource(kubri, args.need("resource")?).await?;
+    let verb = args.need("verb")?;
+    let mut check = AccessCheck::new(verb, &info.reference, args.str("namespace"));
+    if let Some(sub) = args.str("subresource") {
+        check = check.on_subresource(sub);
+    }
+    if let Some(name) = args.str("name") {
+        check = check.named(name);
+    }
+    let answer = kubri
+        .access(std::slice::from_ref(&check), true)
+        .await
+        .map_err(text)?;
+    Ok(match answer.first().copied().flatten() {
+        Some(true) => format!("yes: {} is allowed", check.describe()),
+        Some(false) => format!("no: {} is not allowed", check.describe()),
+        None => "The cluster cannot say.".into(),
+    })
+}
+
+fn kubectl(context: &str, target: &ObjectRef, args: &[String]) -> String {
+    let mut words = vec!["kubectl".to_owned(), "--context".into(), context.to_owned()];
+    if let Some(ns) = &target.namespace {
+        words.extend(["-n".into(), ns.clone()]);
+    }
+    words.extend(args.iter().cloned());
+    words.join(" ")
+}
+
+/// A change: checked against the guard rails, confirmed by the user, then done.
+async fn change(
+    tool: &Tool,
+    kubri: &Kubri,
+    hub: &Hub,
+    args: &Args<'_>,
+    context: String,
+) -> Result<String, String> {
+    let guard = kubri.guard().await;
+    if guard.read_only {
+        return Err(format!(
+            "Kubri does not let agents change the context {context}: {}.",
+            guard.reason.unwrap_or_default()
+        ));
+    }
+    let (target, info) = object(kubri, args, args.need("resource")?).await?;
+    let reference = format!("{}/{}", info.reference.plural, target.name);
+    let what = format!("{} {}", info.kind, place(&target));
+    let (summary, command) = match tool.name {
+        "scale" => {
+            let replicas = args.int("replicas")?.ok_or("`replicas` is missing")?;
+            (
+                format!("Scale {what} to {replicas} replicas"),
+                vec!["scale".into(), reference, format!("--replicas={replicas}")],
+            )
+        }
+        "restart" => (
+            format!("Restart {what}"),
+            vec!["rollout".into(), "restart".into(), reference],
+        ),
+        "set_image" => {
+            let container = args.need("container")?;
+            let image = args.need("image")?;
+            (
+                format!("Set the image of container {container} in {what} to {image}"),
+                vec![
+                    "set".into(),
+                    "image".into(),
+                    reference,
+                    format!("{container}={image}"),
+                ],
+            )
+        }
+        "delete_object" => (format!("Delete {what}"), vec!["delete".into(), reference]),
+        other => return Err(format!("unknown tool {other}")),
+    };
+    hub.confirm(
+        tool.name,
+        Some(context.clone()),
+        summary.clone(),
+        kubectl(&context, &target, &command),
+    )
+    .await?;
+    match tool.name {
+        "scale" => {
+            let replicas = args.int("replicas")?.unwrap_or_default();
+            let replicas = u32::try_from(replicas).map_err(|_| "too many replicas")?;
+            kubri.scale(&target, replicas).await.map_err(text)?;
+        }
+        "restart" => kubri.restart(&target).await.map_err(text)?,
+        "set_image" => {
+            let image = ContainerImage {
+                name: args.need("container")?.to_owned(),
+                image: args.need("image")?.to_owned(),
+                init: false,
+            };
+            kubri.set_images(&target, &[image]).await.map_err(text)?;
+        }
+        _ => kubri
+            .delete(&target, &DeleteOptions::default())
+            .await
+            .map_err(text)?,
+    }
+    Ok(format!("Done: {summary}, as the user allowed."))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_tool_has_a_valid_schema() {
+        for tool in TOOLS {
+            let definition = definition(tool);
+            assert!(tool.name.chars().all(|c| c.is_ascii_lowercase() || c == '_'));
+            assert_eq!(definition["inputSchema"]["type"], "object");
+            for required in definition["inputSchema"]["required"].as_array().unwrap() {
+                assert!(
+                    definition["inputSchema"]["properties"]
+                        .get(required.as_str().unwrap())
+                        .is_some()
+                );
+            }
+        }
+        assert!(list(false).len() < list(true).len());
+        assert!(find("scale", false).is_none());
+        assert!(find("scale", true).is_some());
+    }
+}

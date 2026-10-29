@@ -1,5 +1,6 @@
 //! The desktop app: the shared UI in a native window, backed by kubri-core through Tauri commands.
 
+mod agents;
 #[cfg(unix)]
 mod shell_env;
 
@@ -673,23 +674,40 @@ pub fn run() {
         shell_env::print();
         return;
     }
+    // Over stdio, stdout belongs to the protocol.
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "kubri_desktop_lib=info,kubri_core=info".into()),
         )
+        .with_writer(std::io::stderr)
         .init();
     // Before Kubri reads KUBECONFIG, and before Tauri starts any threads.
     #[cfg(unix)]
     shell_env::load();
 
-    let kubri = Kubri::load();
-    if read_only_requested() {
+    if std::env::args().skip(1).any(|a| a == "--mcp") {
+        agents::serve_stdio();
+        return;
+    }
+
+    let kubri = Arc::new(Kubri::load());
+    let read_only = read_only_requested();
+    if read_only {
         kubri.set_read_only();
         tracing::info!("read-only: Kubri does not change clusters");
     }
+    let agents = agents::Agents::new(kubri.clone(), read_only);
     tauri::Builder::default()
-        .manage(Arc::new(kubri))
+        .setup({
+            let agents = agents.clone();
+            move |_| {
+                tauri::async_runtime::spawn(async move { agents.follow_settings().await });
+                Ok(())
+            }
+        })
+        .manage(kubri)
+        .manage(agents)
         .manage(Arc::new(Streams::default()))
         .manage(Arc::new(Terminals::default()))
         .invoke_handler(tauri::generate_handler![
@@ -705,6 +723,12 @@ pub fn run() {
             settings,
             set_context_settings,
             set_diff_settings,
+            agents::set_agent_settings,
+            agents::agents_connection,
+            agents::agents_new_token,
+            agents::agents_pending,
+            agents::agents_answer,
+            agents::agents_calls,
             guard,
             unlock,
             lock,

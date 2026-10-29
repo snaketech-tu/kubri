@@ -124,6 +124,24 @@
 			<small>Kubri never changes this cluster until you turn this off.</small>
 		</span>
 	</label>
+	<label class="check">
+		<input
+			type="checkbox"
+			checked={current.agentWrites && !current.production}
+			disabled={current.production}
+			onchange={(e) => save({ agentWrites: e.currentTarget.checked })}
+		/>
+		<span>
+			<strong>AI agents may change it</strong>
+			<small>
+				{#if current.production}
+					Never on a production context: agents only read here.
+				{:else}
+					Agents connected over MCP may scale, restart, set images and delete here. You allow each change in Kubri.
+				{/if}
+			</small>
+		</span>
+	</label>
 </div>
 
 <style>

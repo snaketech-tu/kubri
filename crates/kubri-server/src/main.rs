@@ -1,5 +1,6 @@
 //! Runs Kubri in the browser: serves the UI and the API it talks to.
 
+mod agents;
 mod api;
 mod auth;
 mod guard;
@@ -64,15 +65,20 @@ struct Args {
         value_parser = clap::value_parser!(u64).range(1..=87_600)
     )]
     session_hours: u64,
+    /// Serve MCP over stdio for an AI agent instead of the web UI. Agents only read this way.
+    #[arg(long)]
+    mcp: bool,
 }
 
 fn main() -> ExitCode {
+    let args = Args::parse();
+    // Over stdio, stdout belongs to the protocol.
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| "kubri_server=info,kubri_core=info".into()),
         )
+        .with_writer(std::io::stderr)
         .init();
-    let args = Args::parse();
 
     match kubri_core::write_in_cluster_kubeconfig() {
         Some(Ok(path)) => {
@@ -85,7 +91,24 @@ fn main() -> ExitCode {
     }
 
     match tokio::runtime::Runtime::new() {
+        Ok(runtime) if args.mcp => runtime.block_on(serve_mcp()),
         Ok(runtime) => runtime.block_on(serve(args)),
+        Err(err) => {
+            tracing::error!("{err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// MCP over stdio, for an agent that starts Kubri itself.
+async fn serve_mcp() -> ExitCode {
+    let kubri = Arc::new(Kubri::load());
+    // No Kubri window can confirm a change made this way.
+    kubri.set_read_only();
+    let hub = Arc::new(kubri_mcp::Hub::for_this_computer());
+    let mcp = Arc::new(kubri_mcp::Mcp::new(kubri, kubri_mcp::Transport::Stdio, hub));
+    match kubri_mcp::stdio::serve(mcp).await {
+        Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             tracing::error!("{err}");
             ExitCode::FAILURE
@@ -120,11 +143,14 @@ async fn serve(args: Args) -> ExitCode {
     if !args.ui_dir.join("index.html").exists() {
         tracing::warn!(dir = %args.ui_dir.display(), "UI not found, only the API is served");
     }
+    let agents = agents::Agents::new(kubri.clone(), args.addr, args.read_only);
     let api = api::router(kubri)
+        .merge(agents.router())
         .layer(axum::middleware::from_fn_with_state(auth.clone(), auth::require))
         .merge(auth::router(auth));
     let app = Router::new()
         .nest("/api", api)
+        .merge(agents.endpoint())
         .fallback_service(ui(&args.ui_dir))
         .layer(axum::middleware::from_fn_with_state(guard, guard::check))
         .layer(axum::middleware::from_fn(guard::headers))

@@ -20,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 kubri-core.workspace = true
+kubri-mcp.workspace = true
 tauri = { version = "2", features = [] }
 futures.workspace = true
 tokio.workspace = true

@@ -23,6 +23,7 @@ Kubri keeps its own settings in one file. The kubeconfig and the k9s configurati
 | Read-only | Kubri never changes this cluster until you turn it off. |
 | Locked | Starts read-only. **Unlock** in the header allows changes for 15 minutes, then the context locks again. |
 | Namespace | The namespace shown after connecting, instead of all namespaces. |
+| AI agents may change it | Agents connected over MCP may scale, restart, set images and delete here, each change allowed by you in Kubri. Never on production contexts. See [AI agents](AGENTS.md). |
 
 Read-only and locked contexts are enforced in the core, not only hidden in the interface, so plugins and the API refuse changes too. Starting Kubri with `--read-only` (or `KUBRI_READ_ONLY=true`) and `readOnly` in the k9s configuration still apply on top.
 

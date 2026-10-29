@@ -29,6 +29,9 @@ pub struct ContextSettings {
     pub locked: bool,
     /// The namespace to show after connecting; empty for all namespaces.
     pub namespace: String,
+    /// AI agents connected over MCP may change this context, each change confirmed in Kubri.
+    /// Production contexts never allow it.
+    pub agent_writes: bool,
 }
 
 impl ContextSettings {
@@ -74,12 +77,35 @@ impl Default for DiffSettings {
     }
 }
 
+/// What AI agents connected to Kubri's MCP server may do.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AgentSettings {
+    /// Serve MCP over HTTP on localhost, from the running app. Over stdio it is always there.
+    pub http: bool,
+    /// The port of that endpoint in the desktop app; the web server uses its own port.
+    pub port: u16,
+    /// Agents may read the values of Secrets; otherwise they see only the keys.
+    pub secrets: bool,
+}
+
+impl Default for AgentSettings {
+    fn default() -> Self {
+        Self {
+            http: false,
+            port: 7879,
+            secrets: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     /// Per context, by the context's name.
     pub contexts: BTreeMap<String, ContextSettings>,
     pub diff: DiffSettings,
+    pub agents: AgentSettings,
 }
 
 impl Settings {
@@ -101,6 +127,11 @@ impl Settings {
 
 /// The settings file, or `None` where there is no config folder.
 pub(crate) fn path() -> Option<PathBuf> {
+    Some(dir()?.join("settings.json"))
+}
+
+/// Kubri's config folder: `$KUBRI_CONFIG_DIR`, or `kubri` in the system's config folder.
+pub fn dir() -> Option<PathBuf> {
     let var = |name: &str| {
         std::env::var_os(name)
             .filter(|v| !v.is_empty())
@@ -111,7 +142,7 @@ pub(crate) fn path() -> Option<PathBuf> {
             .or_else(dirs::config_local_dir)
             .map(|d| d.join("kubri"))
     })?;
-    Some(dir.join("settings.json"))
+    Some(dir)
 }
 
 /// Reads the settings; a missing file gives the defaults, a broken one an error to show.
