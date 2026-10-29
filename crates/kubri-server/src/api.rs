@@ -10,11 +10,12 @@ use axum::routing::{any, delete, get, post, put};
 use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
-    BenchInfo, BenchRequest, ClusterInfo, ContainerImage, ContextList, DeleteOptions, DrainOptions,
-    DrainReport, Drill, EventInfo, HelmRelease, HelmReleaseDetails, K9sConfig, Kubri, LogEvent, LogOptions,
-    MetricsKind, ObjectRef, Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac,
-    Reference, ResourceInfo, ResourceRef, SanitizerReport, TableScope, Terminal, TerminalOptions,
-    TerminalOutput, Usage, XrayNode,
+    AccessCheck, BenchInfo, BenchRequest, ClusterInfo, ContainerImage, ContextList, ContextSettings,
+    DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, Guard, HelmRelease,
+    HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
+    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac, Reference, ResourceInfo,
+    ResourceRef, SanitizerReport, Settings, TableScope, Terminal, TerminalOptions, TerminalOutput, Usage,
+    XrayNode,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,15 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/contexts", get(contexts))
         .route("/contexts/reload", post(reload))
         .route("/context", put(switch_context))
+        .route("/settings", get(settings))
+        .route("/settings/context", put(set_context_settings))
+        .route("/settings/diff", put(set_diff_settings))
+        .route("/guard", get(guard))
+        .route("/guard/unlock", post(unlock))
+        .route("/guard/lock", post(lock))
+        .route("/access", post(access))
+        .route("/whoami", get(who_am_i))
+        .route("/namespaces/readable", get(readable_namespaces))
         .route("/resources", get(resources))
         .route("/table", any(table))
         .route(
@@ -95,7 +105,7 @@ impl IntoResponse for ApiError {
             NoKubeconfig(_) | NotConnected | ContextChanged(_) => StatusCode::CONFLICT,
             Unsupported(_) | InvalidObject(_) => StatusCode::BAD_REQUEST,
             Timeout => StatusCode::GATEWAY_TIMEOUT,
-            ReadOnly(_) => StatusCode::FORBIDDEN,
+            ReadOnly(_) | Forbidden(_) => StatusCode::FORBIDDEN,
             InvalidKubeconfig(_) | Kubeconfig(_) | Kube(_) => StatusCode::BAD_GATEWAY,
             Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
@@ -124,6 +134,74 @@ async fn switch_context(
     Json(req): Json<SwitchContext>,
 ) -> ApiResult<ClusterInfo> {
     Ok(Json(kubri.switch_context(&req.name).await?))
+}
+
+/// The settings, and why the file could not be read if it could not.
+#[derive(Serialize)]
+struct SettingsReply {
+    settings: Settings,
+    error: Option<String>,
+}
+
+async fn settings(State(kubri): State<Arc<Kubri>>) -> ApiResult<SettingsReply> {
+    Ok(Json(SettingsReply {
+        settings: kubri.settings(),
+        error: kubri.settings_error(),
+    }))
+}
+
+#[derive(Deserialize)]
+struct SetContextSettings {
+    name: String,
+    settings: ContextSettings,
+}
+
+async fn set_context_settings(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<SetContextSettings>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_context_settings(&req.name, req.settings)?))
+}
+
+async fn set_diff_settings(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<DiffSettings>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_diff_settings(req)?))
+}
+
+async fn guard(State(kubri): State<Arc<Kubri>>) -> ApiResult<Guard> {
+    Ok(Json(kubri.guard().await))
+}
+
+async fn unlock(State(kubri): State<Arc<Kubri>>) -> ApiResult<Guard> {
+    Ok(Json(kubri.unlock().await?))
+}
+
+async fn lock(State(kubri): State<Arc<Kubri>>) -> ApiResult<Guard> {
+    Ok(Json(kubri.lock().await?))
+}
+
+#[derive(Deserialize)]
+struct AccessRequest {
+    checks: Vec<AccessCheck>,
+    #[serde(default)]
+    fresh: bool,
+}
+
+async fn access(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<AccessRequest>,
+) -> ApiResult<Vec<Option<bool>>> {
+    Ok(Json(kubri.access(&req.checks, req.fresh).await?))
+}
+
+async fn who_am_i(State(kubri): State<Arc<Kubri>>) -> ApiResult<Option<Identity>> {
+    Ok(Json(kubri.who_am_i().await?))
+}
+
+async fn readable_namespaces(State(kubri): State<Arc<Kubri>>) -> ApiResult<Vec<String>> {
+    Ok(Json(kubri.readable_namespaces().await?))
 }
 
 async fn resources(State(kubri): State<Arc<Kubri>>) -> ApiResult<Vec<ResourceInfo>> {

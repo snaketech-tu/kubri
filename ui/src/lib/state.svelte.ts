@@ -1,10 +1,14 @@
 import { drafts } from './navigation.svelte';
+import { access } from './access.svelte';
 import {
 	backend,
+	type AccessCheck,
 	type ClusterInfo,
 	type BenchInfo,
 	type ContextInfo,
+	type ContextSettings,
 	type Drill,
+	type Guard,
 	type HelmRelease,
 	type K9sConfig,
 	type ObjectRef,
@@ -13,6 +17,7 @@ import {
 	type PortForwardInfo,
 	type ResourceInfo,
 	type ResourceRef,
+	type Settings,
 	type TableScope,
 	type TerminalMode
 } from './api';
@@ -61,6 +66,7 @@ interface View {
 
 const HISTORY = 50;
 
+/** Where Kubri 0.2 kept per-context choices in the browser; moved to the settings file once. */
 const READ_ONLY_KEY = 'kubri.readonly.';
 const ENVIRONMENT_KEY = 'kubri.environment.';
 const TOOLS_BESIDE_KEY = 'kubri.toolsBeside';
@@ -82,6 +88,46 @@ function store(key: string, value: string | null) {
 	} catch {
 		// Kept in memory only.
 	}
+}
+
+export const NO_CONTEXT_SETTINGS: ContextSettings = {
+	displayName: '',
+	label: '',
+	color: '',
+	production: false,
+	readOnly: false,
+	locked: false,
+	namespace: ''
+};
+
+const DEFAULT_SETTINGS: Settings = {
+	contexts: {},
+	diff: { scale: false, restart: false, image: true, labels: true }
+};
+
+/** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
+export function legacyContextSettings(
+	keys: string[],
+	read: (key: string) => string | null,
+	existing: Record<string, ContextSettings>
+): Record<string, ContextSettings> {
+	const found: Record<string, ContextSettings> = {};
+	for (const key of keys) {
+		const [prefix, name] = key.startsWith(READ_ONLY_KEY)
+			? [READ_ONLY_KEY, key.slice(READ_ONLY_KEY.length)]
+			: key.startsWith(ENVIRONMENT_KEY)
+				? [ENVIRONMENT_KEY, key.slice(ENVIRONMENT_KEY.length)]
+				: [null, ''];
+		if (!prefix || !name || existing[name]) continue;
+		const value = read(key) ?? '';
+		const settings = (found[name] ??= { ...NO_CONTEXT_SETTINGS });
+		if (prefix === READ_ONLY_KEY) settings.readOnly = value === 'true';
+		else {
+			settings.label = value.trim();
+			settings.production = /\bprod(uction)?\b/i.test(value);
+		}
+	}
+	return found;
 }
 
 export type Page =
@@ -109,7 +155,9 @@ export type Dialog =
 	| { kind: 'trigger'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'suspend'; resource: ResourceInfo; target: ObjectRef; suspend: boolean }
 	| { kind: 'image'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef };
+	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef }
+	/** Explains an action RBAC refuses, and what would allow it. */
+	| { kind: 'forbidden'; action: string; check: AccessCheck; target: ObjectRef | null };
 
 export interface Toast {
 	id: number;
@@ -203,6 +251,8 @@ class AppState {
 	pluginTerminal = $state<{ plugin: Plugin; run: PluginRun } | null>(null);
 	/** A filter for the resource list to take, from a command like `:pods app=web`. */
 	filterRequest = $state<string | null>(null);
+	/** A filter for the RBAC page to take, like `can delete pods` from "Who may do this?". */
+	rbacFilterRequest = $state<string | null>(null);
 	/** The object the resource list puts its cursor on once it shows up, as after Shift+J. */
 	cursorRequest = $state<{ namespace: string | null; name: string } | null>(null);
 	/** Narrows the resource list, after Enter on a workload, CronJob or node. */
@@ -239,24 +289,138 @@ class AppState {
 
 	paletteConfig = $derived<PaletteConfig>({ aliases: this.k9s?.aliases ?? [], skins: this.k9s?.skins ?? [] });
 
-	/** Read-only picked in Kubri for this context. It can only add to k9s `readOnly`, never lift it. */
-	localReadOnly = $state(false);
+	/** Kubri's settings file: names, colors and guard rails per context, and preferences. */
+	settings = $state<Settings>(DEFAULT_SETTINGS);
+	/** Why the settings file could not be read. */
+	settingsError = $state<string | null>(null);
+	/** Whether the core lets Kubri change the connected cluster, which it enforces. */
+	guard = $state<Guard>({ readOnly: false, reason: null, canUnlock: false, unlockedFor: null });
+	/** When an unlocked context locks again, in milliseconds since the epoch. */
+	unlockedUntil = $state<number | null>(null);
+	#guardTimer: ReturnType<typeof setTimeout> | null = null;
+	#guardRequest = 0;
+	/** The settings of the connected context. */
+	contextSettings = $derived(this.contextSettingsOf(this.cluster?.context));
 	/** A label such as "Production" for this context, set by the user; Kubri never guesses it from names. */
-	environment = $state('');
-	/** k9s `readOnly`, or read-only picked in Kubri: nothing that changes the cluster is offered. */
-	readOnly = $derived((this.k9s?.readOnly ?? false) || this.localReadOnly);
+	environment = $derived(this.contextSettings.label);
+	/** Marked as production by the user: a banner, and typed names before destructive actions. */
+	production = $derived(this.contextSettings.production);
+	/** k9s `readOnly`, read-only or locked in Kubri: nothing that changes the cluster is offered. */
+	readOnly = $derived((this.k9s?.readOnly ?? false) || this.guard.readOnly);
 	/** Light or dark picked in Kubri; null follows the system. Skins pick their own. */
 	scheme = $state<Scheme>(storedScheme());
 
-	setEnvironment(value: string) {
-		this.environment = value.trim();
-		if (this.cluster) store(ENVIRONMENT_KEY + this.cluster.context, this.environment || null);
+	contextSettingsOf(context: string | undefined | null): ContextSettings {
+		return (context && this.settings.contexts[context]) || NO_CONTEXT_SETTINGS;
 	}
 
+	/** The name to show for a context: the display name set in Kubri, or its own. */
+	contextName(context: string): string {
+		return this.contextSettingsOf(context).displayName || context;
+	}
+
+	async loadSettings() {
+		try {
+			const reply = await backend.settings();
+			this.settings = reply.settings;
+			this.settingsError = reply.error;
+			if (!reply.error) await this.migrateLegacySettings();
+		} catch (err) {
+			this.settingsError = errorMessage(err);
+		}
+	}
+
+	/** Moves the read-only choices and labels of Kubri 0.2 from the browser to the settings file. */
+	private async migrateLegacySettings() {
+		let keys: string[] = [];
+		try {
+			keys = Object.keys(localStorage).filter((k) => k.startsWith(READ_ONLY_KEY) || k.startsWith(ENVIRONMENT_KEY));
+		} catch {
+			return;
+		}
+		const found = legacyContextSettings(keys, stored, this.settings.contexts);
+		for (const [name, settings] of Object.entries(found)) {
+			try {
+				this.settings = await backend.setContextSettings(name, settings);
+			} catch {
+				return;
+			}
+		}
+		for (const key of keys) store(key, null);
+	}
+
+	/** Saves the settings of a context; the connected one's guard follows. */
+	async setContextSettings(context: string, settings: ContextSettings): Promise<boolean> {
+		try {
+			this.settings = await backend.setContextSettings(context, settings);
+			if (context === this.cluster?.context) await this.refreshGuard();
+			return true;
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+			return false;
+		}
+	}
+
+	async setDiffSettings(diff: Settings['diff']) {
+		try {
+			this.settings = await backend.setDiffSettings(diff);
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+		}
+	}
+
+	async refreshGuard() {
+		await this.#askGuard(() => backend.guard(), true);
+	}
+
+	/** Asks the core for the guard; only the latest answer counts, so a slow one cannot undo an unlock. */
+	async #askGuard(ask: () => Promise<Guard>, quiet = false): Promise<boolean> {
+		const request = ++this.#guardRequest;
+		try {
+			const guard = await ask();
+			if (request === this.#guardRequest) this.applyGuard(guard);
+			return true;
+		} catch (err) {
+			// Quietly keep the last state; the core still refuses what it must.
+			if (!quiet) this.toast(errorMessage(err), 'bad');
+			return false;
+		}
+	}
+
+	private applyGuard(guard: Guard) {
+		this.guard = guard;
+		this.unlockedUntil = guard.unlockedFor ? Date.now() + guard.unlockedFor * 1000 : null;
+		if (this.#guardTimer) clearTimeout(this.#guardTimer);
+		this.#guardTimer = null;
+		// Lock again on screen when the core does.
+		if (guard.unlockedFor) this.#guardTimer = setTimeout(() => this.refreshGuard(), guard.unlockedFor * 1000 + 500);
+	}
+
+	/** Unlocks a locked context for 15 minutes. */
+	async unlock() {
+		if (drafts.block(() => this.unlock())) return;
+		if (await this.#askGuard(() => backend.unlock())) this.toast('Unlocked for 15 minutes');
+	}
+
+	async lock() {
+		if (drafts.block(() => this.lock())) return;
+		await this.#askGuard(() => backend.lock());
+	}
+
+	/** The header's lock button: read-only on and off, or a locked context unlocked and locked. */
 	toggleReadOnly() {
 		if (drafts.block(() => this.toggleReadOnly())) return;
-		this.localReadOnly = !this.localReadOnly;
-		if (this.cluster) store(READ_ONLY_KEY + this.cluster.context, this.localReadOnly ? 'true' : null);
+		const context = this.cluster?.context;
+		if (!context) return;
+		const settings = this.contextSettings;
+		if (settings.readOnly) {
+			this.setContextSettings(context, { ...settings, readOnly: false });
+		} else if (this.guard.canUnlock) {
+			if (this.guard.readOnly) this.unlock();
+			else this.lock();
+		} else {
+			this.setContextSettings(context, { ...settings, readOnly: true });
+		}
 	}
 
 	toggleScheme() {
@@ -276,6 +440,7 @@ class AppState {
 
 	async load() {
 		try {
+			await this.loadSettings();
 			const { contexts, cluster } = await backend.contexts();
 			this.contexts = contexts;
 			if (cluster) {
@@ -545,6 +710,8 @@ class AppState {
 			const config = await backend.k9sConfig();
 			if (this.cluster?.context !== context) return;
 			this.k9s = config;
+			// The k9s files can turn read-only on or off.
+			this.refreshGuard();
 			// k9s opens its `defaultView` when it starts.
 			const start = this.#startup && config.defaultView;
 			this.#startup = false;
@@ -616,10 +783,12 @@ class AppState {
 		const previous = this.selected;
 		this.cluster = cluster;
 		this.k9s = null;
-		this.localReadOnly = stored(READ_ONLY_KEY + cluster.context) === 'true';
-		this.environment = stored(ENVIRONMENT_KEY + cluster.context) ?? '';
+		access.reset(cluster.context);
+		this.#guardRequest++;
+		this.applyGuard({ readOnly: true, reason: 'Kubri is still checking whether it may change this cluster', canUnlock: false, unlockedFor: null });
+		this.refreshGuard();
 		this.resources = resources;
-		this.namespace = ALL_NAMESPACES;
+		this.namespace = this.contextSettingsOf(cluster.context).namespace || ALL_NAMESPACES;
 		this.scope = null;
 		// Views of the last cluster may not exist in this one.
 		this.#history = [];

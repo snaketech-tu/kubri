@@ -82,6 +82,15 @@ export const httpBackend: Backend = {
 	reloadContexts: () => request('POST', '/contexts/reload'),
 	switchContext: (name) => request('PUT', '/context', { name }),
 	resources: () => request('GET', '/resources'),
+	access: (checks, fresh = false) => request('POST', '/access', { checks, fresh }),
+	whoAmI: () => request('GET', '/whoami'),
+	readableNamespaces: () => request('GET', '/namespaces/readable'),
+	settings: () => request('GET', '/settings'),
+	setContextSettings: (name, settings) => request('PUT', '/settings/context', { name, settings }),
+	setDiffSettings: (settings) => request('PUT', '/settings/diff', settings),
+	guard: () => request('GET', '/guard'),
+	unlock: () => request('POST', '/guard/unlock'),
+	lock: () => request('POST', '/guard/lock'),
 
 	watchTable(resource, namespace, scope, onEvent) {
 		const params = new URLSearchParams({ ...resource, namespace: namespace ?? '' });

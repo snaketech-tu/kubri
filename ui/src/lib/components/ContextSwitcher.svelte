@@ -6,7 +6,11 @@
 	let input = $state<HTMLInputElement>();
 
 	const filtered = $derived(
-		app.contexts.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
+		app.contexts.filter((c) =>
+			[c.name, app.contextName(c.name), app.contextSettingsOf(c.name).label].some((text) =>
+				text.toLowerCase().includes(query.toLowerCase())
+			)
+		)
 	);
 
 	function toggle() {
@@ -50,10 +54,17 @@
 		aria-haspopup="listbox"
 		aria-expanded={app.contextMenuOpen}
 	>
-		<span class="dot" class:connecting={app.connecting} class:online={app.cluster && !app.connecting}></span>
+		<span
+			class="dot"
+			class:connecting={app.connecting}
+			class:online={app.cluster && !app.connecting}
+			style:--dot={app.cluster && !app.connecting ? app.contextSettings.color || null : null}
+		></span>
 		<span class="label">
 			<span class="meta">{app.connecting ? 'Connecting…' : 'Context'}</span>
-			<span class="name">{app.connecting ?? app.cluster?.context ?? 'No context'}</span>
+			<span class="name">
+				{app.connecting ? app.contextName(app.connecting) : app.cluster ? app.contextName(app.cluster.context) : 'No context'}
+			</span>
 		</span>
 		<span class="chevron"><Icon name="chevron" size={16} /></span>
 	</button>
@@ -67,6 +78,7 @@
 			</div>
 			<ul>
 				{#each filtered as ctx (ctx.name)}
+					{@const settings = app.contextSettingsOf(ctx.name)}
 					<li>
 						<button
 							class:active={ctx.name === app.cluster?.context}
@@ -74,9 +86,14 @@
 							role="option"
 							aria-selected={ctx.name === app.cluster?.context}
 						>
-							<span class="name">{ctx.name}</span>
+							<span class="name">
+								{#if settings.color}<span class="swatch" style:background={settings.color}></span>{/if}
+								{app.contextName(ctx.name)}
+								{#if settings.production}<span class="badge production">production</span>
+								{:else if settings.label}<span class="badge">{settings.label}</span>{/if}
+							</span>
 							<span class="meta">
-								{ctx.cluster ?? ''}{ctx.namespace ? ` · ns ${ctx.namespace}` : ''}
+								{settings.displayName ? `${ctx.name} · ` : ''}{ctx.cluster ?? ''}{ctx.namespace ? ` · ns ${ctx.namespace}` : ''}
 								{#if ctx.isDefault}<span class="badge">default</span>{/if}
 							</span>
 						</button>
@@ -142,8 +159,8 @@
 		flex: none;
 	}
 	.dot.online {
-		background: var(--ok);
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+		background: var(--dot, var(--ok));
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--dot, var(--ok)) 25%, transparent);
 	}
 	.dot.connecting {
 		background: var(--warn);
@@ -218,6 +235,18 @@
 		font-size: 11px;
 		background: var(--surface-2);
 		color: var(--text);
+	}
+	.badge.production {
+		background: color-mix(in srgb, var(--bad) 16%, var(--surface-1));
+		color: var(--bad);
+	}
+	.swatch {
+		display: inline-block;
+		width: 9px;
+		height: 9px;
+		margin-right: 4px;
+		border-radius: 50%;
+		vertical-align: 1px;
 	}
 	.empty {
 		padding: 12px;

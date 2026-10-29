@@ -110,6 +110,49 @@ pub enum TableEvent {
     Error {
         message: String,
     },
+    /// Something to know about the list, such as which namespaces it covers.
+    Notice {
+        message: String,
+    },
+}
+
+/// Streams one table made of the collections at `urls`, such as the same resource in several
+/// namespaces, starting with `notice`.
+pub(crate) fn watch_tables(
+    client: Client,
+    urls: Vec<String>,
+    scope: TableScope,
+    notice: String,
+) -> impl Stream<Item = TableEvent> + Send + 'static {
+    let streams: Vec<_> = urls
+        .into_iter()
+        .enumerate()
+        .map(|(i, url)| {
+            watch_table(client.clone(), url, scope.clone())
+                .map(move |event| (i, event))
+                .boxed()
+        })
+        .collect();
+    let mut parts: Vec<Option<Vec<Row>>> = vec![None; streams.len()];
+    let mut columns = Vec::new();
+    let merged = futures::stream::select_all(streams).filter_map(move |(i, event)| {
+        let out = match event {
+            TableEvent::Reset { columns: c, rows } => {
+                parts[i] = Some(rows);
+                if columns.is_empty() {
+                    columns = c;
+                }
+                let rows = parts.iter().flatten().flatten().cloned().collect();
+                Some(TableEvent::Reset {
+                    columns: columns.clone(),
+                    rows,
+                })
+            }
+            other => Some(other),
+        };
+        futures::future::ready(out)
+    });
+    futures::stream::once(futures::future::ready(TableEvent::Notice { message: notice })).chain(merged)
 }
 
 /// Streams table updates for the collection at `url` until the stream is dropped.

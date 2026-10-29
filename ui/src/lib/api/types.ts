@@ -15,6 +15,72 @@ export interface ClusterInfo {
 	defaultNamespace: string;
 }
 
+/** What Kubri remembers about a context, in its own settings file. */
+export interface ContextSettings {
+	/** Shown instead of the context's name when set. */
+	displayName: string;
+	/** Such as `Staging`, shown beside the name. */
+	label: string;
+	/** `#rrggbb`, or empty. */
+	color: string;
+	/** Destructive actions ask to type the name; a banner says where you are. */
+	production: boolean;
+	readOnly: boolean;
+	/** Starts read-only; unlocking lasts 15 minutes. */
+	locked: boolean;
+	/** The namespace shown after connecting; empty for all. */
+	namespace: string;
+}
+
+/** Which actions show a dry-run diff first. YAML edits always do. */
+export interface DiffSettings {
+	scale: boolean;
+	restart: boolean;
+	image: boolean;
+	labels: boolean;
+}
+
+export interface Settings {
+	contexts: Record<string, ContextSettings>;
+	diff: DiffSettings;
+}
+
+export interface SettingsReply {
+	settings: Settings;
+	/** Why the settings file could not be read. */
+	error: string | null;
+}
+
+/** One action as RBAC sees it, like `kubectl auth can-i`. */
+export interface AccessCheck {
+	verb: string;
+	/** Empty for the core group. */
+	group: string;
+	/** Plural, such as `pods`. */
+	resource: string;
+	/** Such as `exec` or `scale`. */
+	subresource?: string;
+	/** Null for cluster-scoped resources or all namespaces. */
+	namespace?: string | null;
+	name?: string | null;
+}
+
+/** Who the cluster takes the user for, like `kubectl auth whoami`. */
+export interface Identity {
+	username: string;
+	groups: string[];
+}
+
+/** Whether Kubri may change the connected cluster. */
+export interface Guard {
+	readOnly: boolean;
+	reason: string | null;
+	/** Locked, and nothing else keeps it read-only. */
+	canUnlock: boolean;
+	/** Seconds until an unlocked context locks again. */
+	unlockedFor: number | null;
+}
+
 export interface ContextList {
 	contexts: ContextInfo[];
 	cluster: ClusterInfo | null;
@@ -97,7 +163,9 @@ export type TableEvent =
 	| { type: 'reset'; columns: Column[]; rows: Row[] }
 	| { type: 'upsert'; row: Row }
 	| { type: 'delete'; row: Row }
-	| { type: 'error'; message: string };
+	| { type: 'error'; message: string }
+	/** Something to know about the list, such as which namespaces it covers. */
+	| { type: 'notice'; message: string };
 
 export interface ObjectRef {
 	context?: string;
@@ -591,6 +659,18 @@ export interface Backend {
 	reloadContexts(): Promise<ContextList>;
 	switchContext(name: string): Promise<ClusterInfo>;
 	resources(): Promise<ResourceInfo[]>;
+	/** Whether each check is allowed; null where the API server cannot say. */
+	access(checks: AccessCheck[], fresh?: boolean): Promise<(boolean | null)[]>;
+	whoAmI(): Promise<Identity | null>;
+	/** All namespaces, or those the kubeconfig and settings name where listing them is not allowed. */
+	readableNamespaces(): Promise<string[]>;
+	settings(): Promise<SettingsReply>;
+	setContextSettings(name: string, settings: ContextSettings): Promise<Settings>;
+	setDiffSettings(settings: DiffSettings): Promise<Settings>;
+	guard(): Promise<Guard>;
+	/** Unlocks a locked context for 15 minutes. */
+	unlock(): Promise<Guard>;
+	lock(): Promise<Guard>;
 	/** Starts a live table and returns a function that stops it. */
 	watchTable(
 		resource: ResourceRef,

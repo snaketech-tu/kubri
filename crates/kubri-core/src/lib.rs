@@ -3,6 +3,7 @@
 //! [`Kubri`] owns the merged kubeconfig and the connection to the selected context.
 //! Both frontends talk to the cluster only through it.
 
+mod access;
 mod bench;
 mod context;
 mod discovery;
@@ -24,6 +25,7 @@ mod references;
 mod resource;
 mod sanitizer;
 mod selector;
+mod settings;
 mod table;
 mod template;
 mod terminal;
@@ -47,6 +49,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::RwLock;
 
+pub use access::{AccessCheck, Identity};
 pub use bench::{
     BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
 };
@@ -68,6 +71,7 @@ pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
+pub use settings::{ContextSettings, DiffSettings, Settings};
 pub use table::{Column, Owner, Row, TableEvent, TableScope};
 pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
 pub use workload::{ContainerImage, Drill};
@@ -99,6 +103,7 @@ struct Session {
     client: Client,
     resources: Vec<ResourceInfo>,
     by_ref: HashMap<ResourceRef, usize>,
+    access: access::AccessCache,
 }
 
 pub struct Kubri {
@@ -108,6 +113,34 @@ pub struct Kubri {
     benchmarks: std::sync::Mutex<bench::Benchmarks>,
     /// Started read-only, whatever the k9s configuration says.
     read_only: AtomicBool,
+    settings: std::sync::RwLock<SettingsFile>,
+    /// Locked contexts unlocked until then, by name. Never saved: a restart locks them again.
+    unlocks: std::sync::Mutex<HashMap<String, std::time::Instant>>,
+}
+
+/// The settings and where they are kept.
+struct SettingsFile {
+    /// `None` keeps them in memory only, as in tests.
+    path: Option<std::path::PathBuf>,
+    settings: Settings,
+    /// Why the file could not be read; Kubri then uses the defaults and does not overwrite it.
+    error: Option<String>,
+}
+
+/// How long unlocking a locked context lasts.
+pub const UNLOCK_FOR: Duration = Duration::from_secs(15 * 60);
+
+/// Whether Kubri may change the connected cluster, and why not.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Guard {
+    pub read_only: bool,
+    /// Why changes are off, when they are.
+    pub reason: Option<String>,
+    /// The context is locked and nothing else keeps it read-only, so it can be unlocked.
+    pub can_unlock: bool,
+    /// Seconds until an unlocked context locks again.
+    pub unlocked_for: Option<u64>,
 }
 
 /// The client configuration for `context`, read the way kubectl reads it.
@@ -131,7 +164,19 @@ impl Kubri {
     /// or `~/.kube/config`, as kubectl does.
     /// A missing or broken kubeconfig is not fatal: it is reported by [`Kubri::contexts`].
     pub fn load() -> Self {
-        Self::with_kubeconfig(kubeconfig::read())
+        let kubri = Self::with_kubeconfig(kubeconfig::read());
+        if let Some(path) = settings::path() {
+            let mut file = kubri.settings_file();
+            match settings::read(&path) {
+                Ok(settings) => file.settings = settings,
+                Err(err) => {
+                    tracing::warn!("cannot read the settings: {err}");
+                    file.error = Some(err);
+                }
+            }
+            file.path = Some(path);
+        }
+        kubri
     }
 
     pub fn from_kubeconfig(kubeconfig: Kubeconfig) -> Self {
@@ -145,7 +190,158 @@ impl Kubri {
             forwards: Default::default(),
             benchmarks: Default::default(),
             read_only: AtomicBool::new(false),
+            settings: std::sync::RwLock::new(SettingsFile {
+                path: None,
+                settings: Settings::default(),
+                error: None,
+            }),
+            unlocks: Default::default(),
         }
+    }
+
+    fn settings_file(&self) -> std::sync::RwLockWriteGuard<'_, SettingsFile> {
+        self.settings.write().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Kubri's own settings.
+    pub fn settings(&self) -> Settings {
+        self.settings
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .settings
+            .clone()
+    }
+
+    /// Why the settings file could not be read, if it could not.
+    pub fn settings_error(&self) -> Option<String> {
+        self.settings
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .error
+            .clone()
+    }
+
+    /// Changes the settings and saves them.
+    fn update_settings(&self, change: impl FnOnce(&mut Settings) -> Result<()>) -> Result<Settings> {
+        let mut file = self.settings_file();
+        if let Some(err) = &file.error {
+            return Err(Error::Unsupported(format!(
+                "the settings file is broken, so Kubri does not overwrite it: {err}"
+            )));
+        }
+        let mut settings = file.settings.clone();
+        change(&mut settings)?;
+        if let Some(path) = &file.path {
+            settings::write(path, &settings)?;
+        }
+        file.settings = settings.clone();
+        Ok(settings)
+    }
+
+    /// Sets what Kubri remembers about a context. Turning locking on ends an unlock.
+    pub fn set_context_settings(&self, context: &str, value: ContextSettings) -> Result<Settings> {
+        let lock = value.locked && !self.settings().context(context).locked;
+        let settings = self.update_settings(|s| s.set_context(context, value))?;
+        if lock {
+            self.unlocks_map().remove(context);
+        }
+        Ok(settings)
+    }
+
+    /// Sets which actions show a dry-run diff.
+    pub fn set_diff_settings(&self, value: DiffSettings) -> Result<Settings> {
+        self.update_settings(|s| {
+            s.diff = value;
+            Ok(())
+        })
+    }
+
+    fn unlocks_map(&self) -> std::sync::MutexGuard<'_, HashMap<String, std::time::Instant>> {
+        self.unlocks.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Seconds until `context` locks again, if it is unlocked now.
+    fn unlocked_for(&self, context: &str) -> Option<u64> {
+        let mut unlocks = self.unlocks_map();
+        let until = *unlocks.get(context)?;
+        let left = until.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            unlocks.remove(context);
+            return None;
+        }
+        Some(left.as_secs().max(1))
+    }
+
+    /// Whether Kubri may change the connected cluster now, and why not.
+    pub async fn guard(&self) -> Guard {
+        let context = self.cluster().await.map(|c| c.context);
+        self.guard_for(context.as_deref()).await
+    }
+
+    async fn guard_for(&self, context: Option<&str>) -> Guard {
+        let fixed = if self.read_only.load(Ordering::Relaxed) {
+            Some("it was started read-only")
+        } else if self.k9s_files().await.read_only {
+            Some("readOnly is set in the k9s configuration")
+        } else {
+            None
+        };
+        let settings = context.map(|c| self.settings().context(c)).unwrap_or_default();
+        if let Some(reason) = fixed {
+            return Guard {
+                read_only: true,
+                reason: Some(reason.into()),
+                ..Default::default()
+            };
+        }
+        if settings.read_only {
+            return Guard {
+                read_only: true,
+                reason: Some("this context is set read-only in Kubri".into()),
+                ..Default::default()
+            };
+        }
+        if !settings.locked {
+            return Guard::default();
+        }
+        match context.and_then(|c| self.unlocked_for(c)) {
+            Some(left) => Guard {
+                can_unlock: true,
+                unlocked_for: Some(left),
+                ..Default::default()
+            },
+            None => Guard {
+                read_only: true,
+                reason: Some("this context is locked; unlock it to make changes".into()),
+                can_unlock: true,
+                unlocked_for: None,
+            },
+        }
+    }
+
+    /// Unlocks the connected context for [`UNLOCK_FOR`] if it is locked.
+    pub async fn unlock(&self) -> Result<Guard> {
+        let context = self.cluster().await.ok_or(Error::NotConnected)?.context;
+        let guard = self.guard_for(Some(&context)).await;
+        if !guard.can_unlock {
+            return Err(Error::ReadOnly(
+                guard
+                    .reason
+                    .unwrap_or_else(|| "this context is not locked".into()),
+            ));
+        }
+        self.unlocks_map()
+            .insert(context.clone(), std::time::Instant::now() + UNLOCK_FOR);
+        tracing::info!(context, "unlocked for 15 minutes");
+        Ok(self.guard_for(Some(&context)).await)
+    }
+
+    /// Locks the connected context again before its unlock runs out.
+    pub async fn lock(&self) -> Result<Guard> {
+        let context = self.cluster().await.ok_or(Error::NotConnected)?.context;
+        self.unlocks_map().remove(&context);
+        tracing::info!(context, "locked again");
+        Ok(self.guard_for(Some(&context)).await)
     }
 
     /// Turns changes to clusters off for good, like k9s `--readonly`. The k9s `readOnly`
@@ -157,13 +353,14 @@ impl Kubri {
     /// Fails with [`Error::ReadOnly`] when changes are turned off. Port-forwards, logs and
     /// benchmarks only read, so they stay allowed, as in k9s.
     async fn ensure_writable(&self) -> Result<()> {
-        if self.read_only.load(Ordering::Relaxed) {
-            return Err(Error::ReadOnly("it was started read-only".into()));
+        match self.guard().await {
+            Guard {
+                read_only: true,
+                reason,
+                ..
+            } => Err(Error::ReadOnly(reason.unwrap_or_default())),
+            _ => Ok(()),
         }
-        if self.k9s_files().await.read_only {
-            return Err(Error::ReadOnly("readOnly is set in the k9s configuration".into()));
-        }
-        Ok(())
     }
 
     /// Re-reads the kubeconfig from disk, keeping the current connection.
@@ -231,6 +428,28 @@ impl Kubri {
         Ok(info)
     }
 
+    /// Whether the current user may do each of `checks`, like `kubectl auth can-i`. `None`
+    /// where the API server could not say. `fresh` forgets earlier answers first, after a
+    /// role may have changed.
+    pub async fn access(&self, checks: &[AccessCheck], fresh: bool) -> Result<Vec<Option<bool>>> {
+        if checks.len() > access::MAX_CHECKS {
+            return Err(Error::Unsupported(format!(
+                "at most {} checks at once",
+                access::MAX_CHECKS
+            )));
+        }
+        let session = self.session().await?;
+        if fresh {
+            session.access.clear();
+        }
+        Ok(access::check_all(&session.client, &session.access, checks).await)
+    }
+
+    /// Who the cluster takes the current user for, like `kubectl auth whoami`.
+    pub async fn who_am_i(&self) -> Result<Option<Identity>> {
+        Ok(access::who_am_i(&self.session().await?.client).await)
+    }
+
     /// All resource types served by the connected cluster, sorted by kind.
     pub async fn resources(&self) -> Result<Vec<ResourceInfo>> {
         Ok(self.session().await?.resources.clone())
@@ -248,11 +467,61 @@ impl Kubri {
     ) -> Result<impl Stream<Item = TableEvent> + Send + 'static> {
         let session = self.session().await?;
         let api = session.api(resource, namespace)?;
-        Ok(table::watch_table(
-            session.client.clone(),
-            api.resource_url().to_owned(),
-            scope,
-        ))
+        let info = session.info_for(resource)?;
+        if namespace.is_none() && info.namespaced {
+            // Someone who may not list all namespaces at once sees the namespaces they may read.
+            let everywhere = AccessCheck::new("list", resource, None);
+            if session.access_of(&everywhere).await == Some(false) {
+                let mut readable = Vec::new();
+                for ns in self.readable_namespaces().await? {
+                    let here = AccessCheck::new("list", resource, Some(&ns));
+                    if session.access_of(&here).await != Some(false) {
+                        readable.push(ns);
+                    }
+                }
+                if !readable.is_empty() {
+                    let notice = format!(
+                        "You may not list {} in all namespaces; showing {}",
+                        info.reference.plural,
+                        readable.join(", ")
+                    );
+                    let urls = readable
+                        .iter()
+                        .map(|ns| Ok(session.api(resource, Some(ns))?.resource_url().to_owned()))
+                        .collect::<Result<Vec<_>>>()?;
+                    return Ok(table::watch_tables(session.client.clone(), urls, scope, notice).boxed());
+                }
+            }
+        }
+        Ok(table::watch_table(session.client.clone(), api.resource_url().to_owned(), scope).boxed())
+    }
+
+    /// The namespaces to show: all of them where the user may list namespaces, otherwise the
+    /// ones the kubeconfig and Kubri's settings name for this context.
+    pub async fn readable_namespaces(&self) -> Result<Vec<String>> {
+        let session = self.session().await?;
+        if let Some(namespaces) = session.resolve("v1", "Namespace") {
+            let check = AccessCheck::new("list", &namespaces, None);
+            if session.access_of(&check).await != Some(false) {
+                let api: Api<k8s_openapi::api::core::v1::Namespace> = Api::all(session.client.clone());
+                match api.list(&ListParams::default()).await {
+                    Ok(list) => {
+                        let mut names: Vec<String> =
+                            list.items.into_iter().filter_map(|n| n.metadata.name).collect();
+                        names.sort();
+                        return Ok(names);
+                    }
+                    Err(kube::Error::Api(status)) if status.code == 403 => {}
+                    Err(err) => return Err(err.into()),
+                }
+            }
+        }
+        let settings = self.settings().context(&session.info.context);
+        let mut names = vec![session.info.default_namespace.clone()];
+        if !settings.namespace.is_empty() && settings.namespace != names[0] {
+            names.push(settings.namespace);
+        }
+        Ok(names)
     }
 
     /// Fetches one object in full.
@@ -268,10 +537,9 @@ impl Kubri {
     /// `object` was read.
     pub async fn replace(&self, obj: &ObjectRef, object: Value) -> Result<Value> {
         self.ensure_writable().await?;
-        let api = self
-            .object_session(obj)
-            .await?
-            .api(&obj.resource, obj.namespace.as_deref())?;
+        let session = self.object_session(obj).await?;
+        session.ensure_may("update", obj, "").await?;
+        let api = session.api(&obj.resource, obj.namespace.as_deref())?;
         let object: DynamicObject = serde_json::from_value(object)?;
         let saved = api.replace(&obj.name, &PostParams::default(), &object).await?;
         Ok(serde_json::to_value(saved)?)
@@ -280,10 +548,9 @@ impl Kubri {
     /// Applies a JSON merge patch, for example to change labels or annotations.
     pub async fn patch(&self, obj: &ObjectRef, patch: Value) -> Result<Value> {
         self.ensure_writable().await?;
-        let api = self
-            .object_session(obj)
-            .await?
-            .api(&obj.resource, obj.namespace.as_deref())?;
+        let session = self.object_session(obj).await?;
+        session.ensure_may("patch", obj, "").await?;
+        let api = session.api(&obj.resource, obj.namespace.as_deref())?;
         let saved = api
             .patch(&obj.name, &PatchParams::default(), &Patch::Merge(patch))
             .await?;
@@ -292,10 +559,9 @@ impl Kubri {
 
     pub async fn delete(&self, obj: &ObjectRef, options: &DeleteOptions) -> Result<()> {
         self.ensure_writable().await?;
-        let api = self
-            .object_session(obj)
-            .await?
-            .api(&obj.resource, obj.namespace.as_deref())?;
+        let session = self.object_session(obj).await?;
+        session.ensure_may("delete", obj, "").await?;
+        let api = session.api(&obj.resource, obj.namespace.as_deref())?;
         api.delete(&obj.name, &options.to_params()).await?;
         Ok(())
     }
@@ -308,6 +574,7 @@ impl Kubri {
         if !info.subresources.iter().any(|s| s == "scale") {
             return Err(Error::Unsupported(format!("{} cannot be scaled", info.kind)));
         }
+        session.ensure_may("patch", obj, "scale").await?;
         let api = session.api(&obj.resource, obj.namespace.as_deref())?;
         let patch = serde_json::json!({ "spec": { "replicas": replicas } });
         api.patch_scale(&obj.name, &PatchParams::default(), &Patch::Merge(patch))
@@ -324,6 +591,7 @@ impl Kubri {
         if !matches!(info.kind.as_str(), "Deployment" | "StatefulSet" | "DaemonSet") {
             return Err(Error::Unsupported(format!("{} cannot be restarted", info.kind)));
         }
+        session.ensure_may("patch", obj, "").await?;
         let now = k8s_openapi::jiff::Timestamp::now().to_string();
         let api = session.api(&obj.resource, obj.namespace.as_deref())?;
         api.patch(
@@ -372,6 +640,11 @@ impl Kubri {
         if session.info_for(&target.resource)?.kind != "CronJob" {
             return Err(Error::Unsupported("only CronJobs can be triggered".into()));
         }
+        if let Some(jobs) = session.resolve("batch/v1", "Job") {
+            session
+                .ensure_allowed(AccessCheck::new("create", &jobs, target.namespace.as_deref()))
+                .await?;
+        }
         let cronjob = serde_json::to_value(
             session
                 .api(&target.resource, target.namespace.as_deref())?
@@ -396,6 +669,7 @@ impl Kubri {
         if session.info_for(&target.resource)?.kind != "CronJob" {
             return Err(Error::Unsupported("only CronJobs can be suspended".into()));
         }
+        session.ensure_may("patch", target, "").await?;
         let patch = serde_json::json!({ "spec": { "suspend": suspend } });
         session
             .api(&target.resource, target.namespace.as_deref())?
@@ -443,6 +717,7 @@ impl Kubri {
         if !workload::has_images(info) {
             return Err(Error::Unsupported(format!("{} has no images to set", info.kind)));
         }
+        session.ensure_may("patch", target, "").await?;
         let patch = workload::image_patch(info.kind == "Pod", images)?;
         session
             .api(&target.resource, target.namespace.as_deref())?
@@ -470,6 +745,13 @@ impl Kubri {
         let deployments = session
             .resolve("apps/v1", "Deployment")
             .ok_or_else(|| Error::UnknownResource("apps/v1/deployments".into()))?;
+        let deployment_ref = ObjectRef {
+            context: None,
+            resource: deployments.clone(),
+            namespace: target.namespace.clone(),
+            name: name.clone(),
+        };
+        session.ensure_may("update", &deployment_ref, "").await?;
         let api = session.api(&deployments, target.namespace.as_deref())?;
         let deployment = serde_json::to_value(api.get(&name).await?)?;
         let updated: DynamicObject = serde_json::from_value(workload::rolled_back(deployment, &replicaset)?)?;
@@ -803,6 +1085,11 @@ impl Kubri {
         if !session.is_core(&target.resource, "Pod")? {
             return Err(Error::Unsupported("terminals open in pods".into()));
         }
+        let subresource = match options.mode {
+            TerminalMode::Attach => "attach",
+            _ => "exec",
+        };
+        session.ensure_may("create", target, subresource).await?;
         let api = session.pod_api(target.namespace.as_deref())?;
         let pod = api.get(&target.name).await?;
         terminal::open(api, &pod, options).await
@@ -877,6 +1164,11 @@ impl Kubri {
     pub async fn cordon(&self, node: &str, cordoned: bool) -> Result<()> {
         self.ensure_writable().await?;
         let session = self.session().await?;
+        if let Some(resource) = session.resolve("v1", "Node") {
+            session
+                .ensure_allowed(AccessCheck::new("patch", &resource, None).named(node))
+                .await?;
+        }
         let nodes: Api<Node> = Api::all(session.client.clone());
         let patch = serde_json::json!({ "spec": { "unschedulable": cordoned } });
         nodes
@@ -945,6 +1237,32 @@ impl Drop for Kubri {
 }
 
 impl Session {
+    /// Fails with [`Error::Forbidden`] when RBAC denies `check`. Where the API server cannot
+    /// say, the action goes ahead and the API server decides.
+    async fn ensure_allowed(&self, check: AccessCheck) -> Result<()> {
+        match self.access_of(&check).await {
+            Some(false) => Err(Error::Forbidden(check.describe())),
+            _ => Ok(()),
+        }
+    }
+
+    /// Whether RBAC allows `check`; `None` where the API server cannot say.
+    async fn access_of(&self, check: &AccessCheck) -> Option<bool> {
+        access::check_all(&self.client, &self.access, std::slice::from_ref(check))
+            .await
+            .into_iter()
+            .next()
+            .flatten()
+    }
+
+    /// Checks `verb` on the object `obj`, or on its `subresource`.
+    async fn ensure_may(&self, verb: &str, obj: &ObjectRef, subresource: &str) -> Result<()> {
+        let check = AccessCheck::new(verb, &obj.resource, obj.namespace.as_deref())
+            .on_subresource(subresource)
+            .named(&obj.name);
+        self.ensure_allowed(check).await
+    }
+
     fn new(info: ClusterInfo, client: Client, resources: Vec<ResourceInfo>) -> Self {
         let by_ref = resources
             .iter()
@@ -956,6 +1274,7 @@ impl Session {
             client,
             resources,
             by_ref,
+            access: Default::default(),
         }
     }
 

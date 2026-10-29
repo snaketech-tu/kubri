@@ -1,7 +1,7 @@
 import type { Alias, ContextInfo, ResourceInfo } from './api';
 import { xrayResources } from './xray';
 
-export type ConfigSection = 'skins' | 'hotkeys' | 'plugins' | 'aliases';
+export type ConfigSection = 'contexts' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
 
 export type Action =
 	| {
@@ -43,6 +43,7 @@ const SANITIZER_COMMANDS = ['popeye', 'pop', 'sanitizer', 'sanitize'];
 const BENCH_COMMANDS = ['be', 'bench', 'benchmark', 'benchmarks'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	config: undefined,
+	settings: undefined,
 	k9s: undefined,
 	skins: 'skins',
 	hotkeys: 'hotkeys',
@@ -189,7 +190,7 @@ function builtins(
 		const section = CONFIG_COMMANDS[cmd];
 		configPage.push({
 			label: cmd,
-			detail: 'k9s configuration: skins, hotkeys, plugins and aliases',
+			detail: 'Settings: contexts, and the k9s skins, hotkeys, plugins and aliases',
 			action: section ? { type: 'config', section } : { type: 'config' }
 		});
 	}

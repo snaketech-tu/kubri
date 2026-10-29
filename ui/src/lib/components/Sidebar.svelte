@@ -92,7 +92,7 @@
 		</button>
 		<button class:active={app.page === 'config'} onclick={() => app.showConfig()} title=":config">
 			<Icon name="settings" />
-			<span class="label">k9s config</span>
+			<span class="label">Settings</span>
 		</button>
 		{#if others.length}
 			<h3>All resources</h3>

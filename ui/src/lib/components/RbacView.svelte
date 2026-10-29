@@ -20,7 +20,13 @@
 	let me = $state<Permissions | null>(null);
 	let meError = $state<string | null>(null);
 	let error = $state<string | null>(null);
-	let filter = $state('');
+	let filter = $state(app.rbacFilterRequest ?? '');
+	$effect(() => {
+		const request = app.rbacFilterRequest;
+		if (request === null) return;
+		filter = request;
+		app.rbacFilterRequest = null;
+	});
 	let selectedKey = $state(ME);
 	let reloads = $state(0);
 	let list = $state<HTMLDivElement>();
@@ -142,7 +148,12 @@
 	<div class="split">
 		<div class="side">
 			<div class="filter">
-				<SearchField bind:value={filter} bind:input={filterInput} label="Filter subjects" placeholder="Filter subjects" />
+				<SearchField
+					bind:value={filter}
+					bind:input={filterInput}
+					label="Filter subjects"
+					placeholder="Filter subjects, or: can delete pods"
+				/>
 			</div>
 			<div class="list" bind:this={list} role="listbox" aria-label="Subjects">
 				<button class="item me" class:active={selectedKey === ME} onclick={() => (selectedKey = ME)} role="option" aria-selected={selectedKey === ME}>

@@ -9,11 +9,12 @@ use std::sync::{Arc, Mutex};
 
 use futures::{Stream, StreamExt};
 use kubri_core::{
-    BenchInfo, BenchRequest, ClusterInfo, ContainerImage, ContextList, DeleteOptions, DrainOptions,
-    DrainReport, Drill, EventInfo, HelmRelease, HelmReleaseDetails, K9sConfig, Kubri, LogEvent, LogOptions,
-    MetricsKind, ObjectRef, Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac,
-    Reference, ResourceInfo, ResourceRef, SanitizerReport, TableEvent, TableScope, Terminal, TerminalInput,
-    TerminalOptions, TerminalOutput, Usage, XrayNode,
+    AccessCheck, BenchInfo, BenchRequest, ClusterInfo, ContainerImage, ContextList, ContextSettings,
+    DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, Guard, HelmRelease,
+    HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
+    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac, Reference, ResourceInfo,
+    ResourceRef, SanitizerReport, Settings, TableEvent, TableScope, Terminal, TerminalInput, TerminalOptions,
+    TerminalOutput, Usage, XrayNode,
 };
 use serde_json::Value;
 use tauri::State;
@@ -87,6 +88,71 @@ async fn reload_contexts(kubri: State<'_, Arc<Kubri>>) -> CommandResult<ContextL
 #[tauri::command]
 async fn switch_context(kubri: State<'_, Arc<Kubri>>, name: String) -> CommandResult<ClusterInfo> {
     kubri.switch_context(&name).await.map_err(|e| e.to_string())
+}
+
+/// The settings, and why the file could not be read if it could not.
+#[derive(serde::Serialize)]
+struct SettingsReply {
+    settings: Settings,
+    error: Option<String>,
+}
+
+#[tauri::command]
+fn settings(kubri: State<'_, Arc<Kubri>>) -> SettingsReply {
+    SettingsReply {
+        settings: kubri.settings(),
+        error: kubri.settings_error(),
+    }
+}
+
+#[tauri::command]
+fn set_context_settings(
+    kubri: State<'_, Arc<Kubri>>,
+    name: String,
+    settings: ContextSettings,
+) -> CommandResult<Settings> {
+    kubri
+        .set_context_settings(&name, settings)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_diff_settings(kubri: State<'_, Arc<Kubri>>, settings: DiffSettings) -> CommandResult<Settings> {
+    kubri.set_diff_settings(settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn guard(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Guard> {
+    Ok(kubri.guard().await)
+}
+
+#[tauri::command]
+async fn unlock(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Guard> {
+    kubri.unlock().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn lock(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Guard> {
+    kubri.lock().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn access(
+    kubri: State<'_, Arc<Kubri>>,
+    checks: Vec<AccessCheck>,
+    fresh: bool,
+) -> CommandResult<Vec<Option<bool>>> {
+    kubri.access(&checks, fresh).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn who_am_i(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Option<Identity>> {
+    kubri.who_am_i().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn readable_namespaces(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<String>> {
+    kubri.readable_namespaces().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -620,6 +686,15 @@ pub fn run() {
             reload_contexts,
             switch_context,
             resources,
+            access,
+            who_am_i,
+            readable_namespaces,
+            settings,
+            set_context_settings,
+            set_diff_settings,
+            guard,
+            unlock,
+            lock,
             watch_table,
             logs,
             unwatch,

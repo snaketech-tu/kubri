@@ -13,8 +13,10 @@
 	import BenchmarksView from '#lib/components/BenchmarksView.svelte';
 	import CommandPalette from '#lib/components/CommandPalette.svelte';
 	import ConfigView from '#lib/components/ConfigView.svelte';
+	import ContextSettingsForm from '#lib/components/ContextSettingsForm.svelte';
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
+	import ForbiddenDialog from '#lib/components/ForbiddenDialog.svelte';
 	import HelmView from '#lib/components/HelmView.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
@@ -41,6 +43,7 @@
 		isReplicaSets,
 		isSecrets
 	} from '#lib/pods.js';
+	import { backend } from '#lib/api/index.js';
 	import { session } from '#lib/session.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 	import { LiveTable } from '#lib/watch.svelte.js';
@@ -65,6 +68,18 @@
 
 	$effect(() => {
 		app.namespaces = namespaces.rows.map((r) => r.name).sort();
+	});
+
+	// Someone who may not list namespaces still gets the ones the kubeconfig and settings name.
+	$effect(() => {
+		if (!app.cluster || !namespaces.error || namespaces.rows.length) return;
+		const context = app.cluster.context;
+		backend.readableNamespaces().then(
+			(names) => {
+				if (app.cluster?.context === context && !namespaces.rows.length) app.namespaces = names;
+			},
+			() => {}
+		);
 	});
 
 	// Every place Kubri shows goes into the history, for `[`, `]` and `-`.
@@ -254,11 +269,49 @@
 	}
 
 	let environmentEditor = $state<HTMLDetailsElement>();
+
+	// A clock for the unlock countdown.
+	let now = $state(Date.now());
+	$effect(() => {
+		if (app.unlockedUntil === null) return;
+		const timer = setInterval(() => (now = Date.now()), 1000);
+		return () => clearInterval(timer);
+	});
+	const unlockLeft = $derived(app.unlockedUntil === null ? null : Math.max(0, Math.ceil((app.unlockedUntil - now) / 1000)));
+	const lockLabel = $derived(
+		unlockLeft !== null
+			? `Unlocked ${Math.floor(unlockLeft / 60)}:${String(unlockLeft % 60).padStart(2, '0')}`
+			: app.readOnly
+				? app.guard.canUnlock && !app.contextSettings.readOnly
+					? 'Locked'
+					: 'Read-only'
+				: 'Editable'
+	);
+	const lockTitle = $derived(
+		app.k9s?.readOnly
+			? 'k9s readOnly is set: Kubri does not change this cluster'
+			: app.contextSettings.readOnly
+				? 'Read-only in Kubri: no edits, deletes, scaling or shells. Click to allow changes.'
+				: unlockLeft !== null
+					? 'Unlocked for now; it locks again by itself. Click to lock it now.'
+					: app.guard.readOnly && app.guard.canUnlock
+						? 'Locked: click to unlock for 15 minutes.'
+						: app.guard.readOnly
+							? `Read-only: ${app.guard.reason ?? 'Kubri does not change this cluster'}`
+							: 'Changes are allowed; Kubernetes permissions still apply. Click to make Kubri read-only.'
+	);
+	const accent = $derived(app.contextSettings.color || null);
 </script>
 
 <svelte:window {onkeydown} {onmouseup} />
 
-<div class="shell" class:maximized={app.details && app.maximized} class:inspecting={app.details}>
+<div
+	class="shell"
+	class:maximized={app.details && app.maximized}
+	class:inspecting={app.details}
+	class:tinted={accent}
+	style:--context-color={accent}
+>
 	<Sidebar />
 	<div class="workspace">
 		<header>
@@ -289,24 +342,18 @@
 			<ContextSwitcher />
 			{#if app.cluster}
 				<details class="environment" bind:this={environmentEditor}>
-					<summary class:set={app.environment} title="Label this context, such as Production">
-						{app.environment || 'Add label'}
+					<summary
+						class:set={app.environment}
+						class:production={app.production}
+						title="Name, color and guard rails of this context"
+					>
+						{app.environment || 'Context settings'}
 					</summary>
-					<label>
-						Environment label for {app.cluster.context}
-						<input
-							value={app.environment}
-							onchange={(e) => app.setEnvironment(e.currentTarget.value)}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' || e.key === 'Escape') {
-									app.setEnvironment(e.currentTarget.value);
-									environmentEditor?.removeAttribute('open');
-								}
-							}}
-							placeholder="e.g. Production"
-						/>
-						<span class="note">With a production label, destructive actions ask you to type “confirm”.</span>
-					</label>
+					<div class="popover">
+						<p class="popover-title">Settings for <strong>{app.cluster.context}</strong></p>
+						<ContextSettingsForm context={app.cluster.context} namespaces={app.namespaces} />
+						<p class="note">Kept in Kubri's settings file; the kubeconfig is never changed.</p>
+					</div>
 				</details>
 			{/if}
 			<span class="divider"></span>
@@ -328,17 +375,14 @@
 			<button
 				class="mode"
 				class:locked={app.readOnly}
+				class:unlocked={app.unlockedUntil !== null}
 				aria-pressed={app.readOnly}
-				disabled={!app.cluster || app.k9s?.readOnly}
+				disabled={!app.cluster || app.k9s?.readOnly || (app.guard.readOnly && !app.guard.canUnlock && !app.contextSettings.readOnly)}
 				onclick={() => app.toggleReadOnly()}
-				title={app.k9s?.readOnly
-					? 'k9s readOnly is set: Kubri does not change this cluster'
-					: app.readOnly
-						? 'Read-only in Kubri: no edits, deletes, scaling or shells. Click to allow changes.'
-						: 'Changes are allowed; Kubernetes permissions still apply. Click to make Kubri read-only.'}
+				title={lockTitle}
 			>
 				<Icon name={app.readOnly ? 'lock' : 'unlock'} size={15} />
-				{app.readOnly ? 'Read-only' : 'Editable'}
+				{lockLabel}
 			</button>
 			<button class="square help" onclick={() => (app.helpOpen = true)} title="Keys and commands (?)" aria-label="Help">
 				?
@@ -348,6 +392,21 @@
 			{/if}
 		</header>
 
+		{#if app.cluster && app.production}
+			<div class="production-banner" role="note">
+				<Icon name="warning" size={15} />
+				<span>
+					<strong>Production</strong> · {app.contextName(app.cluster.context)} ·
+					{app.readOnly ? 'changes are off' : 'changes go live; deleting asks you to type the name'}
+				</span>
+			</div>
+		{/if}
+		{#if app.settingsError}
+			<div class="error" role="alert">
+				<span>Kubri's settings file could not be read, so it uses the defaults: {app.settingsError}</span>
+				<button onclick={() => (app.settingsError = null)} aria-label="Dismiss">×</button>
+			</div>
+		{/if}
 		{#if app.error}
 			<div class="error" role="alert">
 				<span>{app.error}</span>
@@ -447,7 +506,11 @@
 {#if app.paletteOpen}<CommandPalette />{/if}
 {#if app.helpOpen}<HelpOverlay />{/if}
 {#if app.menu}<ActionMenu menu={app.menu} />{/if}
-{#if app.dialog}<ActionDialog dialog={app.dialog} />{/if}
+{#if app.dialog?.kind === 'forbidden'}
+	<ForbiddenDialog dialog={app.dialog} />
+{:else if app.dialog}
+	<ActionDialog dialog={app.dialog} />
+{/if}
 {#if app.pluginTerminal}
 	<PluginTerminal plugin={app.pluginTerminal.plugin} run={app.pluginTerminal.run} />
 {/if}
@@ -542,25 +605,53 @@
 		background: color-mix(in srgb, var(--warn) 16%, var(--surface-1));
 		color: var(--warn);
 	}
-	.environment label {
+	.environment summary.production {
+		background: color-mix(in srgb, var(--bad) 16%, var(--surface-1));
+		color: var(--bad);
+	}
+	.environment .popover {
 		position: absolute;
 		top: calc(100% + 8px);
 		left: 0;
 		z-index: 20;
 		display: grid;
-		gap: 8px;
-		width: 280px;
+		gap: 12px;
+		width: 320px;
+		max-height: calc(100dvh - 100px);
+		overflow: auto;
 		padding: 14px;
 		border: 1px solid var(--border);
 		border-radius: 10px;
 		background: var(--surface-1);
 		box-shadow: var(--shadow);
-		font-size: 12px;
-		font-weight: 600;
+	}
+	.popover-title {
+		margin: 0;
+		font-size: 13px;
 	}
 	.environment .note {
+		margin: 0;
 		color: var(--text-muted);
-		font-weight: 400;
+		font-size: 12px;
+	}
+	/* The context's color, as a strip over the header. */
+	.shell.tinted header {
+		box-shadow: inset 0 3px 0 var(--context-color);
+		background: color-mix(in srgb, var(--context-color) 6%, var(--surface-1));
+	}
+	.production-banner {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 20px;
+		background: color-mix(in srgb, var(--bad) 14%, var(--surface-1));
+		color: var(--bad);
+		font-size: 12.5px;
+	}
+	.mode.unlocked {
+		border-color: transparent;
+		background: color-mix(in srgb, var(--warn) 16%, var(--surface-1));
+		color: var(--warn);
 	}
 	.divider {
 		width: 1px;

@@ -1,4 +1,4 @@
-import type { Grant, ResourceInfo, Rule, SubjectInfo } from './api';
+import type { AccessCheck, Grant, Identity, ResourceInfo, Rule, SubjectInfo } from './api';
 
 /** The verbs that get a column of their own, in the order kubectl lists them. */
 export const VERBS = ['get', 'list', 'watch', 'create', 'update', 'patch', 'delete', 'deletecollection'] as const;
@@ -86,9 +86,82 @@ export function isAdmin(grants: Grant[]) {
 	);
 }
 
-/** Keeps subjects whose name, kind or namespace contain `text`. */
+/**
+ * Subjects whose name, kind or namespace contains the text. `can VERB RESOURCE` (such as
+ * `can delete pods` or `can create pods/exec`) keeps those whose rules allow that instead.
+ */
 export function filterSubjects(subjects: SubjectInfo[], text: string) {
 	const t = text.trim().toLowerCase();
 	if (!t) return subjects;
+	const can = /^can\s+(\S+)\s+(\S+)$/.exec(t);
+	if (can) {
+		const [, verb, what] = can;
+		const [resource, subresource = ''] = what.split('/');
+		return subjects.filter((s) => s.grants.some((g) => g.rules.some((r) => ruleAllows(r, verb, null, resource, subresource))));
+	}
 	return subjects.filter((s) => [s.name, s.kind, s.namespace ?? ''].some((v) => v.toLowerCase().includes(t)));
+}
+
+/** Whether a rule allows `verb` on a resource; a null group matches any group. */
+export function ruleAllows(rule: Rule, verb: string, group: string | null, resource: string, subresource = ''): boolean {
+	const name = subresource ? `${resource}/${subresource}` : resource;
+	const verbs = rule.verbs.includes('*') || rule.verbs.includes(verb);
+	const groups = group === null || rule.apiGroups.includes('*') || rule.apiGroups.includes(group);
+	const resources = rule.resources.some((r) => r === '*' || r === name || (!!subresource && (r === `${resource}/*` || r === `*/${subresource}`)));
+	return verbs && groups && resources;
+}
+
+/** A name for a Role from what it allows, as Kubernetes accepts names. */
+function roleName(check: AccessCheck): string {
+	const parts = ['kubri', check.verb, check.resource, check.subresource ?? ''].filter(Boolean).join('-');
+	return parts.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').slice(0, 63).replace(/-$/, '');
+}
+
+/** The subject a RoleBinding names for a user, or for a service account from its username. */
+function subjectYaml(identity: Identity | null): string[] {
+	const sa = identity && /^system:serviceaccount:([^:]+):([^:]+)$/.exec(identity.username);
+	if (sa) return ['  - kind: ServiceAccount', `    name: ${sa[2]}`, `    namespace: ${sa[1]}`];
+	return ['  - kind: User', `    name: ${quote(identity?.username ?? 'YOUR-USER-NAME')}`, '    apiGroup: rbac.authorization.k8s.io'];
+}
+
+function quote(text: string): string {
+	return /^[A-Za-z0-9._@-]+$/.test(text) && !/^(true|false|null|yes|no|on|off|~)$/i.test(text) ? text : JSON.stringify(text);
+}
+
+/**
+ * A Role and RoleBinding (ClusterRole and ClusterRoleBinding without a namespace) that would
+ * allow `check`, to send to an admin.
+ */
+export function grantYaml(check: AccessCheck, identity: Identity | null): string {
+	const name = roleName(check);
+	const namespaced = !!check.namespace;
+	const [role, binding] = namespaced ? ['Role', 'RoleBinding'] : ['ClusterRole', 'ClusterRoleBinding'];
+	const meta = (kind: string) => [
+		'apiVersion: rbac.authorization.k8s.io/v1',
+		`kind: ${kind}`,
+		'metadata:',
+		`  name: ${name}`,
+		...(namespaced ? [`  namespace: ${check.namespace}`] : [])
+	];
+	const resource = check.subresource ? `${check.resource}/${check.subresource}` : check.resource;
+	return [
+		...meta(role),
+		'rules:',
+		`  - apiGroups: [${JSON.stringify(check.group)}]`,
+		`    resources: [${JSON.stringify(resource)}]`,
+		// Rules cannot name objects for verbs that act on no existing object.
+		...(check.name && !['create', 'list', 'watch', 'deletecollection'].includes(check.verb)
+			? [`    resourceNames: [${JSON.stringify(check.name)}]`]
+			: []),
+		`    verbs: [${JSON.stringify(check.verb)}]`,
+		'---',
+		...meta(binding),
+		'subjects:',
+		...subjectYaml(identity),
+		'roleRef:',
+		'  apiGroup: rbac.authorization.k8s.io',
+		`  kind: ${role}`,
+		`  name: ${name}`,
+		''
+	].join('\n');
 }
