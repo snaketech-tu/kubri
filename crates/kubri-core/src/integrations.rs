@@ -15,6 +15,7 @@ use serde_json::Value;
 
 use crate::prometheus::{self, Charts, Limits, Marker, Range, Subject};
 use crate::{Error, ObjectRef, ResourceInfo, Result};
+use crate::{grafana, loki};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -809,6 +810,177 @@ impl crate::Kubri {
                 points,
             })
             .collect())
+    }
+}
+
+/// How long Grafana's dashboards are kept before Kubri asks again.
+const DASHBOARDS_FOR: std::time::Duration = std::time::Duration::from_secs(300);
+
+impl crate::Kubri {
+    /// The dashboards of the connected cluster's Grafana, and why Grafana's own list could not
+    /// be read if it could not; kept for a few minutes.
+    async fn grafana_dashboards(
+        &self,
+        session: &crate::Session,
+    ) -> Result<(Vec<grafana::Dashboard>, Option<String>)> {
+        let integrations = self.integrations(false).await?;
+        let endpoint = integrations.endpoint("grafana").cloned().ok_or_else(|| {
+            Error::Unsupported("no Grafana found; give its URL on the integrations page".into())
+        })?;
+        let mut cached = session.grafana.lock().await;
+        if let Some((at, dashboards, note)) = cached.as_ref()
+            && at.elapsed() < DASHBOARDS_FOR
+        {
+            return Ok((dashboards.clone(), note.clone()));
+        }
+        let token = self
+            .settings()
+            .context(&session.info.context)
+            .integrations
+            .grafana_token;
+        let token = Some(token.as_str()).filter(|t| !t.is_empty());
+        let (api, mut dashboards) = futures::join!(
+            grafana::from_api(&session.proxy_client, &endpoint, token),
+            grafana::from_config_maps(&session.client)
+        );
+        let note = match api {
+            Ok(found) => {
+                dashboards.splice(0..0, found);
+                None
+            }
+            Err(err) => Some(err.to_string()),
+        };
+        *cached = Some((std::time::Instant::now(), dashboards.clone(), note.clone()));
+        Ok((dashboards, note))
+    }
+
+    /// Grafana dashboards that show `target`, as links with its variables filled in.
+    pub async fn dashboards(&self, target: &ObjectRef) -> Result<grafana::Dashboards> {
+        let session = self.object_session(target).await?;
+        let kind = session.info_for(&target.resource)?.kind.clone();
+        let namespace = target.namespace.clone().unwrap_or_default();
+        let subject = match (target.resource.group.as_str(), kind.as_str()) {
+            ("", "Pod") => grafana::Subject::Pod {
+                namespace,
+                name: target.name.clone(),
+            },
+            ("", "Node") => grafana::Subject::Node {
+                name: target.name.clone(),
+            },
+            ("", "Namespace") => grafana::Subject::Namespace {
+                name: target.name.clone(),
+            },
+            ("apps", "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet")
+            | ("batch", "Job" | "CronJob") => grafana::Subject::Workload {
+                kind,
+                namespace,
+                name: target.name.clone(),
+            },
+            _ => return Ok(grafana::Dashboards::default()),
+        };
+        let (dashboards, note) = self.grafana_dashboards(&session).await?;
+        let links = grafana::links(&dashboards, &subject);
+        Ok(grafana::Dashboards {
+            note: note.filter(|_| links.is_empty()),
+            links,
+        })
+    }
+
+    /// Where the browser reaches a tool: its URL, or for one on a Service a port-forward to
+    /// it, started once and used again.
+    pub async fn integration_url(&self, id: &str) -> Result<String> {
+        let integrations = self.integrations(false).await?;
+        let endpoint = integrations
+            .endpoint(id)
+            .cloned()
+            .ok_or_else(|| Error::Unsupported(format!("{id} is not found in this cluster")))?;
+        let (namespace, name, port, https) = match endpoint {
+            Endpoint::Url { url } => return Ok(url),
+            Endpoint::Service {
+                namespace,
+                name,
+                port,
+                https,
+            } => (namespace, name, port, https),
+        };
+        let context = self.cluster().await.map(|c| c.context).unwrap_or_default();
+        let scheme = if https { "https" } else { "http" };
+        let running = self.port_forwards().into_iter().find(|f| {
+            f.context == context
+                && f.target.resource.group.is_empty()
+                && f.target.resource.plural == "services"
+                && f.target.namespace.as_deref() == Some(namespace.as_str())
+                && f.target.name == name
+                && f.remote_port == port
+        });
+        let forward = match running {
+            Some(forward) => forward,
+            None => {
+                self.start_port_forward(crate::PortForwardRequest {
+                    target: ObjectRef {
+                        context: None,
+                        resource: crate::ResourceRef {
+                            group: String::new(),
+                            version: "v1".into(),
+                            plural: "services".into(),
+                        },
+                        namespace: Some(namespace),
+                        name,
+                    },
+                    remote_port: port,
+                    local_port: None,
+                    address: None,
+                })
+                .await?
+            }
+        };
+        Ok(format!("{scheme}://127.0.0.1:{}", forward.local_port))
+    }
+
+    /// Log history of a pod, workload or Service from Loki.
+    pub async fn loki_logs(&self, request: &loki::LokiRequest) -> Result<loki::LokiLogs> {
+        let session = self.object_session(&request.target).await?;
+        let endpoint = self
+            .integrations(false)
+            .await?
+            .endpoint("loki")
+            .cloned()
+            .ok_or_else(|| {
+                Error::Unsupported("no Loki found; give its URL on the integrations page".into())
+            })?;
+        let query = match request.query.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
+            Some(query) => query.to_owned(),
+            None => self.loki_query(&session, request).await?,
+        };
+        let limit = request.limit.unwrap_or(loki::MAX_LINES).clamp(1, loki::MAX_LINES);
+        let seconds = request.seconds.clamp(60, 30 * 24 * 3600);
+        loki::query(&session.proxy_client, &endpoint, &query, seconds, limit).await
+    }
+
+    /// The LogQL that finds an object's lines: by pod name, or by a Service's selector.
+    async fn loki_query(&self, session: &crate::Session, request: &loki::LokiRequest) -> Result<String> {
+        let target = &request.target;
+        let kind = session.info_for(&target.resource)?.kind.clone();
+        let namespace = target.namespace.clone().unwrap_or_default();
+        let selector = if target.resource.group.is_empty() && kind == "Service" {
+            let api: Api<Service> = Api::namespaced(session.client.clone(), &namespace);
+            api.get(&target.name).await?.spec.and_then(|s| s.selector)
+        } else {
+            None
+        };
+        if kind == "Service" && selector.as_ref().is_none_or(|s| s.is_empty()) {
+            return Err(Error::Unsupported(format!(
+                "Service {} selects no pods",
+                target.name
+            )));
+        }
+        Ok(loki::default_query(
+            &kind,
+            &namespace,
+            &target.name,
+            selector.as_ref(),
+            request.container.as_deref(),
+        ))
     }
 }
 

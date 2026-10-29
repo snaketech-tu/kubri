@@ -19,7 +19,7 @@ use kubri_core::{
     TerminalOutput, Usage, XrayNode,
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
-use kubri_core::{Charts, Integrations, Range, Series};
+use kubri_core::{Charts, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -78,6 +78,9 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/charts", post(charts))
         .route("/usage-history", get(usage_history))
         .route("/prometheus/query", post(prometheus_query))
+        .route("/grafana/dashboards", post(dashboards))
+        .route("/integrations/url", post(integration_url))
+        .route("/loki/logs", post(loki_logs))
         .route("/xray", get(xray))
         .route("/rbac", get(rbac))
         .route("/sanitize", get(sanitize))
@@ -641,6 +644,30 @@ async fn prometheus_query(
     Json(req): Json<PromQuery>,
 ) -> ApiResult<Vec<Series>> {
     Ok(Json(kubri.prometheus_query(&req.query, req.range).await?))
+}
+
+async fn dashboards(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Dashboards> {
+    Ok(Json(kubri.dashboards(&req.target).await?))
+}
+
+#[derive(Deserialize)]
+struct IntegrationId {
+    id: String,
+}
+
+#[derive(Serialize)]
+struct Url {
+    url: String,
+}
+
+async fn integration_url(State(kubri): State<Arc<Kubri>>, Json(req): Json<IntegrationId>) -> ApiResult<Url> {
+    Ok(Json(Url {
+        url: kubri.integration_url(&req.id).await?,
+    }))
+}
+
+async fn loki_logs(State(kubri): State<Arc<Kubri>>, Json(req): Json<LokiRequest>) -> ApiResult<LokiLogs> {
+    Ok(Json(kubri.loki_logs(&req).await?))
 }
 
 #[derive(Deserialize)]

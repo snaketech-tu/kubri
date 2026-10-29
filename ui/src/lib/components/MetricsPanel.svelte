@@ -8,6 +8,7 @@
 	import { RANGES } from '../charts';
 	import { errorMessage } from '../format';
 	import { app } from '../state.svelte';
+	import DashboardList from './DashboardList.svelte';
 	import TimeChart from './TimeChart.svelte';
 
 	let { target }: { target: ObjectRef } = $props();
@@ -37,10 +38,13 @@
 		}
 	}
 
+	const prometheus = $derived(app.has('prometheus'));
+
 	$effect(() => {
 		void target;
 		void seconds;
 		lastRange = seconds;
+		if (!prometheus) return;
 		load();
 		const timer = setInterval(load, REFRESH);
 		return () => clearInterval(timer);
@@ -58,50 +62,55 @@
 </script>
 
 <div class="metrics">
-	<div class="bar">
-		<div class="ranges" role="group" aria-label="Time range">
-			{#each RANGES as range (range.seconds)}
-				<button class:active={seconds === range.seconds} aria-pressed={seconds === range.seconds} onclick={() => (seconds = range.seconds)}>
-					{range.label}
-				</button>
-			{/each}
-		</div>
-		<span class="source">
-			{#if loading && !charts}Asking Prometheus…{:else if charts}From Prometheus at {charts.source}{/if}
-		</span>
-	</div>
-
-	{#if error}
-		<div class="banner">{error}</div>
+	{#if app.has('grafana')}
+		<DashboardList {target} />
 	{/if}
-
-	{#if charts}
-		{#if !charts.charts.length}
-			<p class="muted">Prometheus has no data for {target.name} in this range. It may be newer than that, or Prometheus may not collect cAdvisor metrics.</p>
-		{/if}
-		<div class="grid">
-			{#each charts.charts as chart (chart.id)}
-				<section>
-					<TimeChart {chart} start={charts.start} end={charts.end} step={charts.step} markers={charts.markers} />
-					<button class="link" onclick={() => copy(chart.query)} title={chart.query}>Copy PromQL</button>
-				</section>
-			{/each}
-		</div>
-		{#if charts.markers.length}
-			<div class="markers">
-				<strong>In this range</strong>
-				<ul>
-					{#each charts.markers as marker (marker.at + marker.label)}
-						<li><span class="at">{time(marker.at)}</span> {marker.label}</li>
-					{/each}
-				</ul>
+	{#if prometheus}
+		<div class="bar">
+			<div class="ranges" role="group" aria-label="Time range">
+				{#each RANGES as range (range.seconds)}
+					<button class:active={seconds === range.seconds} aria-pressed={seconds === range.seconds} onclick={() => (seconds = range.seconds)}>
+						{range.label}
+					</button>
+				{/each}
 			</div>
+			<span class="source">
+				{#if loading && !charts}Asking Prometheus…{:else if charts}From Prometheus at {charts.source}{/if}
+			</span>
+		</div>
+
+		{#if error}
+			<div class="banner">{error}</div>
 		{/if}
-		{#if charts.missing.length}
-			<p class="muted note">
-				No data for {charts.missing.join(', ').toLowerCase()}.
-				{#if charts.missing.includes('Container restarts')}Restarts come from kube-state-metrics.{/if}
-			</p>
+
+		{#if charts}
+			{#if !charts.charts.length}
+				<p class="muted">Prometheus has no data for {target.name} in this range. It may be newer than that, or Prometheus may not collect cAdvisor metrics.</p>
+			{/if}
+			<div class="grid">
+				{#each charts.charts as chart (chart.id)}
+					<section>
+						<TimeChart {chart} start={charts.start} end={charts.end} step={charts.step} markers={charts.markers} />
+						<button class="link" onclick={() => copy(chart.query)} title={chart.query}>Copy PromQL</button>
+					</section>
+				{/each}
+			</div>
+			{#if charts.markers.length}
+				<div class="markers">
+					<strong>In this range</strong>
+					<ul>
+						{#each charts.markers as marker (marker.at + marker.label)}
+							<li><span class="at">{time(marker.at)}</span> {marker.label}</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+			{#if charts.missing.length}
+				<p class="muted note">
+					No data for {charts.missing.join(', ').toLowerCase()}.
+					{#if charts.missing.includes('Container restarts')}Restarts come from kube-state-metrics.{/if}
+				</p>
+			{/if}
 		{/if}
 	{/if}
 </div>

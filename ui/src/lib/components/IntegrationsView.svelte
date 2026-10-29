@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { Integration, IntegrationSettings } from '../api';
+	import { openTool } from '../integrations';
 	import { app } from '../state.svelte';
+	import DashboardList from './DashboardList.svelte';
 	import PageHeader from './PageHeader.svelte';
 
 	/** What each tool adds, and the kinds to open for the operators. */
@@ -81,6 +83,11 @@
 		return e.via === 'url' ? e.url : `Service ${e.namespace}/${e.name}:${e.port}, through the API server`;
 	}
 
+	/** The namespace picked in the sidebar, whose dashboards the Grafana card lists. */
+	const namespaceRef = $derived(
+		app.namespace ? { resource: { group: '', version: 'v1', plural: 'namespaces' }, namespace: null, name: app.namespace } : null
+	);
+
 	function openKind(group: string, plural: string) {
 		const resource = app.resources.find((r) => r.group === group && r.plural === plural);
 		if (resource) app.open(resource);
@@ -110,6 +117,16 @@
 						<p class="about">{about?.text}</p>
 						{#if where(item)}<p class="where">{where(item)}</p>{/if}
 						{#if item.error}<p class="error">{item.error}</p>{/if}
+						{#if item.id === 'grafana' && item.endpoint && !item.error}
+							<div class="kinds">
+								<button class="btn" onclick={() => openTool('grafana', '/')}>Open Grafana</button>
+							</div>
+							{#if namespaceRef}
+								<div class="dashboards">
+									<DashboardList target={namespaceRef} title="Dashboards for {app.namespace}" empty="Grafana has no dashboard for {app.namespace} alone." />
+								</div>
+							{/if}
+						{/if}
 						{#if about?.kinds && item.source === 'found'}
 							<div class="kinds">
 								{#each about.kinds.filter((k) => app.resources.some((r) => r.group === k.group && r.plural === k.plural)) as kind (kind.plural)}
@@ -213,6 +230,9 @@
 	}
 	.error {
 		color: var(--bad);
+	}
+	.dashboards {
+		margin-top: 10px;
 	}
 	.kinds {
 		display: flex;

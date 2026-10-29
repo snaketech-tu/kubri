@@ -97,6 +97,40 @@ export interface Chart {
 	query: string;
 }
 
+/** A Grafana dashboard that shows an object, with its variables filled in. */
+export interface DashboardLink {
+	title: string;
+	folder: string;
+	/** Path and query on Grafana. */
+	path: string;
+	filled: string[];
+}
+
+export interface Dashboards {
+	links: DashboardLink[];
+	/** Why Grafana's own list could not be read, when no dashboard was found. */
+	note: string | null;
+}
+
+export interface LokiRequest {
+	target: ObjectRef;
+	/** LogQL; the object's own query when left out. */
+	query?: string | null;
+	container?: string | null;
+	seconds: number;
+	limit?: number;
+}
+
+export interface LokiLogs {
+	query: string;
+	source: string;
+	sources: LogSource[];
+	/** Oldest first. */
+	lines: LogLine[];
+	/** More lines matched; the newest are here. */
+	limited: boolean;
+}
+
 export interface Charts {
 	/** Where Prometheus is. */
 	source: string;
@@ -1095,6 +1129,12 @@ export interface Backend {
 	charts(target: ObjectRef, range: ChartRange): Promise<Charts>;
 	/** CPU and memory of a namespace, or the cluster, from Prometheus. */
 	usageHistory(namespace: string | null, seconds: number): Promise<Charts>;
+	/** Grafana dashboards that show an object. */
+	dashboards(target: ObjectRef): Promise<Dashboards>;
+	/** Where the browser reaches a tool; a port-forward for one on a Service. */
+	integrationUrl(id: IntegrationId): Promise<string>;
+	/** Log history from Loki. */
+	lokiLogs(request: LokiRequest): Promise<LokiLogs>;
 	/** The XRay trees of every object of `resource`. */
 	xray(resource: ResourceRef, namespace: string | null): Promise<XrayNode[]>;
 	/** Checks the objects of a namespace, or of the whole cluster, like Popeye. */
