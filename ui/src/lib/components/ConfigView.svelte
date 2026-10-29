@@ -6,6 +6,7 @@
 	import { forControl } from '../keys';
 	import { resolveColor } from '../skin';
 	import { app } from '../state.svelte';
+	import PageHeader from './PageHeader.svelte';
 
 	let previews = $state<Record<string, SkinTheme | null>>({});
 	let reloading = $state(false);
@@ -69,21 +70,24 @@
 <svelte:window {onkeydown} />
 
 <section>
-	<header>
-		<div class="title">
-			<h1>k9s configuration</h1>
-			<span class="muted">Aliases, hotkeys, plugins and skins from your k9s files</span>
-		</div>
-		<button class="reload" onclick={reload} disabled={reloading} title="Read the files again (Shift+R)">
-			{reloading ? 'Reading…' : 'Reload'}
-		</button>
-	</header>
+	<PageHeader
+		crumbs={['Explore', 'k9s config']}
+		title="k9s configuration"
+		subtitle="Aliases, hotkeys, plugins and skins from your k9s files"
+	>
+		{#snippet tools()}
+			<button class="btn" onclick={reload} disabled={reloading} title="Read the files again (Shift+R)">
+				{reloading ? 'Reading…' : 'Reload'}
+			</button>
+		{/snippet}
+	</PageHeader>
 
 	<div class="scroll" bind:this={scroller}>
 		{#if !config}
 			<p class="empty">Reading the k9s configuration…</p>
 		{:else}
-			<div class="files">
+			<div class="block files">
+				<h2 id="config-files">Files <span class="count">{config.files.length}</span></h2>
 				<p>
 					Kubri reads the files k9s reads, for the context <strong>{app.cluster?.context ?? '–'}</strong>:
 					{#each config.dirs as dir, i (dir)}{i ? ' and ' : ''}<code>{dir}</code>{/each}.
@@ -109,102 +113,110 @@
 				{/if}
 			</div>
 
-			<h2 id="config-skins">Skin</h2>
-			<p class="muted">
-				Picked per context, like in k9s. <code>:skin name</code> switches from the command line.
-			</p>
-			{#if app.skinError}<p class="error">{app.skinError}</p>{/if}
-			<div class="skins">
-				<button class="skin" class:active={app.skinChoice === undefined} onclick={() => app.setSkin(undefined)}>
-					{@render swatch(config.skin ? previews[config.skin] : kubriTheme)}
-					<span class="name">As in k9s</span>
-					<span class="muted small">{config.skin ?? 'no skin set'}</span>
-				</button>
-				<button class="skin" class:active={app.skinChoice === null} onclick={() => app.setSkin(null)}>
-					{@render swatch(kubriTheme)}
-					<span class="name">Kubri</span>
-					<span class="muted small">light or dark, as the system</span>
-				</button>
-				{#each config.skins as name (name)}
-					<button class="skin" class:active={app.skinChoice === name} onclick={() => app.setSkin(name)}>
-						{@render swatch(previews[name])}
-						<span class="name">{name}</span>
-						{#if app.skin === name}<span class="muted small">on screen</span>{/if}
-					</button>
-				{/each}
-			</div>
-			{#if config.skins.length === 0}
-				<p class="muted">No skins found. k9s skins go in a <code>skins</code> folder next to the other files.</p>
-			{/if}
-
-			<h2 id="config-hotkeys">Hotkeys <span class="count">{config.hotkeys.length}</span></h2>
-			{#if config.hotkeys.length}
-				<table>
-					<thead><tr><th>Key</th><th>Description</th><th>Command</th><th></th></tr></thead>
-					<tbody>
-						{#each config.hotkeys as hotkey (hotkey.name)}
-							{@const k = key(hotkey.shortCut)}
-							<tr>
-								<td>{@render keyCell(hotkey.shortCut, k, hotkey.override)}</td>
-								<td>{hotkey.description || hotkey.name}</td>
-								<td class="mono">:{hotkey.command}</td>
-								<td class="actions"><button onclick={() => runHotkey(hotkey)}>Run</button></td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			{:else}
-				<p class="muted">No hotkeys. In <code>hotkeys.yaml</code>, a hotkey opens a view with a key, like <code>Shift-0</code> for <code>:pods</code>.</p>
-			{/if}
-
-			<h2 id="config-plugins">Plugins <span class="count">{config.plugins.length}</span></h2>
-			{#if config.plugins.length}
-				<table>
-					<thead><tr><th>Key</th><th>Plugin</th><th>Where</th><th>Command</th><th></th></tr></thead>
-					<tbody>
-						{#each config.plugins as plugin (plugin.name)}
-							{@const k = key(plugin.shortCut)}
-							<tr>
-								<td>{@render keyCell(plugin.shortCut, k, plugin.override)}</td>
-								<td>
-									<div>{plugin.name}</div>
-									{#if plugin.description}<div class="muted small">{plugin.description}</div>{/if}
-								</td>
-								<td class="muted">{plugin.scopes.join(', ') || 'nowhere'}</td>
-								<td class="mono command" title={[plugin.command, ...plugin.args].join(' ')}>
-									{[plugin.command, ...plugin.args].join(' ')}
-								</td>
-								<td class="tags">
-									{#if plugin.background}<span class="tag">background</span>{/if}
-									{#if plugin.confirm}<span class="tag">asks first</span>{/if}
-									{#if plugin.dangerous}<span class="tag bad">dangerous</span>{/if}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-				<p class="muted small">
-					Plugins run on this computer, in the views their scopes name. Terminal plugins open over the window; the
-					variables like <code>$NAME</code> and <code>$NAMESPACE</code> work as in k9s.
+			<div class="block">
+				<h2 id="config-skins">Skin</h2>
+				<p class="muted">
+					Picked per context, like in k9s. <code>:skin name</code> switches from the command line.
 				</p>
-			{:else}
-				<p class="muted">No plugins. In <code>plugins.yaml</code>, a plugin runs a command for the selected object.</p>
-			{/if}
-
-			<h2 id="config-aliases">Aliases <span class="count">{config.aliases.length}</span></h2>
-			{#if config.aliases.length}
-				<div class="aliases">
-					{#each config.aliases as alias (alias.name)}
-						<button class="alias" onclick={() => runCommand(alias.name)} title="Open :{alias.name}">
-							<code class="name">{alias.name}</code>
-							<span class="muted">→</span>
-							<code>{alias.command}</code>
+				{#if app.skinError}<p class="error">{app.skinError}</p>{/if}
+				<div class="skins">
+					<button class="skin" class:active={app.skinChoice === undefined} onclick={() => app.setSkin(undefined)}>
+						{@render swatch(config.skin ? previews[config.skin] : kubriTheme)}
+						<span class="name">As in k9s</span>
+						<span class="muted small">{config.skin ?? 'no skin set'}</span>
+					</button>
+					<button class="skin" class:active={app.skinChoice === null} onclick={() => app.setSkin(null)}>
+						{@render swatch(kubriTheme)}
+						<span class="name">Kubri</span>
+						<span class="muted small">light or dark, as the system</span>
+					</button>
+					{#each config.skins as name (name)}
+						<button class="skin" class:active={app.skinChoice === name} onclick={() => app.setSkin(name)}>
+							{@render swatch(previews[name])}
+							<span class="name">{name}</span>
+							{#if app.skin === name}<span class="muted small">on screen</span>{/if}
 						</button>
 					{/each}
 				</div>
-			{:else}
-				<p class="muted">No aliases. In <code>aliases.yaml</code>, <code>pp: v1/pods</code> makes <code>:pp</code> open pods.</p>
-			{/if}
+				{#if config.skins.length === 0}
+					<p class="muted">No skins found. k9s skins go in a <code>skins</code> folder next to the other files.</p>
+				{/if}
+			</div>
+
+			<div class="block">
+				<h2 id="config-hotkeys">Hotkeys <span class="count">{config.hotkeys.length}</span></h2>
+				{#if config.hotkeys.length}
+					<table>
+						<thead><tr><th>Key</th><th>Description</th><th>Command</th><th></th></tr></thead>
+						<tbody>
+							{#each config.hotkeys as hotkey (hotkey.name)}
+								{@const k = key(hotkey.shortCut)}
+								<tr>
+									<td>{@render keyCell(hotkey.shortCut, k, hotkey.override)}</td>
+									<td>{hotkey.description || hotkey.name}</td>
+									<td class="mono">:{hotkey.command}</td>
+									<td class="actions"><button class="btn small" onclick={() => runHotkey(hotkey)}>Run</button></td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{:else}
+					<p class="muted">No hotkeys. In <code>hotkeys.yaml</code>, a hotkey opens a view with a key, like <code>Shift-0</code> for <code>:pods</code>.</p>
+				{/if}
+			</div>
+
+			<div class="block">
+				<h2 id="config-plugins">Plugins <span class="count">{config.plugins.length}</span></h2>
+				{#if config.plugins.length}
+					<table>
+						<thead><tr><th>Key</th><th>Plugin</th><th>Where</th><th>Command</th><th></th></tr></thead>
+						<tbody>
+							{#each config.plugins as plugin (plugin.name)}
+								{@const k = key(plugin.shortCut)}
+								<tr>
+									<td>{@render keyCell(plugin.shortCut, k, plugin.override)}</td>
+									<td>
+										<div>{plugin.name}</div>
+										{#if plugin.description}<div class="muted small">{plugin.description}</div>{/if}
+									</td>
+									<td class="muted">{plugin.scopes.join(', ') || 'nowhere'}</td>
+									<td class="mono command" title={[plugin.command, ...plugin.args].join(' ')}>
+										{[plugin.command, ...plugin.args].join(' ')}
+									</td>
+									<td class="tags">
+										{#if plugin.background}<span class="tag">background</span>{/if}
+										{#if plugin.confirm}<span class="tag">asks first</span>{/if}
+										{#if plugin.dangerous}<span class="tag bad">dangerous</span>{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+					<p class="muted small">
+						Plugins run on this computer, in the views their scopes name. Terminal plugins open over the window; the
+						variables like <code>$NAME</code> and <code>$NAMESPACE</code> work as in k9s.
+					</p>
+				{:else}
+					<p class="muted">No plugins. In <code>plugins.yaml</code>, a plugin runs a command for the selected object.</p>
+				{/if}
+			</div>
+
+			<div class="block">
+				<h2 id="config-aliases">Aliases <span class="count">{config.aliases.length}</span></h2>
+				{#if config.aliases.length}
+					<div class="aliases">
+						{#each config.aliases as alias (alias.name)}
+							<button class="alias" onclick={() => runCommand(alias.name)} title="Open :{alias.name}">
+								<code class="name">{alias.name}</code>
+								<span class="muted">→</span>
+								<code>{alias.command}</code>
+							</button>
+						{/each}
+					</div>
+				{:else}
+					<p class="muted">No aliases. In <code>aliases.yaml</code>, <code>pp: v1/pods</code> makes <code>:pp</code> open pods.</p>
+				{/if}
+			</div>
 		{/if}
 	</div>
 </section>
@@ -243,49 +255,29 @@
 		flex-direction: column;
 		min-height: 0;
 		min-width: 0;
+		padding: 0 24px;
 	}
-	header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 16px;
-		padding: 14px 20px 10px;
+	.scroll {
+		flex: 1;
+		overflow: auto;
+		padding-bottom: 20px;
 	}
-	.title {
-		display: flex;
-		align-items: baseline;
-		gap: 12px;
-		min-width: 0;
-	}
-	h1 {
-		margin: 0;
-		font-size: 20px;
-		white-space: nowrap;
+	.block {
+		margin-bottom: 14px;
+		padding: 16px 18px;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
 	}
 	h2 {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		margin: 28px 0 6px;
+		margin: 0 0 8px;
 		font-size: 15px;
-	}
-	.scroll {
-		flex: 1;
-		overflow: auto;
-		padding: 0 20px 24px;
 	}
 	p {
 		margin: 6px 0;
-	}
-	.reload {
-		padding: 5px 12px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		font-size: 12.5px;
-	}
-	.reload:hover:not(:disabled) {
-		border-color: var(--accent);
 	}
 	.files ul {
 		margin: 8px 0 0;
@@ -376,13 +368,11 @@
 		font-size: 13px;
 	}
 	th {
-		padding: 6px 10px;
+		padding: 8px 10px;
 		border-bottom: 1px solid var(--border);
 		text-align: left;
-		font-size: 11px;
+		font-size: 12px;
 		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
 		color: var(--text-muted);
 	}
 	td {
@@ -401,16 +391,6 @@
 	}
 	.actions {
 		text-align: right;
-	}
-	.actions button {
-		padding: 2px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		font-size: 12px;
-	}
-	.actions button:hover {
-		border-color: var(--accent);
 	}
 	.tags {
 		text-align: right;
@@ -488,5 +468,13 @@
 		padding: 40px 0;
 		text-align: center;
 		color: var(--text-muted);
+	}
+	@media (max-width: 720px) {
+		section {
+			padding: 0 12px;
+		}
+		.block {
+			padding: 14px 12px;
+		}
 	}
 </style>

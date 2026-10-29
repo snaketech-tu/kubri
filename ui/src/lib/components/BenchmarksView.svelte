@@ -6,6 +6,7 @@
 	import { forControl } from '../keys';
 	import { app } from '../state.svelte';
 	import Histogram from './Histogram.svelte';
+	import PageHeader from './PageHeader.svelte';
 
 	let now = $state(Date.now());
 	let list = $state<HTMLDivElement>();
@@ -112,12 +113,16 @@
 <svelte:window {onkeydown} />
 
 <section>
-	<header>
-		<h1>Benchmarks</h1>
-		<span class="count">{runs.length}</span>
-		<span class="spacer"></span>
-		<span class="muted hint">Start one from a port-forward with <kbd>b</kbd>.</span>
-	</header>
+	<PageHeader
+		crumbs={['Explore', 'Benchmarks']}
+		title="Benchmarks"
+		count={runs.length}
+		subtitle="HTTP load tests against port-forwards. Start one from a port-forward with b."
+	>
+		{#snippet tools()}
+			<button class="btn" onclick={() => app.showPortForwards()}>Port-forwards</button>
+		{/snippet}
+	</PageHeader>
 
 	{#if runs.length}
 		<div class="split">
@@ -163,10 +168,10 @@
 					</p>
 					<div class="actions">
 						{#if selected.state === 'running'}
-							<button onclick={() => stop(selected)} title="Stop (Ctrl+D)">Stop</button>
+							<button class="btn danger" onclick={() => stop(selected)} title="Stop (Ctrl+D)">Stop</button>
 						{:else}
-							<button onclick={() => rerun(selected)} title="Run again (b)">Run again…</button>
-							<button onclick={() => remove(selected)} title="Remove (Ctrl+D)">Remove</button>
+							<button class="btn" onclick={() => rerun(selected)} title="Run again (b)">Run again…</button>
+							<button class="btn danger" onclick={() => remove(selected)} title="Remove (Ctrl+D)">Remove</button>
 						{/if}
 					</div>
 
@@ -273,7 +278,7 @@
 			</div>
 		</div>
 	{:else}
-		<div class="empty">
+		<div class="empty" role="status">
 			<p>No benchmarks yet.</p>
 			<p class="muted">
 				Start a port-forward, then press <kbd>b</kbd> on it in <button class="link" onclick={() => app.showPortForwards()}>Port-forwards</button>
@@ -289,30 +294,8 @@
 		flex-direction: column;
 		min-height: 0;
 		min-width: 0;
+		padding: 0 24px 20px;
 		container-type: inline-size;
-	}
-	header {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 14px 20px 10px;
-	}
-	h1 {
-		margin: 0;
-		font-size: 20px;
-	}
-	.count {
-		padding: 1px 8px;
-		border-radius: 999px;
-		background: var(--surface-2);
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.spacer {
-		flex: 1;
-	}
-	.hint {
-		font-size: 12.5px;
 	}
 	.muted {
 		color: var(--text-muted);
@@ -322,7 +305,10 @@
 		display: grid;
 		grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
 		min-height: 0;
-		border-top: 1px solid var(--border-subtle);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		overflow: hidden;
 	}
 	@container (max-width: 760px) {
 		.split {
@@ -431,13 +417,6 @@
 		gap: 8px;
 		margin-bottom: 14px;
 	}
-	.actions button {
-		padding: 4px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		font-size: 12px;
-	}
 	.live {
 		display: flex;
 		flex-direction: column;
@@ -489,6 +468,9 @@
 	.panel-head {
 		display: flex;
 		align-items: center;
+	}
+	.spacer {
+		flex: 1;
 	}
 	h3 {
 		margin: 0 0 8px;
@@ -583,7 +565,14 @@
 	}
 	.empty {
 		padding: 40px 24px;
+		border: 1px dashed var(--border);
+		border-radius: 10px;
 		text-align: center;
+	}
+	@media (max-width: 720px) {
+		section {
+			padding: 0 12px 12px;
+		}
 	}
 	.empty p {
 		margin: 4px 0;

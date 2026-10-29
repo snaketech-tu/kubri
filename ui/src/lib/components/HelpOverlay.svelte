@@ -178,10 +178,25 @@
 		return all;
 	});
 
+	let box = $state<HTMLDivElement>();
+
+	// The overlay takes the focus while open and gives it back when it closes.
+	$effect(() => {
+		const previous = document.activeElement as HTMLElement | null;
+		box?.focus();
+		return () => {
+			if (previous?.isConnected) previous.focus();
+		};
+	});
+
 	function onkeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape' || e.key === '?') {
 			e.preventDefault();
 			app.helpOpen = false;
+		} else if (e.key === 'Tab') {
+			// Nothing inside takes the focus, so it stays on the overlay instead of the page behind.
+			e.preventDefault();
+			box?.focus();
 		}
 	}
 </script>
@@ -189,7 +204,7 @@
 <svelte:window {onkeydown} />
 
 <div class="backdrop" onclick={() => (app.helpOpen = false)} role="presentation"></div>
-<div class="help" role="dialog" aria-label="Keyboard shortcuts">
+<div class="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabindex="-1" bind:this={box}>
 	<h2>Keyboard shortcuts</h2>
 	<div class="groups">
 		{#each groups as [title, keys] (title)}
@@ -212,6 +227,9 @@
 		inset: 0;
 		z-index: 50;
 		background: rgb(0 0 0 / 35%);
+	}
+	.help:focus {
+		outline: none;
 	}
 	.help {
 		position: fixed;

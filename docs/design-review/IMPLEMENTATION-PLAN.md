@@ -1,6 +1,6 @@
 # Kubri redesign implementation plan
 
-Date: 29 October 2026. Status: changesets 1–7 implemented in the application; changeset 8 (remaining views, documentation, release QA) is open.
+Date: 29 October 2026. Status: changesets 1–8 implemented in the application.
 
 **Brand decision: 02 / Link.** The angular K mark and electric-blue identity are selected by the project owner. Span and Portal remain archived alternatives. This decision supersedes the original review's recommendation of Span.
 
@@ -140,6 +140,6 @@ Changesets 1–3 can be shipped before the visual redesign. Each changeset shoul
 - [x] Changesets 1–3: completed-only pod cleanup, context-bound destructive dialogs (core rejects a target from another context), central YAML draft guard for every exit route, truthful list/metrics states with retry that keeps rows.
 - [x] Changesets 4–7: semantic tokens with light/dark toggle, sidebar with Workloads/Cluster/Explore and icons, labeled context/namespace bar with environment label and voluntary read-only, status footer, overview with KPI cards and grouped attention list, pod list with status tabs and icons, inspector with problem callout, events timeline and Events tab, logs with instance selection and stream state, runtime-aware connect screen.
 - [x] Browser checks: `node scripts/check-ui.cjs <playwright> [browser] [base-url]` against a built UI (`vite preview`) with fixtures, including 1440/1280/900×560/768/390/320 widths.
-- [ ] Changeset 8: carry the page header and card patterns into XRay, Helm, RBAC, Sanitizer, port-forwards, benchmarks and config; accessibility pass; refreshed README screenshots; checks against a real disposable cluster and in Tauri.
+- [x] Changeset 8: shared `PageHeader` and `SearchField` components and `.btn`/`.segmented`/`.notice` styles carry the breadcrumb, title and card layout into Topology (XRay), Helm, Access (RBAC), Sanitizer, port-forwards, benchmarks and k9s config. Accessibility: the help overlay and command palette are modal, keep and return the focus, and the palette is a combobox with a listbox of options; empty states announce themselves. README screenshots refreshed from a disposable k3s cluster; Helm release/history/values, port-forward and benchmark flows checked there in light and dark at 1440, 900×560 and 390 px. Desktop builds come from CI on every platform.
 
 No delivery dates or effort estimates are committed here. Establish them from the first changesets and the depth of any required transport changes.

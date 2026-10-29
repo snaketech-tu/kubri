@@ -5,6 +5,7 @@
 	import { backend, type PortForwardInfo } from '../api';
 	import { age, errorMessage } from '../format';
 	import { app } from '../state.svelte';
+	import PageHeader from './PageHeader.svelte';
 
 	let cursorId = $state<number | null>(null);
 	let now = $state(Date.now());
@@ -96,54 +97,60 @@
 <svelte:window {onkeydown} />
 
 <section>
-	<header>
-		<h1>Port-forwards</h1>
-		<span class="count">{forwards.length}</span>
-	</header>
+	<PageHeader
+		crumbs={['Explore', 'Port-forwards']}
+		title="Port-forwards"
+		count={forwards.length}
+		subtitle="Local ports tunneled to pods. They keep running while you work elsewhere in Kubri."
+	/>
 
-	<div class="table-wrap" bind:this={scroller}>
-		{#if forwards.length}
-			<table>
-				<thead>
-					<tr>
-						<th>Local</th>
-						<th>Target</th>
-						<th>Pod</th>
-						<th>Context</th>
-						<th class="numeric">Conns</th>
-						<th>Age</th>
-						<th></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each forwards as f, i (f.id)}
-						<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)}>
-							<td class="mono">
-								<a href={url(f)} target="_blank" rel="noreferrer" onclick={(e) => open(f, e)} title="Open in the browser (o)">{f.address}:{f.localPort}</a>
-								<button class="link" onclick={() => copy(f)} title="Copy URL (c)">copy</button>
-							</td>
-							<td class="mono">{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</td>
-							<td class="mono">
-								{f.pod}:{f.podPort}
-								{#if f.error}<div class="error" title={f.error}>{f.error}</div>{/if}
-							</td>
-							<td class="muted">{f.context}</td>
-							<td class="numeric">{f.connections}</td>
-							<td class="muted">{age(f.started, now)}</td>
-							<td class="buttons">
-								<button class="stop" onclick={() => (app.dialog = { kind: 'benchmark', forward: f })} title="HTTP benchmark (b)">Benchmark</button>
-								<button class="stop danger" onclick={() => stopPortForward(f.id)} title="Stop (Ctrl+D)">Stop</button>
-							</td>
+	<div class="card">
+		<div class="table-wrap" bind:this={scroller}>
+			{#if forwards.length}
+				<table>
+					<thead>
+						<tr>
+							<th>Local</th>
+							<th>Target</th>
+							<th>Pod</th>
+							<th>Context</th>
+							<th class="numeric">Conns</th>
+							<th>Age</th>
+							<th></th>
 						</tr>
-					{/each}
-				</tbody>
-			</table>
-		{:else}
-			<div class="empty">
-				<p>No port-forwards running.</p>
-				<p class="muted">Select a pod, deployment or service and press <kbd>Shift+F</kbd> to start one.</p>
-			</div>
-		{/if}
+					</thead>
+					<tbody>
+						{#each forwards as f, i (f.id)}
+							<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)}>
+								<td class="mono">
+									<a href={url(f)} target="_blank" rel="noreferrer" onclick={(e) => open(f, e)} title="Open in the browser (o)">{f.address}:{f.localPort}</a>
+									<button class="link" onclick={() => copy(f)} title="Copy URL (c)">copy</button>
+								</td>
+								<td class="mono">{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</td>
+								<td class="mono">
+									{f.pod}:{f.podPort}
+									{#if f.error}<div class="error" title={f.error}>{f.error}</div>{/if}
+								</td>
+								<td class="muted">{f.context}</td>
+								<td class="numeric">{f.connections}</td>
+								<td class="muted">{age(f.started, now)}</td>
+								<td>
+									<div class="buttons">
+										<button class="btn small" onclick={() => (app.dialog = { kind: 'benchmark', forward: f })} title="HTTP benchmark (b)">Benchmark</button>
+										<button class="btn small danger" onclick={() => stopPortForward(f.id)} title="Stop (Ctrl+D)">Stop</button>
+									</div>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{:else}
+				<div class="empty" role="status">
+					<p>No port-forwards running.</p>
+					<p class="muted">Select a pod, deployment or service and press <kbd>Shift+F</kbd> to start one.</p>
+				</div>
+			{/if}
+		</div>
 	</div>
 </section>
 
@@ -153,28 +160,22 @@
 		flex-direction: column;
 		min-height: 0;
 		min-width: 0;
+		padding: 0 24px 20px;
 	}
-	header {
+	.card {
 		display: flex;
-		align-items: baseline;
-		gap: 10px;
-		padding: 14px 20px 10px;
-	}
-	h1 {
-		margin: 0;
-		font-size: 20px;
-	}
-	.count {
-		padding: 1px 8px;
-		border-radius: 999px;
-		background: var(--surface-2);
-		font-size: 12px;
-		font-weight: 600;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		overflow: hidden;
 	}
 	.table-wrap {
 		flex: 1;
+		min-height: 0;
 		overflow: auto;
-		padding: 0 12px 16px;
 	}
 	table {
 		width: 100%;
@@ -184,27 +185,31 @@
 	th {
 		position: sticky;
 		top: 0;
-		padding: 8px 10px;
-		background: var(--bg);
+		z-index: 1;
+		padding: 9px 10px;
+		background: var(--surface-1);
 		border-bottom: 1px solid var(--border);
 		text-align: left;
-		font-size: 11px;
+		font-size: 12px;
 		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
 		color: var(--text-muted);
+		white-space: nowrap;
+	}
+	th:first-child,
+	td:first-child {
+		padding-left: 16px;
 	}
 	td {
-		padding: 6px 10px;
+		padding: 11px 10px;
 		border-bottom: 1px solid var(--border-subtle);
 		white-space: nowrap;
 		vertical-align: top;
 	}
 	tbody tr:hover {
-		background: var(--surface-1);
+		background: color-mix(in srgb, var(--surface-2) 55%, transparent);
 	}
 	tbody tr.cursor {
-		background: color-mix(in srgb, var(--accent) 16%, transparent);
+		background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
 	.mono {
@@ -237,24 +242,10 @@
 	.muted {
 		color: var(--text-muted);
 	}
-	.stop {
-		padding: 2px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		font-size: 12px;
-	}
 	.buttons {
 		display: flex;
 		gap: 6px;
 		justify-content: flex-end;
-	}
-	.stop:hover {
-		border-color: var(--accent);
-	}
-	.stop.danger:hover {
-		border-color: var(--bad);
-		color: var(--bad);
 	}
 	.empty {
 		padding: 40px 24px;
@@ -270,5 +261,10 @@
 		background: var(--surface-2);
 		font-family: var(--mono);
 		font-size: 11px;
+	}
+	@media (max-width: 720px) {
+		section {
+			padding: 0 12px 12px;
+		}
 	}
 </style>

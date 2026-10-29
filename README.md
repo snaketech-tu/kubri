@@ -127,12 +127,16 @@ See [Development](#development).
 
 <table>
   <tr>
-    <td width="50%" valign="top"><img src="docs/assets/screenshots/pulses.png" alt="Pulses: health per kind and CPU and memory trends"><br><b>Pulses</b>: the health of the cluster at a glance</td>
-    <td width="50%" valign="top"><img src="docs/assets/screenshots/xray.png" alt="XRay: deployments down to their pods and containers"><br><b>XRay</b>: from a Deployment down to its containers</td>
+    <td width="50%" valign="top"><img src="docs/assets/screenshots/overview.png" alt="Cluster overview: pods and nodes, CPU and memory, and the objects that need attention"><br><b>Overview</b>: what needs attention first, with health and trends (<kbd>:pulses</kbd>)</td>
+    <td width="50%" valign="top"><img src="docs/assets/screenshots/xray.png" alt="Topology: deployments down to their replica sets and pods"><br><b>Topology</b>: from a Deployment down to its pods (<kbd>:xray</kbd>)</td>
   </tr>
   <tr>
-    <td valign="top"><img src="docs/assets/screenshots/describe.png" alt="A pod described next to the list"><br><b>Describe</b>: containers, conditions and events beside the list</td>
+    <td valign="top"><img src="docs/assets/screenshots/describe.png" alt="A crash-looping pod in the inspector beside the list"><br><b>Inspector</b>: status, the likely problem, events and previous logs beside the list</td>
     <td valign="top"><img src="docs/assets/screenshots/palette.png" alt="The command palette suggesting resources"><br><b>Command palette</b>: <kbd>:</kbd> and any resource or command</td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/helm.png" alt="A Helm release with its objects, notes and revisions"><br><b>Helm</b>: releases, values, manifests, history and rollback</td>
+    <td valign="top"><img src="docs/assets/screenshots/rbac.png" alt="Access: a service account's role bindings and the rules they grant"><br><b>Access</b>: who may do what, from the role bindings (<kbd>:rbac</kbd>)</td>
   </tr>
 </table>
 

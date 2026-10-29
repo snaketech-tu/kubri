@@ -27,6 +27,14 @@
 		field?.focus();
 	});
 
+	// Closing gives the focus back to where it was, if that is still on screen.
+	$effect(() => {
+		const previous = document.activeElement as HTMLElement | null;
+		return () => {
+			if (previous?.isConnected) previous.focus();
+		};
+	});
+
 	// `:ctx` offers contexts added to the kubeconfig since Kubri started.
 	onMount(() => {
 		app.reloadContexts(true);
@@ -68,29 +76,43 @@
 </script>
 
 <div class="backdrop" onclick={close} role="presentation"></div>
-<div class="palette" role="dialog" aria-label="Command palette">
+<div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
 	<div class="prompt">
 		<span>:</span>
 		<input
 			bind:this={field}
 			bind:value={input}
 			{onkeydown}
+			role="combobox"
+			aria-label="Command"
+			aria-expanded="true"
+			aria-controls="palette-suggestions"
+			aria-autocomplete="list"
+			aria-activedescendant={suggestions.length ? `palette-option-${active}` : undefined}
 			placeholder="pods, deploy kube-system, po app=web, ctx, ns default, skin…"
 			spellcheck="false"
 			autocomplete="off"
 		/>
 	</div>
-	<ul>
+	<ul id="palette-suggestions" role="listbox" aria-label="Suggestions">
 		{#each suggestions as s, i (s.label + i)}
-			<li>
+			<li role="presentation">
 				<!-- Not mouseenter: a list that opens under a resting pointer keeps its first entry. -->
-				<button class:active={i === active} onmousemove={() => (active = i)} onclick={() => run(s)}>
+				<button
+					id="palette-option-{i}"
+					role="option"
+					aria-selected={i === active}
+					tabindex="-1"
+					class:active={i === active}
+					onmousemove={() => (active = i)}
+					onclick={() => run(s)}
+				>
 					<span class="label">{s.label}</span>
 					<span class="detail">{s.detail}</span>
 				</button>
 			</li>
 		{:else}
-			<li class="empty">No matching resource or command</li>
+			<li class="empty" role="status">No matching resource or command</li>
 		{/each}
 	</ul>
 	<footer><kbd>↑↓</kbd> select <kbd>Tab</kbd> complete <kbd>Enter</kbd> run <kbd>Esc</kbd> close</footer>

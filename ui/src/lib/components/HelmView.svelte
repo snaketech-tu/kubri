@@ -18,6 +18,8 @@
 	import type { MenuAction } from '../menu';
 	import { app } from '../state.svelte';
 	import HealthIcon from './HealthIcon.svelte';
+	import PageHeader from './PageHeader.svelte';
+	import SearchField from './SearchField.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
 	type Tab = 'overview' | 'values' | 'manifest' | 'history';
@@ -345,223 +347,237 @@
 
 <section>
 	{#if opened}
-		<header>
-			<button class="back" onclick={back} title="Back to releases (Esc)">← Releases</button>
-			<h1 class="mono">{opened.name}</h1>
-			<span class="scope">{opened.namespace}</span>
-			{#if shown}{@render status(shown.status)}{/if}
-			<span class="spacer"></span>
-			{#if history.length > 1}
-				<label class="revision">
-					Revision
-					<select
-						value={revision ?? history[0]?.revision}
-						onchange={(e) => viewRevision(Number(e.currentTarget.value))}
-					>
-						{#each history as h (h.revision)}
-							<option value={h.revision}>{h.revision} · {h.status}</option>
-						{/each}
-					</select>
-				</label>
-			{/if}
-			<button
-				onclick={() => rollback(latest, revision ?? undefined)}
-				disabled={!helm || !latest || (revision === null && history.length < 2)}
-				title={helm ? (revision === null ? 'Roll back to the previous revision (r)' : `Roll back to revision ${revision}`) : 'Needs the helm command'}
-			>
-				Roll back{revision !== null ? ` to ${revision}` : ''}
-			</button>
-			<button class="danger" onclick={() => uninstall(latest)} disabled={!helm || !latest} title={helm ? 'Uninstall (Ctrl+D)' : 'Needs the helm command'}>
-				Uninstall
-			</button>
-		</header>
-
-		<nav>
-			{#each TABS as [id, label, key] (id)}
-				<button class:active={tab === id} onclick={() => (tab = id)}>{label} <kbd>{key}</kbd></button>
-			{/each}
-			<span class="spacer"></span>
-			{#if tab === 'values'}
-				<div class="toggle" role="group" aria-label="Values">
-					<button class:active={!allValues} onclick={() => (allValues = false)}>Given</button>
-					<button class:active={allValues} onclick={() => (allValues = true)}>With chart defaults</button>
-				</div>
-			{/if}
-		</nav>
+		<PageHeader
+			crumbs={['Explore', { label: 'Helm', onclick: back, title: 'Back to releases (Esc)' }, opened.name]}
+			title={opened.name}
+			mono
+			subtitle="Release in {opened.namespace}{shown ? ` · ${chartLabel(shown)}` : ''}"
+		>
+			{#if shown}<span class="tag">{@render status(shown.status)}</span>{/if}
+			{#snippet tools()}
+				{#if history.length > 1}
+					<label class="revision">
+						Revision
+						<select
+							value={revision ?? history[0]?.revision}
+							onchange={(e) => viewRevision(Number(e.currentTarget.value))}
+						>
+							{#each history as h (h.revision)}
+								<option value={h.revision}>{h.revision} · {h.status}</option>
+							{/each}
+						</select>
+					</label>
+				{/if}
+				<button
+					class="btn"
+					onclick={() => rollback(latest, revision ?? undefined)}
+					disabled={!helm || !latest || (revision === null && history.length < 2)}
+					title={helm ? (revision === null ? 'Roll back to the previous revision (r)' : `Roll back to revision ${revision}`) : 'Needs the helm command'}
+				>
+					Roll back{revision !== null ? ` to ${revision}` : ''}
+				</button>
+				<button class="btn danger" onclick={() => uninstall(latest)} disabled={!helm || !latest} title={helm ? 'Uninstall (Ctrl+D)' : 'Needs the helm command'}>
+					Uninstall
+				</button>
+			{/snippet}
+		</PageHeader>
 
 		{#if revision !== null}
-			<div class="note bar">
+			<div class="notice warn" role="status">
 				Showing revision {revision}, not the deployed one.
 				<button class="link" onclick={() => (revision = null)}>Show the latest</button>
 			</div>
 		{/if}
 		{#if helm === null}
-			<div class="note bar">Install the <code>helm</code> command where Kubri runs to roll back or uninstall releases.</div>
+			<div class="notice warn">Install the <code>helm</code> command where Kubri runs to roll back or uninstall releases.</div>
 		{/if}
 		{#if detailsError}
-			<div class="error">{detailsError}</div>
+			<div class="notice" role="alert">{detailsError}</div>
 		{/if}
 
-		<div class="pane" class:fill={tab === 'values' || tab === 'manifest'} bind:this={scroller}>
-			{#if !shown}
-				{#if !detailsError}<p class="muted pad">Loading…</p>{/if}
-			{:else if tab === 'overview'}
-				<dl class="facts">
-					<dt>Status</dt>
-					<dd>{@render status(shown.status)}</dd>
-					<dt>Revision</dt>
-					<dd>{shown.revision}</dd>
-					<dt>Chart</dt>
-					<dd class="mono">{chartLabel(shown)}</dd>
-					<dt>App version</dt>
-					<dd class="mono">{shown.appVersion || '—'}</dd>
-					<dt>Updated</dt>
-					<dd>
-						{#if shown.updated}{age(shown.updated, now)} ago <span class="muted">· {new Date(shown.updated).toLocaleString()}</span>{:else}—{/if}
-					</dd>
-					{#if shown.description}
-						<dt>Description</dt>
-						<dd>{shown.description}</dd>
-					{/if}
-				</dl>
-
-				<h3>Objects <span class="count">{objects.length}</span></h3>
-				{#if objects.length}
-					<ul class="objects">
-						{#each objects as o, i (i)}
-							{@const resource = manifestResource(app.resources, o)}
-							<li>
-								<span class="kind">{o.kind}</span>
-								{#if resource}
-									<button class="link mono" onclick={() => openObject(o)}>{o.name}</button>
-								{:else}
-									<span class="mono" title="The cluster does not serve this kind">{o.name}</span>
-								{/if}
-								{#if o.namespace && o.namespace !== opened.namespace}<span class="muted">in {o.namespace}</span>{/if}
-							</li>
-						{/each}
-					</ul>
-				{:else}
-					<p class="muted">The manifest creates no objects.</p>
-				{/if}
-
-				<h3>Notes</h3>
-				{#if shown.notes.trim()}
-					<pre class="notes">{shown.notes.trim()}</pre>
-				{:else}
-					<p class="muted">The chart has no notes.</p>
-				{/if}
-			{:else if tab === 'values'}
-				{#if valuesText}
-					<YamlEditor value={valuesText} readonly oncancel={blurEditor} />
-				{:else}
-					<div class="pad">
-						<p class="muted">
-							{allValues ? 'The chart has no values.' : 'No values were given at install or upgrade, so the chart defaults apply.'}
-						</p>
-						{#if !allValues}<button class="link" onclick={() => (allValues = true)}>Show the chart defaults</button>{/if}
+		<div class="card">
+			<div class="tabs" role="tablist" aria-label="Release">
+				{#each TABS as [id, label, key] (id)}
+					<button role="tab" aria-selected={tab === id} onclick={() => (tab = id)}>{label} <kbd>{key}</kbd></button>
+				{/each}
+				<span class="spacer"></span>
+				{#if tab === 'values'}
+					<div class="segmented" role="group" aria-label="Values">
+						<button aria-pressed={!allValues} onclick={() => (allValues = false)}>Given</button>
+						<button aria-pressed={allValues} onclick={() => (allValues = true)}>With chart defaults</button>
 					</div>
 				{/if}
-			{:else if tab === 'manifest'}
-				<YamlEditor value={shown.manifest} readonly oncancel={blurEditor} />
-			{:else}
-				<table>
-					<thead>
-						<tr>
-							<th class="numeric">Rev</th>
-							<th>Status</th>
-							<th>Chart</th>
-							<th>App version</th>
-							<th>Updated</th>
-							<th>Description</th>
-							<th></th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each history as h, i (h.revision)}
-							<tr
-								class:cursor={i === historyCursor}
-								class:viewing={h.revision === shown.revision}
-								onclick={() => (historyCursor = i)}
-								ondblclick={() => viewRevision(h.revision)}
-							>
-								<td class="numeric">{h.revision}</td>
-								<td>{@render status(h.status)}</td>
-								<td class="mono">{chartLabel(h)}</td>
-								<td class="mono">{h.appVersion}</td>
-								<td class="muted">{age(h.updated, now)}</td>
-								<td class="wrap">{h.description}</td>
-								<td class="actions">
-									<button class="small" onclick={() => viewRevision(h.revision)}>View</button>
-									{#if canRollBack(h.revision)}
-										<button class="small" onclick={() => rollback(latest, h.revision)}>Roll back</button>
+			</div>
+			<div class="pane" class:fill={tab === 'values' || tab === 'manifest'} bind:this={scroller}>
+				{#if !shown}
+					{#if !detailsError}<p class="muted pad">Loading…</p>{/if}
+				{:else if tab === 'overview'}
+					<dl class="facts">
+						<dt>Status</dt>
+						<dd>{@render status(shown.status)}</dd>
+						<dt>Revision</dt>
+						<dd>{shown.revision}</dd>
+						<dt>Chart</dt>
+						<dd class="mono">{chartLabel(shown)}</dd>
+						<dt>App version</dt>
+						<dd class="mono">{shown.appVersion || '—'}</dd>
+						<dt>Updated</dt>
+						<dd>
+							{#if shown.updated}{age(shown.updated, now)} ago <span class="muted">· {new Date(shown.updated).toLocaleString()}</span>{:else}—{/if}
+						</dd>
+						{#if shown.description}
+							<dt>Description</dt>
+							<dd>{shown.description}</dd>
+						{/if}
+					</dl>
+
+					<h3>Objects <span class="count">{objects.length}</span></h3>
+					{#if objects.length}
+						<ul class="objects">
+							{#each objects as o, i (i)}
+								{@const resource = manifestResource(app.resources, o)}
+								<li>
+									<span class="kind">{o.kind}</span>
+									{#if resource}
+										<button class="link mono" onclick={() => openObject(o)}>{o.name}</button>
+									{:else}
+										<span class="mono" title="The cluster does not serve this kind">{o.name}</span>
 									{/if}
-								</td>
+									{#if o.namespace && o.namespace !== opened.namespace}<span class="muted">in {o.namespace}</span>{/if}
+								</li>
+							{/each}
+						</ul>
+					{:else}
+						<p class="muted">The manifest creates no objects.</p>
+					{/if}
+
+					<h3>Notes</h3>
+					{#if shown.notes.trim()}
+						<pre class="notes">{shown.notes.trim()}</pre>
+					{:else}
+						<p class="muted">The chart has no notes.</p>
+					{/if}
+				{:else if tab === 'values'}
+					{#if valuesText}
+						<YamlEditor value={valuesText} readonly oncancel={blurEditor} />
+					{:else}
+						<div class="pad">
+							<p class="muted">
+								{allValues ? 'The chart has no values.' : 'No values were given at install or upgrade, so the chart defaults apply.'}
+							</p>
+							{#if !allValues}<button class="link" onclick={() => (allValues = true)}>Show the chart defaults</button>{/if}
+						</div>
+					{/if}
+				{:else if tab === 'manifest'}
+					<YamlEditor value={shown.manifest} readonly oncancel={blurEditor} />
+				{:else}
+					<table>
+						<thead>
+							<tr>
+								<th class="numeric">Rev</th>
+								<th>Status</th>
+								<th>Chart</th>
+								<th>App version</th>
+								<th>Updated</th>
+								<th>Description</th>
+								<th></th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
-			{/if}
+						</thead>
+						<tbody>
+							{#each history as h, i (h.revision)}
+								<tr
+									class:cursor={i === historyCursor}
+									class:viewing={h.revision === shown.revision}
+									onclick={() => (historyCursor = i)}
+									ondblclick={() => viewRevision(h.revision)}
+								>
+									<td class="numeric">{h.revision}</td>
+									<td>{@render status(h.status)}</td>
+									<td class="mono">{chartLabel(h)}</td>
+									<td class="mono">{h.appVersion}</td>
+									<td class="muted">{age(h.updated, now)}</td>
+									<td class="wrap">{h.description}</td>
+									<td>
+										<div class="actions">
+											<button class="btn small" onclick={() => viewRevision(h.revision)}>View</button>
+											{#if canRollBack(h.revision)}
+												<button class="btn small" onclick={() => rollback(latest, h.revision)}>Roll back</button>
+											{/if}
+										</div>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{/if}
+			</div>
 		</div>
 	{:else}
-		<header>
-			<h1>Helm</h1>
-			<span class="scope">{namespace ?? 'All namespaces'}</span>
-			{#if releases}<span class="count">{visible.length}</span>{/if}
-			<span class="spacer"></span>
-			<input class="filter" bind:this={filterInput} bind:value={filter} placeholder="Filter releases…" />
-			<button onclick={() => reloads++}>Reload</button>
-		</header>
+		<PageHeader
+			crumbs={['Explore', 'Helm']}
+			title="Helm releases"
+			count={releases ? visible.length : null}
+			subtitle={namespace ? `In ${namespace}` : 'All namespaces'}
+		>
+			{#snippet tools()}
+				<button class="btn" onclick={() => reloads++} title="Read the releases again">Reload</button>
+			{/snippet}
+		</PageHeader>
 
 		{#if error}
-			<div class="error">{error}</div>
+			<div class="notice" role="alert">{error}</div>
 		{/if}
 
-		<div class="pane" bind:this={scroller}>
-			{#if releases && visible.length}
-				<table>
-					<thead>
-						<tr>
-							<th>Name</th>
-							{#if !namespace}<th>Namespace</th>{/if}
-							<th class="numeric">Rev</th>
-							<th>Status</th>
-							<th>Chart</th>
-							<th>App version</th>
-							<th>Updated</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each visible as r, i (releaseKey(r))}
-							<tr
-								class:cursor={i === cursor}
-								onclick={() => (cursorKey = releaseKey(r))}
-								ondblclick={() => open(r)}
-								oncontextmenu={(e) => openMenu(e, r)}
-							>
-								<td class="mono name"><button class="link" onclick={() => open(r)}>{r.name}</button></td>
-								{#if !namespace}<td class="muted">{r.namespace}</td>{/if}
-								<td class="numeric">{r.revision}</td>
-								<td>{@render status(r.status)}</td>
-								<td class="mono">{chartLabel(r)}</td>
-								<td class="mono">{r.appVersion}</td>
-								<td class="muted">{age(r.updated, now)}</td>
+		<div class="card">
+			<div class="toolbar">
+				<SearchField bind:value={filter} bind:input={filterInput} label="Filter releases" placeholder="Filter by name, namespace, chart or status" />
+			</div>
+			<div class="pane" bind:this={scroller}>
+				{#if releases && visible.length}
+					<table>
+						<thead>
+							<tr>
+								<th>Name</th>
+								{#if !namespace}<th>Namespace</th>{/if}
+								<th class="numeric">Rev</th>
+								<th>Status</th>
+								<th>Chart</th>
+								<th>App version</th>
+								<th>Updated</th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
-			{:else if releases}
-				<div class="empty">
-					{#if filter}
-						<p>No release matches the filter.</p>
-					{:else}
-						<p>No Helm releases{namespace ? ` in ${namespace}` : ''}.</p>
-						<p class="muted">Kubri reads the release records Helm 3 and 4 keep in Secrets or ConfigMaps.</p>
-					{/if}
-				</div>
-			{:else if !error}
-				<p class="muted pad">Loading…</p>
-			{/if}
+						</thead>
+						<tbody>
+							{#each visible as r, i (releaseKey(r))}
+								<tr
+									class:cursor={i === cursor}
+									onclick={() => (cursorKey = releaseKey(r))}
+									ondblclick={() => open(r)}
+									oncontextmenu={(e) => openMenu(e, r)}
+								>
+									<td class="mono name"><button class="link" onclick={() => open(r)}>{r.name}</button></td>
+									{#if !namespace}<td class="muted">{r.namespace}</td>{/if}
+									<td class="numeric">{r.revision}</td>
+									<td>{@render status(r.status)}</td>
+									<td class="mono">{chartLabel(r)}</td>
+									<td class="mono">{r.appVersion}</td>
+									<td class="muted">{age(r.updated, now)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				{:else if releases}
+					<div class="empty" role="status">
+						{#if filter}
+							<p>No release matches the filter.</p>
+						{:else}
+							<p>No Helm releases{namespace ? ` in ${namespace}` : ''}.</p>
+							<p class="muted">Kubri reads the release records Helm 3 and 4 keep in Secrets or ConfigMaps.</p>
+						{/if}
+					</div>
+				{:else if !error}
+					<p class="muted pad">Loading…</p>
+				{/if}
+			</div>
 		</div>
 	{/if}
 </section>
@@ -572,58 +588,17 @@
 		flex-direction: column;
 		min-height: 0;
 		min-width: 0;
+		padding: 0 24px 20px;
 	}
-	header {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 8px 10px;
-		padding: 14px 20px 10px;
-	}
-	h1 {
-		margin: 0;
-		font-size: 20px;
-	}
-	h1.mono {
-		font-family: var(--mono);
-		font-size: 18px;
-	}
-	.scope,
-	.count {
-		padding: 1px 8px;
-		border-radius: 999px;
+	.tag {
+		padding: 2px 8px;
+		border-radius: 5px;
 		background: var(--surface-2);
 		font-size: 12px;
 		font-weight: 600;
 	}
 	.spacer {
 		flex: 1;
-	}
-	.filter {
-		width: 200px;
-		padding: 4px 8px;
-		font-size: 13px;
-	}
-	header button,
-	.small {
-		padding: 4px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		font-size: 12px;
-	}
-	header button:disabled {
-		opacity: 0.5;
-	}
-	.small:hover {
-		border-color: var(--accent);
-	}
-	header button.danger:not(:disabled):hover {
-		border-color: var(--bad);
-		color: var(--bad);
-	}
-	.back {
-		color: var(--text-muted);
 	}
 	.revision {
 		display: flex;
@@ -633,68 +608,65 @@
 		color: var(--text-muted);
 	}
 	.revision select {
-		padding: 3px 6px;
+		padding: 5px 8px;
 		font-size: 12px;
+		color: var(--text);
 	}
-	nav {
+	.card {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		overflow: hidden;
+	}
+	.toolbar {
+		padding: 14px 16px 10px;
+		border-bottom: 1px solid var(--border);
+	}
+	.tabs {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: 20px;
 		padding: 0 16px;
-		border-bottom: 1px solid var(--border-subtle);
+		border-bottom: 1px solid var(--border);
 	}
-	nav > button {
-		padding: 7px 10px;
+	.tabs > button {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 10px 0 9px;
 		border: none;
 		border-bottom: 2px solid transparent;
 		background: none;
 		color: var(--text-muted);
-		font-size: 13px;
+		font-size: 12.5px;
 	}
-	nav > button.active {
-		border-bottom-color: var(--accent);
+	.tabs > button:hover {
 		color: var(--text);
-		font-weight: 600;
 	}
-	.toggle {
-		display: flex;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		overflow: hidden;
-	}
-	.toggle button {
-		padding: 3px 10px;
-		border: none;
-		background: var(--surface-1);
-		font-size: 12px;
-		color: var(--text-muted);
-	}
-	.toggle button.active {
-		background: color-mix(in srgb, var(--accent) 18%, var(--surface-1));
+	.tabs > button[aria-selected='true'] {
+		border-bottom-color: var(--accent);
 		color: var(--accent-strong);
-		font-weight: 600;
+		font-weight: 650;
 	}
-	.error {
-		margin: 8px 20px;
-		padding: 8px 12px;
-		border-radius: 8px;
-		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
-		color: var(--bad);
-	}
-	.note {
-		padding: 6px 10px;
-		border-radius: 6px;
-		background: color-mix(in srgb, var(--warn) 12%, transparent);
-		font-size: 13px;
-	}
-	.note.bar {
-		margin: 8px 20px 0;
+	.tabs .segmented {
+		margin: 5px 0;
 	}
 	.pane {
 		flex: 1;
 		min-height: 0;
 		overflow: auto;
-		padding: 0 12px 16px;
+		padding: 0 8px 12px;
+	}
+	.pane:has(> table) {
+		padding: 0 0 12px;
+	}
+	th:first-child,
+	td:first-child {
+		padding-left: 16px;
 	}
 	.pane.fill {
 		display: flex;
@@ -775,18 +747,19 @@
 	th {
 		position: sticky;
 		top: 0;
-		padding: 8px 10px;
-		background: var(--bg);
+		z-index: 1;
+		padding: 9px 10px;
+		background: var(--surface-1);
 		border-bottom: 1px solid var(--border);
 		text-align: left;
-		font-size: 11px;
+		font-size: 12px;
 		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
 		color: var(--text-muted);
+		white-space: nowrap;
 	}
 	td {
-		padding: 6px 10px;
+		height: 40px;
+		padding: 4px 10px;
 		border-bottom: 1px solid var(--border-subtle);
 		white-space: nowrap;
 	}
@@ -795,10 +768,10 @@
 		white-space: normal;
 	}
 	tbody tr:hover {
-		background: var(--surface-1);
+		background: color-mix(in srgb, var(--surface-2) 55%, transparent);
 	}
 	tbody tr.cursor {
-		background: color-mix(in srgb, var(--accent) 16%, transparent);
+		background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
 	tr.viewing td:first-child {
@@ -808,10 +781,6 @@
 		display: flex;
 		gap: 6px;
 		justify-content: flex-end;
-	}
-	.small {
-		padding: 1px 8px;
-		font-size: 11.5px;
 	}
 	.status {
 		display: inline-flex;
@@ -841,7 +810,7 @@
 		color: var(--accent-strong);
 		text-decoration: underline;
 	}
-	.note .link,
+	.notice .link,
 	.pad .link {
 		color: var(--accent-strong);
 		text-decoration: underline;
@@ -852,6 +821,15 @@
 	}
 	.empty p {
 		margin: 4px 0;
+	}
+	@media (max-width: 720px) {
+		section {
+			padding: 0 12px 12px;
+		}
+		.tabs {
+			gap: 14px;
+			overflow-x: auto;
+		}
 	}
 	kbd {
 		margin-left: 4px;

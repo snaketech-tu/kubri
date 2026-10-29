@@ -9,6 +9,8 @@
 	import { app, findResource, refOf } from '../state.svelte';
 	import { allIds, initialExpanded, issuesBelow, kindTag, visibleRows, xrayResources, type TreeRow } from '../xray';
 	import HealthIcon from './HealthIcon.svelte';
+	import PageHeader from './PageHeader.svelte';
+	import SearchField from './SearchField.svelte';
 
 	let { resource }: { resource: ResourceInfo } = $props();
 
@@ -197,76 +199,95 @@
 <svelte:window {onkeydown} />
 
 <section>
-	<header>
-		<h1>XRay</h1>
-		<select value={resource.plural} onchange={switchKind} title="What the trees start from">
-			{#each kinds as k (k.plural)}<option value={k.plural}>{k.kind}s</option>{/each}
-		</select>
-		<span class="count">{roots.length}</span>
-		{#if withIssues}<span class="issues"><HealthIcon health="failed" /> {withIssues} with issues</span>{/if}
-		<span class="spacer"></span>
-		<label><input type="checkbox" bind:checked={issuesOnly} /> Issues only</label>
-		<input class="filter" bind:this={filterInput} bind:value={filter} placeholder="Filter…" />
-		<button onclick={expandAll}>Expand all</button>
-		<button onclick={() => expanded.clear()}>Collapse all</button>
-	</header>
+	<PageHeader
+		crumbs={['Explore', 'Topology']}
+		title="Topology"
+		count={loaded ? roots.length : null}
+		subtitle="XRay of {resource.kind.toLowerCase()}s and what they own, {namespace ? `in ${namespace}` : 'in all namespaces'}"
+	>
+		{#if withIssues}<span class="tag bad"><HealthIcon health="failed" />{withIssues} with issues</span>{/if}
+		{#snippet tools()}
+			<button class="btn" onclick={expandAll} title="Open every tree">Expand all</button>
+			<button class="btn" onclick={() => expanded.clear()} title="Close every tree">Collapse all</button>
+		{/snippet}
+	</PageHeader>
 
 	{#if error}
-		<div class="error">{error}</div>
+		<div class="notice" role="alert">Could not build the tree: {error}</div>
 	{/if}
 
-	<div class="tree" bind:this={scroller} role="tree" aria-label="XRay of {resource.kind}s">
-		{#each rows as row, i (row.node.id)}
-			{@const node = row.node}
-			{@const hidden = row.expanded ? 0 : issuesBelow(node)}
-			<div
-				class="row"
-				class:cursor={i === cursor}
-				class:root={row.depth === 0}
-				style:padding-left={`${12 + row.depth * 20}px`}
-				role="treeitem"
-				aria-selected={i === cursor}
-				aria-expanded={node.children.length ? row.expanded : undefined}
-				tabindex="-1"
-				onclick={() => (cursorId = node.id)}
-				ondblclick={() => openDetails(row)}
-				oncontextmenu={(e) => openMenu(e, row)}
-				onkeydown={() => {}}
-			>
-				<button
-					class="chevron"
-					class:open={row.expanded}
-					class:leaf={!node.children.length}
+	<div class="card">
+		<div class="toolbar">
+			<label class="start">
+				<span>Start from</span>
+				<select value={resource.plural} onchange={switchKind}>
+					{#each kinds as k (k.plural)}<option value={k.plural}>{k.kind}s</option>{/each}
+				</select>
+			</label>
+			<SearchField bind:value={filter} bind:input={filterInput} label="Filter the trees" placeholder="Filter by name or status" />
+		</div>
+		<div class="tabs" role="tablist" aria-label="Show">
+			<button role="tab" aria-selected={!issuesOnly} onclick={() => (issuesOnly = false)}>
+				All <span class="n">{roots.length}</span>
+			</button>
+			<button role="tab" aria-selected={issuesOnly} onclick={() => (issuesOnly = true)}>
+				With issues <span class="n" class:alert={withIssues}>{withIssues}</span>
+			</button>
+		</div>
+
+		<div class="tree" bind:this={scroller} role="tree" aria-label="XRay of {resource.kind}s">
+			{#each rows as row, i (row.node.id)}
+				{@const node = row.node}
+				{@const hidden = row.expanded ? 0 : issuesBelow(node)}
+				<div
+					class="row"
+					class:cursor={i === cursor}
+					class:root={row.depth === 0}
+					style:padding-left={`${12 + row.depth * 20}px`}
+					role="treeitem"
+					aria-selected={i === cursor}
+					aria-expanded={node.children.length ? row.expanded : undefined}
 					tabindex="-1"
-					aria-label={row.expanded ? 'Collapse' : 'Expand'}
-					onclick={(e) => {
-						e.stopPropagation();
-						cursorId = node.id;
-						toggle(row);
-					}}>›</button
+					onclick={() => (cursorId = node.id)}
+					ondblclick={() => openDetails(row)}
+					oncontextmenu={(e) => openMenu(e, row)}
+					onkeydown={() => {}}
 				>
-				<HealthIcon health={node.health} />
-				<span class="tag">{kindTag(node.kind)}</span>
-				{#if node.resource}
-					<button class="name link" tabindex="-1" onclick={() => openDetails(row)} title="Describe {node.kind} {node.name}">{node.name}</button>
-				{:else}
-					<span class="name">{node.name}</span>
-				{/if}
-				{#if row.depth === 0 && !namespace && node.namespace}<span class="ns">{node.namespace}</span>{/if}
-				{#if node.detail}<span class="detail {node.health}" title={node.detail}>{node.detail}</span>{/if}
-				{#if hidden}<span class="hidden-issues" title="Problems below this row">{hidden} {hidden === 1 ? 'issue' : 'issues'} inside</span>{/if}
-			</div>
-		{:else}
-			<div class="empty">
-				{#if !loaded}
-					Building the tree…
-				{:else if filter || issuesOnly}
-					Nothing matches the filter.
-				{:else if !error}
-					No {resource.kind}s {namespace ? `in ${namespace}` : 'in the cluster'}.
-				{/if}
-			</div>
-		{/each}
+					<button
+						class="chevron"
+						class:open={row.expanded}
+						class:leaf={!node.children.length}
+						tabindex="-1"
+						aria-label={row.expanded ? 'Collapse' : 'Expand'}
+						onclick={(e) => {
+							e.stopPropagation();
+							cursorId = node.id;
+							toggle(row);
+						}}>›</button
+					>
+					<HealthIcon health={node.health} />
+					<span class="tag">{kindTag(node.kind)}</span>
+					{#if node.resource}
+						<button class="name link" tabindex="-1" onclick={() => openDetails(row)} title="Describe {node.kind} {node.name}">{node.name}</button>
+					{:else}
+						<span class="name">{node.name}</span>
+					{/if}
+					{#if row.depth === 0 && !namespace && node.namespace}<span class="ns">{node.namespace}</span>{/if}
+					{#if node.detail}<span class="detail {node.health}" title={node.detail}>{node.detail}</span>{/if}
+					{#if hidden}<span class="hidden-issues" title="Problems below this row">{hidden} {hidden === 1 ? 'issue' : 'issues'} inside</span>{/if}
+				</div>
+			{:else}
+				<div class="empty">
+					{#if !loaded}
+						Building the tree…
+					{:else if filter || issuesOnly}
+						Nothing matches the filter.
+					{:else if !error}
+						No {resource.kind}s {namespace ? `in ${namespace}` : 'in the cluster'}.
+					{/if}
+				</div>
+			{/each}
+		</div>
 	</div>
 </section>
 
@@ -276,68 +297,96 @@
 		flex-direction: column;
 		min-height: 0;
 		min-width: 0;
+		padding: 0 24px 20px;
 	}
-	header {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 8px 10px;
-		padding: 14px 20px 10px;
-	}
-	h1 {
-		margin: 0;
-		font-size: 20px;
-	}
-	select,
-	.filter {
-		padding: 4px 8px;
-		font-size: 13px;
-	}
-	.filter {
-		width: 170px;
-	}
-	.count {
-		padding: 1px 8px;
-		border-radius: 999px;
-		background: var(--surface-2);
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.issues {
+	.tag {
 		display: inline-flex;
 		align-items: center;
 		gap: 5px;
-		font-size: 12.5px;
-		color: var(--text-muted);
+		padding: 2px 8px;
+		border-radius: 5px;
+		font-size: 11.5px;
+		font-weight: 600;
+		white-space: nowrap;
 	}
-	.spacer {
+	.tag.bad {
+		background: color-mix(in srgb, var(--bad) 13%, var(--surface-1));
+		color: var(--bad);
+	}
+	.card {
+		display: flex;
+		flex-direction: column;
 		flex: 1;
+		min-height: 0;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		overflow: hidden;
 	}
-	label {
+	.toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px 14px;
+		padding: 14px 16px 6px;
+	}
+	.toolbar > :global(.search) {
+		flex: 1;
+		min-width: 200px;
+	}
+	.start {
 		display: flex;
 		align-items: center;
-		gap: 5px;
+		gap: 8px;
 		font-size: 12.5px;
 		color: var(--text-muted);
 	}
-	header button {
-		padding: 4px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		font-size: 12px;
+	.start select {
+		padding: 6px 8px;
+		font-size: 13px;
+		color: var(--text);
 	}
-	.error {
-		margin: 0 20px 10px;
-		padding: 8px 12px;
-		border-radius: 8px;
+	.tabs {
+		display: flex;
+		gap: 20px;
+		padding: 0 16px;
+		border-bottom: 1px solid var(--border);
+	}
+	.tabs button {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 10px 0 9px;
+		border: none;
+		border-bottom: 2px solid transparent;
+		background: none;
+		color: var(--text-muted);
+		font-size: 12.5px;
+	}
+	.tabs button:hover {
+		color: var(--text);
+	}
+	.tabs button[aria-selected='true'] {
+		border-bottom-color: var(--accent);
+		color: var(--accent-strong);
+		font-weight: 650;
+	}
+	.n {
+		padding: 0 6px;
+		border-radius: 4px;
+		background: var(--surface-2);
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.n.alert {
 		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
 		color: var(--bad);
 	}
 	.tree {
 		flex: 1;
 		overflow: auto;
-		padding: 0 12px 16px;
+		padding: 6px 8px 12px;
 		font-size: 13px;
 	}
 	.row {
@@ -351,10 +400,10 @@
 		outline: none;
 	}
 	.row:hover {
-		background: var(--surface-1);
+		background: color-mix(in srgb, var(--surface-2) 55%, transparent);
 	}
 	.row.cursor {
-		background: color-mix(in srgb, var(--accent) 16%, transparent);
+		background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
 	.row.root {
@@ -429,6 +478,11 @@
 		color: var(--bad);
 		font-size: 11px;
 		font-weight: 600;
+	}
+	@media (max-width: 720px) {
+		section {
+			padding: 0 12px 12px;
+		}
 	}
 	.empty {
 		padding: 40px 24px;
