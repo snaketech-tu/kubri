@@ -193,6 +193,7 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }), { id: 'previous', needs: logs, kubectl: k({ op: 'logs', previous: true }) });
 	if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }), { needs: on('get'), kubectl: k({ op: 'decode' }) });
 	if (hasUsers(resource)) add('View', 'Used by', ['u'], show('describe'), { id: 'usedBy' });
+	add('View', 'What changed', [], () => app.showChanges({ namespace: target.namespace ?? undefined, kind: resource.kind, name: target.name }), { id: 'changes' });
 	add('View', 'Compare…', [], dialog(() => ({ kind: 'compare', resource, target })), { id: 'compare', needs: on('get') });
 	// In the action bar once a model is set up; until then the menus lead to the settings.
 	const explaining = app.settings.explain.provider !== 'none' ? { primary: isPods(resource) ? 4 : 9 } : {};

@@ -240,8 +240,11 @@ export interface Bucket {
 	first: number;
 }
 
-/** Lines per time slot, for the rate strip above the log. `null` while fewer than two lines carry a time. */
-export function rate(rows: Row[], slots = 60): Bucket[] | null {
+/**
+ * Lines per time slot, for the rate strip above the log. `null` while fewer than two lines carry a time.
+ * `changes` are recorded changes, like rollouts, marked where they fall within the lines' time.
+ */
+export function rate(rows: Row[], slots = 60, changes: { at: number; text: string }[] = []): Bucket[] | null {
 	const timed: { at: number; index: number; row: Row }[] = [];
 	rows.forEach((row, index) => {
 		const at = row.line.time ? Date.parse(row.line.time) : NaN;
@@ -277,6 +280,10 @@ export function rate(rows: Row[], slots = 60): Bucket[] | null {
 		b.lines += n;
 		if (row.line.level === 'error') b.errors += n;
 		else if (row.line.level === 'warn') b.warnings += n;
+	}
+	for (const change of changes) {
+		if (change.at < start || change.at > end) continue;
+		buckets[Math.min(slots - 1, Math.floor((change.at - start) / step))].markers.push(change.text);
 	}
 	return buckets;
 }

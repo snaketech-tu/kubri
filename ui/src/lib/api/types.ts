@@ -229,6 +229,85 @@ export interface Settings {
 	columns: Record<string, ColumnSettings>;
 	/** Searches kept in the sidebar. */
 	searches: SavedSearch[];
+	history: HistorySettings;
+}
+
+/** What the change history records and keeps. */
+export interface HistorySettings {
+	record: boolean;
+	keepDays: number;
+	maxMb: number;
+}
+
+export type ChangeKind =
+	| 'created'
+	| 'deleted'
+	| 'scaled'
+	| 'image'
+	| 'restarted'
+	| 'rollout'
+	| 'data'
+	| 'spec'
+	| 'metadata'
+	| 'node'
+	| 'warning';
+
+/** One recorded change. */
+export interface HistoryEntry {
+	id: number;
+	context: string;
+	/** Unix milliseconds. */
+	at: number;
+	resource: ResourceRef;
+	kind: string;
+	namespace: string | null;
+	name: string;
+	uid: string;
+	change: ChangeKind;
+	summary: string;
+	/** Found when Kubri started again; it happened before `at`, while Kubri was not watching. */
+	unwatched: boolean;
+	hasDiff: boolean;
+}
+
+export interface HistoryDetail extends HistoryEntry {
+	before: unknown;
+	after: unknown;
+}
+
+export interface HistoryQuery {
+	context?: string;
+	namespace?: string;
+	kind?: string;
+	name?: string;
+	uid?: string;
+	since?: number;
+	until?: number;
+	changes?: ChangeKind[];
+	text?: string;
+	limit?: number;
+	before?: number;
+}
+
+/** A time Kubri was watching, in Unix milliseconds. */
+export interface Span {
+	from: number;
+	to: number;
+}
+
+export interface RecorderStatus {
+	recording: boolean;
+	reason: string | null;
+	skipped: string[];
+	since: number | null;
+}
+
+export interface HistoryPage {
+	context: string;
+	entries: HistoryEntry[];
+	more: boolean;
+	watched: Span[];
+	recorder: RecorderStatus;
 }
 
 export interface SavedSearch {
@@ -1230,6 +1309,11 @@ export interface Backend {
 	settings(): Promise<SettingsReply>;
 	setContextSettings(name: string, settings: ContextSettings): Promise<Settings>;
 	setDiffSettings(settings: DiffSettings): Promise<Settings>;
+	setHistorySettings(settings: HistorySettings): Promise<Settings>;
+	/** What changed, newest first, with the times Kubri was watching. */
+	history(query: HistoryQuery): Promise<HistoryPage>;
+	/** One change with the object before and after it. */
+	historyDetail(id: number): Promise<HistoryDetail>;
 	/** How lists show a kind, by `group/Kind`; the defaults forget it. */
 	setColumnSettings(kind: string, columns: ColumnSettings): Promise<Settings>;
 	setAgentSettings(settings: AgentSettings): Promise<Settings>;

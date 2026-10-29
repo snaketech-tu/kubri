@@ -1,8 +1,9 @@
 import type { Alias, ContextInfo, ObjectRef, ResourceInfo } from './api';
+import { parseChangesArgs, type ChangesFilter } from './changes';
 import { CORE_GROUPS, parseShortForm, TEMPLATE_KINDS, type TemplateParams } from './create';
 import { xrayResources } from './xray';
 
-export type ConfigSection = 'contexts' | 'diffs' | 'agents' | 'explain' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
+export type ConfigSection = 'contexts' | 'diffs' | 'changes' | 'agents' | 'explain' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
 
 export type Action =
 	| {
@@ -29,6 +30,7 @@ export type Action =
 	| { type: 'fleet' }
 	| { type: 'search'; query?: string }
 	| { type: 'graph'; namespace?: string }
+	| { type: 'changes'; filter?: ChangesFilter }
 	/** One object, in whichever context it is. */
 	| { type: 'object'; target: ObjectRef; kind?: string }
 	| { type: 'config'; section?: ConfigSection }
@@ -56,6 +58,7 @@ const SIZING_COMMANDS = ['rightsizing', 'rightsize', 'sizing'];
 const FLEET_COMMANDS = ['fleet', 'home'];
 const SEARCH_COMMANDS = ['search', 'find', 'grep'];
 const GRAPH_COMMANDS = ['graph', 'topology'];
+const CHANGES_COMMANDS = ['changes', 'changed', 'history', 'timeline'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	config: undefined,
 	settings: undefined,
@@ -305,6 +308,20 @@ function builtins(
 	});
 	if (GRAPH_COMMANDS.includes(cmd)) return [graph(rest[0])];
 
+	// `changes shop 6h`: a namespace and how far back, both optional.
+	const changes = (filter: ChangesFilter = {}): Suggestion => {
+		const hours = filter.hours ? (filter.hours < 1 ? `${Math.round(filter.hours * 60)}m` : `${filter.hours}h`) : '';
+		return {
+			label: ['changes', filter.namespace, hours].filter(Boolean).join(' '),
+			detail: 'What changed: rollouts, scaling, config and warnings Kubri recorded',
+			action: { type: 'changes', filter }
+		};
+	};
+	if (CHANGES_COMMANDS.includes(cmd)) {
+		const filter = parseChangesArgs(rest);
+		return [changes(filter), ...(filter.hours ? [] : [changes({ ...filter, hours: 1 })])];
+	}
+
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {
 		const roots = xrayResources(resources);
@@ -395,6 +412,7 @@ function builtins(
 	if (cmd.length > 1 && FLEET_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(fleet);
 	if (cmd.length > 1 && SEARCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push({ ...search, label: 'search' });
 	if (cmd.length > 1 && GRAPH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(graph());
+	if (cmd.length > 1 && CHANGES_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(changes(), changes({ hours: 1 }));
 	if (cmd.length > 1 && 'config'.startsWith(cmd) && cmd !== 'config') {
 		extra.push(...builtins('config', resources, contexts, namespaces, config).slice(0, 1));
 	}

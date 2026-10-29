@@ -2,6 +2,7 @@ import { drafts } from './navigation.svelte';
 import { access } from './access.svelte';
 import { creating } from './create.svelte';
 import type { TemplateParams } from './create';
+import type { ChangesFilter } from './changes';
 import { dock } from './dock.svelte';
 import {
 	backend,
@@ -127,7 +128,8 @@ const DEFAULT_SETTINGS: Settings = {
 	explain: { provider: 'none', baseUrl: '', model: '' },
 	debug: { image: 'busybox' },
 	columns: {},
-	searches: []
+	searches: [],
+	history: { record: true, keepDays: 14, maxMb: 200 }
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
@@ -170,6 +172,7 @@ export type Page =
 	| 'rightsizing'
 	| 'fleet'
 	| 'search'
+	| 'changes'
 	| 'config';
 
 export type Dialog =
@@ -249,6 +252,8 @@ class AppState {
 	page = $state<Page>('pulses');
 	/** What the search page searches for, as typed. */
 	searchQuery = $state('');
+	/** What the What changed page shows; replaced as a whole when opened from elsewhere. */
+	changesFilter = $state<ChangesFilter>({});
 	/** The kind the XRay page starts its trees from. */
 	xrayResource = $state<ResourceInfo | null>(null);
 	#details = $state<Details | null>(null);
@@ -451,6 +456,14 @@ class AppState {
 	async setDiffSettings(diff: Settings['diff']) {
 		try {
 			this.settings = await backend.setDiffSettings(diff);
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+		}
+	}
+
+	async setHistorySettings(history: Settings['history']) {
+		try {
+			this.settings = await backend.setHistorySettings(history);
 		} catch (err) {
 			this.toast(errorMessage(err), 'bad');
 		}
@@ -728,6 +741,9 @@ class AppState {
 			case 'graph':
 				this.showGraph(action.namespace);
 				break;
+			case 'changes':
+				this.showChanges(action.filter);
+				break;
 			case 'object':
 				await this.openObject(action.target, action.kind);
 				break;
@@ -793,6 +809,14 @@ class AppState {
 		this.page = 'search';
 		this.details = null;
 		if (query !== undefined) this.searchQuery = query;
+	}
+
+	/** What changed: the changes Kubri recorded, for the namespace or one object. */
+	showChanges(filter: ChangesFilter = {}) {
+		if (drafts.block(() => this.showChanges(filter))) return;
+		this.page = 'changes';
+		this.details = null;
+		this.changesFilter = { namespace: this.namespace || undefined, ...filter };
 	}
 
 	/** What the cluster runs that Kubri uses: Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager. */

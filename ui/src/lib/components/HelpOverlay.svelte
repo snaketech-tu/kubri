@@ -29,6 +29,7 @@
 				[':pulses', 'Cluster overview'],
 				[':xray deploy [ns]', 'XRay: what each object depends on'],
 				[':graph [ns]', 'XRay graph: how objects connect, and Ingress request paths'],
+				[':changes [ns] [1h]', 'What changed: rollouts, scaling, config edits and warnings Kubri recorded'],
 				[':rbac', 'Who may do what'],
 				[':helm', 'Helm releases'],
 				[':new [kind name --image …]', 'Create from a template or YAML, like kubectl create'],

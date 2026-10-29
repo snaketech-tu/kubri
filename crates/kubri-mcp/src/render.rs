@@ -82,6 +82,10 @@ pub(crate) fn yaml(value: &impl serde::Serialize) -> String {
 }
 
 /// Unix seconds as an RFC 3339 time.
+pub(crate) fn now_ms() -> i64 {
+    k8s_openapi::jiff::Timestamp::now().as_millisecond()
+}
+
 pub(crate) fn unix_time(seconds: f64) -> String {
     k8s_openapi::jiff::Timestamp::from_millisecond((seconds * 1000.0) as i64)
         .map(|t| t.to_string())

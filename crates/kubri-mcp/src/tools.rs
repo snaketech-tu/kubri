@@ -331,6 +331,35 @@ const TOOLS: &[Tool] = &[
         ],
     },
     Tool {
+        name: "what_changed",
+        title: "What changed",
+        description: "Changes Kubri recorded in a context over the last hours, newest first: rollouts, image changes, scaling, ConfigMap and Secret edits (keys only), nodes, deletions and warning events. Recorded only while a Kubri window or web server was running; the answer says when it was.",
+        write: false,
+        destructive: false,
+        params: &[
+            param(
+                "namespace",
+                "string",
+                "Only this namespace; the whole cluster when left out.",
+                false,
+            ),
+            param(
+                "resource",
+                "string",
+                "Only this resource type, like `deploy` or `configmaps`.",
+                false,
+            ),
+            param("name", "string", "Only objects of this name.", false),
+            param(
+                "hours",
+                "integer",
+                "How far back, in hours; 1 when left out, at most 336.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
         name: "scale",
         title: "Scale",
         description: "Sets the replicas of a Deployment, StatefulSet or ReplicaSet. The user confirms it in Kubri first.",
@@ -614,6 +643,7 @@ pub(crate) async fn call(tool: &Tool, kubri: &Kubri, hub: &Hub, arguments: &Valu
                 "noData": charts.missing,
             })))
         }
+        "what_changed" => what_changed(kubri, &args, &context).await,
         "query_prometheus" => {
             let series = kubri
                 .prometheus_query(args.need("query")?, hours(&args)?)
@@ -766,6 +796,74 @@ async fn get_object(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {
         redact::secret(&mut value);
     }
     Ok(render::yaml(&value))
+}
+
+async fn what_changed(kubri: &Kubri, args: &Args<'_>, context: &str) -> Result<String, String> {
+    let hours = args.int("hours")?.unwrap_or(1).clamp(1, 336);
+    let now = render::now_ms();
+    let since = now - hours * 3600 * 1000;
+    let kind = match args.str("resource") {
+        Some(name) => Some(resource(kubri, name).await?.kind),
+        None => None,
+    };
+    let page = kubri
+        .history(&kubri_core::HistoryQuery {
+            context: Some(context.to_owned()),
+            namespace: args.str("namespace").map(Into::into),
+            kind,
+            name: args.str("name").map(Into::into),
+            since: Some(since),
+            limit: Some(MAX_ROWS as u32),
+            ..Default::default()
+        })
+        .await
+        .map_err(text)?;
+    let time = |ms: i64| render::unix_time(ms as f64 / 1000.0);
+    let mut lines = Vec::new();
+    if page.watched.is_empty() {
+        lines.push(format!(
+            "Kubri did not watch {context} in the last {hours} h, so it has no record of that time. Changes are recorded only while a Kubri window or web server is connected to the context."
+        ));
+    } else {
+        let spans: Vec<String> = page
+            .watched
+            .iter()
+            .rev()
+            .map(|s| format!("{} to {}", time(s.from.max(since)), time(s.to)))
+            .collect();
+        lines.push(format!(
+            "Kubri watched {context} from {}.",
+            spans.join(", and from ")
+        ));
+    }
+    if page.entries.is_empty() {
+        lines.push("No changes recorded in that time.".into());
+    }
+    for e in &page.entries {
+        let place = match &e.namespace {
+            Some(ns) => format!("{ns}/{}", e.name),
+            None => e.name.clone(),
+        };
+        let unwatched = if e.unwatched {
+            " (happened while Kubri was not watching, found when it started again)"
+        } else {
+            ""
+        };
+        lines.push(format!(
+            "{}  {} {}  {}: {}{unwatched}",
+            time(e.at),
+            e.kind,
+            place,
+            e.change.as_str(),
+            e.summary
+        ));
+    }
+    if page.more {
+        lines.push(format!(
+            "Only the newest {MAX_ROWS} are shown; narrow the question to see more."
+        ));
+    }
+    Ok(lines.join("\n"))
 }
 
 async fn get_events(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> {

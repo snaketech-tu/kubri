@@ -136,6 +136,55 @@
 			</div>
 		</div>
 
+		<div class="block">
+			<h2 id="config-changes">What changed</h2>
+			<p class="muted">
+				While it runs, Kubri records what changes in the context it is connected to, in <code>history.db</code> in its config
+				folder. ConfigMap and Secret values are never kept, only which keys changed.
+			</p>
+			<div class="diff-settings">
+				<label>
+					<input
+						type="checkbox"
+						checked={app.settings.history.record}
+						onchange={(e) => app.setHistorySettings({ ...app.settings.history, record: e.currentTarget.checked })}
+					/>
+					Record changes
+				</label>
+				<label>
+					Keep for
+					<input
+						class="number"
+						type="number"
+						min="1"
+						max="365"
+						value={app.settings.history.keepDays}
+						onchange={(e) => {
+							const days = Math.round(Number(e.currentTarget.value));
+							if (days >= 1) app.setHistorySettings({ ...app.settings.history, keepDays: Math.min(days, 365) });
+						}}
+					/>
+					days
+				</label>
+				<label>
+					At most
+					<input
+						class="number"
+						type="number"
+						min="10"
+						max="10000"
+						step="10"
+						value={app.settings.history.maxMb}
+						onchange={(e) => {
+							const mb = Math.round(Number(e.currentTarget.value));
+							if (mb >= 10) app.setHistorySettings({ ...app.settings.history, maxMb: Math.min(mb, 10000) });
+						}}
+					/>
+					MB
+				</label>
+			</div>
+		</div>
+
 		<AgentSettings />
 
 		<ExplainSettings />
@@ -477,6 +526,9 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
+	}
+	.number {
+		width: 72px;
 	}
 	.contexts {
 		display: grid;

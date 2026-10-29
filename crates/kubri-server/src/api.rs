@@ -38,6 +38,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings/context", put(set_context_settings))
         .route("/settings/diff", put(set_diff_settings))
         .route("/settings/searches", put(set_saved_searches))
+        .route("/settings/history", put(set_history_settings))
         .route("/settings/columns", put(set_column_settings))
         .route("/settings/agents", put(set_agent_settings))
         .route("/settings/explain", put(set_explain_settings))
@@ -96,6 +97,8 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/loki/logs", post(loki_logs))
         .route("/xray", get(xray))
         .route("/graph", get(graph))
+        .route("/history", post(history))
+        .route("/history/{id}", get(history_detail))
         .route("/rbac", get(rbac))
         .route("/sanitize", get(sanitize))
         .route("/permissions", get(permissions))
@@ -251,6 +254,13 @@ async fn set_saved_searches(
     Json(req): Json<Vec<kubri_core::SavedSearch>>,
 ) -> ApiResult<Settings> {
     Ok(Json(kubri.set_saved_searches(req)?))
+}
+
+async fn set_history_settings(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<kubri_core::HistorySettings>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_history_settings(req).await?))
 }
 
 async fn set_diff_settings(
@@ -810,6 +820,20 @@ struct XrayQuery {
 async fn xray(State(kubri): State<Arc<Kubri>>, Query(query): Query<XrayQuery>) -> ApiResult<Vec<XrayNode>> {
     let namespace = query.namespace.filter(|ns| !ns.is_empty());
     Ok(Json(kubri.xray(&query.resource, namespace.as_deref()).await?))
+}
+
+async fn history(
+    State(kubri): State<Arc<Kubri>>,
+    Json(query): Json<kubri_core::HistoryQuery>,
+) -> ApiResult<kubri_core::HistoryPage> {
+    Ok(Json(kubri.history(&query).await?))
+}
+
+async fn history_detail(
+    State(kubri): State<Arc<Kubri>>,
+    Path(id): Path<i64>,
+) -> ApiResult<kubri_core::HistoryDetail> {
+    Ok(Json(kubri.history_detail(id)?))
 }
 
 async fn graph(State(kubri): State<Arc<Kubri>>, Query(query): Query<NamespaceQuery>) -> ApiResult<Graph> {

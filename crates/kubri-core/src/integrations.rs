@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::prometheus::{self, Charts, Limits, Marker, Range, Subject};
-use crate::{Error, ObjectRef, ResourceInfo, Result};
+use crate::{ChangeKind, Error, ObjectRef, ResourceInfo, Result};
 use crate::{grafana, loki};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -686,6 +686,7 @@ impl crate::Kubri {
                 )));
             }
         };
+        self.recorded_markers(&session.info.context, &kind, &object, &range, &mut markers);
         prometheus::charts(
             &session.proxy_client,
             &endpoint,
@@ -696,6 +697,66 @@ impl crate::Kubri {
             markers,
         )
         .await
+    }
+
+    /// Changes from the change history in `range`: for a workload or node its own, for a
+    /// namespace those that start new pods. Rollouts already marked from ReplicaSets are not
+    /// marked twice.
+    fn recorded_markers(
+        &self,
+        context: &str,
+        kind: &str,
+        object: &Value,
+        range: &Range,
+        markers: &mut Vec<Marker>,
+    ) {
+        let Ok(store) = self.history_store() else {
+            return;
+        };
+        let (start, end, _) = range.resolve();
+        let text = |path: &str| object.pointer(path).and_then(Value::as_str).map(str::to_owned);
+        let mut query = crate::HistoryQuery {
+            context: Some(context.to_owned()),
+            since: Some((start * 1000.0) as i64),
+            until: Some((end * 1000.0) as i64),
+            limit: Some(200),
+            ..Default::default()
+        };
+        match kind {
+            "Pod" => return,
+            "Namespace" => {
+                query.namespace = text("/metadata/name");
+                query.changes = vec![
+                    ChangeKind::Image,
+                    ChangeKind::Restarted,
+                    ChangeKind::Rollout,
+                    ChangeKind::Scaled,
+                    ChangeKind::Data,
+                ];
+            }
+            _ => query.uid = text("/metadata/uid"),
+        }
+        let Ok((entries, _)) = store.query(context, &query) else {
+            return;
+        };
+        let from_replica_sets = markers.clone();
+        for entry in entries.iter().filter(|e| e.change != ChangeKind::Warning) {
+            let at = entry.at as f64 / 1000.0;
+            let starts_pods = matches!(
+                entry.change,
+                ChangeKind::Image | ChangeKind::Restarted | ChangeKind::Rollout
+            );
+            if starts_pods && from_replica_sets.iter().any(|m| (m.at - at).abs() < 120.0) {
+                continue;
+            }
+            let label = if kind == "Namespace" {
+                format!("{} {}: {}", entry.kind, entry.name, entry.summary)
+            } else {
+                entry.summary.clone()
+            };
+            markers.push(Marker { at, label });
+        }
+        markers.sort_by(|a, b| a.at.total_cmp(&b.at));
     }
 
     /// When a workload rolled out a new revision: its ReplicaSets or ControllerRevisions.

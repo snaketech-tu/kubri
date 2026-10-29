@@ -21,6 +21,7 @@ mod grafana;
 mod graph;
 mod health;
 mod helm;
+mod history;
 mod integrations;
 mod jsonpath;
 mod k9s;
@@ -37,6 +38,7 @@ mod prometheus;
 mod proxy;
 mod pulse;
 mod rbac;
+mod recorder;
 pub mod redact;
 mod references;
 mod resource;
@@ -85,6 +87,9 @@ pub use gitops::{GitOpsAction, Manager};
 pub use grafana::{DashboardLink, Dashboards};
 pub use health::Health;
 pub use helm::{HelmChange, HelmChartRef, HelmOutcome, HelmRelease, HelmReleaseDetails, HubChart};
+pub use history::{
+    ChangeKind, HistoryDetail, HistoryEntry, HistoryPage, HistoryQuery, HistorySettings, RecorderStatus, Span,
+};
 pub use integrations::{Endpoint, Integration, IntegrationSettings, Integrations};
 pub use k9s::{
     Alias, ConfigFile, Hotkey, Jump, K9sConfig, Logger, Plugin, PluginInput, Threshold, Thresholds,
@@ -174,6 +179,10 @@ pub struct Kubri {
     unlocks: std::sync::Mutex<HashMap<String, std::time::Instant>>,
     /// Connections to other contexts, for reading objects there, and when they were made.
     others: tokio::sync::Mutex<HashMap<String, (std::time::Instant, Arc<Session>)>>,
+    /// Records what changes in the connected context, where this process records.
+    recording: AtomicBool,
+    recorder: std::sync::Mutex<Option<recorder::Recorder>>,
+    history: std::sync::OnceLock<std::result::Result<Arc<history::Store>, String>>,
 }
 
 /// The settings and where they are kept.
@@ -273,6 +282,9 @@ impl Kubri {
             }),
             unlocks: Default::default(),
             others: Default::default(),
+            recording: AtomicBool::new(false),
+            recorder: Default::default(),
+            history: Default::default(),
         }
     }
 
@@ -356,6 +368,110 @@ impl Kubri {
             s.diff = value;
             Ok(())
         })
+    }
+
+    /// Sets what the change history keeps; recording starts or stops at once.
+    pub async fn set_history_settings(&self, value: HistorySettings) -> Result<Settings> {
+        let settings = self.update_settings(|s| {
+            s.history = value;
+            Ok(())
+        })?;
+        if let Ok(session) = self.session().await {
+            self.restart_recorder(&session).await;
+        }
+        Ok(settings)
+    }
+
+    /// Records what changes in each context Kubri connects to from now on, as the desktop app
+    /// and the web server do. Tools that only read, like the MCP server on its own, do not.
+    pub fn record_changes(&self) {
+        self.recording.store(true, Ordering::Relaxed);
+    }
+
+    /// The change history, opened on first use: `history.db` in Kubri's config folder, or a
+    /// database in memory when there is no settings file, as in tests.
+    fn history_store(&self) -> Result<Arc<history::Store>> {
+        let path = self.settings_file().path.clone();
+        self.history
+            .get_or_init(|| {
+                let store = match path.as_ref().and_then(|p| p.parent()) {
+                    Some(dir) => history::Store::open(&dir.join("history.db")),
+                    None => history::Store::in_memory(),
+                };
+                store.map(Arc::new).map_err(|e| e.to_string())
+            })
+            .clone()
+            .map_err(Error::Unsupported)
+    }
+
+    /// Stops recording the previous context and starts recording `session`'s, if Kubri records.
+    async fn restart_recorder(&self, session: &Session) {
+        let settings = self.settings().history;
+        let mut start = None;
+        if self.recording.load(Ordering::Relaxed) && settings.record {
+            match self.history_store() {
+                Ok(store) => {
+                    let namespaces = self.allowed_namespaces(session).await.unwrap_or_default();
+                    start = Some((store, namespaces));
+                }
+                Err(err) => tracing::warn!("cannot record changes: {err}"),
+            }
+        }
+        let mut recorder = self.recorder.lock().unwrap_or_else(|e| e.into_inner());
+        // Stop first, so the new recorder can claim the context at once.
+        *recorder = None;
+        if let Some((store, namespaces)) = start {
+            *recorder = Some(recorder::Recorder::start(
+                store,
+                session.client.clone(),
+                &session.info.context,
+                &session.resources,
+                namespaces,
+                settings,
+            ));
+        }
+    }
+
+    /// What changed in a context, newest first, with the times Kubri was watching it.
+    pub async fn history(&self, query: &HistoryQuery) -> Result<HistoryPage> {
+        let context = match &query.context {
+            Some(context) => context.clone(),
+            None => self.session().await?.info.context.clone(),
+        };
+        let store = self.history_store()?;
+        let (entries, more) = store.query(&context, query)?;
+        let watched = store.watched(&context, query.since, query.until)?;
+        let recorder = self
+            .recorder
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .filter(|r| r.context() == context)
+            .map(|r| r.status())
+            .unwrap_or_else(|| RecorderStatus {
+                reason: Some(if !self.recording.load(Ordering::Relaxed) {
+                    "This Kubri does not record changes".into()
+                } else if !self.settings().history.record {
+                    "Recording is turned off in the settings".into()
+                } else {
+                    "Kubri records only the context it is connected to".into()
+                }),
+                ..Default::default()
+            });
+        Ok(HistoryPage {
+            context,
+            entries,
+            more,
+            watched,
+            recorder,
+        })
+    }
+
+    /// One change with the object before and after it.
+    pub fn history_detail(&self, id: i64) -> Result<HistoryDetail> {
+        self.history_store()?
+            .detail(id)?
+            .ok_or_else(|| Error::NotFound(format!("change {id}")))
     }
 
     fn unlocks_map(&self) -> std::sync::MutexGuard<'_, HashMap<String, std::time::Instant>> {
@@ -549,8 +665,10 @@ impl Kubri {
     pub async fn switch_context(&self, context: &str) -> Result<ClusterInfo> {
         let session = self.connect(context).await?;
         let info = session.info.clone();
-        *self.session.write().await = Some(Arc::new(session));
+        let session = Arc::new(session);
+        *self.session.write().await = Some(session.clone());
         tracing::info!(context, version = %info.version, "connected");
+        self.restart_recorder(&session).await;
         Ok(info)
     }
 
@@ -1861,6 +1979,32 @@ mod tests {
         assert!(matches!(kubri.contexts().await, Err(Error::NoKubeconfig(_))));
         assert!(matches!(kubri.resources().await, Err(Error::NotConnected)));
         assert!(kubri.cluster().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn history_says_why_nothing_is_recorded() {
+        let kubri = Kubri::with_kubeconfig(Err("not found".into()));
+        assert!(matches!(
+            kubri.history(&HistoryQuery::default()).await,
+            Err(Error::NotConnected)
+        ));
+        let query = HistoryQuery {
+            context: Some("lab".into()),
+            ..Default::default()
+        };
+        let page = kubri.history(&query).await.unwrap();
+        assert!(page.entries.is_empty() && page.watched.is_empty());
+        assert_eq!(
+            page.recorder.reason.as_deref(),
+            Some("This Kubri does not record changes")
+        );
+        kubri.record_changes();
+        let page = kubri.history(&query).await.unwrap();
+        assert_eq!(
+            page.recorder.reason.as_deref(),
+            Some("Kubri records only the context it is connected to")
+        );
+        assert!(matches!(kubri.history_detail(1), Err(Error::NotFound(_))));
     }
 
     #[tokio::test]
