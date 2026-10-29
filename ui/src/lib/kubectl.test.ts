@@ -36,6 +36,19 @@ describe('kubectlCommand', () => {
 		);
 	});
 
+	it('debugs like kubectl debug', () => {
+		expect(kubectlCommand('k3s', pod, { op: 'debug', container: 'app', image: 'busybox:1.36' })).toBe(
+			'kubectl --context k3s -n shop debug -it web-1 --image=busybox:1.36 --target=app'
+		);
+		expect(kubectlCommand(null, pod, { op: 'debug', copy: true, container: 'app' })).toBe(
+			'kubectl -n shop debug web-1 --copy-to=web-1-debug --container=app -it -- sh'
+		);
+		const node: ObjectRef = { resource: { group: '', version: 'v1', plural: 'nodes' }, namespace: null, name: 'n1' };
+		expect(kubectlCommand(null, node, { op: 'nodeShell' })).toBe(
+			'kubectl debug node/n1 -it --profile=sysadmin --image=busybox -- chroot /host sh'
+		);
+	});
+
 	it('deletes several objects per namespace', () => {
 		const other = { ...pod, namespace: 'web', name: 'x' };
 		expect(kubectlCommand('c', pod, { op: 'delete', targets: [pod, other, { ...pod, name: 'web-2' }], options: { force: true, gracePeriodSeconds: 0, propagation: 'foreground' } })).toBe(

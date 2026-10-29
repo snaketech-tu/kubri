@@ -130,6 +130,7 @@ export const httpBackend: Backend = {
 	deleteObject: (target, options) => request('DELETE', '/object', { target, options: options ?? {} }),
 	scale: (target, replicas) => request('POST', '/object/scale', { target, replicas }),
 	restart: (target) => request('POST', '/object/restart', { target }),
+	debug: (req) => request('POST', '/debug', req),
 	drill: (target) => request('POST', '/object/drill', { target }),
 	usedBy: (target) => request('POST', '/object/used-by', { target }),
 	triggerCronJob: async (target) => (await request<{ name: string }>('POST', '/cronjob/trigger', { target })).name,

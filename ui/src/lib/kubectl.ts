@@ -8,6 +8,8 @@ export type KubectlOp =
 	| { op: 'decode' }
 	| { op: 'shell'; container?: string | null }
 	| { op: 'attach'; container?: string | null }
+	| { op: 'debug'; container?: string | null; image?: string | null; copy?: boolean }
+	| { op: 'nodeShell'; image?: string | null }
 	| { op: 'portForward'; local?: number | null; remote?: number | null; address?: string | null }
 	| { op: 'cordon' }
 	| { op: 'uncordon' }
@@ -67,6 +69,12 @@ export function kubectlCommand(context: string | null | undefined, target: Objec
 			return run('exec', '-it', ref, ...container(op.container), '--', 'sh', '-c', 'bash || sh');
 		case 'attach':
 			return run('attach', '-it', ref, ...container(op.container));
+		case 'debug':
+			return op.copy
+				? run('debug', target.name, `--copy-to=${target.name}-debug`, `--container=${op.container ?? 'CONTAINER'}`, '-it', '--', 'sh')
+				: run('debug', '-it', target.name, `--image=${op.image || 'busybox'}`, ...(op.container ? [`--target=${op.container}`] : []));
+		case 'nodeShell':
+			return command(context, null, ['debug', `node/${target.name}`, '-it', '--profile=sysadmin', `--image=${op.image || 'busybox'}`, '--', 'chroot', '/host', 'sh']);
 		case 'portForward': {
 			const ports = `${op.local || ''}:${op.remote ?? 'PORT'}`;
 			const address = op.address && op.address !== '127.0.0.1' && op.address !== 'localhost' ? ['--address', op.address] : [];

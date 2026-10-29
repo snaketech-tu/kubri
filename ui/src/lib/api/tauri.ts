@@ -86,6 +86,7 @@ export const tauriBackend: Backend = {
 	deleteObject: (target, options) => invoke('delete_object', { target, options: options ?? null }),
 	scale: (target, replicas) => invoke('scale', { target, replicas }),
 	restart: (target) => invoke('restart', { target }),
+	debug: (request) => invoke('debug', { request }),
 	drill: (target) => invoke('drill', { target }),
 	usedBy: (target) => invoke('used_by', { target }),
 	triggerCronJob: (target) => invoke('trigger_cronjob', { target }),

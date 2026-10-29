@@ -12,9 +12,9 @@ use std::sync::{Arc, Mutex};
 use futures::{Stream, StreamExt};
 use kubri_core::{
     AccessCheck, BenchInfo, BenchRequest, Change, ClusterInfo, ContainerImage, ContextList, ContextSettings,
-    DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, Guard, HelmRelease,
-    HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
-    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Preview, Pulse, Rbac, Reference,
+    DebugRequest, DebugSession, DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo,
+    Guard, HelmRelease, HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind,
+    ObjectRef, Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Preview, Pulse, Rbac, Reference,
     ResourceInfo, ResourceRef, SanitizerReport, Settings, TableEvent, TableScope, Terminal, TerminalInput,
     TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
@@ -412,6 +412,11 @@ async fn scale(kubri: State<'_, Arc<Kubri>>, target: ObjectRef, replicas: u32) -
 }
 
 #[tauri::command]
+async fn debug(kubri: State<'_, Arc<Kubri>>, request: DebugRequest) -> CommandResult<DebugSession> {
+    kubri.debug(request).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn restart(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<()> {
     kubri.restart(&target).await.map_err(|e| e.to_string())
 }
@@ -764,6 +769,7 @@ pub fn run() {
             delete_object,
             scale,
             restart,
+            debug,
             events,
             metrics,
             pulse,

@@ -11,11 +11,12 @@ use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
     AccessCheck, AgentSettings, BenchInfo, BenchRequest, Change, ClusterInfo, ContainerImage, ContextList,
-    ContextSettings, DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, ExplainAnswer,
-    ExplainPrompt, ExplainSettings, ExplainSubject, Guard, HelmRelease, HelmReleaseDetails, Identity,
-    K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions, PluginRun, PortForwardInfo,
-    PortForwardRequest, Preview, Pulse, Rbac, Reference, ResourceInfo, ResourceRef, SanitizerReport,
-    Settings, TableScope, Terminal, TerminalOptions, TerminalOutput, Usage, XrayNode,
+    ContextSettings, DebugRequest, DebugSession, DeleteOptions, DiffSettings, DrainOptions, DrainReport,
+    Drill, EventInfo, ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject, Guard, HelmRelease,
+    HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
+    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Preview, Pulse, Rbac, Reference,
+    ResourceInfo, ResourceRef, SanitizerReport, Settings, TableScope, Terminal, TerminalOptions,
+    TerminalOutput, Usage, XrayNode,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -53,6 +54,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/object/preview", post(preview))
         .route("/object/scale", post(scale))
         .route("/object/restart", post(restart))
+        .route("/debug", post(debug))
         .route("/object/drill", post(drill))
         .route("/object/used-by", post(used_by))
         .route("/object/images", post(set_images))
@@ -421,6 +423,10 @@ async fn scale(State(kubri): State<Arc<Kubri>>, Json(req): Json<Scale>) -> ApiRe
 #[derive(Deserialize)]
 struct Target {
     target: ObjectRef,
+}
+
+async fn debug(State(kubri): State<Arc<Kubri>>, Json(req): Json<DebugRequest>) -> ApiResult<DebugSession> {
+    Ok(Json(kubri.debug(req).await?))
 }
 
 async fn restart(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<()> {
@@ -986,6 +992,7 @@ mod tests {
         let changes = [
             ("/object/restart", format!("{target}}}")),
             ("/cronjob/trigger", format!("{target}}}")),
+            ("/debug", r#"{"kind":"node","node":"n1"}"#.to_owned()),
             ("/cronjob/suspend", format!(r#"{target},"suspend":true}}"#)),
             ("/replicaset/rollback", format!("{target}}}")),
             (

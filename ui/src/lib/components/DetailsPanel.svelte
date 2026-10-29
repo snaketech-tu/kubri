@@ -13,10 +13,10 @@
 </script>
 
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { parse, stringify } from 'yaml';
 	import { canEdit, save } from '../actions';
-	import { backend, type EventInfo, type KubeObject, type Preview, type Reference } from '../api';
+	import { backend, type EventInfo, type KubeObject, type Preview, type Reference, type TerminalMode } from '../api';
 	import { errorMessage } from '../format';
 	import { drafts } from '../navigation.svelte';
 	import { containerNames, hasLogs, hasUsers, isPods } from '../pods';
@@ -94,7 +94,10 @@
 	// Logs and shells keep running in the background once opened, until another object is shown.
 	let opened = $state({ logs: false, shell: false });
 	/** Containers picked in Describe, for the logs and the shell to switch to. */
-	let picked = $state<{ logs: { name: string; previous?: boolean } | null; shell: { name: string } | null }>({
+	let picked = $state<{
+		logs: { name: string; previous?: boolean } | null;
+		shell: { name: string; mode?: TerminalMode } | null;
+	}>({
 		logs: null,
 		shell: null
 	});
@@ -102,6 +105,16 @@
 		void details.target;
 		opened = { logs: false, shell: false };
 		picked = { logs: null, shell: null };
+	});
+
+	// A container asked for when the panel opened, such as a debug container just started.
+	$effect(() => {
+		const name = details.container;
+		if (!name) return;
+		untrack(() => {
+			picked.shell = { name, mode: details.mode };
+			details.container = undefined;
+		});
 	});
 
 	function openContainer(name: string, tab: 'logs' | 'shell') {

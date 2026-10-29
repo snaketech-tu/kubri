@@ -30,7 +30,7 @@
 	} from '../pods';
 	import { app, type Dialog } from '../state.svelte';
 
-	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' }> } = $props();
+	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' }> } = $props();
 
 	let busy = $state(false);
 	let error = $state<string | null>(null);

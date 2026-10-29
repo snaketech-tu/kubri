@@ -6,6 +6,7 @@
 mod access;
 mod bench;
 mod context;
+mod debug;
 pub mod diagnose;
 mod discovery;
 mod error;
@@ -59,6 +60,7 @@ pub use bench::{
     BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
 };
 pub use context::{ContextInfo, write_in_cluster_kubeconfig};
+pub use debug::{DebugRequest, DebugSession, DebugSettings};
 pub use error::{Error, Result};
 pub use explain::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject, Provider};
 pub use health::Health;
@@ -1253,7 +1255,8 @@ impl Kubri {
         session.ensure_may("create", target, subresource).await?;
         let api = session.pod_api(target.namespace.as_deref())?;
         let pod = api.get(&target.name).await?;
-        terminal::open(api, &pod, options).await
+        let terminal = terminal::open(api.clone(), &pod, options).await?;
+        Ok(debug::end_with_terminal(api, &pod, terminal))
     }
 
     /// Running port-forwards, of every context.
