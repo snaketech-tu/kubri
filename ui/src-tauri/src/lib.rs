@@ -90,6 +90,28 @@ async fn reload_contexts(kubri: State<'_, Arc<Kubri>>) -> CommandResult<ContextL
 }
 
 #[tauri::command]
+async fn inspect_kubeconfig(
+    kubri: State<'_, Arc<Kubri>>,
+    text: String,
+) -> CommandResult<Vec<kubri_core::NewContext>> {
+    kubri.inspect_kubeconfig(&text).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn add_contexts(
+    kubri: State<'_, Arc<Kubri>>,
+    text: String,
+    names: Vec<String>,
+) -> CommandResult<ContextList> {
+    kubri.add_contexts(&text, &names).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn remove_context(kubri: State<'_, Arc<Kubri>>, name: String) -> CommandResult<ContextList> {
+    kubri.remove_context(&name).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn switch_context(kubri: State<'_, Arc<Kubri>>, name: String) -> CommandResult<ClusterInfo> {
     kubri.switch_context(&name).await.map_err(|e| e.to_string())
 }
@@ -995,6 +1017,9 @@ pub fn run() {
             renew_certificate,
             right_sizing,
             fleet_cluster,
+            inspect_kubeconfig,
+            add_contexts,
+            remove_context,
             get_object_elsewhere,
             set_resources,
             xray,

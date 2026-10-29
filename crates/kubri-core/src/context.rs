@@ -16,6 +16,8 @@ pub struct ContextInfo {
     pub namespace: Option<String>,
     /// The kubeconfig's `current-context`.
     pub is_default: bool,
+    /// Added in Kubri rather than in the user's kubeconfig, so Kubri can remove it.
+    pub added: bool,
 }
 
 /// Inside a pod without a kubeconfig, writes one for the pod's service account, with the
@@ -84,7 +86,10 @@ fn in_cluster(host: &str, port: &str, dir: &Path) -> Option<serde_json::Value> {
     }))
 }
 
-pub(crate) fn list_contexts(kubeconfig: &Kubeconfig) -> Vec<ContextInfo> {
+pub(crate) fn list_contexts(
+    kubeconfig: &Kubeconfig,
+    added: &std::collections::HashSet<String>,
+) -> Vec<ContextInfo> {
     let default = kubeconfig.current_context.as_deref();
     let mut contexts: Vec<ContextInfo> = kubeconfig
         .contexts
@@ -97,6 +102,7 @@ pub(crate) fn list_contexts(kubeconfig: &Kubeconfig) -> Vec<ContextInfo> {
                 user: ctx.and_then(|c| c.user.clone()),
                 namespace: ctx.and_then(|c| c.namespace.clone()),
                 is_default: Some(named.name.as_str()) == default,
+                added: added.contains(&named.name),
             }
         })
         .collect();
@@ -136,7 +142,7 @@ contexts:
 
         let json = in_cluster("10.96.0.1", "443", &dir).unwrap().to_string();
         let kubeconfig = Kubeconfig::from_yaml(&json).unwrap();
-        let contexts = list_contexts(&kubeconfig);
+        let contexts = list_contexts(&kubeconfig, &Default::default());
         assert_eq!(contexts[0].name, "in-cluster");
         assert_eq!(contexts[0].namespace.as_deref(), Some("kubri"));
         assert!(contexts[0].is_default);
@@ -165,7 +171,7 @@ contexts:
     #[test]
     fn lists_contexts_sorted_with_default_marked() {
         let kubeconfig = Kubeconfig::from_yaml(KUBECONFIG).unwrap();
-        let contexts = list_contexts(&kubeconfig);
+        let contexts = list_contexts(&kubeconfig, &Default::default());
         assert_eq!(contexts.len(), 2);
         assert_eq!(contexts[0].name, "dev");
         assert!(!contexts[0].is_default);

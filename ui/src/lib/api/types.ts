@@ -8,6 +8,20 @@ export interface ContextInfo {
 	user: string | null;
 	namespace: string | null;
 	isDefault: boolean;
+	/** Added in Kubri rather than in your kubeconfig, so Kubri can remove it. */
+	added: boolean;
+}
+
+/** One context of a kubeconfig about to be added. */
+export interface NewContext {
+	name: string;
+	server: string | null;
+	user: string | null;
+	namespace: string | null;
+	/** The command it runs to sign in, like `aws`. */
+	exec: string | null;
+	/** Why it cannot be added. */
+	problem: string | null;
 }
 
 export interface ClusterInfo {
@@ -32,6 +46,10 @@ export interface ContextSettings {
 	locked: boolean;
 	/** The namespace shown after connecting; empty for all. */
 	namespace: string;
+	/** The only namespaces to show; empty for all. */
+	namespaces: string[];
+	/** Namespaces to show by label, like `team=shop`, when `namespaces` is empty. */
+	namespaceSelector: string;
 	/** AI agents may change this context, each change confirmed in Kubri. Never on production. */
 	agentWrites: boolean;
 	/** Port-forwards that start when Kubri connects to this context. */
@@ -1098,6 +1116,12 @@ export interface PluginRun {
 export interface Backend {
 	contexts(): Promise<ContextList>;
 	reloadContexts(): Promise<ContextList>;
+	/** The contexts of a kubeconfig the user picked, and why any cannot be added. */
+	inspectKubeconfig(text: string): Promise<NewContext[]>;
+	/** Adds contexts from a kubeconfig to Kubri's own list; the user's files stay as they are. */
+	addContexts(text: string, names: string[]): Promise<ContextList>;
+	/** Removes a context added in Kubri. */
+	removeContext(name: string): Promise<ContextList>;
 	switchContext(name: string): Promise<ClusterInfo>;
 	resources(): Promise<ResourceInfo[]>;
 	/** Whether each check is allowed; null where the API server cannot say. */

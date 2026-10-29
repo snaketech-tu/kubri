@@ -383,6 +383,8 @@ async fn run_with(args: &[&str], context: &str, stdin: Option<&str>) -> Result<S
         .args(args)
         // One argument, so a context name starting with a dash cannot pass for a flag.
         .arg(format!("--kube-context={context}"))
+        // The user's kubeconfig files and the contexts added in Kubri.
+        .env("KUBECONFIG", crate::kubeconfig::env_value())
         .stdin(if stdin.is_some() {
             std::process::Stdio::piped()
         } else {

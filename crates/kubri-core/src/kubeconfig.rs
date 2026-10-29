@@ -21,6 +21,43 @@ const EXEC_V1ALPHA1: &str = "client.authentication.k8s.io/v1alpha1";
 /// Loads the files listed in `KUBECONFIG`, merged with the first one winning, or
 /// `~/.kube/config`. Listed files that do not exist are skipped, as in kubectl.
 pub(crate) fn read() -> Result<Kubeconfig, String> {
+    let base = read_own();
+    let added = crate::added::files();
+    if added.is_empty() {
+        return base;
+    }
+    let added = read_files(&added);
+    match (base, added) {
+        (Ok(base), Ok(added)) => base.merge(added).map_err(|e| e.to_string()),
+        (Ok(base), Err(err)) => {
+            tracing::warn!("contexts added in Kubri are left out: {err}");
+            Ok(base)
+        }
+        // Without a kubeconfig of their own, the contexts added in Kubri are all there is.
+        (Err(err), Ok(added)) => {
+            tracing::warn!("{err}");
+            Ok(added)
+        }
+        (Err(err), Err(_)) => Err(err),
+    }
+}
+
+/// The value of `KUBECONFIG` for helm and k9s plugins: the user's files, then the contexts
+/// added in Kubri.
+pub(crate) fn env_value() -> std::ffi::OsString {
+    let mut paths: Vec<PathBuf> = match std::env::var_os("KUBECONFIG").filter(|v| !v.is_empty()) {
+        Some(value) => std::env::split_paths(&value).collect(),
+        None => dirs::home_dir()
+            .map(|h| h.join(".kube").join("config"))
+            .into_iter()
+            .collect(),
+    };
+    paths.extend(crate::added::files());
+    std::env::join_paths(paths).unwrap_or_default()
+}
+
+/// The user's own kubeconfig: the files in `KUBECONFIG`, or `~/.kube/config`.
+fn read_own() -> Result<Kubeconfig, String> {
     let mut paths: Vec<PathBuf> = Vec::new();
     if let Some(value) = std::env::var_os("KUBECONFIG") {
         for path in std::env::split_paths(&value) {

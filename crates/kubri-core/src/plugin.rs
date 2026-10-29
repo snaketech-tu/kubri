@@ -531,6 +531,7 @@ mod tests {
             user: Some("admin".into()),
             namespace: None,
             is_default: true,
+            added: false,
         };
         let pods = resource("", "pods", "Pod", &["po"]);
         let run = PluginRun {

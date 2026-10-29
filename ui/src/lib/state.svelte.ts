@@ -111,6 +111,8 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 	readOnly: false,
 	locked: false,
 	namespace: '',
+	namespaces: [],
+	namespaceSelector: '',
 	agentWrites: false,
 	forwards: [],
 	integrations: { prometheus: '', grafana: '', grafanaToken: '', loki: '' }

@@ -20,7 +20,7 @@ use kubri_core::{
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
 use kubri_core::{Charts, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
-use kubri_core::{FleetCluster, GitOpsAction, Manager, RightSizing};
+use kubri_core::{FleetCluster, GitOpsAction, Manager, NewContext, RightSizing};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -30,6 +30,8 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
     Router::new()
         .route("/contexts", get(contexts))
         .route("/contexts/reload", post(reload))
+        .route("/contexts/inspect", post(inspect_kubeconfig))
+        .route("/contexts/added", post(add_contexts).delete(remove_context))
         .route("/context", put(switch_context))
         .route("/settings", get(settings))
         .route("/settings/context", put(set_context_settings))
@@ -162,6 +164,43 @@ async fn contexts(State(kubri): State<Arc<Kubri>>) -> ApiResult<ContextList> {
 
 async fn reload(State(kubri): State<Arc<Kubri>>) -> ApiResult<ContextList> {
     Ok(Json(kubri.reload().await?))
+}
+
+#[derive(Deserialize)]
+struct KubeconfigText {
+    text: String,
+}
+
+async fn inspect_kubeconfig(
+    State(kubri): State<Arc<Kubri>>,
+    Json(body): Json<KubeconfigText>,
+) -> ApiResult<Vec<NewContext>> {
+    Ok(Json(kubri.inspect_kubeconfig(&body.text).await?))
+}
+
+#[derive(Deserialize)]
+struct AddContexts {
+    text: String,
+    names: Vec<String>,
+}
+
+async fn add_contexts(
+    State(kubri): State<Arc<Kubri>>,
+    Json(body): Json<AddContexts>,
+) -> ApiResult<ContextList> {
+    Ok(Json(kubri.add_contexts(&body.text, &body.names).await?))
+}
+
+#[derive(Deserialize)]
+struct ContextName {
+    name: String,
+}
+
+async fn remove_context(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<ContextName>,
+) -> ApiResult<ContextList> {
+    Ok(Json(kubri.remove_context(&query.name).await?))
 }
 
 #[derive(Deserialize)]
