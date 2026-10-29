@@ -48,7 +48,7 @@ These were settled with the project owner before writing the plan:
 | Release | Theme | Main items | Effort |
 | --- | --- | --- | --- |
 | 0.3 ✅ | Work safely | Context colors and guard rails, permission-aware actions, copy as kubectl, dry-run diffs, editor help | 3 to 4 weeks |
-| 0.4 | AI | MCP server, Explain action | 2 to 3 weeks |
+| 0.4 ✅ | AI | MCP server, Explain action | 2 to 3 weeks |
 | 0.5 | Logs and debugging | Log workspace tabs, structured logs, debug containers, node shell, fixes from the likely problem | 4 to 5 weeks |
 | 0.6 | Create and change | Create from YAML, clone, `:new`, Helm install and upgrade, columns, port-forward favorites | 3 to 4 weeks |
 | 0.7 | Integrations | Prometheus charts, Grafana, Loki, Flux, Argo CD, cert-manager, right-sizing | 5 to 6 weeks |
