@@ -54,6 +54,11 @@
 			<span class="label">Overview</span>
 			<span class="hint">:pulses</span>
 		</button>
+		<button class:active={app.page === 'create'} onclick={() => app.showCreate()} title=":new">
+			<Icon name="plus" />
+			<span class="label">Create</span>
+			<span class="hint">:new</span>
+		</button>
 		{#each sections as section (section.title)}
 			<h3>{section.title}</h3>
 			{#each section.items as { resource, label, icon } (resource.plural)}

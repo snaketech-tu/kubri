@@ -9,7 +9,9 @@
 		maxHeight = '360px'
 	}: { before: unknown; after: unknown; maxHeight?: string } = $props();
 
-	const lines = $derived(diffLines(stringify(before, { lineWidth: 0 }), stringify(after, { lineWidth: 0 })));
+	// Nothing before, as for an object about to be created, is no lines rather than `null`.
+	const text = (value: unknown) => (value == null ? '' : stringify(value, { lineWidth: 0 }));
+	const lines = $derived(diffLines(text(before), text(after)));
 	const parts = $derived(fold(lines));
 	const added = $derived(lines.filter((l) => l.kind === 'added').length);
 	const removed = $derived(lines.filter((l) => l.kind === 'removed').length);

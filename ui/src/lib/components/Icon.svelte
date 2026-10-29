@@ -48,6 +48,7 @@
 		split: 'M4 4h16v16H4zM12 4v16',
 		dockBottom: 'M4 4h16v16H4zM4 14h16',
 		dockRight: 'M4 4h16v16H4zM14 4v16',
+		plus: 'M12 5v14M5 12h14',
 		popout: 'M14 4h6v6M20 4l-8 8M18 14v6H4V6h6',
 		download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
 		keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10'

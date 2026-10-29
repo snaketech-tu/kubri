@@ -111,6 +111,32 @@ export interface ServiceCheck {
 	near: { name: string; differences: string[] }[];
 }
 
+/** Objects to create or change from YAML, as `kubectl apply --server-side` does. */
+export interface ApplyRequest {
+	objects: unknown[];
+	/** For namespaced objects that name none. */
+	namespace?: string | null;
+	/** Only a server-side dry run: nothing changes. */
+	dryRun?: boolean;
+	context?: string | null;
+}
+
+export type ApplyOutcome = 'created' | 'changed' | 'unchanged' | 'unchecked' | 'failed';
+
+/** What happened, or would happen, to one object. */
+export interface ApplyItem {
+	/** Its place in the request. */
+	index: number;
+	kind: string;
+	name: string;
+	namespace: string | null;
+	target: ObjectRef | null;
+	outcome: ApplyOutcome;
+	before: KubeObject | null;
+	after: KubeObject | null;
+	message: string | null;
+}
+
 /** Where to connect once the debug container runs. */
 export interface DebugSession {
 	pod: ObjectRef;
@@ -877,6 +903,10 @@ export interface Backend {
 	scheduling(target: ObjectRef): Promise<NodeFit[]>;
 	/** Which pods a Service picks. */
 	serviceCheck(target: ObjectRef): Promise<ServiceCheck>;
+	/** Applies objects in dependency order, or with `dryRun` shows what would change. */
+	apply(request: ApplyRequest): Promise<ApplyItem[]>;
+	/** Reads YAML from an http(s) address. */
+	fetchManifest(url: string): Promise<string>;
 	/** Where Enter leads from an object; null when it has nowhere to go but its details. */
 	drill(target: ObjectRef): Promise<Drill | null>;
 	/** What uses a ConfigMap, Secret, PVC, ServiceAccount or PriorityClass, like k9s `u`. */

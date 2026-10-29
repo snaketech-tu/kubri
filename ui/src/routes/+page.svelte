@@ -16,6 +16,7 @@
 	import ConfigView from '#lib/components/ConfigView.svelte';
 	import ContextSettingsForm from '#lib/components/ContextSettingsForm.svelte';
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
+	import CreateView from '#lib/components/CreateView.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
 	import Dock from '#lib/components/Dock.svelte';
 	import DebugDialog from '#lib/components/DebugDialog.svelte';
@@ -191,6 +192,9 @@
 				...panel,
 				['?', 'help']
 			] as [string, string][];
+		}
+		if (app.page === 'create') {
+			return [[':', 'command'], ['^s', 'review'], ['esc', 'back to editing'], ['?', 'help']] as [string, string][];
 		}
 		if (app.page === 'config') {
 			return [[':', 'command'], ['⇧r', 'reload'], ['?', 'help']] as [string, string][];
@@ -452,7 +456,9 @@
 						{#key `${app.cluster?.context}/${app.namespace}`}
 							<RbacView />
 						{/key}
-					{:else if app.page === 'helm'}
+					{:else if app.page === 'create'}
+					<CreateView />
+				{:else if app.page === 'helm'}
 						{#key `${app.cluster?.context}/${app.namespace}`}
 							<HelmView />
 						{/key}

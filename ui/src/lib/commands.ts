@@ -1,4 +1,5 @@
 import type { Alias, ContextInfo, ResourceInfo } from './api';
+import { CORE_GROUPS, parseShortForm, TEMPLATE_KINDS, type TemplateParams } from './create';
 import { xrayResources } from './xray';
 
 export type ConfigSection = 'contexts' | 'diffs' | 'agents' | 'explain' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
@@ -20,6 +21,7 @@ export type Action =
 	| { type: 'xray'; resource: ResourceInfo; namespace?: string }
 	| { type: 'rbac'; namespace?: string }
 	| { type: 'helm'; namespace?: string }
+	| { type: 'new'; resource?: ResourceInfo; params?: TemplateParams }
 	| { type: 'sanitizer'; namespace?: string }
 	| { type: 'benchmarks' }
 	| { type: 'config'; section?: ConfigSection }
@@ -39,6 +41,7 @@ const PULSE_COMMANDS = ['pu', 'pulse', 'pulses'];
 const XRAY_COMMANDS = ['xray'];
 const RBAC_COMMANDS = ['rbac', 'policy', 'subjects'];
 const HELM_COMMANDS = ['helm', 'hm', 'chart', 'charts'];
+const NEW_COMMANDS = ['new', 'create', 'apply'];
 const SANITIZER_COMMANDS = ['popeye', 'pop', 'sanitizer', 'sanitize'];
 const BENCH_COMMANDS = ['be', 'bench', 'benchmark', 'benchmarks'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
@@ -266,6 +269,32 @@ function builtins(
 	};
 	if (XRAY_COMMANDS.includes(cmd)) return xray(rest[0] ?? '', rest[1]);
 
+	const blank: Suggestion = {
+		label: 'new',
+		detail: 'Create objects from a template, a file, a URL or the clipboard',
+		action: { type: 'new' }
+	};
+	// `new deploy web --image nginx --replicas 3`, like kubectl create.
+	if (NEW_COMMANDS.includes(cmd)) {
+		const form = parseShortForm(input.trim().replace(/^:/, '').slice(command.length));
+		const creatable = resources.filter((r) => r.verbs.includes('create') && !r.plural.includes('/'));
+		if (!form) {
+			const common = TEMPLATE_KINDS.flatMap((k) => creatable.filter((r) => r.kind === k && CORE_GROUPS.includes(r.group)).slice(0, 1));
+			return [
+				{ ...blank, label: cmd },
+				...common.map((r): Suggestion => ({ label: `${cmd} ${r.singular || r.kind.toLowerCase()}`, detail: `New ${r.kind}`, action: { type: 'new', resource: r } }))
+			];
+		}
+		const more = rest.slice(1).join(' ');
+		return matchResources(form.kind, creatable)
+			.slice(0, 8)
+			.map((r): Suggestion => ({
+				label: [cmd, r.singular || r.kind.toLowerCase(), more].filter(Boolean).join(' '),
+				detail: `New ${r.kind}${form.params.name ? ` ${form.params.name}` : ''}${r.group ? ` · ${r.group}` : ''}`,
+				action: { type: 'new', resource: r, params: form.params }
+			}));
+	}
+
 	if (CONTEXT_COMMANDS.includes(cmd)) {
 		return contexts
 			.filter((c) => c.name.toLowerCase().includes(arg))
@@ -309,6 +338,7 @@ function builtins(
 	if (cmd && 'xray'.startsWith(cmd)) extra.push(...xray('').slice(0, 3));
 	if (cmd && RBAC_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(rbac());
 	if (cmd && HELM_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(helm());
+	if (cmd && NEW_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(blank);
 	if (cmd && SANITIZER_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sanitizer());
 	if (cmd && BENCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(benchmarks);
 	if (cmd.length > 1 && 'config'.startsWith(cmd) && cmd !== 'config') {

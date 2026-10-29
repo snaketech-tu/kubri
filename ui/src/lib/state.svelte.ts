@@ -1,5 +1,7 @@
 import { drafts } from './navigation.svelte';
 import { access } from './access.svelte';
+import { creating } from './create.svelte';
+import type { TemplateParams } from './create';
 import { dock } from './dock.svelte';
 import {
 	backend,
@@ -147,6 +149,7 @@ export type Page =
 	| 'xray'
 	| 'rbac'
 	| 'helm'
+	| 'create'
 	| 'sanitizer'
 	| 'config';
 
@@ -635,6 +638,9 @@ class AppState {
 			case 'helm':
 				this.showHelm(action.namespace);
 				break;
+			case 'new':
+				this.showCreate(action.resource, action.params);
+				break;
 			case 'sanitizer':
 				this.showSanitizer(action.namespace);
 				break;
@@ -694,6 +700,17 @@ class AppState {
 		this.page = 'rbac';
 		this.details = null;
 		this.setNamespace(namespace);
+	}
+
+	/** The Create page; with `resource`, starting from its template, like `:new deploy web --image nginx`. */
+	showCreate(resource?: ResourceInfo, params: TemplateParams = {}) {
+		if (drafts.block(() => this.showCreate(resource, params))) return;
+		this.page = 'create';
+		this.details = null;
+		if (resource) {
+			const namespace = params.namespace ?? (resource.namespaced && this.namespace ? this.namespace : undefined);
+			creating.start(resource, { ...params, namespace });
+		}
 	}
 
 	/** Helm releases, like k9s `:helm`. */
