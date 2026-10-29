@@ -2,6 +2,7 @@ import {
 	backend,
 	type ContainerImage,
 	type DeleteOptions,
+	type GitOpsAction,
 	type Hotkey,
 	type KubeObject,
 	type ObjectRef,
@@ -103,6 +104,21 @@ export function suspendCronJob(target: ObjectRef, suspend: boolean) {
 	return runAction(suspend ? `Suspended ${label(target)}` : `Resumed ${label(target)}`, () =>
 		backend.suspendCronJob(target, suspend)
 	);
+}
+
+const GITOPS_DONE: Record<GitOpsAction, string> = {
+	reconcile: 'Asked Flux to reconcile',
+	suspend: 'Suspended',
+	resume: 'Resumed',
+	sync: 'Started a sync of',
+	refresh: 'Asked Argo CD to compare again',
+	autoSyncOff: 'Turned auto-sync off for',
+	autoSyncOn: 'Turned auto-sync on for'
+};
+
+/** A Flux or Argo CD action, as their CLIs run it. */
+export function runGitOps(target: ObjectRef, action: GitOpsAction) {
+	return runAction(`${GITOPS_DONE[action]} ${label(target)}`, () => backend.gitops(target, action));
 }
 
 export function setImages(target: ObjectRef, images: ContainerImage[]) {

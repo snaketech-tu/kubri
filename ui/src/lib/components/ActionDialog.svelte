@@ -8,6 +8,7 @@
 		pluginCommand,
 		restart,
 		rollback,
+		runGitOps,
 		scale,
 		setImages,
 		startPortForward,
@@ -19,6 +20,7 @@
 	import { helmCommand, kubectlCommand } from '../kubectl';
 	import DiffView from './DiffView.svelte';
 	import HelmCompare from './HelmCompare.svelte';
+	import ManagedNote from './ManagedNote.svelte';
 	import { errorMessage } from '../format';
 	import { inputError, inputVariables } from '../k9s';
 	import {
@@ -34,6 +36,28 @@
 	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' }> } = $props();
 
 	let busy = $state(false);
+
+	/** Whether Argo CD's auto-sync is on now, for the action that turns it off or on. */
+	let autoSync = $state<{ on: boolean; options: string[] } | null>(null);
+	$effect(() => {
+		if (dialog.kind !== 'gitops' || dialog.action !== 'autoSync') return;
+		const target = dialog.target;
+		backend.getObject(target).then(
+			(app) => {
+				const automated = (app.spec as { syncPolicy?: { automated?: Record<string, unknown> | null } } | undefined)?.syncPolicy?.automated;
+				const on = !!automated && automated.enabled !== false;
+				autoSync = { on, options: on ? ['selfHeal', 'prune'].filter((k) => automated![k]) : [] };
+			},
+			(err) => (error = errorMessage(err))
+		);
+	});
+	const GITOPS_TITLES: Record<string, string> = {
+		reconcile: 'Reconcile',
+		suspend: 'Suspend',
+		resume: 'Resume',
+		sync: 'Sync',
+		refresh: 'Refresh'
+	};
 	let error = $state<string | null>(null);
 	let confirmButton = $state<HTMLButtonElement>();
 	let firstField = $state<HTMLInputElement | HTMLTextAreaElement>();
@@ -332,6 +356,11 @@
 				case 'suspend':
 					ok = await suspendCronJob(dialog.target, dialog.suspend);
 					break;
+				case 'gitops': {
+					const action = dialog.action === 'autoSync' ? (autoSync?.on ? 'autoSyncOff' : 'autoSyncOn') : dialog.action;
+					ok = await runGitOps(dialog.target, action);
+					break;
+				}
 				case 'rollback':
 					ok = await rollback(dialog.target);
 					break;
@@ -544,6 +573,8 @@
 				return 'Run CronJob now';
 			case 'suspend':
 				return dialog.suspend ? 'Suspend CronJob' : 'Resume CronJob';
+			case 'gitops':
+				return dialog.action === 'autoSync' ? 'Auto-sync' : `${GITOPS_TITLES[dialog.action]} ${dialog.resource.kind}`;
 			case 'image':
 				return 'Set image';
 			case 'rollback':
@@ -557,6 +588,12 @@
 			? dialog.suspend
 				? 'Suspend'
 				: 'Resume'
+			: dialog.kind === 'gitops'
+				? dialog.action === 'autoSync'
+					? autoSync?.on
+						? 'Turn off'
+						: 'Turn on'
+					: GITOPS_TITLES[dialog.action]
 			: {
 					delete: 'Delete',
 					scale: 'Scale',
@@ -626,6 +663,12 @@
 			? `${dialog.targets.length} selected`
 			: 'Review the target before you continue'}
 	</p>
+
+	{#if dialog.kind === 'scale' || dialog.kind === 'restart' || dialog.kind === 'image' || dialog.kind === 'labels' || dialog.kind === 'memory'}
+		<ManagedNote target={dialog.target} compact />
+	{:else if dialog.kind === 'delete' && dialog.targets.length === 1}
+		<ManagedNote target={dialog.targets[0]} compact />
+	{/if}
 
 	{#if dialog.kind === 'delete'}
 		<p>
@@ -871,6 +914,33 @@
 		{:else}
 			<p>Resume <strong>{name(dialog.target)}</strong>? It starts Jobs on its schedule again.</p>
 		{/if}
+	{:else if dialog.kind === 'gitops'}
+		{#if dialog.action === 'suspend'}
+			<p>
+				Suspend <strong>{name(dialog.target)}</strong>? Flux stops reconciling it, so changes in its source are not applied and
+				changes by hand are not put back, until it is resumed.
+			</p>
+		{:else if dialog.action === 'resume'}
+			<p>Resume <strong>{name(dialog.target)}</strong>? Flux reconciles it now and on its interval again, putting back changes made by hand.</p>
+		{:else if dialog.action === 'sync'}
+			<p>
+				Sync <strong>{name(dialog.target)}</strong> to its target revision? Argo CD applies what Git says, running its sync hooks,
+				as argocd app sync does.
+			</p>
+		{:else if dialog.action === 'autoSync'}
+			{#if !autoSync}
+				<p class="muted">Reading the Application…</p>
+			{:else if autoSync.on}
+				<p>
+					Auto-sync of <strong>{name(dialog.target)}</strong> is on{autoSync.options.length
+						? ` (${autoSync.options.map((o) => (o === 'selfHeal' ? 'self-heal' : o)).join(', ')})`
+						: ''}. Turn it off? Argo CD then applies changes from Git only when someone syncs, and leaves changes by hand
+					alone. Kubri keeps the settings to turn it on again as it was.
+				</p>
+			{:else}
+				<p>Turn auto-sync of <strong>{name(dialog.target)}</strong> on? Argo CD then applies changes from Git by itself.</p>
+			{/if}
+		{/if}
 	{:else if dialog.kind === 'rollback'}
 		<p>
 			Roll the Deployment of <strong>{name(dialog.target)}</strong> back to this ReplicaSet? Its pods get the
@@ -948,7 +1018,7 @@
 			class="primary"
 			class:danger
 			bind:this={confirmButton}
-			disabled={busy || !confirmed}
+			disabled={busy || !confirmed || (dialog.kind === 'gitops' && dialog.action === 'autoSync' && !autoSync)}
 			onclick={confirm}
 		>
 			{busy ? 'Working…' : report ? 'Close' : needsPreview ? 'Review changes' : confirmLabel}

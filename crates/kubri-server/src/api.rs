@@ -20,6 +20,7 @@ use kubri_core::{
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
 use kubri_core::{Charts, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
+use kubri_core::{GitOpsAction, Manager};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -70,6 +71,8 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/object/images", post(set_images))
         .route("/cronjob/trigger", post(trigger_cronjob))
         .route("/cronjob/suspend", post(suspend_cronjob))
+        .route("/gitops", post(gitops))
+        .route("/object/managed-by", post(managed_by))
         .route("/replicaset/rollback", post(rollback))
         .route("/events", get(events))
         .route("/metrics", get(metrics))
@@ -537,6 +540,20 @@ struct Suspend {
 
 async fn suspend_cronjob(State(kubri): State<Arc<Kubri>>, Json(req): Json<Suspend>) -> ApiResult<()> {
     Ok(Json(kubri.suspend_cronjob(&req.target, req.suspend).await?))
+}
+
+#[derive(Deserialize)]
+struct GitOps {
+    target: ObjectRef,
+    action: GitOpsAction,
+}
+
+async fn gitops(State(kubri): State<Arc<Kubri>>, Json(req): Json<GitOps>) -> ApiResult<()> {
+    Ok(Json(kubri.gitops(&req.target, req.action).await?))
+}
+
+async fn managed_by(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Option<Manager>> {
+    Ok(Json(kubri.managed_by(&req.target).await?))
 }
 
 #[derive(Deserialize)]
@@ -1191,6 +1208,7 @@ mod tests {
                 format!(r#"{target},"container":"app","memory":"1Gi"}}"#),
             ),
             ("/cronjob/suspend", format!(r#"{target},"suspend":true}}"#)),
+            ("/gitops", format!(r#"{target},"action":"reconcile"}}"#)),
             ("/replicaset/rollback", format!("{target}}}")),
             (
                 "/object/images",

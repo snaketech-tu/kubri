@@ -112,6 +112,19 @@ export interface Dashboards {
 	note: string | null;
 }
 
+export type GitOpsAction = 'reconcile' | 'suspend' | 'resume' | 'sync' | 'refresh' | 'autoSyncOff' | 'autoSyncOn';
+
+/** The Flux or Argo CD object that manages another. */
+export interface Manager {
+	tool: 'Flux' | 'Argo CD';
+	owner: ObjectRef;
+	kind: string;
+	/** Changes by hand are put back on its next reconcile or right away. */
+	reverts: boolean;
+	/** It does not reconcile now: suspended, or auto-sync off. */
+	paused: boolean;
+}
+
 export interface LokiRequest {
 	target: ObjectRef;
 	/** LogQL; the object's own query when left out. */
@@ -1100,6 +1113,10 @@ export interface Backend {
 	/** Runs a CronJob now; returns the Job's name. */
 	triggerCronJob(target: ObjectRef): Promise<string>;
 	suspendCronJob(target: ObjectRef, suspend: boolean): Promise<void>;
+	/** A Flux or Argo CD action, as their CLIs run it. */
+	gitops(target: ObjectRef, action: GitOpsAction): Promise<void>;
+	/** The Flux or Argo CD object that manages an object, if any. */
+	managedBy(target: ObjectRef): Promise<Manager | null>;
 	setImages(target: ObjectRef, images: ContainerImage[]): Promise<void>;
 	/** Rolls a ReplicaSet's Deployment back to it; returns the Deployment's name. */
 	rollback(target: ObjectRef): Promise<string>;

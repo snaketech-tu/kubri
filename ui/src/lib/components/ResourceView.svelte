@@ -14,7 +14,7 @@
 	import { filterRows, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
 	import { navPlace } from '../nav';
-	import { NO_COLUMNS, isShown, kindKey, ordered, pathsOf } from '../columns';
+	import { columnsFor, defaultColumns, isShown, kindKey, ordered, pathsOf } from '../columns';
 	import ActionBar from './ActionBar.svelte';
 	import ColumnChooser from './ColumnChooser.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
@@ -50,7 +50,7 @@
 
 	/** How this kind's list shows its columns, from the settings. */
 	const columnKey = $derived(kindKey(resource));
-	const columnSettings = $derived(app.settings.columns?.[columnKey] ?? NO_COLUMNS);
+	const columnSettings = $derived(columnsFor(columnKey, app.settings.columns));
 	const paths = $derived(pathsOf(columnSettings));
 	let chooserOpen = $state(false);
 
@@ -362,7 +362,7 @@
 			target: target(row),
 			owners: row.owners,
 			node: isPods(resource) ? cell(row, 'Node') : null,
-			suspended: cell(row, 'Suspend') === 'True'
+			suspended: cell(row, 'Suspend') === 'True' || cell(row, '.spec.suspend') === 'true'
 		};
 	}
 
@@ -645,6 +645,7 @@
 							kind={resource.kind}
 							columns={allColumns}
 							settings={columnSettings}
+							defaults={defaultColumns(columnKey)}
 							{wide}
 							onchange={(next) => app.setColumnSettings(columnKey, next)}
 							onclose={() => (chooserOpen = false)}

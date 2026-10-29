@@ -7,8 +7,8 @@ Kubri finds the tools most clusters run and uses them without setup. Open **Inte
 | Prometheus | A Service like kube-prometheus-stack's `…-prometheus`, `prometheus-server` or `prometheus-operated` | Charts for pods, workloads, nodes and namespaces, and an hour of history in the overview. |
 | Grafana | A Service like `…-grafana` or `grafana` | Links from objects to the dashboards that show them, opened already filtered. |
 | Loki | A Service like `loki`, `loki-gateway` or `loki-read` | Log history beyond a pod's lifetime, in the log workspace. |
-| Flux | The `kustomize.toolkit.fluxcd.io` or `helm.toolkit.fluxcd.io` API group | Lists of Kustomizations, HelmReleases and sources. |
-| Argo CD | The `argoproj.io` Applications | The list of Applications. |
+| Flux | The `kustomize.toolkit.fluxcd.io` or `helm.toolkit.fluxcd.io` API group | State, revision and managed objects of Kustomizations, HelmReleases and sources; reconcile, suspend and resume. |
+| Argo CD | The `argoproj.io` Applications | Sync state, health and managed objects of Applications; sync, refresh and auto-sync. |
 | cert-manager | The `cert-manager.io` API group | Lists of Certificates and issuers. |
 
 Kubri reaches Prometheus, Grafana and Loki through the API server's service proxy, with your kubeconfig's credentials, so nothing has to be exposed or port-forwarded. Your user needs `get` on `services/proxy` in their namespace, which cluster admins have. Only opening Grafana in the browser needs a port-forward, which Kubri starts the first time and keeps under Port-forwards.
@@ -49,6 +49,21 @@ Dashboards come from Grafana's own list and from the ConfigMaps labeled `grafana
 ## Loki
 
 In the log workspace (<kbd>l</kbd>), **Loki history** in the source menu shows what Loki kept over the last 15 minutes to 7 days, including pods that no longer exist. The LogQL field starts with the object's own query (by pod name for pods and workloads, by selector labels for a Service, and the container when one is picked) and runs any other with **Run**. The lines take the same search, levels, fields, table and export as live logs. A query returns at most 5000 lines, the newest; a note at the top says when there were more.
+
+## Flux and Argo CD
+
+Lists of Kustomizations, HelmReleases and Flux sources get **Revision** and **Suspended** columns; Applications get **Revision** and **Last sync**. **Columns** hides them or puts them back.
+
+The overview of a Flux object or an Application says whether it is ready, synced and healthy, why not, and its revision, source and last reconcile or sync. Below that are the objects it manages, from a Kustomization's inventory or an Application's resource list, with those out of sync or unhealthy first; each opens with a click.
+
+| Kind | Actions |
+| --- | --- |
+| Flux objects | **Reconcile** (<kbd>r</kbd>), like `flux reconcile`; **Suspend** and **Resume** (<kbd>s</kbd>), like `flux suspend` and `flux resume` |
+| Argo CD Applications | **Sync** (<kbd>s</kbd>), like `argocd app sync`; **Refresh** (<kbd>r</kbd>), to compare with Git again; **Auto-sync** (<kbd>t</kbd>), to turn automated sync off and on again as it was |
+
+The actions change the objects the controllers watch, the way their CLIs do, so they need `patch` on them and no Flux or Argo CD login.
+
+An object that Flux or Argo CD manages says so in its overview, when it is edited and in the dialogs that change it: which Kustomization, HelmRelease or Application manages it, and whether changes made by hand stay or are put back, at the next reconcile or right away with Argo CD's self-heal. Kubri finds the manager by the labels Flux sets and by Argo CD's tracking annotation or its `app.kubernetes.io/instance` label.
 
 ## AI agents
 

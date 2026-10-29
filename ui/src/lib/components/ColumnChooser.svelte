@@ -7,6 +7,7 @@
 		kind,
 		columns,
 		settings,
+		defaults = NO_COLUMNS,
 		wide,
 		onchange,
 		onclose
@@ -15,6 +16,8 @@
 		/** Every column the list can show, in the order it shows them. */
 		columns: (Arrangeable & { custom?: boolean })[];
 		settings: ColumnSettings;
+		/** What resetting goes back to. */
+		defaults?: ColumnSettings;
 		wide: boolean;
 		onchange: (settings: ColumnSettings) => void;
 		onclose: () => void;
@@ -71,7 +74,7 @@
 <div class="popover" role="dialog" aria-label="Columns for {kind}" tabindex="-1" bind:this={box} {onkeydown}>
 	<div class="head">
 		<strong>Columns for {kind}</strong>
-		<button class="link" onclick={() => onchange(NO_COLUMNS)} disabled={JSON.stringify(settings) === JSON.stringify(NO_COLUMNS)}>
+		<button class="link" onclick={() => onchange(defaults)} disabled={JSON.stringify(settings) === JSON.stringify(defaults)}>
 			Reset
 		</button>
 	</div>
