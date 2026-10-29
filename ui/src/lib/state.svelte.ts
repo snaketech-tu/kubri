@@ -18,6 +18,8 @@ import {
 	type Guard,
 	type MemoryFix,
 	type HelmRelease,
+	type IntegrationId,
+	type Integrations,
 	type K9sConfig,
 	type ObjectRef,
 	type Plugin,
@@ -37,7 +39,7 @@ import { applyScheme, applyTheme, resolveColor, storeSkin, storedScheme, storedS
 
 export const ALL_NAMESPACES = '';
 
-export type DetailsTab = 'describe' | 'events' | 'yaml' | 'logs' | 'shell';
+export type DetailsTab = 'describe' | 'events' | 'yaml' | 'metrics' | 'logs' | 'shell';
 
 export interface Details {
 	target: ObjectRef;
@@ -109,7 +111,8 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 	locked: false,
 	namespace: '',
 	agentWrites: false,
-	forwards: []
+	forwards: [],
+	integrations: { prometheus: '', grafana: '', grafanaToken: '', loki: '' }
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -156,6 +159,7 @@ export type Page =
 	| 'helm'
 	| 'create'
 	| 'sanitizer'
+	| 'integrations'
 	| 'config';
 
 export type Dialog =
@@ -265,6 +269,8 @@ class AppState {
 
 	/** The k9s configuration of the connected context. */
 	k9s = $state<K9sConfig | null>(null);
+	/** The tools the connected cluster runs, like Prometheus or Flux. */
+	integrations = $state<Integrations | null>(null);
 	/** The skin picked for this context: undefined follows k9s, null is Kubri's own colors. */
 	skinChoice = $state<string | null | undefined>(undefined);
 	/** The skin on screen, and why the wanted one is not. */
@@ -664,6 +670,9 @@ class AppState {
 			case 'benchmarks':
 				this.showBenchmarks();
 				break;
+			case 'integrations':
+				this.showIntegrations();
+				break;
 			case 'portforwards':
 				this.showPortForwards();
 				break;
@@ -692,6 +701,13 @@ class AppState {
 			return;
 		}
 		this.details = { resource, target: { ...target, context: this.cluster?.context }, tab, editing: false, ...extra };
+	}
+
+	/** What the cluster runs that Kubri uses: Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager. */
+	showIntegrations() {
+		if (drafts.block(() => this.showIntegrations())) return;
+		this.page = 'integrations';
+		this.details = null;
 	}
 
 	/** The cluster overview, optionally switching namespace like `:pulses kube-system`. */
@@ -874,6 +890,25 @@ class AppState {
 		// Hotkeys, plugins and skins can differ per context.
 		this.loadK9s();
 		this.startFavoriteForwards();
+		this.integrations = null;
+		this.loadIntegrations(false);
+	}
+
+	/** Finds the cluster's tools; `fresh` looks again and asks each whether it answers. */
+	async loadIntegrations(fresh: boolean) {
+		const context = this.cluster?.context;
+		try {
+			const found = await backend.integrations(fresh);
+			if (this.cluster?.context === context) this.integrations = found;
+		} catch {
+			// Without them, Kubri works as before.
+		}
+	}
+
+	/** Whether the cluster runs `id` and Kubri may use it. */
+	has(id: IntegrationId): boolean {
+		const item = this.integrations?.items.find((i) => i.id === id);
+		return !!item && (item.source === 'found' || item.source === 'settings');
 	}
 
 	/** Starts the connected context's favorite port-forwards, as after connecting. */

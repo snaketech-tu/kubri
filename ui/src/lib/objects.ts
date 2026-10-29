@@ -1,6 +1,7 @@
 import { access, need } from './access.svelte';
 import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, startPlugin } from './actions';
 import { backend, type AccessCheck, type ObjectRef, type Owner, type ResourceInfo, type TerminalMode } from './api';
+import { hasCharts } from './charts';
 import { creating } from './create.svelte';
 import { dock } from './dock.svelte';
 import { errorMessage } from './format';
@@ -182,6 +183,7 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	add('View', 'Describe', ['d'], show('describe'), { primary: 5, id: 'describe', needs: on('get'), kubectl: k({ op: 'describe' }) });
 	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get'), kubectl: k({ op: 'yaml' }) });
 	const logs = isPods(resource) ? on('get', 'log') : need('get', pods, ns, { subresource: 'log' });
+	if (hasCharts(resource) && app.has('prometheus')) add('View', 'Metrics', ['m'], show('metrics'), { primary: 9, id: 'metrics' });
 	if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2, id: 'logs', needs: logs, kubectl: k({ op: 'logs', workload: !isPods(resource) }) });
 	const keep = (kind: 'logs' | 'shell', extra: { previous?: boolean; mode?: TerminalMode } = {}) => () =>
 		dock.add({ kind, resource, target: { ...target, context: app.cluster?.context }, ...extra });

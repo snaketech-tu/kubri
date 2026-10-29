@@ -5,12 +5,15 @@
 		samples,
 		format,
 		label,
-		now
+		now,
+		window = HISTORY_MS
 	}: {
 		samples: Sample[];
 		format: (value: number) => string;
 		label: string;
 		now: number;
+		/** How far back the line goes, in milliseconds. */
+		window?: number;
 	} = $props();
 
 	const HEIGHT = 40;
@@ -21,7 +24,7 @@
 	let width = $state(0);
 	let hover = $state<number | null>(null);
 
-	const span = $derived(Math.min(HISTORY_MS, Math.max(MIN_SPAN_MS, samples.length ? now - samples[0].at : 0)));
+	const span = $derived(Math.min(window, Math.max(MIN_SPAN_MS, samples.length ? now - samples[0].at : 0)));
 	// Zero stays at the bottom so the line does not overstate small changes.
 	const top = $derived(Math.max(...samples.map((s) => s.value), 1) * 1.2);
 	const x = (at: number) => PAD + ((at - (now - span)) / span) * (width - 2 * PAD);
@@ -40,7 +43,8 @@
 	function agoText(at: number) {
 		const seconds = Math.round((now - at) / 1000);
 		if (seconds < 5) return 'now';
-		return seconds < 60 ? `${seconds}s ago` : `${Math.floor(seconds / 60)}m ${seconds % 60}s ago`;
+		if (seconds < 60) return `${seconds}s ago`;
+		return seconds < 600 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s ago` : `${Math.round(seconds / 60)}m ago`;
 	}
 
 	// The crosshair snaps to the nearest sample; the pointer never has to hit the line.

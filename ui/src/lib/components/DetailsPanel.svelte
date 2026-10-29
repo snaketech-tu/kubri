@@ -16,6 +16,7 @@
 	import { tick, untrack } from 'svelte';
 	import { parse, stringify } from 'yaml';
 	import { canEdit, save } from '../actions';
+	import { hasCharts } from '../charts';
 	import { backend, type EventInfo, type KubeObject, type Preview, type Reference, type TerminalMode } from '../api';
 	import { dock } from '../dock.svelte';
 	import { errorMessage } from '../format';
@@ -33,6 +34,7 @@
 	import FieldHelp from './FieldHelp.svelte';
 	import Icon from './Icon.svelte';
 	import LogView from './LogView.svelte';
+	import MetricsPanel from './MetricsPanel.svelte';
 	import PodSummary from './PodSummary.svelte';
 	import ServiceSummary from './ServiceSummary.svelte';
 	import TerminalView from './TerminalView.svelte';
@@ -134,6 +136,7 @@
 	});
 
 	const logs = $derived(hasLogs(details.resource, object));
+	const charts = $derived(hasCharts(details.resource) && app.has('prometheus'));
 	// Shells change what runs in the cluster, so read-only leaves them out.
 	const shell = $derived(isPods(details.resource) && !app.readOnly);
 	const containers = $derived(containerNames(object));
@@ -404,7 +407,7 @@
 	});
 
 	/** The tabs show these already. */
-	const TABS = new Set(['describe', 'yaml', 'logs', 'shell', 'usedBy']);
+	const TABS = new Set(['describe', 'yaml', 'metrics', 'logs', 'shell', 'usedBy']);
 
 	const actions = $derived(
 		objectActions(subjectOf(details.resource, details.target, object), {
@@ -485,6 +488,9 @@
 			Events <span class="n" class:alert={warnings}>{events.length}</span>
 		</button>
 		<button class:active={details.tab === 'yaml'} onclick={() => tab('yaml')}>YAML <kbd>y</kbd></button>
+		{#if charts}
+			<button class:active={details.tab === 'metrics'} onclick={() => tab('metrics')}>Metrics <kbd>m</kbd></button>
+		{/if}
 		{#if logs}
 			<button class:active={details.tab === 'logs'} onclick={() => tab('logs')}>Logs <kbd>l</kbd></button>
 		{/if}
@@ -550,6 +556,10 @@
 		{/key}
 		{#if details.tab === 'logs' || details.tab === 'shell'}
 			<!-- Shown above. -->
+		{:else if details.tab === 'metrics' && charts}
+			<div class="scroll">
+				{#key targetKey}<MetricsPanel target={details.target} />{/key}
+			</div>
 		{:else if !object}
 			{#if !error}<p class="muted">Loading…</p>{/if}
 		{:else if details.tab === 'describe'}

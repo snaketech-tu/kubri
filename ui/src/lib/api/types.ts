@@ -36,6 +36,78 @@ export interface ContextSettings {
 	agentWrites: boolean;
 	/** Port-forwards that start when Kubri connects to this context. */
 	forwards: FavoriteForward[];
+	/** Where Prometheus, Grafana and Loki are when not found on their own. */
+	integrations: IntegrationSettings;
+}
+
+/** URLs for the tools; empty finds them in the cluster, `off` turns them off. */
+export interface IntegrationSettings {
+	prometheus: string;
+	grafana: string;
+	/** Sent to a Grafana given by URL. */
+	grafanaToken: string;
+	loki: string;
+}
+
+/** How Kubri reaches a tool: through the API server's service proxy, or at a URL. */
+export type Endpoint =
+	| { via: 'service'; namespace: string; name: string; port: number; https: boolean }
+	| { via: 'url'; url: string };
+
+export type IntegrationId = 'prometheus' | 'grafana' | 'loki' | 'flux' | 'argocd' | 'certManager';
+
+export interface Integration {
+	id: IntegrationId;
+	name: string;
+	endpoint: Endpoint | null;
+	source: 'found' | 'settings' | 'off' | 'missing';
+	/** Reported when Kubri looked again. */
+	version: string | null;
+	/** Why it did not answer. */
+	error: string | null;
+}
+
+export interface Integrations {
+	items: Integration[];
+}
+
+export interface ChartRange {
+	/** Seconds back from `end`. */
+	seconds: number;
+	/** Unix seconds; now when left out. */
+	end?: number;
+}
+
+export interface ChartSeries {
+	name: string;
+	/** `[unix seconds, value]`. */
+	points: [number, number][];
+}
+
+export type ChartUnit = 'millicores' | 'bytes' | 'count' | 'bytesPerSecond' | 'perSecond';
+
+export interface Chart {
+	id: 'cpu' | 'memory' | 'restarts' | 'network' | 'requests';
+	title: string;
+	unit: ChartUnit;
+	series: ChartSeries[];
+	/** Levels drawn across, like a request or limit. */
+	levels: { label: string; value: number }[];
+	/** The PromQL behind it. */
+	query: string;
+}
+
+export interface Charts {
+	/** Where Prometheus is. */
+	source: string;
+	start: number;
+	end: number;
+	step: number;
+	charts: Chart[];
+	/** Rollouts and restarts in the range. */
+	markers: { at: number; label: string }[];
+	/** Charts Prometheus had no data for. */
+	missing: string[];
 }
 
 /** A port-forward that starts whenever Kubri connects to its context, on the same local port. */
@@ -1017,6 +1089,12 @@ export interface Backend {
 	drain(node: string, options: DrainOptions): Promise<DrainReport>;
 	/** The cluster overview; null covers all namespaces. */
 	pulse(namespace: string | null): Promise<Pulse>;
+	/** The tools the cluster runs; `fresh` looks again and asks each whether it answers. */
+	integrations(fresh: boolean): Promise<Integrations>;
+	/** Charts of a pod, workload, node or namespace from Prometheus. */
+	charts(target: ObjectRef, range: ChartRange): Promise<Charts>;
+	/** CPU and memory of a namespace, or the cluster, from Prometheus. */
+	usageHistory(namespace: string | null, seconds: number): Promise<Charts>;
 	/** The XRay trees of every object of `resource`. */
 	xray(resource: ResourceRef, namespace: string | null): Promise<XrayNode[]>;
 	/** Checks the objects of a namespace, or of the whole cluster, like Popeye. */

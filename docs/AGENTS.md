@@ -27,6 +27,8 @@ Settings → AI agents shows the exact command for Claude Code (`claude mcp add 
 | `show_tree` | XRay: workloads down to their pods, containers and what they use. |
 | `can_i` | Whether you may do something, like `kubectl auth can-i`. |
 | `cluster_health` | Pulses: health per kind, usage and recent warnings. |
+| `get_metrics` | CPU, memory, restarts, network and request rates of a pod, workload, node or namespace over the last hours, from Prometheus. |
+| `query_prometheus` | Runs a PromQL query over the last hours; min, average, max and latest per series. |
 | `scale`, `restart`, `set_image`, `delete_object` | Changes, only over HTTP and only where allowed (see below). |
 
 Resources can be named as with kubectl: `pods`, `po`, `deploy`, `deployments.apps` or a kind. Each tool takes an optional `context`; without it, tools work on your kubeconfig's current context. The agent has a Kubri of its own, so switching contexts there never changes the context you have open in Kubri.

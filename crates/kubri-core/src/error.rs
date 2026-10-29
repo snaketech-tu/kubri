@@ -39,6 +39,9 @@ pub enum Error {
     /// The model Explain asked did not answer; the text says why.
     #[error("Explain: {0}")]
     Model(String),
+    /// Prometheus, Grafana or Loki could not be asked; the text says why.
+    #[error("{0}")]
+    Integration(String),
     #[error("{0}")]
     Io(#[from] std::io::Error),
 }

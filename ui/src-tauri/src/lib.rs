@@ -560,6 +560,46 @@ async fn pulse(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> Comma
 }
 
 #[tauri::command]
+async fn integrations(kubri: State<'_, Arc<Kubri>>, fresh: bool) -> CommandResult<kubri_core::Integrations> {
+    kubri.integrations(fresh).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn charts(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+    range: kubri_core::Range,
+) -> CommandResult<kubri_core::Charts> {
+    kubri.charts(&target, range).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn usage_history(
+    kubri: State<'_, Arc<Kubri>>,
+    namespace: Option<String>,
+    seconds: u64,
+) -> CommandResult<kubri_core::Charts> {
+    let range = kubri_core::Range { seconds, end: None };
+    let namespace = namespace.filter(|ns| !ns.is_empty());
+    kubri
+        .usage_history(namespace.as_deref(), range)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn prometheus_query(
+    kubri: State<'_, Arc<Kubri>>,
+    query: String,
+    range: kubri_core::Range,
+) -> CommandResult<Vec<kubri_core::Series>> {
+    kubri
+        .prometheus_query(&query, range)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn xray(
     kubri: State<'_, Arc<Kubri>>,
     resource: ResourceRef,
@@ -861,6 +901,10 @@ pub fn run() {
             events,
             metrics,
             pulse,
+            integrations,
+            charts,
+            usage_history,
+            prometheus_query,
             xray,
             sanitize,
             rbac,

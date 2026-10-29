@@ -24,6 +24,7 @@ export type Action =
 	| { type: 'new'; resource?: ResourceInfo; params?: TemplateParams }
 	| { type: 'sanitizer'; namespace?: string }
 	| { type: 'benchmarks' }
+	| { type: 'integrations' }
 	| { type: 'config'; section?: ConfigSection }
 	| { type: 'skin'; name: string | null }
 	| { type: 'help' };
@@ -44,6 +45,7 @@ const HELM_COMMANDS = ['helm', 'hm', 'chart', 'charts'];
 const NEW_COMMANDS = ['new', 'create', 'apply'];
 const SANITIZER_COMMANDS = ['popeye', 'pop', 'sanitizer', 'sanitize'];
 const BENCH_COMMANDS = ['be', 'bench', 'benchmark', 'benchmarks'];
+const INTEGRATION_COMMANDS = ['integrations', 'integration', 'prometheus', 'grafana', 'loki'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	config: undefined,
 	settings: undefined,
@@ -256,6 +258,13 @@ function builtins(
 	};
 	if (BENCH_COMMANDS.includes(cmd)) return [benchmarks];
 
+	const integrations: Suggestion = {
+		label: 'integrations',
+		detail: 'Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager in this cluster',
+		action: { type: 'integrations' }
+	};
+	if (INTEGRATION_COMMANDS.includes(cmd)) return [integrations];
+
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {
 		const roots = xrayResources(resources);
@@ -341,6 +350,7 @@ function builtins(
 	if (cmd && NEW_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(blank);
 	if (cmd && SANITIZER_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sanitizer());
 	if (cmd && BENCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(benchmarks);
+	if (cmd.length > 1 && INTEGRATION_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(integrations);
 	if (cmd.length > 1 && 'config'.startsWith(cmd) && cmd !== 'config') {
 		extra.push(...builtins('config', resources, contexts, namespaces, config).slice(0, 1));
 	}

@@ -81,6 +81,13 @@ pub(crate) fn yaml(value: &impl serde::Serialize) -> String {
     serde_saphyr::to_string(value).unwrap_or_else(|e| format!("cannot write YAML: {e}"))
 }
 
+/// Unix seconds as an RFC 3339 time.
+pub(crate) fn unix_time(seconds: f64) -> String {
+    k8s_openapi::jiff::Timestamp::from_millisecond((seconds * 1000.0) as i64)
+        .map(|t| t.to_string())
+        .unwrap_or_else(|_| seconds.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

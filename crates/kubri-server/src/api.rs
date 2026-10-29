@@ -19,6 +19,7 @@ use kubri_core::{
     TerminalOutput, Usage, XrayNode,
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
+use kubri_core::{Charts, Integrations, Range, Series};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -73,6 +74,10 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/events", get(events))
         .route("/metrics", get(metrics))
         .route("/pulse", get(pulse))
+        .route("/integrations", get(integrations))
+        .route("/charts", post(charts))
+        .route("/usage-history", get(usage_history))
+        .route("/prometheus/query", post(prometheus_query))
         .route("/xray", get(xray))
         .route("/rbac", get(rbac))
         .route("/sanitize", get(sanitize))
@@ -128,7 +133,9 @@ impl IntoResponse for ApiError {
             Unsupported(_) | InvalidObject(_) => StatusCode::BAD_REQUEST,
             Timeout => StatusCode::GATEWAY_TIMEOUT,
             ReadOnly(_) | Forbidden(_) => StatusCode::FORBIDDEN,
-            InvalidKubeconfig(_) | Kubeconfig(_) | Kube(_) | Model(_) => StatusCode::BAD_GATEWAY,
+            InvalidKubeconfig(_) | Kubeconfig(_) | Kube(_) | Model(_) | Integration(_) => {
+                StatusCode::BAD_GATEWAY
+            }
             Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let body = Json(serde_json::json!({ "error": self.0.to_string() }));
@@ -580,6 +587,60 @@ struct PulseQuery {
 async fn pulse(State(kubri): State<Arc<Kubri>>, Query(query): Query<PulseQuery>) -> ApiResult<Pulse> {
     let namespace = query.namespace.filter(|ns| !ns.is_empty());
     Ok(Json(kubri.pulse(namespace.as_deref()).await?))
+}
+
+#[derive(Deserialize)]
+struct IntegrationsQuery {
+    #[serde(default)]
+    fresh: bool,
+}
+
+async fn integrations(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<IntegrationsQuery>,
+) -> ApiResult<Integrations> {
+    Ok(Json(kubri.integrations(query.fresh).await?))
+}
+
+#[derive(Deserialize)]
+struct ChartsRequest {
+    target: ObjectRef,
+    range: Range,
+}
+
+async fn charts(State(kubri): State<Arc<Kubri>>, Json(req): Json<ChartsRequest>) -> ApiResult<Charts> {
+    Ok(Json(kubri.charts(&req.target, req.range).await?))
+}
+
+#[derive(Deserialize)]
+struct HistoryQuery {
+    namespace: Option<String>,
+    seconds: u64,
+}
+
+async fn usage_history(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<HistoryQuery>,
+) -> ApiResult<Charts> {
+    let namespace = query.namespace.filter(|ns| !ns.is_empty());
+    let range = Range {
+        seconds: query.seconds,
+        end: None,
+    };
+    Ok(Json(kubri.usage_history(namespace.as_deref(), range).await?))
+}
+
+#[derive(Deserialize)]
+struct PromQuery {
+    query: String,
+    range: Range,
+}
+
+async fn prometheus_query(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<PromQuery>,
+) -> ApiResult<Vec<Series>> {
+    Ok(Json(kubri.prometheus_query(&req.query, req.range).await?))
 }
 
 #[derive(Deserialize)]

@@ -183,6 +183,10 @@ export const httpBackend: Backend = {
 	cordon: (name, cordoned) => request('POST', '/node/cordon', { name, cordoned }),
 	drain: (name, options) => request('POST', '/node/drain', { name, options }),
 	pulse: (namespace) => request('GET', `/pulse?${new URLSearchParams({ namespace: namespace ?? '' })}`),
+	integrations: (fresh) => request('GET', `/integrations?fresh=${fresh}`),
+	charts: (target, range) => request('POST', '/charts', { target, range }),
+	usageHistory: (namespace, seconds) =>
+		request('GET', `/usage-history?${new URLSearchParams({ namespace: namespace ?? '', seconds: String(seconds) })}`),
 	xray: (resource, namespace) =>
 		request('GET', `/xray?${new URLSearchParams({ ...resource, namespace: namespace ?? '' })}`),
 	sanitize: (namespace) => request('GET', `/sanitize?${new URLSearchParams({ namespace: namespace ?? '' })}`),
