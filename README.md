@@ -92,6 +92,8 @@ See [Development](#development).
         <li>Levels, JSON and logfmt fields as a table, field filters like <code>status>=500</code>, folded stack traces and a rate strip</li>
         <li>Shell or attach in a real terminal</li>
         <li>A workspace of log and shell tabs that keep running while you browse, docked below or beside the list, two side by side</li>
+        <li>Debug containers, debug copies of crash-looping pods and node shells</li>
+        <li>A fix with each likely problem: a higher memory limit with its diff, why each node refuses a pending pod, why a Service has no endpoints</li>
         <li>Port-forwards, with HTTP benchmarks on top</li>
         <li>Decoded Secrets, and what uses a ConfigMap or Secret</li>
       </ul>
@@ -169,6 +171,10 @@ See [Development](#development).
     <td valign="top"><img src="docs/assets/screenshots/explain.png" alt="Explain beside a crash-looping pod: the likely cause and how to fix it"><br><b>Explain</b>: ask your own model why a pod fails, after seeing what is sent</td>
     <td valign="top"><img src="docs/assets/screenshots/agents.png" alt="Settings for AI agents: the MCP endpoint, the command for Claude Code and the log of tool calls"><br><b>AI agents</b>: Kubri as an MCP server, with every call logged (<kbd>:agents</kbd>)</td>
   </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/logs.png" alt="A Deployment's merged logs as a table of JSON fields, filtered by status>=500"><br><b>Structured logs</b>: fields as columns, filters like <code>status>=500</code>, and a rate strip</td>
+    <td valign="top"><img src="docs/assets/screenshots/workspace.png" alt="The pod list with a shell and a Deployment's logs side by side in the workspace below"><br><b>Workspace</b>: logs and shells that keep running while you browse</td>
+  </tr>
 </table>
 
 ## Coming from k9s
@@ -204,6 +210,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 - [Running Kubri in the browser](docs/WEB.md): settings, sign-in, the Docker image, running it in a cluster and behind a proxy.
 - [AI agents (MCP)](docs/AGENTS.md): connecting Claude Code, Claude Desktop or another agent, the tools it gets, and what it may not do.
 - [Explain](docs/EXPLAIN.md): asking a model about a pod, logs, a finding or a failed action with your own key, and what is hidden.
+- [Logs and debugging](docs/DEBUGGING.md): searching logs by field, the workspace, debug containers, node shells and the fixes Kubri offers.
 - [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.
 - [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.
 - [Releasing](docs/RELEASING.md): how a version is published.
