@@ -2327,7 +2327,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2341,6 +2341,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "portable-pty",
+ "secrecy",
  "serde",
  "serde-saphyr",
  "serde_json",
@@ -2352,7 +2353,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-desktop"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "dirs",
  "futures",
@@ -2369,7 +2370,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-server"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "axum",
  "base64 0.22.1",

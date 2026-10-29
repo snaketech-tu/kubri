@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/kubri-core", "crates/kubri-server", "ui/src-tauri"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/snaketech-tu/kubri"
@@ -25,6 +25,7 @@ dirs = "7"
 portable-pty = "0.9"
 ring = "0.17"
 serde-saphyr = "0.0.29"
+secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

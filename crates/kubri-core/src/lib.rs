@@ -3,7 +3,6 @@
 //! [`Kubri`] owns the merged kubeconfig and the connection to the selected context.
 //! Both frontends talk to the cluster only through it.
 
-mod auth;
 mod bench;
 mod context;
 mod discovery;
@@ -11,6 +10,7 @@ mod error;
 mod health;
 mod helm;
 mod k9s;
+mod kubeconfig;
 mod logs;
 mod metrics;
 mod node;
@@ -112,21 +112,26 @@ pub struct Kubri {
 
 /// The client configuration for `context`, read the way kubectl reads it.
 async fn client_config(kubeconfig: &Kubeconfig, context: &str) -> Result<Config> {
+    let mut kubeconfig = kubeconfig.clone();
+    kubeconfig::prepare(&mut kubeconfig, context)?;
     let options = KubeConfigOptions {
         context: Some(context.to_owned()),
         ..Default::default()
     };
     let mut config = Config::from_custom_kubeconfig(kubeconfig.clone(), &options).await?;
-    auth::ignore_lone_client_key(&mut config.auth_info);
-    proxy::skip_proxy_like_kubectl(&mut config, kubeconfig, context);
+    config
+        .headers
+        .extend(kubeconfig::impersonation_headers(&config.auth_info)?);
+    proxy::skip_proxy_like_kubectl(&mut config, &kubeconfig, context);
     Ok(config)
 }
 
 impl Kubri {
-    /// Loads the kubeconfig from `KUBECONFIG` (all listed files, merged) or `~/.kube/config`.
+    /// Loads the kubeconfig from `KUBECONFIG` (all listed files, merged, missing ones skipped)
+    /// or `~/.kube/config`, as kubectl does.
     /// A missing or broken kubeconfig is not fatal: it is reported by [`Kubri::contexts`].
     pub fn load() -> Self {
-        Self::with_kubeconfig(Kubeconfig::read().map_err(|e| e.to_string()))
+        Self::with_kubeconfig(kubeconfig::read())
     }
 
     pub fn from_kubeconfig(kubeconfig: Kubeconfig) -> Self {
@@ -163,7 +168,7 @@ impl Kubri {
 
     /// Re-reads the kubeconfig from disk, keeping the current connection.
     pub async fn reload(&self) -> Result<ContextList> {
-        *self.kubeconfig.write().await = Kubeconfig::read().map_err(|e| e.to_string());
+        *self.kubeconfig.write().await = kubeconfig::read();
         self.contexts().await
     }
 
