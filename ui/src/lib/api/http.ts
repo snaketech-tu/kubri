@@ -18,6 +18,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 function objectQuery(target: ObjectRef) {
 	return new URLSearchParams({
 		...target.resource,
+		...(target.context ? { context: target.context } : {}),
 		namespace: target.namespace ?? '',
 		name: target.name
 	});
@@ -90,7 +91,7 @@ export const httpBackend: Backend = {
 		const socket = new WebSocket(socketUrl(`/table?${params}`));
 		socket.onmessage = (msg) => onEvent(JSON.parse(msg.data));
 		socket.onclose = (e) => {
-			if (!stopped && e.code !== 1000) {
+			if (!stopped) {
 				onEvent({ type: 'error', message: 'Lost connection to kubri-server' });
 			}
 		};

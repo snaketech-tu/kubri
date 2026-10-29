@@ -92,7 +92,7 @@ impl IntoResponse for ApiError {
                 .and_then(|code| StatusCode::from_u16(code).ok())
                 .unwrap_or(StatusCode::BAD_GATEWAY),
             UnknownContext(_) | UnknownResource(_) | NotFound(_) => StatusCode::NOT_FOUND,
-            NoKubeconfig(_) | NotConnected => StatusCode::CONFLICT,
+            NoKubeconfig(_) | NotConnected | ContextChanged(_) => StatusCode::CONFLICT,
             Unsupported(_) | InvalidObject(_) => StatusCode::BAD_REQUEST,
             Timeout => StatusCode::GATEWAY_TIMEOUT,
             ReadOnly(_) => StatusCode::FORBIDDEN,
@@ -195,6 +195,7 @@ async fn forward<T: Serialize>(socket: WebSocket, events: impl Stream<Item = T> 
 
 #[derive(Deserialize)]
 struct ObjectQuery {
+    context: Option<String>,
     #[serde(flatten)]
     resource: ResourceRef,
     namespace: Option<String>,
@@ -203,6 +204,7 @@ struct ObjectQuery {
 
 async fn get_object(State(kubri): State<Arc<Kubri>>, Query(query): Query<ObjectQuery>) -> ApiResult<Value> {
     let target = ObjectRef {
+        context: query.context,
         resource: query.resource,
         namespace: query.namespace.filter(|ns| !ns.is_empty()),
         name: query.name,

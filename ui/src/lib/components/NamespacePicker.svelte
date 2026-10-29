@@ -10,8 +10,8 @@
 </script>
 
 <label class="picker" title="Namespace (:ns, 0 for all)">
-	<span>ns</span>
-	<select bind:value={app.namespace} disabled={!app.selected?.namespaced}>
+	<span class="label">Namespace</span>
+	<select bind:value={app.namespace} disabled={app.page === 'resources' && !app.selected?.namespaced}>
 		<option value={ALL_NAMESPACES}>All namespaces</option>
 		{#each options as ns (ns)}
 			<option value={ns}>{ns}</option>
@@ -22,12 +22,30 @@
 <style>
 	.picker {
 		display: flex;
-		align-items: center;
-		gap: 8px;
+		flex-direction: column;
+		padding: 5px 8px;
+		border-radius: 8px;
+	}
+	.picker:hover {
+		background: var(--surface-2);
+	}
+	.picker:focus-within {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	.label {
+		font-size: 10.5px;
 		color: var(--text-muted);
-		font-size: 13px;
 	}
 	select {
-		min-width: 180px;
+		min-width: 120px;
+		max-width: 200px;
+		padding: 0 4px 0 0;
+		border: none;
+		background: none;
+		font-weight: 600;
+	}
+	select:focus {
+		box-shadow: none;
 	}
 </style>

@@ -6,6 +6,9 @@ use crate::ResourceRef;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ObjectRef {
+    /// When provided, refuse to resolve this target against a different context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
     pub resource: ResourceRef,
     /// `None` for cluster-scoped objects.
     #[serde(default)]

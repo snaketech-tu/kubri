@@ -1,0 +1,144 @@
+{
+  "checked": "Standalone mockup, not production application",
+  "checks": [
+    "Pod selection",
+    "Text and label filtering",
+    "Empty result recovery",
+    "Attention filter",
+    "YAML and event views",
+    "Previous/current logs",
+    "Log level and text filtering",
+    "Command palette keyboard navigation",
+    "Context selection",
+    "Connection failure/retry",
+    "Read-only action state",
+    "Guarded deletion dialog",
+    "Stale data state",
+    "Permission denied state",
+    "Logo selection",
+    "Responsive document overflow"
+  ],
+  "responsive": [
+    {
+      "width": 1024,
+      "screen": "overview",
+      "viewport": 1024,
+      "document": 1024
+    },
+    {
+      "width": 1024,
+      "screen": "pods",
+      "viewport": 1024,
+      "document": 1024
+    },
+    {
+      "width": 1024,
+      "screen": "logs",
+      "viewport": 1024,
+      "document": 1024
+    },
+    {
+      "width": 1024,
+      "screen": "connect",
+      "viewport": 1024,
+      "document": 1024
+    },
+    {
+      "width": 1024,
+      "screen": "brand",
+      "viewport": 1024,
+      "document": 1024
+    },
+    {
+      "width": 768,
+      "screen": "overview",
+      "viewport": 768,
+      "document": 768
+    },
+    {
+      "width": 768,
+      "screen": "pods",
+      "viewport": 768,
+      "document": 768
+    },
+    {
+      "width": 768,
+      "screen": "logs",
+      "viewport": 768,
+      "document": 768
+    },
+    {
+      "width": 768,
+      "screen": "connect",
+      "viewport": 768,
+      "document": 768
+    },
+    {
+      "width": 768,
+      "screen": "brand",
+      "viewport": 768,
+      "document": 768
+    },
+    {
+      "width": 390,
+      "screen": "overview",
+      "viewport": 390,
+      "document": 390
+    },
+    {
+      "width": 390,
+      "screen": "pods",
+      "viewport": 390,
+      "document": 390
+    },
+    {
+      "width": 390,
+      "screen": "logs",
+      "viewport": 390,
+      "document": 390
+    },
+    {
+      "width": 390,
+      "screen": "connect",
+      "viewport": 390,
+      "document": 390
+    },
+    {
+      "width": 390,
+      "screen": "brand",
+      "viewport": 390,
+      "document": 390
+    },
+    {
+      "width": 320,
+      "screen": "overview",
+      "viewport": 320,
+      "document": 320
+    },
+    {
+      "width": 320,
+      "screen": "pods",
+      "viewport": 320,
+      "document": 320
+    },
+    {
+      "width": 320,
+      "screen": "logs",
+      "viewport": 320,
+      "document": 320
+    },
+    {
+      "width": 320,
+      "screen": "connect",
+      "viewport": 320,
+      "document": 320
+    },
+    {
+      "width": 320,
+      "screen": "brand",
+      "viewport": 320,
+      "document": 320
+    }
+  ],
+  "consoleErrors": []
+}

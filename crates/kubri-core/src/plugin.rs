@@ -535,6 +535,7 @@ mod tests {
         let pods = resource("", "pods", "Pod", &["po"]);
         let run = PluginRun {
             target: Some(ObjectRef {
+                context: None,
                 resource: pods.reference.clone(),
                 namespace: Some("shop".into()),
                 name: "web-1".into(),

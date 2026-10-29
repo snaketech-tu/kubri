@@ -10,12 +10,14 @@
 	import { tick } from 'svelte';
 	import { backend, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization } from '../api';
 	import { age, errorMessage, memory } from '../format';
-	import { fill, kindLabel, meterTone, record } from '../pulse';
+	import { attentionItems, fill, kindLabel, meterTone, record } from '../pulse';
 	import { app, findResource } from '../state.svelte';
-	import HealthIcon from './HealthIcon.svelte';
+	import Icon, { type IconName } from './Icon.svelte';
 	import Sparkline from './Sparkline.svelte';
 
 	const REFRESH_MS = 10_000;
+	/** Recent warnings the overview lists; the events list has them all. */
+	const RECENT = 6;
 
 	let pulse = $state<Pulse | null>(null);
 	let error = $state<string | null>(null);
@@ -24,7 +26,9 @@
 	let cpuHistory = $state.raw<Sample[]>([]);
 	let memoryHistory = $state.raw<Sample[]>([]);
 	let cursor = $state(0);
-	let grid = $state<HTMLDivElement>();
+	/** The cursor shows once the keys move it, not on a mouse user's first look. */
+	let keyboard = $state(false);
+	let body = $state<HTMLDivElement>();
 
 	const namespace = $derived(app.namespace || null);
 
@@ -66,30 +70,35 @@
 		};
 	});
 
-	interface Tile {
-		key: string;
-		open: () => void;
-	}
-
 	function openList(ref: ResourceRef) {
 		const resource = findResource(app.resources, ref);
 		if (resource) app.open(resource);
 		else app.toast(`${ref.plural} is not served by this cluster`, 'bad');
 	}
 
+	const pods = $derived(pulse?.kinds.find((k) => k.kind === 'Pod'));
+	const nodes = $derived(pulse?.kinds.find((k) => k.kind === 'Node'));
 	const usageList: ResourceRef = $derived(
 		namespace ? { group: '', version: 'v1', plural: 'pods' } : { group: '', version: 'v1', plural: 'nodes' }
 	);
-	const tiles = $derived<Tile[]>([
-		{ key: 'cpu', open: () => openList(usageList) },
-		{ key: 'memory', open: () => openList(usageList) },
-		{ key: 'events', open: () => openList({ group: '', version: 'v1', plural: 'events' }) },
-		...(pulse?.kinds ?? []).map((k) => ({ key: k.kind, open: () => openList(k.resource) }))
+
+	/** What arrow keys move between and Enter opens: the cards on top, then the kinds. */
+	const tiles = $derived<(() => void)[]>([
+		() => openList({ group: '', version: 'v1', plural: 'pods' }),
+		() => openList({ group: '', version: 'v1', plural: 'nodes' }),
+		() => openList(usageList),
+		() => openList(usageList),
+		...(pulse?.kinds ?? []).map((k) => () => openList(k.resource))
 	]);
+	const KIND_TILES = 4;
+
+	const attention = $derived(attentionItems(pulse?.events.recent ?? []));
+	const scopeText = $derived(namespace ? `Namespace ${namespace}` : 'All namespaces');
 
 	function openEvent(event: RecentEvent) {
 		const resource = findResource(app.resources, event.object.resource);
 		if (resource) app.showDetails(resource, { ...event.object, resource });
+		else app.toast(`${event.objectKind} ${event.object.name} cannot be opened here`, 'bad');
 	}
 
 	function cores(millicores: number) {
@@ -99,9 +108,27 @@
 
 	const percent = (value: number) => `${Math.round(value * 100)}%`;
 
+	const KIND_ICONS: Record<string, IconName> = {
+		Pod: 'pod',
+		Deployment: 'deployment',
+		StatefulSet: 'statefulset',
+		DaemonSet: 'daemonset',
+		Job: 'job',
+		CronJob: 'cronjob',
+		Node: 'node',
+		PersistentVolumeClaim: 'volume',
+		PersistentVolume: 'volume'
+	};
+
+	function activate(index: number) {
+		cursor = index;
+		tiles[index]?.();
+	}
+
 	function move(delta: number) {
+		keyboard = true;
 		cursor = Math.max(0, Math.min(tiles.length - 1, cursor + delta));
-		tick().then(() => grid?.querySelector<HTMLElement>(`[data-tile="${cursor}"]`)?.focus());
+		tick().then(() => body?.querySelector<HTMLElement>(`[data-tile="${cursor}"]`)?.focus());
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -122,7 +149,7 @@
 					move(-1);
 					return true;
 				case 'Enter':
-					tiles[cursor]?.open();
+					tiles[cursor]?.();
 					return true;
 				case 'Escape':
 					if (!app.details) return false;
@@ -144,67 +171,141 @@
 
 <section>
 	<header>
-		<h1>Pulses</h1>
-		<span class="scope">{namespace ? `Namespace ${namespace}` : 'All namespaces'}</span>
-		<span class="spacer"></span>
-		{#if updated}
-			<span class="muted" title="Refreshes every {REFRESH_MS / 1000} seconds">Updated {age(new Date(updated).toISOString(), now) || '0s'} ago</span>
-		{/if}
+		<nav class="crumbs" aria-label="Breadcrumb">
+			<span>{app.cluster?.context}</span>
+			<Icon name="next" size={12} />
+			<span>Overview</span>
+		</nav>
+		<div class="heading">
+			<div>
+				<h1>Cluster overview</h1>
+				<p class="subtitle">{scopeText}{app.environment ? ` · ${app.environment}` : ''}</p>
+			</div>
+			<div class="state">
+				{#if attention.length}
+					<span class="tag warn"><Icon name="warning" size={14} />{attention.length} need attention</span>
+				{/if}
+				{#if updated}
+					<span class="live" title="Refreshes every {REFRESH_MS / 1000} seconds">
+						<span class="dot"></span>Updated {age(new Date(updated).toISOString(), now) || '0s'} ago
+					</span>
+				{/if}
+			</div>
+		</div>
 	</header>
 
 	{#if error}
-		<div class="error">Could not load the overview: {error}</div>
+		<div class="error" role="alert">
+			Could not load the overview: {error}{pulse ? ' Showing the last values.' : ''}
+		</div>
 	{/if}
 
 	{#if pulse}
-		<div class="body" bind:this={grid}>
-			<div class="top">
-				{@render usage(0, 'CPU', pulse.cpu, cpuHistory, (m) => `${cores(m)} cores`)}
-				{@render usage(1, 'Memory', pulse.memory, memoryHistory, memory)}
-				<button class="tile" class:cursor={cursor === 2} data-tile="2" onclick={() => ((cursor = 2), tiles[2].open())}>
-					<span class="label">Warnings, last hour</span>
-					{#if pulse.events.error}
-						<span class="denied" title={pulse.events.error}>No access</span>
-					{:else}
-						<span class="value">{pulse.events.warning}</span>
-						<span class="counts">
-							<span>{pulse.events.normal} normal events</span>
-						</span>
-					{/if}
-				</button>
+		<div class="body" bind:this={body}>
+			<div class="kpis">
+				{@render countCard(0, 'Healthy pods', 'pod', pods, namespace ? `In ${namespace}` : 'All namespaces')}
+				{@render countCard(1, 'Ready nodes', 'node', nodes, 'Cluster-wide')}
+				{@render usageCard(2, 'CPU utilization', 'benchmark', pulse.cpu, (m) => `${cores(m)} cores`)}
+				{@render usageCard(3, 'Memory utilization', 'volume', pulse.memory, memory)}
 			</div>
 
-			<div class="kinds">
-				{#each pulse.kinds as kind, i (kind.kind)}
-					{@render kindTile(kind, i + 3)}
-				{/each}
-			</div>
-
-			<div class="warnings">
-				<h2>Recent warnings</h2>
-				{#if pulse.events.recent.length}
-					<table>
-						<thead>
-							<tr><th>Seen</th><th>Object</th><th>Reason</th><th>Message</th></tr>
-						</thead>
-						<tbody>
-							{#each pulse.events.recent as event, i (i)}
-								<tr onclick={() => openEvent(event)} title="Open {event.object.name}">
-									<td class="muted">{age(event.lastSeen, now)}</td>
-									<td class="object">
-										<span class="kind">{event.objectKind}</span>
-										{event.object.name}
-										{#if !namespace && event.object.namespace}<span class="muted">· {event.object.namespace}</span>{/if}
-									</td>
-									<td class="reason">{event.reason}{#if event.count > 1}<span class="muted"> ×{event.count}</span>{/if}</td>
-									<td class="message" title={event.message}>{event.message}</td>
-								</tr>
+			<div class="columns">
+				<div class="main-column">
+					<section class="card" aria-labelledby="attention-title">
+						<div class="card-head">
+							<div>
+								<h2 id="attention-title">Needs attention <span class="n">{attention.length}</span></h2>
+								<p>Warnings of the last hour, one entry per object.</p>
+							</div>
+							<button class="link" onclick={() => openList({ group: '', version: 'v1', plural: 'events' })}>
+								All events <Icon name="arrow" size={15} />
+							</button>
+						</div>
+						{#if pulse.events.error}
+							<p class="empty">Warnings are not available: {pulse.events.error}</p>
+						{:else if attention.length === 0}
+							<p class="empty"><Icon name="ok" size={16} /> Nothing needs a look in {scopeText.toLowerCase()}.</p>
+						{:else}
+							{#each attention as item (`${item.event.object.namespace}/${item.event.object.name}/${item.event.objectKind}`)}
+								<button class="signal" onclick={() => openEvent(item.event)}>
+									<span class="mark {item.severity}"
+										><Icon name={item.severity === 'critical' ? 'critical' : 'warning'} /></span
+									>
+									<span class="copy">
+										<span class="headline">
+											<strong>{item.reasons.join(', ')}</strong>
+											<span class="tag {item.severity === 'critical' ? 'bad' : 'warn'}">
+												{item.severity === 'critical' ? 'Critical' : 'Warning'}
+											</span>
+										</span>
+										<span class="message">{item.event.message}</span>
+										<span class="where">
+											<code
+												>{item.event.objectKind}
+												{item.event.object.namespace ? `${item.event.object.namespace} / ` : ''}{item.event.object
+													.name}</code
+											>
+											<span>{item.count}× · {age(item.event.lastSeen, now) || 'just now'} ago</span>
+										</span>
+									</span>
+									<span class="go">Investigate <Icon name="arrow" size={15} /></span>
+								</button>
 							{/each}
-						</tbody>
-					</table>
-				{:else}
-					<p class="muted">No warnings in the last hour.</p>
-				{/if}
+						{/if}
+					</section>
+
+					<section class="card" aria-labelledby="events-title">
+						<div class="card-head">
+							<h2 id="events-title">Recent warnings</h2>
+							<span class="muted">{pulse.events.warning} warnings · {pulse.events.normal} normal, last hour</span>
+						</div>
+						{#if pulse.events.recent.length}
+							<ul class="events">
+								{#each pulse.events.recent.slice(0, RECENT) as event, i (i)}
+									<li>
+										<button onclick={() => openEvent(event)} title="Open {event.object.name}">
+											<span class="when">{age(event.lastSeen, now) || 'now'}</span>
+											<span class="tag warn">{event.reason}</span>
+											<span class="what">
+												<span class="message">{event.message}</span>
+												<span class="muted"
+													>{event.objectKind} / {event.object.name}{event.count > 1 ? ` · ${event.count}×` : ''}</span
+												>
+											</span>
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<p class="empty">No warnings in the last hour.</p>
+						{/if}
+					</section>
+				</div>
+
+				<div class="side-column">
+					<section class="card" aria-labelledby="health-title">
+						<div class="card-head">
+							<h2 id="health-title">Resource health</h2>
+						</div>
+						<ul class="kinds">
+							{#each pulse.kinds as kind, i (kind.kind)}
+								{@render kindRow(kind, i + KIND_TILES)}
+							{/each}
+						</ul>
+					</section>
+
+					<section class="card" aria-labelledby="trend-title">
+						<div class="card-head">
+							<h2 id="trend-title">Usage trend</h2>
+							<span class="muted">{namespace ? 'This namespace' : 'Cluster-wide'}</span>
+						</div>
+						<div class="trends">
+							{@render trend('CPU', pulse.cpu, cpuHistory, (m) => `${cores(m)} cores`)}
+							{@render trend('Memory', pulse.memory, memoryHistory, memory)}
+						</div>
+						<p class="note">Kept for this session; Kubri stores no history.</p>
+					</section>
+				</div>
 			</div>
 		</div>
 	{:else if !error}
@@ -212,61 +313,118 @@
 	{/if}
 </section>
 
-{#snippet usage(index: number, label: string, u: Utilization, history: Sample[], format: (v: number) => string)}
-	{@const level = fill(u)}
-	<!-- Not a button as a whole: the trend line inside takes focus of its own. -->
-	<div class="tile wide" class:cursor={cursor === index}>
-		<button class="label open" data-tile={index} onclick={() => ((cursor = index), tiles[index].open())} title="Open {namespace ? 'pods' : 'nodes'}">
-			{label}
-			{#if level}<span class="percent">{percent(level.value)}</span>{/if}
-		</button>
-		{#if level && u.capacity}
-			<span class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(level.value * 100)} aria-label="{label} {level.measured ? 'used' : 'requested'}">
-				<span class="fill {meterTone(level.value)}" style:width={percent(Math.min(level.value, 1))}></span>
-				{#if level.measured && u.requested !== null}
-					<span class="mark" style:left={percent(Math.min(u.requested / u.capacity, 1))} title="Requested"></span>
-				{/if}
-			</span>
-			<span class="facts">
-				{#if level.measured && u.used !== null}
-					<span><strong>{format(u.used)}</strong> used of {format(u.capacity)}</span>
-					{#if u.requested !== null}<span class="muted"><span class="tick"></span>requested {format(u.requested)} · {percent(u.requested / u.capacity)}</span>{/if}
-				{:else if u.requested !== null}
-					<span><strong>{format(u.requested)}</strong> requested of {format(u.capacity)}</span>
-					<span class="muted">Install metrics-server to see actual use</span>
-				{/if}
-			</span>
-			<Sparkline samples={history} {format} label="{label} {level.measured ? 'used' : 'requested'}" {now} />
-		{:else}
-			<span class="denied">Not available</span>
-			<span class="muted small">Needs access to nodes{u.used === null ? ' and metrics-server' : ''}</span>
-		{/if}
-	</div>
-{/snippet}
-
-{#snippet kindTile(kind: KindPulse, index: number)}
-	<button class="tile" class:cursor={cursor === index} data-tile={index} onclick={() => ((cursor = index), tiles[index].open())}>
-		<span class="label">{kindLabel(kind)}</span>
-		{#if kind.error}
+{#snippet countCard(index: number, label: string, icon: IconName, kind: KindPulse | undefined, scope: string)}
+	<button class="kpi" class:cursor={keyboard && cursor === index} data-tile={index} onclick={() => activate(index)}>
+		<span class="kpi-label">{label}<Icon name={icon} /></span>
+		{#if !kind}
+			<span class="denied">Not shown</span>
+			<span class="kpi-note">{label === 'Ready nodes' ? 'Nodes show for all namespaces' : 'Not listed'}</span>
+		{:else if kind.error}
 			<span class="denied" title={kind.error}>No access</span>
+			<span class="kpi-note">{scope}</span>
 		{:else}
-			<span class="value">{kind.total}</span>
-			<span class="bar" aria-hidden="true">
-				{#each [['ok', kind.ok], ['warning', kind.warning], ['failed', kind.failed]] as [health, count] (health)}
-					{#if Number(count) > 0}<span class="segment {health}" style:flex-grow={count}></span>{/if}
-				{/each}
+			<span class="kpi-value">{kind.ok}<small> / {kind.total}</small></span>
+			<span class="kpi-note">
+				{kind.warning || kind.failed
+					? [kind.warning && `${kind.warning} warning`, kind.failed && `${kind.failed} failing`]
+							.filter(Boolean)
+							.join(' · ')
+					: kind.total
+						? `${scope} · all healthy`
+						: `${scope} · none`}
 			</span>
-			<span class="counts">
-				{#if kind.total === 0}
-					<span class="muted">none</span>
-				{:else}
-					<span class:zero={!kind.ok}><HealthIcon health="ok" /> {kind.ok} ok</span>
-					<span class:zero={!kind.warning}><HealthIcon health="warning" /> {kind.warning}</span>
-					<span class:zero={!kind.failed}><HealthIcon health="failed" /> {kind.failed}</span>
-				{/if}
+			<span class="meter" aria-hidden="true">
+				<span
+					class="fill {kind.failed ? 'bad' : kind.warning ? 'warn' : ''}"
+					style:width={percent(kind.total ? kind.ok / kind.total : 0)}
+				></span>
 			</span>
 		{/if}
 	</button>
+{/snippet}
+
+{#snippet usageCard(index: number, label: string, icon: IconName, u: Utilization, format: (v: number) => string)}
+	{@const level = fill(u)}
+	<button
+		class="kpi"
+		class:cursor={keyboard && cursor === index}
+		data-tile={index}
+		onclick={() => activate(index)}
+		title="Open {namespace ? 'pods' : 'nodes'}"
+	>
+		<span class="kpi-label">{label}<Icon name={icon} /></span>
+		{#if level && u.capacity}
+			<span class="kpi-value">{Math.round(level.value * 100)}<small>%{level.measured ? '' : ' requested'}</small></span>
+			<span class="kpi-note">
+				{#if level.measured && u.used !== null}
+					{format(u.used)} of {format(u.capacity)}{u.requested !== null ? ` · ${format(u.requested)} requested` : ''}
+				{:else}
+					{format(u.requested ?? 0)} of {format(u.capacity)} · no metrics-server
+				{/if}
+			</span>
+			<span
+				class="meter"
+				role="meter"
+				aria-valuemin="0"
+				aria-valuemax="100"
+				aria-valuenow={Math.round(level.value * 100)}
+				aria-label="{label} {level.measured ? 'used' : 'requested'}"
+			>
+				<span
+					class="fill {meterTone(level.value) === 'accent' ? '' : meterTone(level.value)}"
+					style:width={percent(Math.min(level.value, 1))}
+				></span>
+				{#if level.measured && u.requested !== null}
+					<span class="request" style:left={percent(Math.min(u.requested / u.capacity, 1))} title="Requested"></span>
+				{/if}
+			</span>
+		{:else}
+			<span class="denied">Not available</span>
+			<span class="kpi-note">Needs access to nodes{u.used === null ? ' and metrics-server' : ''}</span>
+		{/if}
+	</button>
+{/snippet}
+
+{#snippet kindRow(kind: KindPulse, index: number)}
+	<li>
+		<button class:cursor={keyboard && cursor === index} data-tile={index} onclick={() => activate(index)}>
+			<span class="kind-name"><Icon name={KIND_ICONS[kind.kind] ?? 'resource'} />{kindLabel(kind)}</span>
+			{#if kind.error}
+				<span class="muted" title={kind.error}>No access</span>
+			{:else if kind.total === 0}
+				<span class="muted">None</span>
+			{:else}
+				<span class="kind-counts">
+					{#if kind.failed}<span class="bad">{kind.failed} failing</span>{/if}
+					{#if kind.warning}<span class="warn">{kind.warning} warning</span>{/if}
+					<span><strong>{kind.ok}</strong> / {kind.total} healthy</span>
+				</span>
+				<span class="bar" aria-hidden="true">
+					{#each [['ok', kind.ok], ['warning', kind.warning], ['failed', kind.failed]] as [health, count] (health)}
+						{#if Number(count) > 0}<span class="segment {health}" style:flex-grow={count}></span>{/if}
+					{/each}
+				</span>
+			{/if}
+		</button>
+	</li>
+{/snippet}
+
+{#snippet trend(label: string, u: Utilization, history: Sample[], format: (v: number) => string)}
+	{@const level = fill(u)}
+	<div class="trend">
+		<span class="trend-label">
+			{label}
+			{#if level && u.capacity}
+				<strong>{format(level.measured ? (u.used ?? 0) : (u.requested ?? 0))}</strong>
+				<span class="muted">/ {format(u.capacity)}</span>
+			{/if}
+		</span>
+		{#if level}
+			<Sparkline samples={history} {format} label="{label} {level.measured ? 'used' : 'requested'}" {now} />
+		{:else}
+			<span class="muted">Not available</span>
+		{/if}
+	</div>
 {/snippet}
 
 <style>
@@ -277,33 +435,72 @@
 		min-width: 0;
 	}
 	header {
+		padding: 20px 24px 16px;
+	}
+	.crumbs {
 		display: flex;
-		align-items: baseline;
-		gap: 10px;
-		padding: 14px 20px 10px;
+		align-items: center;
+		gap: 6px;
+		margin-bottom: 6px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.heading {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 10px 16px;
 	}
 	h1 {
 		margin: 0;
-		font-size: 20px;
+		font-size: 26px;
+		letter-spacing: -0.03em;
 	}
-	.scope {
-		padding: 1px 8px;
-		border-radius: 999px;
-		background: var(--surface-2);
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.spacer {
-		flex: 1;
-	}
-	.muted {
+	.subtitle {
+		margin: 4px 0 0;
+		font-size: 13px;
 		color: var(--text-muted);
 	}
-	.small {
-		font-size: 11.5px;
+	.state {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+	.live {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 12px;
+		color: var(--ok);
+	}
+	.dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: currentColor;
+	}
+	.tag {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 2px 7px;
+		border-radius: 5px;
+		background: var(--surface-2);
+		font-size: 11px;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.tag.warn {
+		background: color-mix(in srgb, var(--warn) 15%, var(--surface-1));
+		color: var(--warn);
+	}
+	.tag.bad {
+		background: color-mix(in srgb, var(--bad) 13%, var(--surface-1));
+		color: var(--bad);
 	}
 	.error {
-		margin: 0 20px 10px;
+		margin: 0 24px 12px;
 		padding: 8px 12px;
 		border-radius: 8px;
 		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
@@ -317,84 +514,308 @@
 	.body {
 		flex: 1;
 		overflow: auto;
-		padding: 2px 20px 24px;
+		padding: 0 24px 24px;
 	}
-	.top {
+	.kpis {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-		gap: 12px;
-		margin-bottom: 12px;
-	}
-	.kinds {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-		gap: 12px;
-	}
-	.tile {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		min-width: 0;
-		padding: 14px 16px;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 		border: 1px solid var(--border);
 		border-radius: 10px;
 		background: var(--surface-1);
+		overflow: hidden;
+	}
+	.kpi {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		min-width: 0;
+		padding: 18px 20px;
+		border: none;
+		border-left: 1px solid var(--border);
+		background: none;
 		text-align: left;
-		font: inherit;
-		color: inherit;
 	}
-	.tile:hover {
-		border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+	.kpi:first-child {
+		border-left: none;
 	}
-	.tile.cursor,
-	.tile:focus-visible,
-	.tile:has(.open:focus-visible) {
-		outline: none;
-		border-color: var(--accent);
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+	.kpi:hover {
+		background: color-mix(in srgb, var(--surface-2) 50%, transparent);
 	}
-	.label {
+	.kpi.cursor,
+	.kpi:focus-visible,
+	.kinds button.cursor,
+	.kinds button:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.kpi-label {
 		display: flex;
 		justify-content: space-between;
 		font-size: 12.5px;
+		color: var(--text-muted);
+	}
+	.kpi-value {
+		font-size: 30px;
+		font-weight: 600;
+		line-height: 1.1;
+		letter-spacing: -0.02em;
+	}
+	.kpi-value small {
+		font-size: 17px;
+		font-weight: 400;
+		color: var(--text-muted);
+	}
+	.kpi-note {
+		min-height: 1.4em;
+		font-size: 11.5px;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.denied {
+		font-size: 17px;
 		font-weight: 600;
 		color: var(--text-muted);
 	}
-	.label.open {
-		padding: 0;
+	.meter {
+		position: relative;
+		height: 5px;
+		margin-top: 6px;
+		border-radius: 3px;
+		background: var(--surface-2);
+	}
+	.fill {
+		position: absolute;
+		inset: 0 auto 0 0;
+		border-radius: 3px;
+		background: var(--accent);
+	}
+	.fill.warn {
+		background: var(--warn-mark);
+	}
+	.fill.bad {
+		background: var(--bad);
+	}
+	.request {
+		position: absolute;
+		top: -3px;
+		bottom: -3px;
+		width: 2px;
+		margin-left: -1px;
+		background: var(--text);
+	}
+	.columns {
+		display: grid;
+		grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr);
+		gap: 20px;
+		margin-top: 20px;
+		align-items: start;
+	}
+	.main-column,
+	.side-column {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+		min-width: 0;
+	}
+	.card {
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		overflow: hidden;
+	}
+	.card-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 16px 20px;
+	}
+	.card-head p {
+		margin: 4px 0 0;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	h2 {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
+		font-size: 16px;
+		letter-spacing: -0.01em;
+	}
+	.n {
+		padding: 0 6px;
+		border-radius: 4px;
+		background: var(--surface-2);
+		font-size: 11px;
+		font-weight: 600;
+	}
+	.link {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		flex: none;
+		padding: 4px 0;
 		border: none;
 		background: none;
-		text-align: left;
-		font: inherit;
+		color: var(--accent-strong);
 		font-size: 12.5px;
 		font-weight: 600;
 	}
-	.label.open:hover {
-		color: var(--accent-strong);
-	}
-	.label.open:focus-visible {
-		outline: none;
-	}
-	.percent {
-		color: var(--text);
-		font-size: 15px;
-	}
-	.value {
-		font-size: 28px;
-		font-weight: 650;
-		line-height: 1;
-		letter-spacing: -0.01em;
-	}
-	.denied {
-		font-size: 15px;
-		font-weight: 600;
+	.empty {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
+		padding: 0 20px 18px;
+		font-size: 12.5px;
 		color: var(--text-muted);
 	}
+	.signal {
+		display: flex;
+		align-items: flex-start;
+		gap: 14px;
+		width: 100%;
+		padding: 16px 20px;
+		border: none;
+		border-top: 1px solid var(--border);
+		background: none;
+		text-align: left;
+	}
+	.signal:hover {
+		background: color-mix(in srgb, var(--surface-2) 50%, transparent);
+	}
+	.mark {
+		display: grid;
+		place-items: center;
+		width: 30px;
+		height: 30px;
+		flex: none;
+		border-radius: 7px;
+	}
+	.mark.critical {
+		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
+		color: var(--bad);
+	}
+	.mark.warning {
+		background: color-mix(in srgb, var(--warn) 15%, var(--surface-1));
+		color: var(--warn);
+	}
+	.copy {
+		display: grid;
+		gap: 5px;
+		flex: 1;
+		min-width: 0;
+	}
+	.headline {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+	.message {
+		font-size: 12.5px;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.where {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 12px;
+		font-size: 11.5px;
+		color: var(--text-muted);
+	}
+	.where code {
+		font-family: var(--mono);
+		color: var(--text);
+		overflow-wrap: anywhere;
+	}
+	.go {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		align-self: center;
+		color: var(--accent-strong);
+		font-size: 12px;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.events,
+	.kinds {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.events button {
+		display: grid;
+		grid-template-columns: 52px auto minmax(0, 1fr);
+		align-items: start;
+		gap: 12px;
+		width: 100%;
+		padding: 11px 20px;
+		border: none;
+		border-top: 1px solid var(--border-subtle);
+		background: none;
+		text-align: left;
+	}
+	.events button:hover {
+		background: color-mix(in srgb, var(--surface-2) 50%, transparent);
+	}
+	.when {
+		font-family: var(--mono);
+		font-size: 11.5px;
+		color: var(--text-muted);
+	}
+	.what {
+		display: grid;
+		gap: 2px;
+		min-width: 0;
+		font-size: 12px;
+	}
+	.what .message {
+		color: var(--text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.kinds button {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 8px 12px;
+		width: 100%;
+		padding: 11px 20px;
+		border: none;
+		border-top: 1px solid var(--border-subtle);
+		background: none;
+		font-size: 13px;
+		text-align: left;
+	}
+	.kinds button:hover {
+		background: color-mix(in srgb, var(--surface-2) 50%, transparent);
+	}
+	.kind-name {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+	}
+	.kind-counts {
+		display: flex;
+		gap: 10px;
+		font-size: 12px;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+	.kind-counts strong {
+		color: var(--text);
+	}
 	.bar {
+		grid-column: 1 / -1;
 		display: flex;
 		gap: 2px;
-		height: 8px;
-		border-radius: 4px;
+		height: 5px;
+		border-radius: 3px;
 		overflow: hidden;
 		background: var(--surface-2);
 	}
@@ -411,117 +832,72 @@
 	.segment.failed {
 		background: var(--bad);
 	}
-	.counts {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px 12px;
-		font-size: 12px;
+	.trends {
+		display: grid;
+		gap: 14px;
+		padding: 0 20px;
 	}
-	.counts > span {
-		display: inline-flex;
-		align-items: center;
+	.trend {
+		display: grid;
 		gap: 4px;
 	}
-	.counts .zero {
-		opacity: 0.45;
-	}
-	.meter {
-		position: relative;
-		height: 10px;
-		border-radius: 5px;
-		background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
-	}
-	.fill {
-		position: absolute;
-		inset: 0 auto 0 0;
-		border-radius: 5px;
-		background: var(--accent);
-	}
-	.fill.warn {
-		background: var(--warn-mark);
-	}
-	.fill.bad {
-		background: var(--bad);
-	}
-	.mark {
-		position: absolute;
-		top: -3px;
-		bottom: -3px;
-		width: 2px;
-		margin-left: -1px;
-		border-radius: 1px;
-		background: var(--text);
-	}
-	.facts {
+	.trend-label {
 		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		gap: 2px 12px;
+		align-items: baseline;
+		gap: 6px;
 		font-size: 12px;
+		color: var(--text-muted);
 	}
-	.tick {
-		display: inline-block;
-		width: 2px;
-		height: 10px;
-		margin-right: 5px;
-		vertical-align: -1px;
-		background: var(--text);
-	}
-	.warnings {
-		margin-top: 22px;
-	}
-	h2 {
-		margin: 0 0 8px;
+	.trend-label strong {
+		margin-left: auto;
+		color: var(--text);
 		font-size: 14px;
 	}
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		table-layout: fixed;
-		font-size: 12.5px;
-	}
-	th {
-		padding: 6px 10px;
-		border-bottom: 1px solid var(--border);
-		text-align: left;
-		font-size: 11px;
-		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
+	.note {
+		margin: 12px 20px 16px;
+		font-size: 11.5px;
 		color: var(--text-muted);
 	}
-	th:nth-child(1) {
-		width: 64px;
-	}
-	th:nth-child(2) {
-		width: 32%;
-	}
-	th:nth-child(3) {
-		width: 210px;
-	}
-	td {
-		padding: 6px 10px;
-		border-bottom: 1px solid var(--border-subtle);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	tbody tr {
-		cursor: pointer;
-	}
-	tbody tr:hover {
-		background: var(--surface-1);
-	}
-	.kind {
-		margin-right: 4px;
+	.muted {
 		color: var(--text-muted);
-	}
-	.object {
-		font-family: var(--mono);
 		font-size: 12px;
 	}
-	.reason {
+	.bad {
+		color: var(--bad);
+	}
+	.warn {
 		color: var(--warn);
-		font-weight: 600;
+	}
+
+	@media (max-width: 1100px) {
+		.kpis {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.kpi:nth-child(3) {
+			border-left: none;
+		}
+		.kpi:nth-child(n + 3) {
+			border-top: 1px solid var(--border);
+		}
+		.columns {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+	@media (max-width: 720px) {
+		header {
+			padding: 16px 12px 12px;
+		}
+		.body {
+			padding: 0 12px 16px;
+		}
+		.go {
+			display: none;
+		}
+		.kpi {
+			padding: 14px;
+		}
+		.kpi-value {
+			font-size: 24px;
+		}
 	}
 </style>

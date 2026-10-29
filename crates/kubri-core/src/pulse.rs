@@ -261,6 +261,7 @@ fn tally_events(
             Some(RecentEvent {
                 object_kind: kind,
                 object: ObjectRef {
+                    context: None,
                     resource,
                     namespace: involved.namespace,
                     name: involved.name.unwrap_or_default(),

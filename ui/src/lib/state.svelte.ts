@@ -1,3 +1,4 @@
+import { drafts } from './navigation.svelte';
 import {
 	backend,
 	type ClusterInfo,
@@ -19,11 +20,11 @@ import { suggest, type Action, type ConfigSection, type PaletteConfig } from './
 import { errorMessage } from './format';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu } from './menu';
-import { applyTheme, resolveColor, storeSkin, storedSkin } from './skin';
+import { applyScheme, applyTheme, resolveColor, storeSkin, storedScheme, storedSkin, type Scheme } from './skin';
 
 export const ALL_NAMESPACES = '';
 
-export type DetailsTab = 'describe' | 'yaml' | 'logs' | 'shell';
+export type DetailsTab = 'describe' | 'events' | 'yaml' | 'logs' | 'shell';
 
 export interface Details {
 	target: ObjectRef;
@@ -60,6 +61,27 @@ interface View {
 
 const HISTORY = 50;
 
+const READ_ONLY_KEY = 'kubri.readonly.';
+const ENVIRONMENT_KEY = 'kubri.environment.';
+
+function stored(key: string): string | null {
+	try {
+		return localStorage.getItem(key);
+	} catch {
+		return null;
+	}
+}
+
+/** Keeps a per-context choice; null forgets it. Without storage it lasts until the page reloads. */
+function store(key: string, value: string | null) {
+	try {
+		if (value === null) localStorage.removeItem(key);
+		else localStorage.setItem(key, value);
+	} catch {
+		// Kept in memory only.
+	}
+}
+
 export type Page =
 	| 'resources'
 	| 'portforwards'
@@ -72,7 +94,7 @@ export type Page =
 	| 'config';
 
 export type Dialog =
-	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[] }
+	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[]; statuses?: Record<string, string> }
 	| { kind: 'scale'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'restart'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'labels'; resource: ResourceInfo; target: ObjectRef }
@@ -100,14 +122,33 @@ class AppState {
 	resources = $state<ResourceInfo[]>([]);
 	namespaces = $state<string[]>([]);
 	selected = $state<ResourceInfo | null>(null);
-	namespace = $state(ALL_NAMESPACES);
+	#namespace = $state(ALL_NAMESPACES);
+	get namespace() {
+		return this.#namespace;
+	}
+	/** Switching namespace leaves an unsaved YAML draft only on the user's say, and closes the details. */
+	set namespace(value: string) {
+		if (value === this.#namespace) return;
+		if (drafts.block(() => (this.namespace = value))) return;
+		this.#namespace = value;
+		this.details = null;
+	}
 	connecting = $state<string | null>(null);
 	error = $state<string | null>(null);
 
-	page = $state<Page>('resources');
+	page = $state<Page>('pulses');
 	/** The kind the XRay page starts its trees from. */
 	xrayResource = $state<ResourceInfo | null>(null);
-	details = $state<Details | null>(null);
+	#details = $state<Details | null>(null);
+	get details() {
+		return this.#details;
+	}
+	/** Closing or replacing the details asks first while a YAML draft is unsaved. */
+	set details(value: Details | null) {
+		if (value === this.#details) return;
+		if (drafts.block(() => (this.details = value))) return;
+		this.#details = value;
+	}
 	/** The details panel fills the window, for logs and shells. */
 	maximized = $state(false);
 	dialog = $state<Dialog | null>(null);
@@ -158,7 +199,8 @@ class AppState {
 			this.contextMenuOpen ||
 			this.menu !== null ||
 			this.dialog !== null ||
-			this.pluginTerminal !== null
+			this.pluginTerminal !== null ||
+			drafts.pending !== null
 	);
 
 	/** Where plugins run now, which decides the plugins on offer. */
@@ -172,8 +214,31 @@ class AppState {
 
 	paletteConfig = $derived<PaletteConfig>({ aliases: this.k9s?.aliases ?? [], skins: this.k9s?.skins ?? [] });
 
-	/** k9s `readOnly`, or Kubri started read-only: nothing that changes the cluster is offered. */
-	readOnly = $derived(this.k9s?.readOnly ?? false);
+	/** Read-only picked in Kubri for this context. It can only add to k9s `readOnly`, never lift it. */
+	localReadOnly = $state(false);
+	/** A label such as "Production" for this context, set by the user; Kubri never guesses it from names. */
+	environment = $state('');
+	/** k9s `readOnly`, or read-only picked in Kubri: nothing that changes the cluster is offered. */
+	readOnly = $derived((this.k9s?.readOnly ?? false) || this.localReadOnly);
+	/** Light or dark picked in Kubri; null follows the system. Skins pick their own. */
+	scheme = $state<Scheme>(storedScheme());
+
+	setEnvironment(value: string) {
+		this.environment = value.trim();
+		if (this.cluster) store(ENVIRONMENT_KEY + this.cluster.context, this.environment || null);
+	}
+
+	toggleReadOnly() {
+		if (drafts.block(() => this.toggleReadOnly())) return;
+		this.localReadOnly = !this.localReadOnly;
+		if (this.cluster) store(READ_ONLY_KEY + this.cluster.context, this.localReadOnly ? 'true' : null);
+	}
+
+	toggleScheme() {
+		const dark = this.scheme ? this.scheme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+		this.scheme = dark ? 'light' : 'dark';
+		applyScheme(this.scheme);
+	}
 
 	/** Where Kubri is, for the history. */
 	view = $derived<View>({
@@ -209,6 +274,12 @@ class AppState {
 	}
 
 	async switchContext(name: string) {
+		if (drafts.block(() => this.switchContext(name))) return;
+		// A dialog was reviewed against the current context; it must not run against the next one.
+		if (this.dialog || this.connecting) {
+			this.toast('Finish the current action before switching contexts', 'bad');
+			return;
+		}
 		this.connecting = name;
 		this.error = null;
 		try {
@@ -222,6 +293,7 @@ class AppState {
 
 	/** Shows a resource list, optionally switching namespace, like k9s `:pods kube-system`. */
 	open(resource: ResourceInfo, namespace?: string, filter?: string, scope: ListScope | null = null) {
+		if (drafts.block(() => this.open(resource, namespace, filter, scope))) return;
 		this.page = 'resources';
 		this.selected = resource;
 		this.setNamespace(namespace);
@@ -271,6 +343,7 @@ class AppState {
 	}
 
 	go(delta: -1 | 1): boolean {
+		if (drafts.block(() => this.go(delta))) return false;
 		const at = this.#historyAt + delta;
 		const view = this.#history[at];
 		if (!view) return false;
@@ -282,6 +355,7 @@ class AppState {
 
 	/** Returns to the view before this one, and back again (`-`). */
 	toggleLast(): boolean {
+		if (drafts.block(() => this.toggleLast())) return false;
 		const last = this.#lastView;
 		if (!last) return false;
 		const at = this.#history.findLastIndex((v) => sameView(v, last));
@@ -363,17 +437,19 @@ class AppState {
 	}
 
 	showDetails(resource: ResourceInfo, target: ObjectRef, tab: DetailsTab = 'describe', extra: DetailsExtra = {}) {
+		if (drafts.block(() => this.showDetails(resource, target, tab, extra))) return;
 		const shown = this.details;
 		if (shown && sameResource(shown.resource, resource) && sameObject(shown.target, target)) {
 			// Same object: switch tabs in place, so running logs and shells survive.
 			Object.assign(shown, { tab, editing: false, ...extra });
 			return;
 		}
-		this.details = { resource, target, tab, editing: false, ...extra };
+		this.details = { resource, target: { ...target, context: this.cluster?.context }, tab, editing: false, ...extra };
 	}
 
 	/** The cluster overview, optionally switching namespace like `:pulses kube-system`. */
 	showPulses(namespace?: string) {
+		if (drafts.block(() => this.showPulses(namespace))) return;
 		this.page = 'pulses';
 		this.details = null;
 		this.setNamespace(namespace);
@@ -381,6 +457,7 @@ class AppState {
 
 	/** The XRay trees of `resource`, like k9s `:xray deploy`. */
 	showXray(resource: ResourceInfo, namespace?: string) {
+		if (drafts.block(() => this.showXray(resource, namespace))) return;
 		this.page = 'xray';
 		this.xrayResource = resource;
 		this.details = null;
@@ -389,6 +466,7 @@ class AppState {
 
 	/** Who may do what, like k9s `:rbac`. */
 	showRbac(namespace?: string) {
+		if (drafts.block(() => this.showRbac(namespace))) return;
 		this.page = 'rbac';
 		this.details = null;
 		this.setNamespace(namespace);
@@ -396,6 +474,7 @@ class AppState {
 
 	/** Helm releases, like k9s `:helm`. */
 	showHelm(namespace?: string) {
+		if (drafts.block(() => this.showHelm(namespace))) return;
 		this.page = 'helm';
 		this.details = null;
 		this.setNamespace(namespace);
@@ -403,6 +482,7 @@ class AppState {
 
 	/** Problems and risky settings, like Popeye; `:popeye kube-system` switches namespace. */
 	showSanitizer(namespace?: string) {
+		if (drafts.block(() => this.showSanitizer(namespace))) return;
 		this.page = 'sanitizer';
 		this.details = null;
 		this.setNamespace(namespace);
@@ -410,6 +490,7 @@ class AppState {
 
 	/** HTTP benchmarks, optionally showing one of them. */
 	showBenchmarks(id?: number) {
+		if (drafts.block(() => this.showBenchmarks(id))) return;
 		this.page = 'benchmarks';
 		this.details = null;
 		if (id !== undefined) this.benchmarkId = id;
@@ -426,6 +507,7 @@ class AppState {
 
 	/** The k9s configuration: skins, hotkeys, plugins and aliases. */
 	showConfig(section?: ConfigSection) {
+		if (drafts.block(() => this.showConfig(section))) return;
 		this.page = 'config';
 		this.details = null;
 		this.configSection = section;
@@ -481,6 +563,7 @@ class AppState {
 	}
 
 	showPortForwards() {
+		if (drafts.block(() => this.showPortForwards())) return;
 		this.page = 'portforwards';
 		this.details = null;
 		this.refreshForwards();
@@ -501,12 +584,17 @@ class AppState {
 	}
 
 	private async connected(cluster: ClusterInfo) {
+		this.details = null;
+		this.resources = [];
+		this.cluster = null;
 		const resources = await backend.resources();
 		const previous = this.selected;
 		this.cluster = cluster;
+		this.k9s = null;
+		this.localReadOnly = stored(READ_ONLY_KEY + cluster.context) === 'true';
+		this.environment = stored(ENVIRONMENT_KEY + cluster.context) ?? '';
 		this.resources = resources;
 		this.namespace = ALL_NAMESPACES;
-		this.details = null;
 		this.scope = null;
 		// Views of the last cluster may not exist in this one.
 		this.#history = [];
