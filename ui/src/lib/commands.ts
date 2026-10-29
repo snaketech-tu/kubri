@@ -1,7 +1,7 @@
 import type { Alias, ContextInfo, ResourceInfo } from './api';
 import { xrayResources } from './xray';
 
-export type ConfigSection = 'contexts' | 'diffs' | 'agents' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
+export type ConfigSection = 'contexts' | 'diffs' | 'agents' | 'explain' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
 
 export type Action =
 	| {
@@ -47,6 +47,8 @@ const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	k9s: undefined,
 	agents: 'agents',
 	mcp: 'agents',
+	explain: 'explain',
+	ai: 'explain',
 	skins: 'skins',
 	hotkeys: 'hotkeys',
 	hotkey: 'hotkeys',

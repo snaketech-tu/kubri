@@ -138,6 +138,7 @@ See [Development](#development).
         <li>In the browser with a password sign-in, from Docker or in the cluster</li>
         <li>A read-only mode that never changes the cluster</li>
         <li>An MCP server, so AI agents can read your clusters with your permissions</li>
+        <li>Explain: ask your own model why a pod fails, seeing first what is sent</li>
       </ul>
     </td>
   </tr>
@@ -196,6 +197,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 
 - [Running Kubri in the browser](docs/WEB.md): settings, sign-in, the Docker image, running it in a cluster and behind a proxy.
 - [AI agents (MCP)](docs/AGENTS.md): connecting Claude Code, Claude Desktop or another agent, the tools it gets, and what it may not do.
+- [Explain](docs/EXPLAIN.md): asking a model about a pod, logs, a finding or a failed action with your own key, and what is hidden.
 - [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.
 - [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.
 - [Releasing](docs/RELEASING.md): how a version is published.

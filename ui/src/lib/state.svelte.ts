@@ -8,6 +8,7 @@ import {
 	type ContextInfo,
 	type ContextSettings,
 	type Drill,
+	type ExplainSubject,
 	type Guard,
 	type HelmRelease,
 	type K9sConfig,
@@ -104,7 +105,8 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 const DEFAULT_SETTINGS: Settings = {
 	contexts: {},
 	diff: { scale: false, restart: false, image: true, labels: true },
-	agents: { http: false, port: 7879, secrets: false }
+	agents: { http: false, port: 7879, secrets: false },
+	explain: { provider: 'none', baseUrl: '', model: '' }
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
@@ -253,6 +255,8 @@ class AppState {
 	configSection = $state<ConfigSection | undefined>(undefined);
 	/** A foreground plugin, which gets a terminal over the whole window. */
 	pluginTerminal = $state<{ plugin: Plugin; run: PluginRun } | null>(null);
+	/** What Explain shows a model, while its panel is open. */
+	explaining = $state<ExplainSubject | null>(null);
 	/** A filter for the resource list to take, from a command like `:pods app=web`. */
 	filterRequest = $state<string | null>(null);
 	/** A filter for the RBAC page to take, like `can delete pods` from "Who may do this?". */
@@ -279,6 +283,7 @@ class AppState {
 			this.menu !== null ||
 			this.dialog !== null ||
 			this.pluginTerminal !== null ||
+			this.explaining !== null ||
 			drafts.pending !== null
 	);
 
@@ -376,6 +381,14 @@ class AppState {
 	async setAgentSettings(agents: Settings['agents']) {
 		try {
 			this.settings = await backend.setAgentSettings(agents);
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+		}
+	}
+
+	async setExplainSettings(explain: Settings['explain']) {
+		try {
+			this.settings = await backend.setExplainSettings(explain);
 		} catch (err) {
 			this.toast(errorMessage(err), 'bad');
 		}

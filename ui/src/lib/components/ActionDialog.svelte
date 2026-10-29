@@ -456,6 +456,18 @@
 		return t.namespace ? `${t.namespace}/${t.name}` : t.name;
 	}
 
+	/** Asks the model why the action failed, with the object it was about. */
+	function explainError() {
+		if (!error) return;
+		const target =
+			'target' in dialog && dialog.target && 'name' in dialog.target
+				? dialog.target
+				: dialog.kind === 'delete' && dialog.targets.length === 1
+					? dialog.targets[0]
+					: null;
+		app.explaining = { kind: 'failure', action: title, target, error };
+	}
+
 	const title = $derived.by(() => {
 		switch (dialog.kind) {
 			case 'delete':
@@ -832,7 +844,12 @@
 			<input bind:value={confirmation} autocomplete="off" spellcheck="false" />
 		</label>
 	{/if}
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
+	{#if error}
+		<p class="error" role="alert">
+			{error}
+			<button class="explain" onclick={explainError} title="Ask your model why this failed">Explain…</button>
+		</p>
+	{/if}
 
 	<div class="buttons">
 		{#if !report}<button class="secondary" bind:this={cancelButton} disabled={busy} onclick={close}>Cancel</button>{/if}
@@ -1075,6 +1092,15 @@
 	}
 	.error {
 		color: var(--bad);
+	}
+	.error .explain {
+		margin-left: 6px;
+		padding: 1px 8px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface-1);
+		color: var(--text);
+		font-size: 12px;
 	}
 	.mono {
 		font-family: var(--mono);

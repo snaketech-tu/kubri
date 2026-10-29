@@ -2,6 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import { backend, type LogEvent, type LogOptions, type LogSource, type ObjectRef } from '../api';
 	import { copyLines, saveFile } from '../actions';
+	import { selectedText } from '../explain';
 	import { forControl } from '../keys';
 	import { logMatcher, logRanges, sourceLabels, stripAnsi } from '../pods';
 	import { app } from '../state.svelte';
@@ -178,6 +179,16 @@
 		copyLines(shownLines(), ['line', 'lines']);
 	}
 
+	/** Asks the model about the selected lines, or else the last 200 shown. */
+	function explain() {
+		const lines = selectedText(scroller) ?? shownLines().slice(-200).join('\n');
+		if (!lines.trim()) {
+			app.toast('There are no log lines to explain yet', 'bad');
+			return;
+		}
+		app.explaining = { kind: 'logs', target, container: container || null, lines };
+	}
+
 	/** A line across the log, to tell what came after it; k9s `m`. */
 	function mark() {
 		lines = [...lines, { id: --marks, source: null, text: '', mark: true }];
@@ -229,6 +240,9 @@
 					return true;
 				case 'm':
 					mark();
+					return true;
+				case 'x':
+					explain();
 					return true;
 			}
 			return false;
@@ -288,6 +302,8 @@
 		<span class="buttons">
 			<button onclick={mark} title="Draw a line to tell what comes after it (m)">Mark</button>
 			<button onclick={copy} title="Copy the shown lines (c)">Copy</button>
+			<!-- Pressing keeps the selection, which is what gets explained. -->
+			<button onmousedown={(e) => e.preventDefault()} onclick={explain} title="Explain the selected lines, or the last 200 shown (x)">Explain</button>
 			<button onclick={() => (lines = [])} title="Clear the view (Shift+C)">Clear</button>
 		</span>
 	</div>

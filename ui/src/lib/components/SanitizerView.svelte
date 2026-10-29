@@ -104,13 +104,32 @@
 		else expanded.add(id);
 	}
 
+	function targetOf(row: Extract<SanitizerRow, { type: 'finding' }>) {
+		const resource = findResource(app.resources, row.section.resource);
+		if (!resource) return null;
+		const target = { resource: refOf(resource), namespace: resource.namespaced ? row.finding.namespace : null, name: row.finding.name };
+		return { resource, target };
+	}
+
+	/** Asks the model about the issues of a finding, like `E` on an object elsewhere. */
+	function explain(row: SanitizerRow | undefined) {
+		if (row?.type !== 'finding') return;
+		const found = targetOf(row);
+		if (!found) return;
+		cursorId = row.id;
+		const issues = row.finding.issues.map(
+			(i) => `${i.level}: ${i.message}${i.container ? ` (container ${i.container})` : ''} [${i.code}]`
+		);
+		app.explaining = { kind: 'finding', target: found.target, issues };
+	}
+
 	function openMenu(e: MouseEvent, row: SanitizerRow) {
 		if (row.type !== 'finding') return;
-		const resource = findResource(app.resources, row.section.resource);
-		if (!resource) return;
+		const found = targetOf(row);
+		if (!found) return;
 		e.preventDefault();
-		const target = { resource: refOf(resource), namespace: resource.namespaced ? row.finding.namespace : null, name: row.finding.name };
-		openObjectMenu(resource, target, e.clientX, e.clientY, { before: () => (cursorId = row.id) });
+		const first = [{ group: 'Findings', label: 'Explain these findings…', keys: [], run: () => explain(row) }];
+		openObjectMenu(found.resource, found.target, e.clientX, e.clientY, { before: () => (cursorId = row.id), first });
 	}
 
 	function openDetails(row: SanitizerRow | undefined) {
@@ -158,6 +177,9 @@
 				case 'l':
 					if (row?.type === 'section' && !expanded.has(row.id)) expanded.add(row.id);
 					else move(1);
+					return true;
+				case 'E':
+					explain(row);
 					return true;
 				case 'ArrowLeft':
 				case 'h':

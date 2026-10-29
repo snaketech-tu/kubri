@@ -184,6 +184,9 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }), { id: 'previous', needs: logs, kubectl: k({ op: 'logs', previous: true }) });
 	if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }), { needs: on('get'), kubectl: k({ op: 'decode' }) });
 	if (hasUsers(resource)) add('View', 'Used by', ['u'], show('describe'), { id: 'usedBy' });
+	// In the action bar once a model is set up; until then the menus lead to the settings.
+	const explaining = app.settings.explain.provider !== 'none' ? { primary: isPods(resource) ? 4 : 9 } : {};
+	add('View', 'Explain…', ['E'], () => (app.explaining = { kind: 'object', target }), { id: 'explain', needs: on('get'), ...explaining });
 
 	if (isPods(resource) && writable) {
 		add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3, id: 'shell', needs: on('create', 'exec'), kubectl: k({ op: 'shell' }) });

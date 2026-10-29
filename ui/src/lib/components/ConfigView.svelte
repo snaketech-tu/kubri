@@ -7,6 +7,7 @@
 	import { resolveColor } from '../skin';
 	import { app } from '../state.svelte';
 	import AgentSettings from './AgentSettings.svelte';
+	import ExplainSettings from './ExplainSettings.svelte';
 	import ContextSettingsForm from './ContextSettingsForm.svelte';
 	import PageHeader from './PageHeader.svelte';
 
@@ -136,6 +137,8 @@
 		</div>
 
 		<AgentSettings />
+
+		<ExplainSettings />
 
 		{#if !config}
 			<p class="empty">Reading the k9s configuration…</p>

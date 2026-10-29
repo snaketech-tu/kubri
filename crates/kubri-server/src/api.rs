@@ -11,11 +11,11 @@ use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
     AccessCheck, AgentSettings, BenchInfo, BenchRequest, Change, ClusterInfo, ContainerImage, ContextList,
-    ContextSettings, DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, Guard,
-    HelmRelease, HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind,
-    ObjectRef, Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Preview, Pulse, Rbac, Reference,
-    ResourceInfo, ResourceRef, SanitizerReport, Settings, TableScope, Terminal, TerminalOptions,
-    TerminalOutput, Usage, XrayNode,
+    ContextSettings, DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, ExplainAnswer,
+    ExplainPrompt, ExplainSettings, ExplainSubject, Guard, HelmRelease, HelmReleaseDetails, Identity,
+    K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef, Permissions, PluginRun, PortForwardInfo,
+    PortForwardRequest, Preview, Pulse, Rbac, Reference, ResourceInfo, ResourceRef, SanitizerReport,
+    Settings, TableScope, Terminal, TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -30,6 +30,10 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings/context", put(set_context_settings))
         .route("/settings/diff", put(set_diff_settings))
         .route("/settings/agents", put(set_agent_settings))
+        .route("/settings/explain", put(set_explain_settings))
+        .route("/explain/key", get(explain_key).put(set_explain_key))
+        .route("/explain/prompt", post(explain_prompt))
+        .route("/explain", post(explain))
         .route("/guard", get(guard))
         .route("/guard/unlock", post(unlock))
         .route("/guard/lock", post(lock))
@@ -109,7 +113,7 @@ impl IntoResponse for ApiError {
             Unsupported(_) | InvalidObject(_) => StatusCode::BAD_REQUEST,
             Timeout => StatusCode::GATEWAY_TIMEOUT,
             ReadOnly(_) | Forbidden(_) => StatusCode::FORBIDDEN,
-            InvalidKubeconfig(_) | Kubeconfig(_) | Kube(_) => StatusCode::BAD_GATEWAY,
+            InvalidKubeconfig(_) | Kubeconfig(_) | Kube(_) | Model(_) => StatusCode::BAD_GATEWAY,
             Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let body = Json(serde_json::json!({ "error": self.0.to_string() }));
@@ -178,6 +182,58 @@ async fn set_agent_settings(
     Json(req): Json<AgentSettings>,
 ) -> ApiResult<Settings> {
     Ok(Json(kubri.set_agent_settings(req)?))
+}
+
+async fn set_explain_settings(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<ExplainSettings>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_explain_settings(req)?))
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExplainKey {
+    /// Never the key itself: only whether one is stored.
+    has_key: bool,
+}
+
+#[derive(Deserialize)]
+struct SetExplainKey {
+    /// `None` or empty removes the key.
+    key: Option<String>,
+}
+
+/// The web server keeps the key in a file only its user can read; see [`kubri_core::explain`].
+async fn explain_key() -> ApiResult<ExplainKey> {
+    Ok(Json(ExplainKey {
+        has_key: kubri_core::explain::read_key_file().is_some(),
+    }))
+}
+
+async fn set_explain_key(Json(req): Json<SetExplainKey>) -> ApiResult<ExplainKey> {
+    kubri_core::explain::write_key_file(req.key.as_deref())?;
+    explain_key().await
+}
+
+async fn explain_prompt(
+    State(kubri): State<Arc<Kubri>>,
+    Json(subject): Json<ExplainSubject>,
+) -> ApiResult<ExplainPrompt> {
+    let mut prompt = kubri.explain_prompt(&subject).await?;
+    prompt.has_key = kubri_core::explain::read_key_file().is_some();
+    Ok(Json(prompt))
+}
+
+#[derive(Deserialize)]
+struct Explain {
+    /// The prompt's text, as the user saw it.
+    text: String,
+}
+
+async fn explain(State(kubri): State<Arc<Kubri>>, Json(req): Json<Explain>) -> ApiResult<ExplainAnswer> {
+    let key = kubri_core::explain::read_key_file();
+    Ok(Json(kubri.explain(&req.text, key.as_deref()).await?))
 }
 
 async fn guard(State(kubri): State<Arc<Kubri>>) -> ApiResult<Guard> {

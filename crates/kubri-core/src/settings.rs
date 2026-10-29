@@ -106,6 +106,7 @@ pub struct Settings {
     pub contexts: BTreeMap<String, ContextSettings>,
     pub diff: DiffSettings,
     pub agents: AgentSettings,
+    pub explain: crate::ExplainSettings,
 }
 
 impl Settings {

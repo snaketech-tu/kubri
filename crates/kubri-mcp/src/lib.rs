@@ -12,10 +12,8 @@
 //! The protocol is JSON-RPC 2.0 as MCP specifies it, over stdio ([`stdio`]) or streamable
 //! HTTP ([`http`]).
 
-mod diagnose;
 pub mod http;
 mod hub;
-mod redact;
 mod render;
 pub mod stdio;
 mod tools;

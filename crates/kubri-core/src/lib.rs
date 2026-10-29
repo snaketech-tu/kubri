@@ -6,8 +6,10 @@
 mod access;
 mod bench;
 mod context;
+pub mod diagnose;
 mod discovery;
 mod error;
+pub mod explain;
 mod health;
 mod helm;
 mod k9s;
@@ -22,6 +24,7 @@ mod preview;
 mod proxy;
 mod pulse;
 mod rbac;
+pub mod redact;
 mod references;
 mod resource;
 mod sanitizer;
@@ -57,6 +60,7 @@ pub use bench::{
 };
 pub use context::{ContextInfo, write_in_cluster_kubeconfig};
 pub use error::{Error, Result};
+pub use explain::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject, Provider};
 pub use health::Health;
 pub use helm::{HelmRelease, HelmReleaseDetails};
 pub use k9s::{
