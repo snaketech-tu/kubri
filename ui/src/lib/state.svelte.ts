@@ -10,6 +10,7 @@ import {
 	type ColumnSettings,
 	type FavoriteForward,
 	type FavoriteStart,
+	type GitOpsAction,
 	type BenchInfo,
 	type ContextInfo,
 	type ContextSettings,
@@ -180,6 +181,8 @@ export type Dialog =
 	| { kind: 'suspend'; resource: ResourceInfo; target: ObjectRef; suspend: boolean }
 	| { kind: 'image'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef }
+	/** A Flux or Argo CD action; `autoSync` turns Argo CD's auto-sync off or on, as it is now. */
+	| { kind: 'gitops'; resource: ResourceInfo; target: ObjectRef; action: GitOpsAction | 'autoSync' }
 	/** A debug container in a pod, a debug copy of it, or a shell on a node. */
 	| { kind: 'debug'; on: 'pod' | 'node'; target: ObjectRef; way?: 'ephemeral' | 'copy'; container?: string }
 	/** A higher memory limit for a container, on the workload that owns its pod. */

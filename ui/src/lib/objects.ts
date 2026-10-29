@@ -1,10 +1,11 @@
 import { access, need } from './access.svelte';
-import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, startPlugin } from './actions';
+import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, runGitOps, startPlugin } from './actions';
 import { backend, type AccessCheck, type ObjectRef, type Owner, type ResourceInfo, type TerminalMode } from './api';
 import { hasCharts } from './charts';
 import { creating } from './create.svelte';
 import { dock } from './dock.svelte';
 import { errorMessage } from './format';
+import { canSuspendFlux, isArgoApp, isFlux } from './gitops';
 import { parseShortcut, pluginApplies, shortcutLabel } from './k9s';
 import { kubectlCommand, type KubectlOp } from './kubectl';
 import type { MenuAction } from './menu';
@@ -219,6 +220,18 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 			add('Change', 'Trigger now…', ['t'], dialog(() => ({ kind: 'trigger', resource, target })), { primary: 4, needs: need('create', { group: 'batch', plural: 'jobs' }, ns), kubectl: k({ op: 'trigger' }) });
 			const suspend = !subject.suspended;
 			add('Change', suspend ? 'Suspend…' : 'Resume…', ['s'], dialog(() => ({ kind: 'suspend', resource, target, suspend })), { needs: on('patch'), kubectl: k({ op: 'suspend', suspend }) });
+		}
+		if (isFlux(resource)) {
+			add('Change', 'Reconcile', ['r'], () => void runGitOps(target, 'reconcile'), { primary: 4, needs: on('patch') });
+			if (canSuspendFlux(resource)) {
+				const action = subject.suspended ? 'resume' : 'suspend';
+				add('Change', subject.suspended ? 'Resume…' : 'Suspend…', ['s'], dialog(() => ({ kind: 'gitops', resource, target, action })), { needs: on('patch') });
+			}
+		}
+		if (isArgoApp(resource)) {
+			add('Change', 'Sync…', ['s'], dialog(() => ({ kind: 'gitops', resource, target, action: 'sync' })), { primary: 4, needs: on('patch') });
+			add('Change', 'Refresh', ['r'], () => void runGitOps(target, 'refresh'), { needs: on('patch') });
+			add('Change', 'Auto-sync…', ['t'], dialog(() => ({ kind: 'gitops', resource, target, action: 'autoSync' })), { needs: on('patch') });
 		}
 		if (canEdit(resource)) add('Change', 'Edit', ['e'], show('yaml', { editing: true }), { primary: 7, id: 'edit', needs: on('update'), kubectl: k({ op: 'edit' }) });
 		if (canScale(resource) && !isPods(resource)) {

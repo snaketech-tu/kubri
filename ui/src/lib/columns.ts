@@ -2,6 +2,35 @@ import type { ColumnSettings, ResourceInfo } from './api';
 
 export const NO_COLUMNS: ColumnSettings = { hidden: [], shown: [], order: [], custom: [] };
 
+const custom = (...columns: [string, string][]): ColumnSettings => ({
+	...NO_COLUMNS,
+	custom: columns.map(([name, path]) => ({ name, path }))
+});
+const SUSPENDED: [string, string] = ['Suspended', '.spec.suspend'];
+const ARTIFACT = custom(['Revision', '.status.artifact.revision'], SUSPENDED);
+
+/** Columns kinds get until the settings say otherwise: what Flux and Argo CD leave out. */
+const BUILTIN: Record<string, ColumnSettings> = {
+	'kustomize.toolkit.fluxcd.io/Kustomization': custom(['Revision', '.status.lastAppliedRevision'], SUSPENDED),
+	'helm.toolkit.fluxcd.io/HelmRelease': custom(['Revision', '.status.lastAttemptedRevision'], SUSPENDED),
+	'source.toolkit.fluxcd.io/GitRepository': ARTIFACT,
+	'source.toolkit.fluxcd.io/OCIRepository': ARTIFACT,
+	'source.toolkit.fluxcd.io/HelmRepository': ARTIFACT,
+	'source.toolkit.fluxcd.io/HelmChart': ARTIFACT,
+	'source.toolkit.fluxcd.io/Bucket': ARTIFACT,
+	'argoproj.io/Application': custom(['Revision', '.status.sync.revision'], ['Last sync', '.status.operationState.phase'])
+};
+
+/** The columns of a kind: its settings, else Kubri's own for it. */
+export function columnsFor(key: string, settings: Record<string, ColumnSettings> | undefined): ColumnSettings {
+	return settings?.[key] ?? defaultColumns(key);
+}
+
+/** Kubri's own columns for a kind, which resetting goes back to. */
+export function defaultColumns(key: string): ColumnSettings {
+	return BUILTIN[key] ?? NO_COLUMNS;
+}
+
 /** How the settings name a kind: `group/Kind`, `/Pod` for the core group. */
 export function kindKey(resource: Pick<ResourceInfo, 'group' | 'kind'>) {
 	return `${resource.group}/${resource.kind}`;

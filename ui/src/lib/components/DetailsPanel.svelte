@@ -32,8 +32,10 @@
 	import DiffView from './DiffView.svelte';
 	import EventTimeline from './EventTimeline.svelte';
 	import FieldHelp from './FieldHelp.svelte';
+	import GitOpsSummary from './GitOpsSummary.svelte';
 	import Icon from './Icon.svelte';
 	import LogView from './LogView.svelte';
+	import ManagedNote from './ManagedNote.svelte';
 	import MetricsPanel from './MetricsPanel.svelte';
 	import PodSummary from './PodSummary.svelte';
 	import ServiceSummary from './ServiceSummary.svelte';
@@ -528,6 +530,9 @@
 	{#if saveError}
 		<div class="banner">{saveError}</div>
 	{/if}
+	{#if details.editing && details.tab === 'yaml'}
+		<ManagedNote target={details.target} />
+	{/if}
 	{#if details.editing && serverChanged && !compare && details.tab === 'yaml'}
 		<div class="banner notice" role="status">
 			<span>Someone changed this object on the server since you started editing.</span>
@@ -564,6 +569,8 @@
 			{#if !error}<p class="muted">Loading…</p>{/if}
 		{:else if details.tab === 'describe'}
 			<div class="scroll">
+				<ManagedNote target={details.target} />
+				<GitOpsSummary {object} target={details.target} {now} />
 				<PodSummary {object} target={details.target} onlogs={logs ? openLogs : undefined} />
 				{#if isServices(details.resource)}<ServiceSummary {object} target={details.target} />{/if}
 				<Describe

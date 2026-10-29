@@ -613,6 +613,23 @@ async fn integration_url(kubri: State<'_, Arc<Kubri>>, id: String) -> CommandRes
 }
 
 #[tauri::command]
+async fn gitops(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+    action: kubri_core::GitOpsAction,
+) -> CommandResult<()> {
+    kubri.gitops(&target, action).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn managed_by(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+) -> CommandResult<Option<kubri_core::Manager>> {
+    kubri.managed_by(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn loki_logs(
     kubri: State<'_, Arc<Kubri>>,
     request: kubri_core::LokiRequest,
@@ -929,6 +946,8 @@ pub fn run() {
             dashboards,
             integration_url,
             loki_logs,
+            gitops,
+            managed_by,
             xray,
             sanitize,
             rbac,
