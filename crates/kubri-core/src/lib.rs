@@ -18,6 +18,7 @@ mod fixes;
 mod fleet;
 mod gitops;
 mod grafana;
+mod graph;
 mod health;
 mod helm;
 mod integrations;
@@ -113,6 +114,7 @@ pub use settings::{
 pub fn config_dir() -> Option<std::path::PathBuf> {
     settings::dir()
 }
+pub use graph::{EdgeKind, Graph, GraphEdge, GraphNode, PathStep, RequestPath};
 pub use table::{Column, Owner, Row, TableEvent, TableScope};
 pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
 pub use workload::{ContainerImage, Drill};
@@ -1152,6 +1154,13 @@ impl Kubri {
             ))
         })?;
         xray::gather(session.client.clone(), root, namespace).await
+    }
+
+    /// The objects of `namespace`, or of all namespaces, as a graph of how they connect, with
+    /// the request path of every Ingress rule.
+    pub async fn graph(&self, namespace: Option<&str>) -> Result<Graph> {
+        let session = self.session().await?;
+        graph::gather(session.client.clone(), namespace).await
     }
 
     /// Checks the objects of `namespace`, or of the whole cluster with nodes, volumes and

@@ -202,6 +202,7 @@ export const httpBackend: Backend = {
 	lokiLogs: (request_) => request('POST', '/loki/logs', request_),
 	usageHistory: (namespace, seconds) =>
 		request('GET', `/usage-history?${new URLSearchParams({ namespace: namespace ?? '', seconds: String(seconds) })}`),
+	graph: (namespace) => request('GET', `/graph?${new URLSearchParams({ namespace: namespace ?? '' })}`),
 	xray: (resource, namespace) =>
 		request('GET', `/xray?${new URLSearchParams({ ...resource, namespace: namespace ?? '' })}`),
 	sanitize: (namespace) => request('GET', `/sanitize?${new URLSearchParams({ namespace: namespace ?? '' })}`),

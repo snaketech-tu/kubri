@@ -720,6 +720,11 @@ async fn loki_logs(
 }
 
 #[tauri::command]
+async fn graph(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<kubri_core::Graph> {
+    kubri.graph(namespace.as_deref()).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn xray(
     kubri: State<'_, Arc<Kubri>>,
     resource: ResourceRef,
@@ -1041,6 +1046,7 @@ pub fn run() {
             get_object_elsewhere,
             set_resources,
             xray,
+            graph,
             sanitize,
             rbac,
             permissions,
