@@ -1204,7 +1204,7 @@ impl Kubri {
         options: LogOptions,
     ) -> Result<impl Stream<Item = LogEvent> + Send + 'static> {
         let session = self.object_session(target).await?;
-        let pods = session.pods_of(target).await?;
+        let (pods, selector) = session.pods_and_selector(target).await?;
         let mut sources = logs::sources(&pods, options.container.as_deref());
         if sources.is_empty() {
             return Err(Error::Unsupported(format!("{} has no pods", target.name)));
@@ -1218,7 +1218,19 @@ impl Kubri {
             ),
         });
         sources.truncate(logs::MAX_STREAMS);
-        let events = logs::stream_logs(session.client.clone(), sources, options);
+        let joiner = match (selector, target.namespace.as_deref()) {
+            (Some(selector), Some(namespace)) => Some(logs::Joiner {
+                api: Api::namespaced(session.client.clone(), namespace),
+                selector,
+                started: pods
+                    .iter()
+                    .filter(|p| logs::pod_started(p))
+                    .filter_map(|p| p.metadata.name.clone())
+                    .collect(),
+            }),
+            _ => None,
+        };
+        let events = logs::stream_logs(session.client.clone(), sources, options, joiner);
         // The notice goes after the sources, which always come first.
         Ok(events.enumerate().flat_map(move |(i, event)| {
             let notice = if i == 0 { notice.clone() } else { None };
@@ -1501,13 +1513,19 @@ impl Session {
 
     /// The pods behind `target`: the pod itself, or the pods a workload or Service selects.
     async fn pods_of(&self, target: &ObjectRef) -> Result<Vec<Pod>> {
+        Ok(self.pods_and_selector(target).await?.0)
+    }
+
+    /// The pods behind `target`, and for a workload or Service the label selector that picks
+    /// them.
+    async fn pods_and_selector(&self, target: &ObjectRef) -> Result<(Vec<Pod>, Option<String>)> {
         let info = self.info_for(&target.resource)?;
         if self.is_core(&target.resource, "Pod")? {
             let pod = self
                 .pod_api(target.namespace.as_deref())?
                 .get(&target.name)
                 .await?;
-            return Ok(vec![pod]);
+            return Ok((vec![pod], None));
         }
         if !info.namespaced {
             return Err(Error::Unsupported(format!(
@@ -1525,7 +1543,7 @@ impl Session {
         let pods = self.pod_api(target.namespace.as_deref())?;
         let mut pods = pods.list(&ListParams::default().labels(&selector)).await?.items;
         pods.sort_by(|a, b| a.metadata.name.cmp(&b.metadata.name));
-        Ok(pods)
+        Ok((pods, Some(selector)))
     }
 
     /// An API handle for `resource`. `namespace` is ignored for cluster-scoped resources.

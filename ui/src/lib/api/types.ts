@@ -348,16 +348,29 @@ export interface LogSource {
 	container: string;
 }
 
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
 export interface LogLine {
 	/** Index into the sources of the stream. */
 	source: number;
+	/** The line without the kubelet's timestamp. */
 	text: string;
+	/** When the kubelet received the line, as RFC 3339. */
+	time?: string;
+	/** The level the line names; lines that continue another take its level. */
+	level?: LogLevel;
+	/** The fields of a JSON or logfmt line. */
+	fields?: Record<string, unknown>;
+	/** The line continues the one before it from the same container, like a stack frame. */
+	continued?: boolean;
 }
 
 export type LogEvent =
 	| { type: 'sources'; sources: LogSource[] }
 	| { type: 'lines'; lines: LogLine[] }
 	| { type: 'error'; source: number | null; message: string }
+	/** Something happened to the stream, such as a pod that joined or a log that ended. */
+	| { type: 'marker'; text: string; time?: string }
 	| { type: 'end' };
 
 export type TerminalMode = 'shell' | 'attach';

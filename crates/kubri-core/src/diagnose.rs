@@ -121,6 +121,7 @@ impl Kubri {
     /// Log lines of `target` as text, each marked with its pod and container when there are
     /// several. Reading stops after 20 seconds.
     pub async fn log_text(&self, target: &ObjectRef, options: LogOptions) -> Result<String> {
+        let timestamps = options.timestamps;
         let mut events = Box::pin(self.logs(target, options).await?);
         let mut sources = Vec::new();
         let mut lines = Vec::new();
@@ -131,6 +132,7 @@ impl Kubri {
                     LogEvent::Sources { sources: s } => sources = s,
                     LogEvent::Lines { lines: batch } => lines.extend(batch),
                     LogEvent::Error { message, .. } => errors.push(message),
+                    LogEvent::Marker { .. } => {}
                     LogEvent::End => break,
                 }
             }
@@ -139,9 +141,16 @@ impl Kubri {
         let several = sources.len() > 1;
         let mut out: Vec<String> = lines
             .iter()
-            .map(|line| match sources.get(line.source) {
-                Some(s) if several => format!("[{}/{}] {}", s.pod, s.container, line.text),
-                _ => line.text.clone(),
+            .map(|line| {
+                let text = if timestamps {
+                    line.with_time()
+                } else {
+                    line.text.clone()
+                };
+                match sources.get(line.source) {
+                    Some(s) if several => format!("[{}/{}] {text}", s.pod, s.container),
+                    _ => text,
+                }
             })
             .collect();
         if out.is_empty() {

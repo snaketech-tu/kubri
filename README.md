@@ -88,7 +88,8 @@ See [Development](#development).
     <td valign="top">
       <b>Debug</b>
       <ul>
-        <li>Live logs of a pod or a whole workload, all containers merged</li>
+        <li>Live logs of a pod or a whole workload, all containers merged, with new pods joining during a rollout</li>
+        <li>Levels, JSON and logfmt fields as a table, field filters like <code>status>=500</code>, folded stack traces and a rate strip</li>
         <li>Shell or attach in a real terminal</li>
         <li>Port-forwards, with HTTP benchmarks on top</li>
         <li>Decoded Secrets, and what uses a ConfigMap or Secret</li>

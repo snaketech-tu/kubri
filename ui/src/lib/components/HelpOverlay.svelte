@@ -60,7 +60,8 @@
 		[
 			'Logs',
 			[
-				['/', 'Search the lines; Esc clears'],
+				['/', 'Search: text, /regex/ or fields like level>=warn status>=500; Esc clears'],
+				['n / N', 'Next / previous match; Enter in the search too'],
 				['0 – 6', 'Tail, all, 1m, 5m, 15m, 30m, 1h'],
 				['t / w', 'Timestamps / wrap'],
 				['s', 'Autoscroll'],
