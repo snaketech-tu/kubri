@@ -25,6 +25,7 @@ mod rbac;
 mod references;
 mod resource;
 mod sanitizer;
+mod schema;
 mod selector;
 mod settings;
 mod table;
@@ -106,6 +107,8 @@ struct Session {
     resources: Vec<ResourceInfo>,
     by_ref: HashMap<ResourceRef, usize>,
     access: access::AccessCache,
+    /// OpenAPI schemas by kind, fetched once per connection.
+    schemas: std::sync::Mutex<HashMap<ResourceRef, Arc<Option<Value>>>>,
 }
 
 pub struct Kubri {
@@ -445,6 +448,35 @@ impl Kubri {
             session.access.clear();
         }
         Ok(access::check_all(&session.client, &session.access, checks).await)
+    }
+
+    /// The OpenAPI v3 schema of a kind: `{ root, schemas }`, with the schemas it refers to by
+    /// name. `None` where the API server publishes none for it.
+    pub async fn schema(&self, resource: &ResourceRef) -> Result<Arc<Option<Value>>> {
+        let session = self.session().await?;
+        if let Some(found) = session
+            .schemas
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(resource)
+        {
+            return Ok(found.clone());
+        }
+        let info = session.info_for(resource)?;
+        let document =
+            schema::group_version_document(&session.client, &resource.group, &resource.version).await?;
+        let found = Arc::new(schema::kind_schema(
+            &document,
+            &resource.group,
+            &resource.version,
+            &info.kind,
+        ));
+        session
+            .schemas
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(resource.clone(), found.clone());
+        Ok(found)
     }
 
     /// Who the cluster takes the current user for, like `kubectl auth whoami`.
@@ -1339,6 +1371,7 @@ impl Session {
             resources,
             by_ref,
             access: Default::default(),
+            schemas: Default::default(),
         }
     }
 

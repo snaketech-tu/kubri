@@ -1,4 +1,19 @@
+<script lang="ts" module>
+	/** Schemas by context and resource: a kind's schema does not change while connected. */
+	const schemas = new Map<string, Promise<KindSchema | null>>();
+	const FIELD_HELP_KEY = 'kubri.fieldHelp';
+
+	function storedFieldHelp() {
+		try {
+			return localStorage.getItem(FIELD_HELP_KEY) !== 'off';
+		} catch {
+			return true;
+		}
+	}
+</script>
+
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { parse, stringify } from 'yaml';
 	import { canEdit, save } from '../actions';
 	import { backend, type EventInfo, type KubeObject, type Preview, type Reference } from '../api';
@@ -8,10 +23,13 @@
 	import { app, type Details, type DetailsTab } from '../state.svelte';
 	import { cellTone } from '../status';
 	import { drill, drillLabel, objectActions, subjectOf } from '../objects';
+	import type { FieldPath, KindSchema } from '../schema';
+	import { changedMeaningfully, comparable, threeWay } from '../threeway';
 	import ActionBar from './ActionBar.svelte';
 	import Describe from './Describe.svelte';
 	import DiffView from './DiffView.svelte';
 	import EventTimeline from './EventTimeline.svelte';
+	import FieldHelp from './FieldHelp.svelte';
 	import Icon from './Icon.svelte';
 	import LogView from './LogView.svelte';
 	import PodSummary from './PodSummary.svelte';
@@ -51,7 +69,8 @@
 		events = [];
 		load();
 		const timer = setInterval(() => {
-			if (!details.editing && ['describe', 'events', 'yaml'].includes(details.tab)) load();
+			if (details.editing) watchServer();
+			else if (['describe', 'events', 'yaml'].includes(details.tab)) load();
 		}, REFRESH);
 		return () => clearInterval(timer);
 	});
@@ -158,6 +177,93 @@
 		return stringify(copy, { lineWidth: 0 });
 	});
 
+	/** The kind's schema, for completion, validation and the field help. */
+	let schema = $state<KindSchema | null>(null);
+	let cursor = $state<FieldPath>([]);
+	let fieldHelp = $state(storedFieldHelp());
+
+	$effect(() => {
+		if (details.tab !== 'yaml') return;
+		const resource = details.resource;
+		const key = JSON.stringify([app.cluster?.context, resource.group, resource.version, resource.plural]);
+		if (!schemas.has(key)) schemas.set(key, backend.schema(resource).catch(() => null));
+		let current = true;
+		schema = null;
+		schemas.get(key)?.then((found) => current && (schema = found));
+		return () => {
+			current = false;
+		};
+	});
+
+	function toggleFieldHelp() {
+		fieldHelp = !fieldHelp;
+		try {
+			localStorage.setItem(FIELD_HELP_KEY, fieldHelp ? 'on' : 'off');
+		} catch {
+			// Remembered until the page reloads.
+		}
+	}
+
+	/** The object as it is on the server now, fetched while editing to notice changes made meanwhile. */
+	let latest = $state<KubeObject | null>(null);
+	/** Changes made on the server since editing began, beyond status updates. */
+	const serverChanged = $derived(
+		!!latest &&
+			!!object &&
+			latest.metadata.resourceVersion !== object.metadata.resourceVersion &&
+			changedMeaningfully($state.snapshot(object), $state.snapshot(latest))
+	);
+	/** Their changes and mine side by side, with the draft rebased onto theirs. */
+	let compare = $state<{ mine: unknown; merged: unknown; conflicts: string[] } | null>(null);
+
+	async function watchServer() {
+		if (details.tab !== 'yaml' || saving) return;
+		try {
+			latest = await backend.getObject(details.target);
+		} catch {
+			// The save will tell.
+		}
+	}
+
+	$effect(() => {
+		if (!details.editing) {
+			latest = null;
+			compare = null;
+		}
+	});
+
+	async function showCompare() {
+		await watchServer();
+		if (!editor || !object || !latest) return;
+		let mine: KubeObject;
+		try {
+			mine = parse(editor.text());
+		} catch (err) {
+			saveError = `Invalid YAML: ${errorMessage(err)}`;
+			return;
+		}
+		const base = $state.snapshot(object);
+		const theirs = $state.snapshot(latest);
+		if (!showManaged) delete (theirs as KubeObject).metadata.managedFields;
+		const { merged, conflicts } = threeWay(base, mine, theirs);
+		review = null;
+		compare = { mine, merged, conflicts };
+	}
+
+	/** Takes their version as the new starting point and puts my changes back on top. */
+	async function rebase() {
+		if (!compare || !latest || !editor) return;
+		const merged = stringify(compare.merged, { lineWidth: 0 });
+		object = latest;
+		compare = null;
+		latest = null;
+		// The editor is hidden while comparing; it takes focus once shown again.
+		await tick();
+		editor.replace(merged);
+		saveError = null;
+		app.toast('Your changes now apply to the latest version');
+	}
+
 	/** A dry run of the edit, shown as a diff before it is saved. */
 	let review = $state<{ text: string; preview: Preview } | null>(null);
 
@@ -184,6 +290,14 @@
 		) {
 			saveError = 'Keep the name, namespace and resourceVersion as they are.';
 			return false;
+		}
+		if (serverChanged) {
+			saveError = 'Someone changed this object since you started editing. Compare and take their changes first.';
+			return false;
+		}
+		// The server only updated the status meanwhile: the edit still applies to the latest version.
+		if (latest && meta && latest.metadata.resourceVersion !== meta.resourceVersion) {
+			meta.resourceVersion = latest.metadata.resourceVersion;
 		}
 		if (!reviewed && review?.text !== text) {
 			saving = true;
@@ -216,8 +330,9 @@
 
 	/** Stops editing; with unsaved changes, asks first. */
 	function cancel() {
-		if (review) {
+		if (review || compare) {
 			review = null;
+			compare = null;
 			return;
 		}
 		if (drafts.block(cancel)) return;
@@ -235,6 +350,7 @@
 		drafts.discard = () => {
 			details.editing = false;
 			review = null;
+			compare = null;
 			saveError = null;
 		};
 		return () => {
@@ -292,7 +408,7 @@
 		<div class="title">
 			<span class="kind">{details.resource.kind} inspector</span>
 			<h2 title={details.target.name}>{details.target.name}</h2>
-			<p class="context-path">{app.cluster?.context} / {details.target.namespace ?? 'cluster-scoped'}</p>
+			<p class="context-path">{app.cluster ? app.contextName(app.cluster.context) : ''} / {details.target.namespace ?? 'cluster-scoped'}</p>
 			{#if status}
 				<p class="status {status.tone}">
 					<Icon name={status.tone === 'ok' ? 'ok' : status.tone === 'bad' ? 'critical' : 'pending'} size={15} />
@@ -338,7 +454,13 @@
 		<span class="spacer"></span>
 		{#if details.tab === 'yaml'}
 			<label class="managed"><input type="checkbox" bind:checked={showManaged} disabled={details.editing} /> managed fields</label>
-			{#if details.editing && review}
+			{#if schema}
+				<label class="managed"><input type="checkbox" checked={fieldHelp} onchange={toggleFieldHelp} /> field help</label>
+			{/if}
+			{#if details.editing && compare}
+				<button class="secondary" onclick={() => (compare = null)}>Back to editing</button>
+				<button class="primary" onclick={rebase}>Apply mine to theirs</button>
+			{:else if details.editing && review}
 				<button class="secondary" onclick={() => (review = null)}>Back to editing</button>
 				<button class="primary" disabled={saving} onclick={() => review && onsave(review.text, true)}>
 					{saving ? 'Saving…' : 'Save'}
@@ -359,6 +481,12 @@
 	{/if}
 	{#if saveError}
 		<div class="banner">{saveError}</div>
+	{/if}
+	{#if details.editing && serverChanged && !compare && details.tab === 'yaml'}
+		<div class="banner notice" role="status">
+			<span>Someone changed this object on the server since you started editing.</span>
+			<button class="secondary" onclick={showCompare}>Compare</button>
+		</div>
 	{/if}
 
 	<div class="body">
@@ -404,24 +532,46 @@
 				<EventTimeline {events} {now} />
 			</div>
 		{:else}
-			{#if review}
+			{#if compare && object && latest}
+				<div class="review">
+					<p>
+						Their changes are on the server now. Applying yours to theirs keeps both{compare.conflicts.length
+							? ', except where you both changed the same field: there yours win'
+							: ''}. Nothing is saved until you review and save.
+					</p>
+					{#if compare.conflicts.length}
+						<p class="conflicts">
+							Both changed: {#each compare.conflicts as path, i (path)}{i ? ', ' : ''}<code>{path || 'the whole object'}</code>{/each}
+						</p>
+					{/if}
+					<h3>Their changes</h3>
+					<DiffView before={comparable($state.snapshot(object))} after={comparable($state.snapshot(latest))} maxHeight="none" />
+					<h3>Your changes</h3>
+					<DiffView before={comparable($state.snapshot(object))} after={comparable(compare.mine)} maxHeight="none" />
+				</div>
+			{:else if review}
 				<div class="review">
 					<p>Review the changes before saving. The API server checked them in a dry run.</p>
 					<DiffView before={review.preview.before} after={review.preview.after} maxHeight="none" />
 				</div>
 			{/if}
 			<!-- Hidden, not closed, while the diff is up: the draft stays as it is. -->
-			<div class="editor" class:hidden={review}>
+			<div class="editor" class:hidden={review || compare}>
 				{#key showManaged}
 					<YamlEditor
 						value={yamlText}
 						readonly={!details.editing}
+						{schema}
+						oncursor={(path) => (cursor = path)}
 						onsave={(text) => onsave(text)}
 						oncancel={cancel}
 						onchange={(dirty) => (drafts.dirty = dirty)}
 						bind:this={editor}
 					/>
 				{/key}
+				{#if schema && fieldHelp}
+					<FieldHelp {schema} path={cursor} />
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -673,6 +823,21 @@
 		margin: 0 0 10px;
 		color: var(--text-muted);
 		font-size: 13px;
+	}
+	.review h3 {
+		margin: 14px 0 6px;
+		font-size: 13px;
+	}
+	.review .conflicts {
+		color: var(--warn);
+	}
+	.banner.notice {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		background: color-mix(in srgb, var(--warn) 15%, transparent);
+		color: var(--text);
 	}
 	.muted {
 		padding: 20px;

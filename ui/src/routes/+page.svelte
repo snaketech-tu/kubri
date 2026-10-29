@@ -489,7 +489,7 @@
 		<footer>
 			<span class="status" class:live={app.cluster && !app.connecting} role="status">
 				<span class="dot"></span>
-				{app.connecting ? `Connecting to ${app.connecting}…` : app.cluster ? `Live · ${app.cluster.context}` : 'Not connected'}
+				{app.connecting ? `Connecting to ${app.connecting}…` : app.cluster ? `Live · ${app.contextName(app.cluster.context)}` : 'Not connected'}
 			</span>
 			<span class="hints">
 				{#each hints as [key, label], i (key + i)}
