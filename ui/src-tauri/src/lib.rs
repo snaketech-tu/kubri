@@ -346,6 +346,13 @@ async fn start_port_forward(
 }
 
 #[tauri::command]
+async fn start_favorite_forwards(
+    kubri: State<'_, Arc<Kubri>>,
+) -> CommandResult<Vec<kubri_core::FavoriteStart>> {
+    kubri.start_favorite_forwards().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn stop_port_forward(kubri: State<'_, Arc<Kubri>>, id: u32) -> CommandResult<()> {
     kubri.stop_port_forward(id).map_err(|e| e.to_string())
 }
@@ -831,6 +838,7 @@ pub fn run() {
             port_forwards,
             start_port_forward,
             stop_port_forward,
+            start_favorite_forwards,
             benchmarks,
             start_benchmark,
             stop_benchmark,

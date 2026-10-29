@@ -94,6 +94,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/terminal", any(terminal))
         .route("/portforwards", get(port_forwards).post(start_port_forward))
         .route("/portforwards/{id}", delete(stop_port_forward))
+        .route("/portforwards/favorites", post(start_favorite_forwards))
         .route("/benchmarks", get(benchmarks).post(start_benchmark))
         .route("/benchmarks/{id}", delete(remove_benchmark))
         .route("/benchmarks/{id}/stop", post(stop_benchmark))
@@ -905,6 +906,12 @@ async fn start_port_forward(
     Json(req): Json<PortForwardRequest>,
 ) -> ApiResult<PortForwardInfo> {
     Ok(Json(kubri.start_port_forward(req).await?))
+}
+
+async fn start_favorite_forwards(
+    State(kubri): State<Arc<Kubri>>,
+) -> ApiResult<Vec<kubri_core::FavoriteStart>> {
+    Ok(Json(kubri.start_favorite_forwards().await?))
 }
 
 async fn stop_port_forward(State(kubri): State<Arc<Kubri>>, Path(id): Path<u32>) -> ApiResult<()> {

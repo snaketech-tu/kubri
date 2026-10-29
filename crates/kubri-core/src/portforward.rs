@@ -1,7 +1,9 @@
 //! Port-forwards from a local port to a pod, like `kubectl port-forward`.
 //!
 //! Each accepted connection opens its own stream to the pod, so one forward serves many
-//! clients. Forwards keep running when the UI switches context, until they are stopped.
+//! clients. Forwards keep running when the UI switches context, until they are stopped. A
+//! forward to a Service or workload picks another ready pod when its pod is gone, so it
+//! survives restarts and rollouts.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -52,6 +54,14 @@ pub struct PortForwardInfo {
     pub error: Option<String>,
 }
 
+/// A favorite forward, and why it could not start if it could not.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FavoriteStart {
+    pub favorite: crate::FavoriteForward,
+    pub error: Option<String>,
+}
+
 struct Forward {
     info: Arc<Mutex<PortForwardInfo>>,
     task: JoinHandle<()>,
@@ -90,12 +100,18 @@ impl Forwards {
     }
 }
 
+/// Finds the pod and port to use now, for a forward whose pod went away.
+pub(crate) type Repick =
+    Arc<dyn Fn() -> futures::future::BoxFuture<'static, Result<(String, u16)>> + Send + Sync>;
+
 /// Where the traffic of a forward goes.
 pub(crate) struct Destination {
     pub api: Api<Pod>,
     pub namespace: String,
     pub pod: String,
     pub port: u16,
+    /// For a Service or workload: how to find another pod.
+    pub repick: Option<Repick>,
 }
 
 /// Binds the local port and starts forwarding.
@@ -139,17 +155,35 @@ async fn serve(listener: TcpListener, destination: Destination, info: Arc<Mutex<
     loop {
         tokio::select! {
             accepted = listener.accept() => match accepted {
-                Ok((socket, peer)) => {
+                Ok((mut socket, peer)) => {
                     let api = destination.api.clone();
-                    let pod = destination.pod.clone();
-                    let port = destination.port;
+                    let repick = destination.repick.clone();
                     let info = Arc::clone(&info);
                     connections.spawn(async move {
-                        info.lock().unwrap().connections += 1;
-                        let result = connect(api, &pod, port, socket).await;
+                        let (pod, port) = {
+                            let mut info = info.lock().unwrap();
+                            info.connections += 1;
+                            (info.pod.clone(), info.pod_port)
+                        };
+                        let mut result = connect(&api, &pod, port, &mut socket).await;
+                        // The pod may be gone after a restart or rollout: another one takes over.
+                        if let (Err(Failure::Open(err)), Some(repick)) = (&result, repick) {
+                            match repick().await {
+                                Ok((pod, port)) => {
+                                    tracing::info!(%err, pod, port, "port-forward moves to another pod");
+                                    {
+                                        let mut info = info.lock().unwrap();
+                                        info.pod = pod.clone();
+                                        info.pod_port = port;
+                                    }
+                                    result = connect(&api, &pod, port, &mut socket).await;
+                                }
+                                Err(again) => result = Err(Failure::Open(format!("{err}; no other pod: {again}"))),
+                            }
+                        }
                         let mut info = info.lock().unwrap();
                         info.connections -= 1;
-                        match result {
+                        match result.map_err(Failure::message) {
                             Ok(()) => info.error = None,
                             Err(err) => {
                                 tracing::warn!(%peer, pod, port, %err, "port-forward connection failed");
@@ -170,21 +204,36 @@ async fn serve(listener: TcpListener, destination: Destination, info: Arc<Mutex<
     }
 }
 
+enum Failure {
+    /// The stream to the pod did not open, as when the pod is gone.
+    Open(String),
+    /// The connection broke while copying.
+    Copy(String),
+}
+
+impl Failure {
+    fn message(self) -> String {
+        match self {
+            Failure::Open(m) | Failure::Copy(m) => m,
+        }
+    }
+}
+
 /// Copies one local connection to and from the pod.
-async fn connect(api: Api<Pod>, pod: &str, port: u16, mut socket: TcpStream) -> Result<(), String> {
+async fn connect(api: &Api<Pod>, pod: &str, port: u16, socket: &mut TcpStream) -> Result<(), Failure> {
     let mut forwarder = api
         .portforward(pod, &[port])
         .await
-        .map_err(|e| Error::from(e).to_string())?;
+        .map_err(|e| Failure::Open(Error::from(e).to_string()))?;
     let mut upstream = forwarder
         .take_stream(port)
-        .ok_or_else(|| "the pod did not open the port".to_owned())?;
+        .ok_or_else(|| Failure::Open("the pod did not open the port".to_owned()))?;
     let failed = forwarder.take_error(port);
     let result = tokio::select! {
-        copied = tokio::io::copy_bidirectional(&mut socket, &mut upstream) => {
-            copied.map(|_| ()).map_err(|e| e.to_string())
+        copied = tokio::io::copy_bidirectional(socket, &mut upstream) => {
+            copied.map(|_| ()).map_err(|e| Failure::Copy(e.to_string()))
         }
-        Some(Some(message)) = async { match failed { Some(f) => Some(f.await), None => None } } => Err(message),
+        Some(Some(message)) = async { match failed { Some(f) => Some(f.await), None => None } } => Err(Failure::Copy(message)),
     };
     drop(upstream);
     forwarder.abort();
@@ -329,6 +378,7 @@ mod tests {
             namespace: "shop".into(),
             pod: "web-1".into(),
             port: 8080,
+            repick: None,
         };
         let info = start(&forwards, "kind".into(), request, destination)
             .await

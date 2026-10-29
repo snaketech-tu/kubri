@@ -104,6 +104,7 @@
 				['b', 'HTTP benchmark'],
 				['o', 'Open in the browser'],
 				['c  or  Enter', 'Copy URL'],
+				['s', 'Favorite: start whenever Kubri connects'],
 				['Ctrl+D', 'Stop']
 			]
 		],

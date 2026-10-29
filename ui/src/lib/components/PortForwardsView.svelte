@@ -4,7 +4,8 @@
 	import { stopPortForward } from '../actions';
 	import { backend, type PortForwardInfo } from '../api';
 	import { age, errorMessage } from '../format';
-	import { app } from '../state.svelte';
+	import { app, favoriteLabel, isForwardOf } from '../state.svelte';
+	import type { FavoriteForward } from '../api';
 	import PageHeader from './PageHeader.svelte';
 
 	let cursorId = $state<number | null>(null);
@@ -21,6 +22,30 @@
 	});
 
 	const forwards = $derived(app.forwards);
+	/** The connected context's favorites that are not running. */
+	const stopped = $derived(
+		(app.cluster ? app.contextSettingsOf(app.cluster.context).forwards ?? [] : []).filter(
+			(f) => !forwards.some((r) => r.context === app.cluster?.context && isForwardOf(f, r))
+		)
+	);
+	let starting = $state<FavoriteForward | null>(null);
+
+	async function start(f: FavoriteForward) {
+		starting = f;
+		try {
+			await backend.startPortForward({
+				target: { ...f.target, context: app.cluster?.context },
+				remotePort: f.remotePort,
+				localPort: f.localPort,
+				address: f.address || null
+			});
+			await app.refreshForwards();
+		} catch (err) {
+			app.toast(`${favoriteLabel(f)} did not start: ${errorMessage(err)}`, 'bad');
+		} finally {
+			starting = null;
+		}
+	}
 	const cursor = $derived.by(() => {
 		const i = forwards.findIndex((f) => f.id === cursorId);
 		return i === -1 ? 0 : i;
@@ -87,6 +112,9 @@
 				case 'b':
 					if (current) app.dialog = { kind: 'benchmark', forward: current };
 					return true;
+				case 's':
+					if (current) app.toggleFavorite(current);
+					return true;
 			}
 			return false;
 		})();
@@ -101,7 +129,7 @@
 		crumbs={['Explore', 'Port-forwards']}
 		title="Port-forwards"
 		count={forwards.length}
-		subtitle="Local ports tunneled to pods. They keep running while you work elsewhere in Kubri."
+		subtitle="Local ports tunneled to pods. They keep running while you work elsewhere in Kubri, and move to another pod when theirs goes away."
 	/>
 
 	<div class="card">
@@ -121,6 +149,7 @@
 					</thead>
 					<tbody>
 						{#each forwards as f, i (f.id)}
+							{@const favorite = !!app.favoriteOf(f)}
 							<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)}>
 								<td class="mono">
 									<a href={url(f)} target="_blank" rel="noreferrer" onclick={(e) => open(f, e)} title="Open in the browser (o)">{f.address}:{f.localPort}</a>
@@ -136,6 +165,15 @@
 								<td class="muted">{age(f.started, now)}</td>
 								<td>
 									<div class="buttons">
+										<button
+											class="btn small star"
+											class:on={favorite}
+											aria-pressed={favorite}
+											onclick={() => app.toggleFavorite(f)}
+											title={favorite ? 'A favorite: starts whenever Kubri connects to this context (s)' : 'Keep as a favorite that starts with Kubri (s)'}
+										>
+											{favorite ? '★' : '☆'} Favorite
+										</button>
 										<button class="btn small" onclick={() => (app.dialog = { kind: 'benchmark', forward: f })} title="HTTP benchmark (b)">Benchmark</button>
 										<button class="btn small danger" onclick={() => stopPortForward(f.id)} title="Stop (Ctrl+D)">Stop</button>
 									</div>
@@ -148,6 +186,23 @@
 				<div class="empty" role="status">
 					<p>No port-forwards running.</p>
 					<p class="muted">Select a pod, deployment or service and press <kbd>Shift+F</kbd> to start one.</p>
+				</div>
+			{/if}
+			{#if stopped.length}
+				<div class="favorites">
+					<h3>Favorites not running in {app.cluster ? app.contextName(app.cluster.context) : ''}</h3>
+					<ul>
+						{#each stopped as f (favoriteLabel(f))}
+							<li>
+								<span class="mono">{f.address || '127.0.0.1'}:{f.localPort}</span>
+								<span class="mono muted">→ {f.target.resource.plural}/{f.target.name}:{f.remotePort}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</span>
+								<span class="buttons">
+									<button class="btn small" onclick={() => start(f)} disabled={starting === f}>{starting === f ? 'Starting…' : 'Start'}</button>
+									<button class="btn small" onclick={() => app.removeFavorite(f)} title="Forget this favorite">Remove</button>
+								</span>
+							</li>
+						{/each}
+					</ul>
 				</div>
 			{/if}
 		</div>
@@ -171,6 +226,37 @@
 		border-radius: 10px;
 		background: var(--surface-1);
 		overflow: hidden;
+	}
+	.favorites {
+		padding: 8px 16px 16px;
+		border-top: 1px solid var(--border-subtle);
+	}
+	.favorites h3 {
+		margin: 8px 0;
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.favorites ul {
+		display: grid;
+		gap: 6px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		font-size: 13px;
+	}
+	.favorites li {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+	.favorites .buttons {
+		margin-left: auto;
+	}
+	.star.on {
+		color: var(--accent-strong);
 	}
 	.table-wrap {
 		flex: 1;
