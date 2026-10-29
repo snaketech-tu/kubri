@@ -105,13 +105,15 @@ See [Development](#development).
       <b>See the whole cluster</b>
       <ul>
         <li>Pulses: health per kind, usage trends and recent warnings</li>
-        <li>XRay: each workload down to its pods, containers and references</li>
+        <li>XRay: each workload down to its pods, containers and references, or a namespace as a graph with each Ingress's request path and where it breaks</li>
         <li>RBAC: who may do what, as a matrix of verbs</li>
         <li>Helm: install charts from repositories, OCI or Artifact Hub, upgrade with a diff, compare revisions and spot drift</li>
         <li>A Popeye-style sanitizer with a grade</li>
         <li>Prometheus charts for CPU, memory, restarts, network and requests, with Grafana dashboards and Loki history</li>
         <li>Flux, Argo CD and cert-manager: status, reconcile, sync and renew, and a warning before changing what they manage</li>
         <li>Right-sizing: containers that request far more or less than they use, with the change to fix it</li>
+        <li>Every cluster on one page, with contexts added from a kubeconfig in the app, and an object compared across clusters</li>
+        <li>Search by name, label and field across clusters (<kbd>:search</kbd>), with saved searches in the sidebar</li>
       </ul>
     </td>
   </tr>
@@ -123,6 +125,7 @@ See [Development](#development).
         <li>Read-only and locked contexts, unlocked for 15 minutes when needed</li>
         <li>Actions you may not run say which permission is missing, with a Role to send to an admin</li>
         <li>Every action as the <code>kubectl</code> command that does the same</li>
+        <li>Deleting something still in use names what breaks first</li>
       </ul>
     </td>
     <td valign="top">
@@ -190,6 +193,14 @@ See [Development](#development).
     <td valign="top"><img src="docs/assets/screenshots/metrics.png" alt="A Deployment's CPU and memory per pod from Prometheus, against its request and limit, with a link to its Grafana dashboard"><br><b>Metrics</b>: Prometheus history against requests and limits, and the matching Grafana dashboard</td>
     <td valign="top"><img src="docs/assets/screenshots/right-sizing.png" alt="Right-sizing: containers whose requests are far from their use, with suggested values"><br><b>Right-sizing</b>: what each container requests and uses, and what to set instead (<kbd>:rightsizing</kbd>)</td>
   </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/fleet.png" alt="Clusters: a card per context with its health, nodes, pods, workloads and requests, including unreachable ones"><br><b>Clusters</b>: every context side by side, even when some are down (<kbd>:fleet</kbd>)</td>
+    <td valign="top"><img src="docs/assets/screenshots/search.png" alt="Search for web across two contexts, listing Deployments, Services and Ingresses"><br><b>Search</b>: objects by name, label and field in several clusters at once (<kbd>:search</kbd>)</td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/graph.png" alt="Topology graph of a namespace: Ingresses, Services, a Deployment with its Secret and pod, and request paths with two broken links"><br><b>Topology graph</b>: how a namespace connects, and where a request path breaks (<kbd>:graph</kbd>)</td>
+    <td valign="top"><img src="docs/assets/screenshots/delete.png" alt="Deleting a Secret: the dialog warns it is used by a Deployment and by an Ingress for TLS"><br><b>Blast radius</b>: what breaks if you delete it, before you confirm</td>
+  </tr>
 </table>
 
 ## Coming from k9s
@@ -226,6 +237,8 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 - [AI agents (MCP)](docs/AGENTS.md): connecting Claude Code, Claude Desktop or another agent, the tools it gets, and what it may not do.
 - [Explain](docs/EXPLAIN.md): asking a model about a pod, logs, a finding or a failed action with your own key, and what is hidden.
 - [Creating and changing](docs/CREATE.md): Create, forms and cloning, Helm install, upgrade, compare and drift, columns, bulk changes and port-forwards that stay.
+- [Several clusters](docs/CLUSTERS.md): the Clusters page, adding contexts from a kubeconfig, namespace limits, search and compare.
+- [What depends on what](docs/TOPOLOGY.md): the topology graph, request paths, Used by and what the delete dialog warns about.
 - [Integrations](docs/INTEGRATIONS.md): Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager and right-sizing, found without configuration.
 - [Logs and debugging](docs/DEBUGGING.md): searching logs by field, the workspace, debug containers, node shells and the fixes Kubri offers.
 - [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.
