@@ -997,14 +997,23 @@ impl Kubri {
         let info = session.info_for(&target.resource)?;
         let used = references::Used::of(info)
             .ok_or_else(|| Error::Unsupported(format!("Kubri does not look up what uses a {}", info.kind)))?;
-        let lists = references::USERS.iter().filter_map(|&(version, kind)| {
+        let users = used.users();
+        let lists = users.iter().filter_map(|&(version, kind)| {
             let resource = session.resolve(version, kind)?;
             let api = session.api(&resource, target.namespace.as_deref()).ok()?;
             Some(async move { (kind, resource, api.list(&ListParams::default()).await) })
         });
         let mut found = Vec::new();
         for (kind, resource, list) in futures::future::join_all(lists).await {
-            for object in list?.items {
+            let list = match list {
+                Ok(list) => list,
+                // Extras: a user who may not list them still sees the rest.
+                Err(_) if kind == "HTTPRoute" || (kind == "Ingress" && used == references::Used::Secret) => {
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
+            for object in list.items {
                 let value = serde_json::to_value(&object)?;
                 if used.by(kind, &value, &target.name) {
                     found.push(Reference {
@@ -1012,6 +1021,7 @@ impl Kubri {
                         kind: kind.to_owned(),
                         namespace: object.metadata.namespace.clone(),
                         name: object.metadata.name.clone().unwrap_or_default(),
+                        how: used.how(kind).map(str::to_owned),
                     });
                 }
             }

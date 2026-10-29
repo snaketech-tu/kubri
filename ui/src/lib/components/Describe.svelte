@@ -292,7 +292,7 @@
 	{#if usedBy !== undefined}
 		<h3>Used by</h3>
 		{#if usedBy === 'loading'}
-			<p class="muted">Looking for workloads and pods that use it…</p>
+			<p class="muted">Looking for what uses it…</p>
 		{:else if 'error' in usedBy}
 			<p class="bad">{usedBy.error}</p>
 		{:else if usedBy.length}
@@ -301,7 +301,7 @@
 				<tbody>
 					{#each usedBy as ref (ref.kind + ref.namespace + ref.name)}
 						<tr>
-							<td>{ref.kind}</td>
+							<td>{ref.kind}{#if ref.how}<span class="muted"> · {ref.how}</span>{/if}</td>
 							<td class="mono"><button class="link" onclick={() => showUser(ref)} title="Show it in its list">{ref.name}</button></td>
 							<td class="muted">{ref.namespace ?? ''}</td>
 						</tr>
@@ -309,7 +309,7 @@
 				</tbody>
 			</table>
 		{:else}
-			<p class="muted">No workload or pod uses it.</p>
+			<p class="muted">Nothing uses it.</p>
 		{/if}
 	{/if}
 

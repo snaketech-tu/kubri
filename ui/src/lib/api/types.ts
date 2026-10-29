@@ -535,12 +535,14 @@ export interface TableScope {
 }
 
 /** Where Enter leads from an object: a list of what belongs to it. */
-/** An object that uses a ConfigMap, Secret, PVC, ServiceAccount or PriorityClass. */
+/** An object that uses a ConfigMap, Secret, PVC, ServiceAccount, PriorityClass or Service. */
 export interface Reference {
 	resource: ResourceRef;
 	kind: string;
 	namespace: string | null;
 	name: string;
+	/** How it uses it, when not through its pod spec: `TLS` or `backend`. */
+	how?: string;
 }
 
 export interface Drill {
