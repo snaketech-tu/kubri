@@ -44,6 +44,11 @@
 		book: 'M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 21V5',
 		arrow: 'M5 12h14M13 6l6 6-6 6',
 		close: 'M6 6l12 12M18 6L6 18',
+		logs: 'M4 6h16M4 10h11M4 14h16M4 18h8',
+		split: 'M4 4h16v16H4zM12 4v16',
+		dockBottom: 'M4 4h16v16H4zM4 14h16',
+		dockRight: 'M4 4h16v16H4zM14 4v16',
+		popout: 'M14 4h6v6M20 4l-8 8M18 14v6H4V6h6',
 		download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
 		keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10'
 	} as const;

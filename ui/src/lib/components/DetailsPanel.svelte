@@ -17,6 +17,7 @@
 	import { parse, stringify } from 'yaml';
 	import { canEdit, save } from '../actions';
 	import { backend, type EventInfo, type KubeObject, type Preview, type Reference, type TerminalMode } from '../api';
+	import { dock } from '../dock.svelte';
 	import { errorMessage } from '../format';
 	import { drafts } from '../navigation.svelte';
 	import { containerNames, hasLogs, hasUsers, isPods, isServices } from '../pods';
@@ -358,6 +359,22 @@
 		app.showDetails(details.resource, details.target, value);
 	}
 
+	/** Moves the logs or shell into the workspace, where they keep running while you browse. */
+	function keep() {
+		const kind = details.tab;
+		if (kind !== 'logs' && kind !== 'shell') return;
+		const container = picked[kind]?.name ?? details.container;
+		dock.add({
+			kind,
+			resource: details.resource,
+			target: details.target,
+			...(container ? { container } : {}),
+			...(kind === 'logs' ? { previous: picked.logs?.previous ?? details.previous } : { mode: picked.shell?.mode ?? details.mode })
+		});
+		opened[kind] = false;
+		tab('describe');
+	}
+
 	// What leaving the edit does: save the editor's text, or drop it.
 	$effect(() => {
 		drafts.save = () => (editor ? onsave(editor.text(), true) : Promise.resolve(false));
@@ -431,6 +448,15 @@
 			{/if}
 		</div>
 		<div class="window">
+			{#if tool}
+				<button
+					class="icon"
+					onclick={keep}
+					onmousedown={(e) => e.preventDefault()}
+					title="Move to the workspace, where the {details.tab} keep{details.tab === 'shell' ? 's' : ''} running while you browse"
+					aria-label="Move to the workspace"><Icon name="popout" size={16} /></button
+				>
+			{/if}
 			{#if tool && !app.maximized}
 				<button
 					class="icon beside"
@@ -512,7 +538,7 @@
 						{containers}
 						previous={details.previous}
 						container={picked.logs}
-						active={details.tab === 'logs'}
+						active={details.tab === 'logs' && dock.focused === null}
 					/>
 				</div>
 			{/if}

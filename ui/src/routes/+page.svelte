@@ -17,6 +17,7 @@
 	import ContextSettingsForm from '#lib/components/ContextSettingsForm.svelte';
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
+	import Dock from '#lib/components/Dock.svelte';
 	import DebugDialog from '#lib/components/DebugDialog.svelte';
 	import ForbiddenDialog from '#lib/components/ForbiddenDialog.svelte';
 	import AgentRequests from '#lib/components/AgentRequests.svelte';
@@ -48,6 +49,7 @@
 		isSecrets
 	} from '#lib/pods.js';
 	import { backend } from '#lib/api/index.js';
+	import { dock } from '#lib/dock.svelte.js';
 	import { session } from '#lib/session.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 	import { LiveTable } from '#lib/watch.svelte.js';
@@ -421,76 +423,79 @@
 			</div>
 		{/if}
 
-		<main
-			class:with-details={app.details}
-			class:wide={app.panelWide}
-			style:--panel-width={app.panelWidth ? `${app.panelWidth}px` : null}
-		>
-			{#if app.cluster && !app.connecting}
-				{#if app.page === 'portforwards'}
-					<PortForwardsView />
-				{:else if app.page === 'benchmarks'}
-					<BenchmarksView />
-				{:else if app.page === 'config'}
-					<ConfigView />
-				{:else if app.page === 'sanitizer'}
-					{#key `${app.cluster?.context}/${app.namespace}`}
-						<SanitizerView />
-					{/key}
-				{:else if app.page === 'pulses'}
-					{#key `${app.cluster?.context}/${app.namespace}`}
-						<PulsesView />
-					{/key}
-				{:else if app.page === 'xray' && app.xrayResource}
-					{#key `${app.cluster?.context}/${app.namespace}/${app.xrayResource.plural}`}
-						<XrayView resource={app.xrayResource} />
-					{/key}
-				{:else if app.page === 'rbac'}
-					{#key `${app.cluster?.context}/${app.namespace}`}
-						<RbacView />
-					{/key}
-				{:else if app.page === 'helm'}
-					{#key `${app.cluster?.context}/${app.namespace}`}
-						<HelmView />
-					{/key}
-				{:else if app.selected}
-					{#key `${app.cluster?.context}/${app.selected.group}/${app.selected.version}/${app.selected.plural}/${JSON.stringify(app.scope)}`}
-						<ResourceView resource={app.selected} namespace={app.namespace} scope={app.scope} />
-					{/key}
-				{:else}
-					<div class="placeholder">Choose a resource or press <kbd>:</kbd>.</div>
-				{/if}
-			{:else}
-				<section class="connect">
-					<img src={logo} alt="" width="56" height="56" />
-					<span class="eyebrow">Your cluster, in focus</span>
-					<h1>{app.connecting ? `Connecting to ${app.connecting}…` : 'Connect to a cluster.'}</h1>
-					<p>
-						{isTauri()
-							? 'Choose a context from your kubeconfig. Reload it after you update your credentials.'
-							: 'Choose a context configured on kubri-server. The server holds the credentials.'}
-					</p>
-					{#if !app.connecting}
-						<div class="connect-actions">
-							<button
-								class="primary"
-								onclick={() => {
-									app.contextMenuOpen = true;
-									app.reloadContexts(true);
-								}}
-							>
-								Choose context <Icon name="arrow" size={16} />
-							</button>
-							<button onclick={() => app.load()}>Try again</button>
-						</div>
+		<div class="area" class:right={dock.sessions.length && dock.side === 'right' && !dock.minimized}>
+			<main
+				class:with-details={app.details}
+				class:wide={app.panelWide}
+				style:--panel-width={app.panelWidth ? `${app.panelWidth}px` : null}
+			>
+				{#if app.cluster && !app.connecting}
+					{#if app.page === 'portforwards'}
+						<PortForwardsView />
+					{:else if app.page === 'benchmarks'}
+						<BenchmarksView />
+					{:else if app.page === 'config'}
+						<ConfigView />
+					{:else if app.page === 'sanitizer'}
+						{#key `${app.cluster?.context}/${app.namespace}`}
+							<SanitizerView />
+						{/key}
+					{:else if app.page === 'pulses'}
+						{#key `${app.cluster?.context}/${app.namespace}`}
+							<PulsesView />
+						{/key}
+					{:else if app.page === 'xray' && app.xrayResource}
+						{#key `${app.cluster?.context}/${app.namespace}/${app.xrayResource.plural}`}
+							<XrayView resource={app.xrayResource} />
+						{/key}
+					{:else if app.page === 'rbac'}
+						{#key `${app.cluster?.context}/${app.namespace}`}
+							<RbacView />
+						{/key}
+					{:else if app.page === 'helm'}
+						{#key `${app.cluster?.context}/${app.namespace}`}
+							<HelmView />
+						{/key}
+					{:else if app.selected}
+						{#key `${app.cluster?.context}/${app.selected.group}/${app.selected.version}/${app.selected.plural}/${JSON.stringify(app.scope)}`}
+							<ResourceView resource={app.selected} namespace={app.namespace} scope={app.scope} />
+						{/key}
+					{:else}
+						<div class="placeholder">Choose a resource or press <kbd>:</kbd>.</div>
 					{/if}
-					<p class="small">Your k9s aliases, hotkeys, plugins and skins keep working.</p>
-				</section>
-			{/if}
-			{#if app.details}
-				<DetailsPanel details={app.details} />
-			{/if}
-		</main>
+				{:else}
+					<section class="connect">
+						<img src={logo} alt="" width="56" height="56" />
+						<span class="eyebrow">Your cluster, in focus</span>
+						<h1>{app.connecting ? `Connecting to ${app.connecting}…` : 'Connect to a cluster.'}</h1>
+						<p>
+							{isTauri()
+								? 'Choose a context from your kubeconfig. Reload it after you update your credentials.'
+								: 'Choose a context configured on kubri-server. The server holds the credentials.'}
+						</p>
+						{#if !app.connecting}
+							<div class="connect-actions">
+								<button
+									class="primary"
+									onclick={() => {
+										app.contextMenuOpen = true;
+										app.reloadContexts(true);
+									}}
+								>
+									Choose context <Icon name="arrow" size={16} />
+								</button>
+								<button onclick={() => app.load()}>Try again</button>
+							</div>
+						{/if}
+						<p class="small">Your k9s aliases, hotkeys, plugins and skins keep working.</p>
+					</section>
+				{/if}
+				{#if app.details}
+					<DetailsPanel details={app.details} />
+				{/if}
+			</main>
+			{#if dock.sessions.length}<Dock />{/if}
+		</div>
 
 		<footer>
 			<span class="status" class:live={app.cluster && !app.connecting} role="status">
@@ -748,8 +753,20 @@
 		font-size: 18px;
 		line-height: 1;
 	}
+	/* The page, and the workspace below or beside it. */
+	.area {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+		min-height: 0;
+	}
+	.area.right {
+		flex-direction: row;
+	}
 	main {
 		flex: 1;
+		min-width: 0;
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
 		min-height: 0;
@@ -937,7 +954,7 @@
 		.error {
 			order: 2;
 		}
-		main {
+		.area {
 			order: 3;
 		}
 		footer {
