@@ -80,6 +80,9 @@ function terminalSocket(path: string, request: unknown, onEvent: (event: Termina
 export const httpBackend: Backend = {
 	contexts: () => request('GET', '/contexts'),
 	reloadContexts: () => request('POST', '/contexts/reload'),
+	inspectKubeconfig: (text) => request('POST', '/contexts/inspect', { text }),
+	addContexts: (text, names) => request('POST', '/contexts/added', { text, names }),
+	removeContext: (name) => request('DELETE', `/contexts/added?${new URLSearchParams({ name })}`),
 	switchContext: (name) => request('PUT', '/context', { name }),
 	resources: () => request('GET', '/resources'),
 	preview: (target, change) => request('POST', '/object/preview', { target, change }),

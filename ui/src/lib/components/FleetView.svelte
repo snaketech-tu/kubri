@@ -4,6 +4,7 @@
 	import { cpu, errorMessage, memory, relative } from '../format';
 	import { meterTone } from '../pulse';
 	import { app } from '../state.svelte';
+	import AddContextsDialog from './AddContextsDialog.svelte';
 	import HealthIcon from './HealthIcon.svelte';
 	import Icon from './Icon.svelte';
 	import PageHeader from './PageHeader.svelte';
@@ -19,6 +20,9 @@
 	let checking = $state(false);
 	let checked = $state(0);
 	let now = $state(Date.now());
+	let adding = $state(false);
+	/** The added context whose Remove was pressed once, asking to press again. */
+	let removing = $state<string | null>(null);
 
 	const contexts = $derived(app.contexts.map((c) => c.name));
 	const states = $derived(Object.fromEntries(contexts.map((name) => [name, fleetState(found[name] ?? null)])));
@@ -65,6 +69,21 @@
 		if (app.cluster?.context === name) app.showPulses();
 	}
 
+	async function remove(name: string) {
+		if (removing !== name) {
+			removing = name;
+			return;
+		}
+		removing = null;
+		try {
+			app.contexts = (await backend.removeContext(name)).contexts;
+			delete found[name];
+			app.toast(`Removed ${name} from Kubri`);
+		} catch (err) {
+			app.toast(errorMessage(err), 'bad');
+		}
+	}
+
 	const percent = (part: number, whole: number) => (whole > 0 ? part / whole : 0);
 	const counted = (k: KindPulse | null | undefined) => (k && !k.error ? `${k.ok}/${k.total}` : '—');
 </script>
@@ -79,6 +98,7 @@
 		{#snippet tools()}
 			{#if checked}<span class="muted small">Checked {relative(new Date(checked).toISOString(), now)}</span>{/if}
 			<button class="btn" onclick={check} disabled={checking}>{checking ? 'Checking…' : 'Check again'}</button>
+			<button class="btn" onclick={() => (adding = true)}>Add clusters…</button>
 		{/snippet}
 	</PageHeader>
 
@@ -98,18 +118,23 @@
 				{@const nodes = c?.kinds.find((k) => k.kind === 'Node')}
 				{@const pods = c?.kinds.find((k) => k.kind === 'Pod')}
 				{@const work = c ? workloads(c.kinds) : null}
-				<button
+				{@const added = app.contexts.find((x) => x.name === name)?.added}
+				<article
 					class="cluster {state.health ?? 'checking'}"
 					class:current={app.cluster?.context === name}
 					style:--context-color={settings.color || null}
-					onclick={() => open(name)}
-					disabled={!!app.connecting}
-					title={app.cluster?.context === name ? 'Show its overview' : `Connect to ${name}`}
 				>
 					<span class="head">
 						<span class="swatch" aria-hidden="true"></span>
 						<span class="names">
-							<span class="name">{app.contextName(name)}</span>
+							<button
+								class="name open"
+								onclick={() => open(name)}
+								disabled={!!app.connecting}
+								title={app.cluster?.context === name ? 'Show its overview' : `Connect to ${name}`}
+							>
+								{app.contextName(name)}
+							</button>
 							{#if settings.displayName}<span class="context mono">{name}</span>{/if}
 						</span>
 						{#if settings.production}<span class="tag prod">Production</span>{:else if settings.label}<span class="tag">{settings.label}</span>{/if}
@@ -120,7 +145,7 @@
 						<span>{failed[name] ? 'Could not be checked' : state.summary}</span>
 					</span>
 					{#if failed[name] || (c?.error && !c.version)}
-						<span class="error">{failed[name] ?? connectError(c?.error ?? '')}</span>
+						<span class="error" title={failed[name] ?? c?.error ?? undefined}>{failed[name] ?? connectError(c?.error ?? '')}</span>
 					{:else if c?.version}
 						<span class="counts">
 							<span><small>Nodes</small>{counted(nodes)}</span>
@@ -148,12 +173,29 @@
 						{#if c.error}<span class="note">{c.error}</span>{/if}
 						<span class="meta mono">{serverHost(c.server)} · {c.version} · {c.millis} ms</span>
 					{/if}
-				</button>
+					{#if added}
+						<span class="added">
+							<small>Added in Kubri</small>
+							<button class="btn small remove" class:danger={removing === name} onclick={() => remove(name)} onblur={() => removing === name && (removing = null)}>
+								{removing === name ? 'Remove from Kubri?' : 'Remove'}
+							</button>
+						</span>
+					{/if}
+				</article>
 			{/each}
 		</div>
 		<p class="muted small">Meters show what pods request of what nodes can hold. Opening a cluster connects Kubri to it.</p>
 	{/if}
 </section>
+
+{#if adding}
+	<AddContextsDialog
+		onclose={(names) => {
+			adding = false;
+			if (names.length) check();
+		}}
+	/>
+{/if}
 
 <style>
 	.page {
@@ -192,6 +234,7 @@
 		gap: 14px;
 	}
 	.cluster {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: 10px;
@@ -202,10 +245,8 @@
 		background: var(--surface-1);
 		color: var(--text);
 		text-align: left;
-		font: inherit;
-		cursor: pointer;
 	}
-	.cluster:hover:not(:disabled) {
+	.cluster:hover {
 		border-color: var(--text-muted);
 		border-top-color: var(--context-color, var(--text-muted));
 	}
@@ -244,6 +285,11 @@
 		min-width: 0;
 	}
 	.name {
+		padding: 0;
+		border: none;
+		background: none;
+		color: inherit;
+		text-align: left;
 		font-size: 15px;
 		font-weight: 650;
 		overflow: hidden;
@@ -346,6 +392,36 @@
 	}
 	.fill.bad {
 		background: var(--bad);
+	}
+	/* The name's button covers the card, so the whole card opens the cluster. */
+	.open::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: 10px;
+	}
+	.open:focus-visible {
+		outline: none;
+	}
+	.open:focus-visible::after {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.cluster:has(.open:disabled) {
+		cursor: progress;
+	}
+	.cluster:has(.open:not(:disabled)) {
+		cursor: pointer;
+	}
+	.added {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding-top: 8px;
+		border-top: 1px solid var(--border-subtle);
 	}
 	.meta {
 		font-size: 11.5px;

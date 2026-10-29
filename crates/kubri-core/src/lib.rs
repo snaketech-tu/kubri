@@ -4,6 +4,7 @@
 //! Both frontends talk to the cluster only through it.
 
 mod access;
+mod added;
 mod apply;
 mod bench;
 mod certmanager;
@@ -67,6 +68,7 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 
 pub use access::{AccessCheck, Identity};
+pub use added::NewContext;
 pub use apply::{ApplyItem, ApplyOutcome, ApplyRequest, fetch_manifest};
 pub use bench::{
     BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
@@ -471,13 +473,54 @@ impl Kubri {
 
     pub async fn contexts(&self) -> Result<ContextList> {
         let contexts = match &*self.kubeconfig.read().await {
-            Ok(kubeconfig) => context::list_contexts(kubeconfig),
+            Ok(kubeconfig) => context::list_contexts(kubeconfig, &added::names()),
             Err(err) => return Err(Error::NoKubeconfig(err.clone())),
         };
         Ok(ContextList {
             contexts,
             cluster: self.cluster().await,
         })
+    }
+
+    /// The contexts of a kubeconfig the user picked, and why any cannot be added.
+    pub async fn inspect_kubeconfig(&self, text: &str) -> Result<Vec<NewContext>> {
+        let new = added::parse(text)?;
+        Ok(added::inspect(&new, &self.context_names().await))
+    }
+
+    /// Adds `names` from a kubeconfig the user picked, in Kubri's own folder.
+    pub async fn add_contexts(&self, text: &str, names: &[String]) -> Result<ContextList> {
+        let dir = added::dir()
+            .ok_or_else(|| Error::Unsupported("Kubri has no config folder to keep contexts in".into()))?;
+        let new = added::parse(text)?;
+        added::add(&dir, &new, names, &self.context_names().await)?;
+        self.reload().await
+    }
+
+    /// Removes a context added in Kubri. Contexts from the user's kubeconfig stay.
+    pub async fn remove_context(&self, name: &str) -> Result<ContextList> {
+        if self.cluster().await.is_some_and(|c| c.context == name) {
+            return Err(Error::Unsupported(format!(
+                "Kubri is connected to {name}; switch to another context first"
+            )));
+        }
+        let removed = match added::dir() {
+            Some(dir) => added::remove(&dir, name)?,
+            None => false,
+        };
+        if !removed {
+            return Err(Error::Unsupported(format!(
+                "{name} is in your kubeconfig, which Kubri does not change"
+            )));
+        }
+        self.reload().await
+    }
+
+    async fn context_names(&self) -> std::collections::HashSet<String> {
+        match &*self.kubeconfig.read().await {
+            Ok(kubeconfig) => kubeconfig.contexts.iter().map(|c| c.name.clone()).collect(),
+            Err(_) => Default::default(),
+        }
     }
 
     pub async fn cluster(&self) -> Option<ClusterInfo> {
@@ -607,6 +650,26 @@ impl Kubri {
         let session = self.session().await?;
         let api = session.api(resource, namespace)?;
         let info = session.info_for(resource)?;
+        if namespace.is_none()
+            && info.namespaced
+            && let Some(allowed) = self.allowed_namespaces(&session).await?
+        {
+            if allowed.is_empty() {
+                return Err(Error::Unsupported(
+                    "no namespace matches the label selector in this context's settings".into(),
+                ));
+            }
+            let shown = match allowed.len() {
+                0..=4 => allowed.join(", "),
+                n => format!("{} and {} more", allowed[..3].join(", "), n - 3),
+            };
+            let notice = format!("Showing the namespaces this context's settings name: {shown}");
+            let urls = allowed
+                .iter()
+                .map(|ns| Ok(session.api(resource, Some(ns))?.resource_url().to_owned()))
+                .collect::<Result<Vec<_>>>()?;
+            return Ok(table::watch_tables(session.client.clone(), urls, scope, notice).boxed());
+        }
         if namespace.is_none() && info.namespaced {
             // Someone who may not list all namespaces at once sees the namespaces they may read.
             let everywhere = AccessCheck::new("list", resource, None);
@@ -639,6 +702,9 @@ impl Kubri {
     /// ones the kubeconfig and Kubri's settings name for this context.
     pub async fn readable_namespaces(&self) -> Result<Vec<String>> {
         let session = self.session().await?;
+        if let Some(allowed) = self.allowed_namespaces(&session).await? {
+            return Ok(allowed);
+        }
         if let Some(namespaces) = session.resolve("v1", "Namespace") {
             let check = AccessCheck::new("list", &namespaces, None);
             if session.access_of(&check).await != Some(false) {
@@ -1275,14 +1341,7 @@ impl Kubri {
             helm::validate_name(&release.namespace)?;
             helm::validate_name(&release.name)?;
         }
-        let kubeconfig = std::env::var("KUBECONFIG")
-            .ok()
-            .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.join(".kube").join("config").display().to_string())
-                    .unwrap_or_default()
-            });
+        let kubeconfig = kubeconfig::env_value().to_string_lossy().into_owned();
         let mut variables = plugin::variables(&context, kubeconfig, run, resource, container);
         variables.0.extend(inputs);
         let prepared = plugin::prepare(&plugin, &variables, &run.columns)?;
@@ -1293,7 +1352,7 @@ impl Kubri {
     async fn context_info(&self) -> Option<ContextInfo> {
         let name = self.cluster().await?.context;
         match &*self.kubeconfig.read().await {
-            Ok(kubeconfig) => context::list_contexts(kubeconfig)
+            Ok(kubeconfig) => context::list_contexts(kubeconfig, &Default::default())
                 .into_iter()
                 .find(|c| c.name == name),
             Err(_) => None,
@@ -1517,6 +1576,28 @@ impl Kubri {
             Some(context) if context != &session.info.context => Err(Error::ContextChanged(context.clone())),
             _ => Ok(session),
         }
+    }
+
+    /// The namespaces the context's settings limit Kubri to, sorted; `None` when they do not.
+    async fn allowed_namespaces(&self, session: &Session) -> Result<Option<Vec<String>>> {
+        let settings = self.settings().context(&session.info.context);
+        let mut names: Vec<String> = settings
+            .namespaces
+            .iter()
+            .map(|n| n.trim().to_owned())
+            .filter(|n| !n.is_empty())
+            .collect();
+        let selector = settings.namespace_selector.trim();
+        if names.is_empty() && !selector.is_empty() {
+            let api: Api<k8s_openapi::api::core::v1::Namespace> = Api::all(session.client.clone());
+            let list = api.list(&ListParams::default().labels(selector)).await?;
+            names = list.items.into_iter().filter_map(|n| n.metadata.name).collect();
+        } else if names.is_empty() {
+            return Ok(None);
+        }
+        names.sort();
+        names.dedup();
+        Ok(Some(names))
     }
 
     /// The connection to `context` for reading: the current one, or one kept for a few

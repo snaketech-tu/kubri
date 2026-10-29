@@ -127,7 +127,7 @@ describe('k9s plugins', () => {
 	});
 
 	it('knows the variables of the row under the cursor', () => {
-		const context = { name: 'prod', cluster: 'eu-1', user: 'admin', namespace: null, isDefault: true };
+		const context = { name: 'prod', cluster: 'eu-1', user: 'admin', namespace: null, isDefault: true, added: false };
 		const vars = focusVariables(
 			{
 				resource: pods,

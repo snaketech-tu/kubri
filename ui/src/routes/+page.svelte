@@ -77,17 +77,22 @@
 		return namespaces.start({ group: '', version: 'v1', plural: 'namespaces' }, null);
 	});
 
+	/** The context's settings name the namespaces to show, by list or by label. */
+	const limited = $derived(app.contextSettings.namespaces.length > 0 || !!app.contextSettings.namespaceSelector.trim());
+
 	$effect(() => {
-		app.namespaces = namespaces.rows.map((r) => r.name).sort();
+		if (!limited) app.namespaces = namespaces.rows.map((r) => r.name).sort();
 	});
 
 	// Someone who may not list namespaces still gets the ones the kubeconfig and settings name.
 	$effect(() => {
-		if (!app.cluster || !namespaces.error || namespaces.rows.length) return;
+		if (!app.cluster || (!limited && (!namespaces.error || namespaces.rows.length))) return;
+		// Read so that changing the limit asks again.
+		void [app.contextSettings.namespaces, app.contextSettings.namespaceSelector];
 		const context = app.cluster.context;
 		backend.readableNamespaces().then(
 			(names) => {
-				if (app.cluster?.context === context && !namespaces.rows.length) app.namespaces = names;
+				if (app.cluster?.context === context && (limited || !namespaces.rows.length)) app.namespaces = names;
 			},
 			() => {}
 		);

@@ -29,6 +29,11 @@ pub struct ContextSettings {
     pub locked: bool,
     /// The namespace to show after connecting; empty for all namespaces.
     pub namespace: String,
+    /// The only namespaces to show; empty for all. Lists across namespaces cover these, one
+    /// watch each, which also suits users who may not list everywhere.
+    pub namespaces: Vec<String>,
+    /// Namespaces to show by label, like `team=shop`, when `namespaces` is empty.
+    pub namespace_selector: String,
     /// AI agents connected over MCP may change this context, each change confirmed in Kubri.
     /// Production contexts never allow it.
     pub agent_writes: bool,

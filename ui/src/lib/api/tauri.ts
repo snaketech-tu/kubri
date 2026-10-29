@@ -43,6 +43,9 @@ function terminalChannel(
 export const tauriBackend: Backend = {
 	contexts: () => invoke('contexts'),
 	reloadContexts: () => invoke('reload_contexts'),
+	inspectKubeconfig: (text) => invoke('inspect_kubeconfig', { text }),
+	addContexts: (text, names) => invoke('add_contexts', { text, names }),
+	removeContext: (name) => invoke('remove_context', { name }),
 	switchContext: (name) => invoke('switch_context', { name }),
 	resources: () => invoke('resources'),
 	preview: (target, change) => invoke('preview', { target, change }),

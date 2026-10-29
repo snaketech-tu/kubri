@@ -103,6 +103,32 @@
 			<input value={current.namespace} placeholder="All namespaces" onchange={text('namespace')} spellcheck="false" />
 		{/if}
 	</label>
+	<label class="field">
+		<span>Only these namespaces</span>
+		<input
+			value={current.namespaces.join(', ')}
+			placeholder="All namespaces, e.g. shop, payments"
+			onchange={(e) => {
+				const list = [...new Set(e.currentTarget.value.split(/[\s,]+/).filter(Boolean))];
+				if (list.join() !== current.namespaces.join()) save({ namespaces: list });
+			}}
+			spellcheck="false"
+		/>
+	</label>
+	<label class="field">
+		<span>Or namespaces labeled</span>
+		<input
+			value={current.namespaceSelector}
+			placeholder="e.g. team=shop"
+			disabled={current.namespaces.length > 0}
+			onchange={(e) => {
+				const value = e.currentTarget.value.trim();
+				if (value !== current.namespaceSelector) save({ namespaceSelector: value });
+			}}
+			spellcheck="false"
+		/>
+	</label>
+	<p class="note">Lists across all namespaces then show only these, which also works when you may not list every namespace.</p>
 	<label class="check">
 		<input type="checkbox" checked={current.production} onchange={(e) => setProduction(e.currentTarget.checked)} />
 		<span>
@@ -158,6 +184,11 @@
 	.field input,
 	.field select {
 		font-size: 13px;
+	}
+	.note {
+		margin: -6px 0 0;
+		color: var(--text-muted);
+		font-size: 12px;
 	}
 	.colors {
 		display: flex;
