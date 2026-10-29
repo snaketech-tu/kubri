@@ -8,6 +8,8 @@ export type KubectlOp =
 	| { op: 'decode' }
 	| { op: 'shell'; container?: string | null }
 	| { op: 'attach'; container?: string | null }
+	| { op: 'debug'; container?: string | null; image?: string | null; copy?: boolean }
+	| { op: 'nodeShell'; image?: string | null }
 	| { op: 'portForward'; local?: number | null; remote?: number | null; address?: string | null }
 	| { op: 'cordon' }
 	| { op: 'uncordon' }
@@ -60,16 +62,53 @@ export function kubectlCommand(context: string | null | undefined, target: Objec
 		case 'edit':
 			return run('edit', ref);
 		case 'logs':
-			return run('logs', ref, ...container(op.container), ...(op.workload ? ['--all-pods', '--prefix'] : []), ...(op.previous ? ['--previous'] : ['-f']));
+			return run(
+				'logs',
+				ref,
+				...container(op.container),
+				...(op.workload ? ['--all-pods', '--prefix'] : []),
+				...(op.previous ? ['--previous'] : ['-f'])
+			);
 		case 'decode':
 			return run('get', ref, '-o', 'go-template={{range $k, $v := .data}}{{$k}}={{$v | base64decode}}{{"\\n"}}{{end}}');
 		case 'shell':
 			return run('exec', '-it', ref, ...container(op.container), '--', 'sh', '-c', 'bash || sh');
 		case 'attach':
 			return run('attach', '-it', ref, ...container(op.container));
+		case 'debug':
+			return op.copy
+				? run(
+						'debug',
+						target.name,
+						`--copy-to=${target.name}-debug`,
+						`--container=${op.container ?? 'CONTAINER'}`,
+						'-it',
+						'--',
+						'sh'
+					)
+				: run(
+						'debug',
+						'-it',
+						target.name,
+						`--image=${op.image || 'busybox'}`,
+						...(op.container ? [`--target=${op.container}`] : [])
+					);
+		case 'nodeShell':
+			return command(context, null, [
+				'debug',
+				`node/${target.name}`,
+				'-it',
+				'--profile=sysadmin',
+				`--image=${op.image || 'busybox'}`,
+				'--',
+				'chroot',
+				'/host',
+				'sh'
+			]);
 		case 'portForward': {
 			const ports = `${op.local || ''}:${op.remote ?? 'PORT'}`;
-			const address = op.address && op.address !== '127.0.0.1' && op.address !== 'localhost' ? ['--address', op.address] : [];
+			const address =
+				op.address && op.address !== '127.0.0.1' && op.address !== 'localhost' ? ['--address', op.address] : [];
 			return run('port-forward', ref, ports.startsWith(':') ? ports.slice(1) : ports, ...address);
 		}
 		case 'cordon':
@@ -102,7 +141,8 @@ export function kubectlCommand(context: string | null | undefined, target: Objec
 			const labels = keyArgs(op.labels ?? {});
 			const annotations = keyArgs(op.annotations ?? {});
 			const lines = [];
-			if (labels.length || !annotations.length) lines.push(run('label', '--overwrite', ref, ...(labels.length ? labels : ['KEY=VALUE'])));
+			if (labels.length || !annotations.length)
+				lines.push(run('label', '--overwrite', ref, ...(labels.length ? labels : ['KEY=VALUE'])));
 			if (annotations.length) lines.push(run('annotate', '--overwrite', ref, ...annotations));
 			return lines.join('\n');
 		}
@@ -116,15 +156,25 @@ export function kubectlCommand(context: string | null | undefined, target: Objec
 			];
 			// One command per namespace, since kubectl takes one.
 			const byNamespace = new Map<string | null, ObjectRef[]>();
-			for (const t of targets) byNamespace.set(t.namespace ?? null, [...(byNamespace.get(t.namespace ?? null) ?? []), t]);
+			for (const t of targets)
+				byNamespace.set(t.namespace ?? null, [...(byNamespace.get(t.namespace ?? null) ?? []), t]);
 			return [...byNamespace]
 				.map(([namespace, list]) =>
-					command(context, namespace, ['delete', ...list.map((t) => `${kubectlResource(t.resource)}/${t.name}`), ...flags])
+					command(context, namespace, [
+						'delete',
+						...list.map((t) => `${kubectlResource(t.resource)}/${t.name}`),
+						...flags
+					])
 				)
 				.join('\n');
 		}
 		case 'rollback':
-			return run('rollout', 'undo', `deployments.apps/${op.deployment ?? 'DEPLOYMENT'}`, `--to-revision=${op.revision ?? 'REVISION'}`);
+			return run(
+				'rollout',
+				'undo',
+				`deployments.apps/${op.deployment ?? 'DEPLOYMENT'}`,
+				`--to-revision=${op.revision ?? 'REVISION'}`
+			);
 	}
 }
 
@@ -135,6 +185,8 @@ export function helmCommand(
 	op: { op: 'rollback'; revision: number } | { op: 'uninstall' }
 ): string {
 	const args =
-		op.op === 'rollback' ? ['helm', 'rollback', release.name, String(op.revision)] : ['helm', 'uninstall', release.name];
+		op.op === 'rollback'
+			? ['helm', 'rollback', release.name, String(op.revision)]
+			: ['helm', 'uninstall', release.name];
 	return [...args, '-n', release.namespace, ...(context ? ['--kube-context', context] : [])].map(shellQuote).join(' ');
 }

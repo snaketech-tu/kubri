@@ -17,6 +17,7 @@
 	import ContextSettingsForm from '#lib/components/ContextSettingsForm.svelte';
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
+	import DebugDialog from '#lib/components/DebugDialog.svelte';
 	import ForbiddenDialog from '#lib/components/ForbiddenDialog.svelte';
 	import AgentRequests from '#lib/components/AgentRequests.svelte';
 	import HelmView from '#lib/components/HelmView.svelte';
@@ -517,6 +518,8 @@
 	<ForbiddenDialog dialog={app.dialog} />
 {:else if app.dialog?.kind === 'kubectl'}
 	<KubectlDialog dialog={app.dialog} />
+{:else if app.dialog?.kind === 'debug'}
+	<DebugDialog dialog={app.dialog} />
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}

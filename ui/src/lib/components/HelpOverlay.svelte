@@ -90,6 +90,7 @@
 			[
 				['s', 'Shell'],
 				['a', 'Attach'],
+				['Shift+D', 'Debug a pod, or a shell on a node'],
 				['o', 'Show the node'],
 				['i', 'Set image (also workloads)'],
 				['z', 'Delete completed and failed pods'],

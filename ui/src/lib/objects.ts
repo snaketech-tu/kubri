@@ -191,6 +191,10 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	if (isPods(resource) && writable) {
 		add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3, id: 'shell', needs: on('create', 'exec'), kubectl: k({ op: 'shell' }) });
 		add('Connect', 'Attach', ['a'], show('shell', { mode: 'attach' }), { id: 'attach', needs: on('create', 'attach'), kubectl: k({ op: 'attach' }) });
+		add('Connect', 'Debug…', ['D'], dialog(() => ({ kind: 'debug', on: 'pod', target })), { id: 'debug', needs: on('patch', 'ephemeralcontainers'), kubectl: k({ op: 'debug' }) });
+	}
+	if (isNodes(resource) && writable) {
+		add('Connect', 'Node shell…', ['D'], dialog(() => ({ kind: 'debug', on: 'node', target })), { id: 'nodeShell', needs: need('create', pods, 'default'), kubectl: k({ op: 'nodeShell' }) });
 	}
 	if (canPortForward(resource)) {
 		const forward = isPods(resource) ? on('create', 'portforward') : need('create', pods, ns, { subresource: 'portforward' });

@@ -107,6 +107,7 @@ pub struct Settings {
     pub diff: DiffSettings,
     pub agents: AgentSettings,
     pub explain: crate::ExplainSettings,
+    pub debug: crate::DebugSettings,
 }
 
 impl Settings {

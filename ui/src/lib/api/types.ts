@@ -71,6 +71,30 @@ export interface Settings {
 	diff: DiffSettings;
 	agents: AgentSettings;
 	explain: ExplainSettings;
+	debug: DebugSettings;
+}
+
+export interface DebugSettings {
+	/** The image last used for a debug container. */
+	image: string;
+}
+
+/** A debug container to start, like `kubectl debug`. */
+export type DebugRequest =
+	/** An ephemeral container in the pod that sees the processes of `container`. */
+	| { kind: 'ephemeral'; target: ObjectRef; container: string | null; image: string | null }
+	/** A copy of the pod in which `container` sleeps instead of running its command. */
+	| { kind: 'copy'; target: ObjectRef; container: string | null }
+	/** A privileged pod on the node with a shell in the node's namespaces. */
+	| { kind: 'node'; node: string; namespace: string | null; image: string | null };
+
+/** Where to connect once the debug container runs. */
+export interface DebugSession {
+	pod: ObjectRef;
+	container: string;
+	mode: TerminalMode;
+	/** What is left behind, such as a copy to delete when done. */
+	note?: string;
 }
 
 /** What to explain. */
@@ -819,6 +843,8 @@ export interface Backend {
 	deleteObject(target: ObjectRef, options?: DeleteOptions): Promise<void>;
 	scale(target: ObjectRef, replicas: number): Promise<void>;
 	restart(target: ObjectRef): Promise<void>;
+	/** Starts a debug container and says where to connect to it. */
+	debug(request: DebugRequest): Promise<DebugSession>;
 	/** Where Enter leads from an object; null when it has nowhere to go but its details. */
 	drill(target: ObjectRef): Promise<Drill | null>;
 	/** What uses a ConfigMap, Secret, PVC, ServiceAccount or PriorityClass, like k9s `u`. */

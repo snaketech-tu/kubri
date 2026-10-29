@@ -13,14 +13,16 @@
 		containers: string[];
 		mode?: TerminalMode;
 		/** A container to connect to, asked for from Describe; a new object each time. */
-		container?: { name: string } | null;
+		container?: { name: string; mode?: TerminalMode } | null;
 	} = $props();
 
 	let container = $state(untrack(() => wanted?.name ?? ''));
+	let mode = $state<TerminalMode>(untrack(() => wanted?.mode ?? startMode));
 	$effect(() => {
-		if (wanted) container = wanted.name;
+		if (!wanted) return;
+		container = wanted.name;
+		if (wanted.mode) mode = wanted.mode;
 	});
-	let mode = $state<TerminalMode>(untrack(() => startMode));
 	let status = $state<'connecting' | 'open' | 'exited'>('connecting');
 	let connectedTo = $state('');
 	let restarts = $state(0);

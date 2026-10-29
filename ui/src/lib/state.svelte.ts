@@ -41,11 +41,13 @@ export interface Details {
 	previous?: boolean;
 	/** How the shell tab connects. */
 	mode?: TerminalMode;
+	/** The container the shell tab connects to, such as a debug container just started. */
+	container?: string;
 	/** Show the decoded values of a Secret, like k9s `x`. */
 	decoded?: boolean;
 }
 
-export type DetailsExtra = Partial<Pick<Details, 'editing' | 'previous' | 'mode' | 'decoded'>>;
+export type DetailsExtra = Partial<Pick<Details, 'editing' | 'previous' | 'mode' | 'decoded' | 'container'>>;
 
 /** A resource list narrowed to what belongs to one object, like the pods of a Deployment. */
 export interface ListScope {
@@ -106,7 +108,8 @@ const DEFAULT_SETTINGS: Settings = {
 	contexts: {},
 	diff: { scale: false, restart: false, image: true, labels: true },
 	agents: { http: false, port: 7879, secrets: false },
-	explain: { provider: 'none', baseUrl: '', model: '' }
+	explain: { provider: 'none', baseUrl: '', model: '' },
+	debug: { image: 'busybox' }
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
@@ -160,6 +163,8 @@ export type Dialog =
 	| { kind: 'suspend'; resource: ResourceInfo; target: ObjectRef; suspend: boolean }
 	| { kind: 'image'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef }
+	/** A debug container in a pod, a debug copy of it, or a shell on a node. */
+	| { kind: 'debug'; on: 'pod' | 'node'; target: ObjectRef }
 	/** The kubectl commands for an object's actions, to copy. */
 	| { kind: 'kubectl'; title: string; commands: { label: string; command: string }[] }
 	/** Explains an action RBAC refuses, and what would allow it. */
