@@ -23,6 +23,8 @@
 	import { openObjectMenu } from '../objects';
 	import { app, findResource, refOf } from '../state.svelte';
 	import LevelIcon from './LevelIcon.svelte';
+	import PageHeader from './PageHeader.svelte';
+	import SearchField from './SearchField.svelte';
 
 	const LEVELS: [LevelFilter, string][] = [
 		['info', 'All'],
@@ -204,21 +206,18 @@
 <svelte:window {onkeydown} />
 
 <section>
-	<header>
-		<h1>Sanitizer</h1>
-		<span class="scope">{namespace ?? 'All namespaces'}</span>
-		<span class="spacer"></span>
-		<div class="toggle" role="group" aria-label="Levels shown">
-			{#each LEVELS as [level, text] (level)}
-				<button class:active={min === level} onclick={() => (min = level)}>{text}</button>
-			{/each}
-		</div>
-		<input class="filter" bind:this={filterInput} bind:value={filter} placeholder="Filter findings…" />
-		<button onclick={scan} disabled={scanning} title="Scan again (Shift+R)">{scanning ? 'Scanning…' : 'Scan again'}</button>
-	</header>
+	<PageHeader
+		crumbs={['Explore', 'Sanitizer']}
+		title="Sanitizer"
+		subtitle="Checks objects for common mistakes, like Popeye, {namespace ? `in ${namespace}` : 'in all namespaces'}"
+	>
+		{#snippet tools()}
+			<button class="btn" onclick={scan} disabled={scanning} title="Scan again (Shift+R)">{scanning ? 'Scanning…' : 'Scan again'}</button>
+		{/snippet}
+	</PageHeader>
 
 	{#if error}
-		<div class="error">{error}</div>
+		<div class="notice" role="alert">{error}</div>
 	{/if}
 
 	{#if report && sum}
@@ -241,83 +240,93 @@
 		</div>
 	{/if}
 
-	<div class="list" bind:this={scroller} role="tree" aria-label="Sanitizer findings">
-		{#each rows as row, i (row.id)}
-			{#if row.type === 'section'}
-				{@const s = row.section}
-				{@const open = expanded.has(row.id)}
-				<div
-					class="row kind"
-					class:cursor={i === cursor}
-					role="treeitem"
-					aria-selected={i === cursor}
-					aria-expanded={row.shown ? open : undefined}
-					tabindex="-1"
-					onclick={() => {
-						cursorId = row.id;
-						toggle(row.id);
-					}}
-					onkeydown={() => {}}
-				>
-					<span class="chevron" class:open class:leaf={!row.shown}>›</span>
-					<span class="kind-name">{s.kind}</span>
-					{#if s.resource.group}<span class="group">{s.resource.group}</span>{/if}
-					{#if s.score !== null}
-						<span class="meter {scoreTone(s.score)}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={s.score} aria-label="{s.kind} score">
-							<span class="fill" style:width="{s.score}%"></span>
-						</span>
-						<span class="value">{s.score}</span>
-						<span class="tally">
-							<span class:zero={!s.error}><LevelIcon level="error" /> {s.error}</span>
-							<span class:zero={!s.warning}><LevelIcon level="warning" /> {s.warning}</span>
-							<span class="muted">of {s.total}</span>
-						</span>
-					{:else}
-						<span class="failed" title={s.failed}>Could not list: {s.failed}</span>
+	<div class="card">
+		<div class="toolbar">
+			<SearchField bind:value={filter} bind:input={filterInput} label="Filter findings" placeholder="Filter by kind, name or message" />
+			<div class="segmented" role="group" aria-label="Levels shown">
+				{#each LEVELS as [level, text] (level)}
+					<button aria-pressed={min === level} onclick={() => (min = level)}>{text}</button>
+				{/each}
+			</div>
+		</div>
+		<div class="list" bind:this={scroller} role="tree" aria-label="Sanitizer findings">
+			{#each rows as row, i (row.id)}
+				{#if row.type === 'section'}
+					{@const s = row.section}
+					{@const open = expanded.has(row.id)}
+					<div
+						class="row kind"
+						class:cursor={i === cursor}
+						role="treeitem"
+						aria-selected={i === cursor}
+						aria-expanded={row.shown ? open : undefined}
+						tabindex="-1"
+						onclick={() => {
+							cursorId = row.id;
+							toggle(row.id);
+						}}
+						onkeydown={() => {}}
+					>
+						<span class="chevron" class:open class:leaf={!row.shown}>›</span>
+						<span class="kind-name">{s.kind}</span>
+						{#if s.resource.group}<span class="group">{s.resource.group}</span>{/if}
+						{#if s.score !== null}
+							<span class="meter {scoreTone(s.score)}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={s.score} aria-label="{s.kind} score">
+								<span class="fill" style:width="{s.score}%"></span>
+							</span>
+							<span class="value">{s.score}</span>
+							<span class="tally">
+								<span class:zero={!s.error}><LevelIcon level="error" /> {s.error}</span>
+								<span class:zero={!s.warning}><LevelIcon level="warning" /> {s.warning}</span>
+								<span class="muted">of {s.total}</span>
+							</span>
+						{:else}
+							<span class="failed" title={s.failed}>Could not list: {s.failed}</span>
+						{/if}
+					</div>
+				{:else}
+					{@const f = row.finding}
+					<div
+						class="row finding"
+						class:cursor={i === cursor}
+						role="treeitem"
+						aria-selected={i === cursor}
+						tabindex="-1"
+						onclick={() => (cursorId = row.id)}
+						ondblclick={() => openDetails(row)}
+						oncontextmenu={(e) => openMenu(e, row)}
+						onkeydown={() => {}}
+					>
+						<div class="object">
+							<LevelIcon level={f.level} />
+							<button class="name link" tabindex="-1" onclick={() => openDetails(row)} title="Describe {row.section.kind} {f.name}">
+								{f.namespace && !namespace ? `${f.namespace}/` : ''}{f.name}
+							</button>
+						</div>
+						<ul>
+							{#each f.issues as issue, j (j)}
+								<li>
+									<LevelIcon level={issue.level} size={8} />
+									<span class="message">{issue.message}</span>
+									{#if issue.container}<span class="container">{issue.container}</span>{/if}
+									<span class="code">{issue.code}</span>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+			{:else}
+				<div class="empty">
+					{#if scanning}
+						Scanning {namespace ?? 'the cluster'}…
+					{:else if report && filter}
+						Nothing matches the filter.
+					{:else if report}
+						Nothing to check {namespace ? `in ${namespace}` : ''}.
 					{/if}
 				</div>
-			{:else}
-				{@const f = row.finding}
-				<div
-					class="row finding"
-					class:cursor={i === cursor}
-					role="treeitem"
-					aria-selected={i === cursor}
-					tabindex="-1"
-					onclick={() => (cursorId = row.id)}
-					ondblclick={() => openDetails(row)}
-					oncontextmenu={(e) => openMenu(e, row)}
-					onkeydown={() => {}}
-				>
-					<div class="object">
-						<LevelIcon level={f.level} />
-						<button class="name link" tabindex="-1" onclick={() => openDetails(row)} title="Describe {row.section.kind} {f.name}">
-							{f.namespace && !namespace ? `${f.namespace}/` : ''}{f.name}
-						</button>
-					</div>
-					<ul>
-						{#each f.issues as issue, j (j)}
-							<li>
-								<LevelIcon level={issue.level} size={8} />
-								<span class="message">{issue.message}</span>
-								{#if issue.container}<span class="container">{issue.container}</span>{/if}
-								<span class="code">{issue.code}</span>
-							</li>
-						{/each}
-					</ul>
-				</div>
-			{/if}
-		{:else}
-			<div class="empty">
-				{#if scanning}
-					Scanning {namespace ?? 'the cluster'}…
-				{:else if report && filter}
-					Nothing matches the filter.
-				{:else if report}
-					Nothing to check {namespace ? `in ${namespace}` : ''}.
-				{/if}
-			</div>
-		{/each}
+			{/each}
+		</div>
 	</div>
 </section>
 
@@ -327,74 +336,39 @@
 		flex-direction: column;
 		min-height: 0;
 		min-width: 0;
+		padding: 0 24px 20px;
 	}
-	header {
+	.card {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		overflow: hidden;
+	}
+	.toolbar {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px 10px;
-		padding: 14px 20px 10px;
+		gap: 10px 14px;
+		padding: 14px 16px 10px;
+		border-bottom: 1px solid var(--border);
 	}
-	h1 {
-		margin: 0;
-		font-size: 20px;
-	}
-	.scope {
-		padding: 1px 8px;
-		border-radius: 999px;
-		background: var(--surface-2);
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.spacer {
+	.toolbar > :global(.search) {
 		flex: 1;
-	}
-	.filter {
-		width: 180px;
-		padding: 4px 8px;
-		font-size: 13px;
-	}
-	header > button {
-		padding: 4px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		font-size: 12px;
-	}
-	.toggle {
-		display: flex;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		overflow: hidden;
-	}
-	.toggle button {
-		padding: 3px 10px;
-		border: none;
-		background: var(--surface-1);
-		font-size: 12px;
-		color: var(--text-muted);
-	}
-	.toggle button.active {
-		background: color-mix(in srgb, var(--accent) 18%, var(--surface-1));
-		color: var(--accent-strong);
-		font-weight: 600;
-	}
-	.error {
-		margin: 0 20px 10px;
-		padding: 8px 12px;
-		border-radius: 8px;
-		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
-		color: var(--bad);
+		min-width: 200px;
 	}
 	.summary {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 10px 22px;
-		margin: 0 20px 12px;
+		margin: 0 0 12px;
 		padding: 14px 18px;
 		border: 1px solid var(--border);
-		border-radius: 12px;
+		border-radius: 10px;
 		background: var(--surface-1);
 	}
 	.grade {
@@ -449,8 +423,9 @@
 	}
 	.list {
 		flex: 1;
+		min-height: 0;
 		overflow: auto;
-		padding: 0 12px 16px;
+		padding: 6px 8px 12px;
 		font-size: 13px;
 	}
 	.row {
@@ -458,10 +433,10 @@
 		outline: none;
 	}
 	.row:hover {
-		background: var(--surface-1);
+		background: color-mix(in srgb, var(--surface-2) 55%, transparent);
 	}
 	.row.cursor {
-		background: color-mix(in srgb, var(--accent) 16%, transparent);
+		background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
 	.kind {
@@ -597,5 +572,10 @@
 		padding: 40px 24px;
 		text-align: center;
 		color: var(--text-muted);
+	}
+	@media (max-width: 720px) {
+		section {
+			padding: 0 12px 12px;
+		}
 	}
 </style>

@@ -5,7 +5,9 @@
 	import { forControl } from '../keys';
 	import { filterSubjects, isAdmin, rbacResource, subjectLabel } from '../rbac';
 	import { app } from '../state.svelte';
+	import PageHeader from './PageHeader.svelte';
 	import RulesMatrix from './RulesMatrix.svelte';
+	import SearchField from './SearchField.svelte';
 
 	const ME = 'me';
 	const KINDS: [SubjectInfo['kind'], string][] = [
@@ -119,49 +121,57 @@
 <svelte:window {onkeydown} />
 
 <section>
-	<header>
-		<h1>RBAC</h1>
-		<span class="scope">{namespace ? `Role bindings in ${namespace}` : 'All namespaces'}</span>
-		<span class="spacer"></span>
-		<input class="filter" bind:this={filterInput} bind:value={filter} placeholder="Filter subjects…" />
-		<button onclick={() => reloads++}>Reload</button>
-	</header>
+	<PageHeader
+		crumbs={['Explore', 'Access']}
+		title="Access"
+		count={rbac ? rbac.subjects.length : null}
+		subtitle="RBAC: who may do what, from the role bindings {namespace ? `in ${namespace}` : 'in all namespaces'}"
+	>
+		{#snippet tools()}
+			<button class="btn" onclick={() => reloads++} title="Read the bindings again">Reload</button>
+		{/snippet}
+	</PageHeader>
 
 	{#if error}
-		<div class="error">{error}</div>
+		<div class="notice" role="alert">{error}</div>
 	{/if}
 	{#each rbac?.errors ?? [] as message (message)}
-		<div class="error">Could not list {message}</div>
+		<div class="notice" role="alert">Could not list {message}</div>
 	{/each}
 
 	<div class="split">
-		<div class="list" bind:this={list} role="listbox" aria-label="Subjects">
-			<button class="item me" class:active={selectedKey === ME} onclick={() => (selectedKey = ME)} role="option" aria-selected={selectedKey === ME}>
-				<span class="name">You</span>
-				<span class="muted">{me ? `rules in ${me.namespace}` : meError ? 'unknown' : '…'}</span>
-			</button>
-			{#each KINDS as [kind, title] (kind)}
-				{@const items = visible.filter((s) => s.kind === kind)}
-				{#if items.length}
-					<h3>{title} <span class="count">{items.length}</span></h3>
-					{#each items as s (key(s))}
-						<button
-							class="item"
-							class:active={selectedKey === key(s)}
-							onclick={() => (selectedKey = key(s))}
-							role="option"
-							aria-selected={selectedKey === key(s)}
-						>
-							<span class="name">{subjectLabel(s)}</span>
-							{#if isAdmin(s.grants)}<span class="admin">admin</span>{/if}
-							<span class="muted">{s.grants.length}</span>
-						</button>
-					{/each}
+		<div class="side">
+			<div class="filter">
+				<SearchField bind:value={filter} bind:input={filterInput} label="Filter subjects" placeholder="Filter subjects" />
+			</div>
+			<div class="list" bind:this={list} role="listbox" aria-label="Subjects">
+				<button class="item me" class:active={selectedKey === ME} onclick={() => (selectedKey = ME)} role="option" aria-selected={selectedKey === ME}>
+					<span class="name">You</span>
+					<span class="muted">{me ? `rules in ${me.namespace}` : meError ? 'unknown' : '…'}</span>
+				</button>
+				{#each KINDS as [kind, title] (kind)}
+					{@const items = visible.filter((s) => s.kind === kind)}
+					{#if items.length}
+						<h3>{title} <span class="count">{items.length}</span></h3>
+						{#each items as s (key(s))}
+							<button
+								class="item"
+								class:active={selectedKey === key(s)}
+								onclick={() => (selectedKey = key(s))}
+								role="option"
+								aria-selected={selectedKey === key(s)}
+							>
+								<span class="name">{subjectLabel(s)}</span>
+								{#if isAdmin(s.grants)}<span class="admin">admin</span>{/if}
+								<span class="muted">{s.grants.length}</span>
+							</button>
+						{/each}
+					{/if}
+				{/each}
+				{#if rbac && !visible.length}
+					<p class="muted pad">{filter ? 'No subject matches the filter.' : 'No role bindings.'}</p>
 				{/if}
-			{/each}
-			{#if rbac && !visible.length}
-				<p class="muted pad">{filter ? 'No subject matches the filter.' : 'No role bindings.'}</p>
-			{/if}
+			</div>
 		</div>
 
 		<div class="detail">
@@ -223,44 +233,10 @@
 		flex-direction: column;
 		min-height: 0;
 		min-width: 0;
+		padding: 0 24px 20px;
 		container-type: inline-size;
 	}
-	header {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 8px 10px;
-		padding: 14px 20px 10px;
-	}
-	h1 {
-		margin: 0;
-		font-size: 20px;
-	}
-	.scope,
-	.count {
-		padding: 1px 8px;
-		border-radius: 999px;
-		background: var(--surface-2);
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.spacer {
-		flex: 1;
-	}
-	.filter {
-		width: 200px;
-		padding: 4px 8px;
-		font-size: 13px;
-	}
-	header button {
-		padding: 4px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		font-size: 12px;
-	}
-	.error {
-		margin: 0 20px 8px;
+	.error.inline {
 		padding: 8px 12px;
 		border-radius: 8px;
 		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
@@ -274,12 +250,25 @@
 		display: grid;
 		grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
 		min-height: 0;
-		border-top: 1px solid var(--border-subtle);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		overflow: hidden;
+	}
+	.side {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		border-right: 1px solid var(--border);
+	}
+	.filter {
+		padding: 12px 12px 4px;
 	}
 	.list {
+		flex: 1;
+		min-height: 0;
 		overflow-y: auto;
-		padding: 8px;
-		border-right: 1px solid var(--border-subtle);
+		padding: 4px 8px 8px;
 	}
 	/* Beside an open details panel there is no room for two columns: stack them. */
 	@container (max-width: 720px) {
@@ -287,9 +276,9 @@
 			grid-template-columns: minmax(0, 1fr);
 			grid-template-rows: minmax(0, 2fr) minmax(0, 3fr);
 		}
-		.list {
+		.side {
 			border-right: none;
-			border-bottom: 1px solid var(--border-subtle);
+			border-bottom: 1px solid var(--border);
 		}
 	}
 	h3 {
