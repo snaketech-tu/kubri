@@ -33,6 +33,7 @@
 	import ResourceView from '#lib/components/ResourceView.svelte';
 	import SanitizerView from '#lib/components/SanitizerView.svelte';
 	import IntegrationsView from '#lib/components/IntegrationsView.svelte';
+	import RightSizingView from '#lib/components/RightSizingView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
@@ -449,6 +450,10 @@
 					{:else if app.page === 'integrations'}
 						{#key app.cluster?.context}
 							<IntegrationsView />
+						{/key}
+					{:else if app.page === 'rightsizing'}
+						{#key `${app.cluster?.context}/${app.namespace}`}
+							<RightSizingView />
 						{/key}
 					{:else if app.page === 'sanitizer'}
 						{#key `${app.cluster?.context}/${app.namespace}`}

@@ -133,6 +133,17 @@
 
 	// Memory limit
 	let memory = $state(untrack(() => (dialog.kind === 'memory' ? dialog.fix.suggested : '')));
+	// Right-sizing: one resource's request and limit, prefilled with the advice.
+	let sizeRequest = $state(untrack(() => (dialog.kind === 'resources' ? dialog.request : '')));
+	let sizeLimit = $state(untrack(() => (dialog.kind === 'resources' ? dialog.limit : '')));
+	/** The requests and limits that change, as typed. */
+	function sizeChange() {
+		if (dialog.kind !== 'resources') return null;
+		const changed = (value: string, now: string | null) => (value.trim() && value.trim() !== now ? { [dialog.name]: value.trim() } : {});
+		const requests = changed(sizeRequest, dialog.current.request);
+		const limits = changed(sizeLimit, dialog.current.limit);
+		return Object.keys(requests).length || Object.keys(limits).length ? { requests, limits } : null;
+	}
 
 	// Drain
 	let ignoreDaemonsets = $state(true);
@@ -147,7 +158,7 @@
 	}
 
 	$effect(() => {
-		if (dialog.kind === 'benchmark' || dialog.kind === 'memory') {
+		if (dialog.kind === 'benchmark' || dialog.kind === 'memory' || dialog.kind === 'resources') {
 			queueMicrotask(() => firstField?.focus());
 		} else if (dialog.kind === 'plugin' && dialog.plugin.inputs.length) {
 			queueMicrotask(focusFirstField);
@@ -368,6 +379,14 @@
 				case 'rollback':
 					ok = await rollback(dialog.target);
 					break;
+				case 'resources': {
+					const change = sizeChange();
+					if (!change) throw new Error('Nothing changes');
+					await backend.setResources(dialog.target, dialog.container, change.requests, change.limits);
+					app.toast(`Set the ${dialog.name === 'cpu' ? 'CPU' : 'memory'} of ${dialog.container} in ${dialog.target.name}; new pods start with it`);
+					ok = true;
+					break;
+				}
 				case 'memory':
 					await backend.setMemoryLimit(dialog.target, dialog.fix.container, memory.trim());
 					app.toast(`Set the memory limit of ${dialog.fix.container} in ${dialog.target.name} to ${memory.trim()}; new pods start with it`);
@@ -443,6 +462,11 @@
 				const patch = metadataPatch();
 				return wanted.labels && patch ? { type: 'patch', patch: { metadata: patch } } : null;
 			}
+			case 'resources': {
+				// Always: the diff shows the pods will be replaced.
+				const change = sizeChange();
+				return change ? { type: 'resources', container: dialog.container, ...change } : null;
+			}
 			case 'memory':
 				// Always: the diff shows the pods will be replaced.
 				return memory.trim() ? { type: 'memory', container: dialog.fix.container, memory: memory.trim() } : null;
@@ -493,6 +517,10 @@
 				return kubectlCommand(ctx, dialog.target, { op: 'rollback' });
 			case 'memory':
 				return kubectlCommand(ctx, dialog.target, { op: 'memory', container: dialog.fix.container, memory: memory.trim() });
+			case 'resources': {
+				const change = sizeChange() ?? { requests: {}, limits: {} };
+				return kubectlCommand(ctx, dialog.target, { op: 'resources', container: dialog.container, ...change });
+			}
 			case 'helmRollback':
 				return helmCommand(ctx, dialog.release, { op: 'rollback', revision: dialog.revision });
 			case 'helmUninstall':
@@ -587,6 +615,8 @@
 				return 'Roll back Deployment';
 			case 'memory':
 				return 'Raise memory limit';
+			case 'resources':
+				return `Right-size ${dialog.name === 'cpu' ? 'CPU' : 'memory'}`;
 		}
 	});
 	const confirmLabel = $derived(
@@ -617,7 +647,8 @@
 					renew: 'Renew',
 					image: 'Set',
 					rollback: 'Roll back',
-					memory: 'Set limit'
+					memory: 'Set limit',
+					resources: 'Set'
 				}[dialog.kind]
 	);
 	/** The plugin's command as it will run, with the inputs as typed. */
@@ -671,7 +702,7 @@
 			: 'Review the target before you continue'}
 	</p>
 
-	{#if dialog.kind === 'scale' || dialog.kind === 'restart' || dialog.kind === 'image' || dialog.kind === 'labels' || dialog.kind === 'memory'}
+	{#if dialog.kind === 'scale' || dialog.kind === 'restart' || dialog.kind === 'image' || dialog.kind === 'labels' || dialog.kind === 'memory' || dialog.kind === 'resources'}
 		<ManagedNote target={dialog.target} compact />
 	{:else if dialog.kind === 'delete' && dialog.targets.length === 1}
 		<ManagedNote target={dialog.targets[0]} compact />
@@ -971,6 +1002,21 @@
 			{dialog.fix.request ? `It requests ${dialog.fix.request}. ` : ''}Kubri suggests about twice the limit. If memory keeps growing, the
 			app may leak it, and a higher limit only buys time.
 		</p>
+	{:else if dialog.kind === 'resources'}
+		<p>
+			<strong>{dialog.container}</strong> in <strong>{dialog.resource.kind} {name(dialog.target)}</strong>: {dialog.note} Its pods are replaced
+			with a rolling update.
+		</p>
+		<div class="pair">
+			<label class="field">
+				<span>{dialog.name === 'cpu' ? 'CPU' : 'Memory'} request{dialog.current.request ? `, now ${dialog.current.request}` : ''}</span>
+				<input class="mono" bind:value={sizeRequest} bind:this={firstField} spellcheck="false" placeholder={dialog.name === 'cpu' ? '100m' : '128Mi'} />
+			</label>
+			<label class="field">
+				<span>Limit{dialog.current.limit ? `, now ${dialog.current.limit}` : ''}</span>
+				<input class="mono" bind:value={sizeLimit} spellcheck="false" placeholder="none" />
+			</label>
+		</div>
 	{:else if dialog.kind === 'image'}
 		<p>Set the container images of <strong>{name(dialog.target)}</strong>.</p>
 		{#if images === null}
@@ -1135,6 +1181,11 @@
 		align-items: center;
 		gap: 8px;
 		margin: 8px 0;
+	}
+	.pair {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
 	}
 	.field {
 		display: flex;

@@ -622,6 +622,32 @@ async fn gitops(
 }
 
 #[tauri::command]
+async fn right_sizing(
+    kubri: State<'_, Arc<Kubri>>,
+    namespace: Option<String>,
+) -> CommandResult<kubri_core::RightSizing> {
+    let namespace = namespace.filter(|n| !n.is_empty());
+    kubri
+        .right_sizing(namespace.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn set_resources(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+    container: String,
+    requests: std::collections::BTreeMap<String, String>,
+    limits: std::collections::BTreeMap<String, String>,
+) -> CommandResult<()> {
+    kubri
+        .set_resources(&target, &container, &requests, &limits)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn renew_certificate(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<()> {
     kubri.renew_certificate(&target).await.map_err(|e| e.to_string())
 }
@@ -954,6 +980,8 @@ pub fn run() {
             gitops,
             managed_by,
             renew_certificate,
+            right_sizing,
+            set_resources,
             xray,
             sanitize,
             rbac,

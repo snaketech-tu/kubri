@@ -31,6 +31,9 @@ describe('kubectlCommand', () => {
 		expect(kubectlCommand('c', deploy, { op: 'suspend', suspend: true })).toBe(
 			`kubectl --context c -n shop patch deployments.apps/web --type=merge -p '{"spec":{"suspend":true}}'`
 		);
+		expect(
+			kubectlCommand('c', deploy, { op: 'resources', container: 'web', requests: { cpu: '35m', memory: '' }, limits: { cpu: '300m' } })
+		).toBe('kubectl --context c -n shop set resources deployments.apps/web -c web --requests=cpu=35m --limits=cpu=300m');
 		expect(kubectlCommand('c', node, { op: 'drain', options: { ignoreDaemonsets: true, force: true, gracePeriodSeconds: 30 } })).toBe(
 			'kubectl --context c drain worker-1 --ignore-daemonsets --force --grace-period=30'
 		);

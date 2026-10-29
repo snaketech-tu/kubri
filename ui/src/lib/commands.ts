@@ -25,6 +25,7 @@ export type Action =
 	| { type: 'sanitizer'; namespace?: string }
 	| { type: 'benchmarks' }
 	| { type: 'integrations' }
+	| { type: 'rightsizing' }
 	| { type: 'config'; section?: ConfigSection }
 	| { type: 'skin'; name: string | null }
 	| { type: 'help' };
@@ -46,6 +47,7 @@ const NEW_COMMANDS = ['new', 'create', 'apply'];
 const SANITIZER_COMMANDS = ['popeye', 'pop', 'sanitizer', 'sanitize'];
 const BENCH_COMMANDS = ['be', 'bench', 'benchmark', 'benchmarks'];
 const INTEGRATION_COMMANDS = ['integrations', 'integration', 'prometheus', 'grafana', 'loki'];
+const SIZING_COMMANDS = ['rightsizing', 'rightsize', 'sizing'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	config: undefined,
 	settings: undefined,
@@ -265,6 +267,13 @@ function builtins(
 	};
 	if (INTEGRATION_COMMANDS.includes(cmd)) return [integrations];
 
+	const sizing: Suggestion = {
+		label: 'rightsizing',
+		detail: 'Containers that request much more or less than they use',
+		action: { type: 'rightsizing' }
+	};
+	if (SIZING_COMMANDS.includes(cmd)) return [sizing];
+
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {
 		const roots = xrayResources(resources);
@@ -351,6 +360,7 @@ function builtins(
 	if (cmd && SANITIZER_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sanitizer());
 	if (cmd && BENCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(benchmarks);
 	if (cmd.length > 1 && INTEGRATION_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(integrations);
+	if (cmd.length > 2 && SIZING_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sizing);
 	if (cmd.length > 1 && 'config'.startsWith(cmd) && cmd !== 'config') {
 		extra.push(...builtins('config', resources, contexts, namespaces, config).slice(0, 1));
 	}

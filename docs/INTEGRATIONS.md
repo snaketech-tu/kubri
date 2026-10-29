@@ -40,6 +40,26 @@ A node's charts come from node-exporter when it runs, and from cAdvisor otherwis
 
 With Prometheus, the **Usage trend** in the overview starts with the last hour of measured use instead of only what Kubri saw since it opened.
 
+## Right-sizing
+
+**Right-sizing** (`:rightsizing`, in the sidebar) compares what each container of the namespace's Deployments, StatefulSets and DaemonSets requests with what it uses:
+
+| Use | From |
+| --- | --- |
+| CPU | The 95th percentile of the 5-minute rate over 7 days, from Prometheus |
+| Memory | The highest working set over 7 days, from Prometheus |
+
+Without Prometheus it falls back to the metrics server, a single measurement of now, and says so; it then only suggests lowering requests that are far (4×) above use.
+
+Suggestions come with a reason, the most urgent first:
+
+- **Near limit**: use is at 90% of the limit or more. The container will be throttled (CPU) or killed (memory).
+- **Under-requested**: use is above the request, so the scheduler places the pod on a node that may not have room.
+- **No request**: the container has none, so the scheduler counts it as free.
+- **Over-requested**: the request is at least twice the suggestion, and by at least 50m CPU or 64Mi memory.
+
+The suggested request is use with 20% headroom, the suggested limit use with 50%, rounded up to 5m or 16Mi. The page sums what lowering the over-requested ones would free. **Review…** opens the change with the dry-run diff of the workload's template, the matching `kubectl set resources` command and, when Flux or Argo CD manage the workload, what they will do with it. Setting the values restarts the workload's pods, as any template change does.
+
 ## Grafana dashboards
 
 **Metrics** lists, above the charts, the Grafana dashboards that show the object: those with a variable Kubri can fill, like `pod`, `workload`, `deployment` or `node`, with the namespace too. Each opens in Grafana with those variables set. The Integrations page lists the dashboards for the namespace picked in the sidebar and opens Grafana itself.

@@ -89,6 +89,10 @@
 			<Icon name="plug" />
 			<span class="label">Integrations</span>
 		</button>
+		<button class:active={app.page === 'rightsizing'} onclick={() => app.showRightSizing()} title=":rightsizing">
+			<Icon name="sizing" />
+			<span class="label">Right-sizing</span>
+		</button>
 		<button class:active={app.page === 'portforwards'} onclick={() => app.showPortForwards()} title=":pf">
 			<Icon name="forward" />
 			<span class="label">Port-forwards</span>

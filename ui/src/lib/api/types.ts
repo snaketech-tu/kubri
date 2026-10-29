@@ -374,7 +374,8 @@ export type Change =
 	| { type: 'restart' }
 	| { type: 'images'; images: ContainerImage[] }
 	/** One container's memory limit in a workload's pod template. */
-	| { type: 'memory'; container: string; memory: string };
+	| { type: 'memory'; container: string; memory: string }
+	| { type: 'resources'; container: string; requests: Record<string, string>; limits: Record<string, string> };
 
 /** An object now and after a change, without status and fields that change on every write. */
 export interface Preview {
@@ -762,6 +763,34 @@ export interface Pulse {
 	certificates: CertificateAlert[];
 }
 
+export type SizeReason = 'nearLimit' | 'underRequested' | 'overRequested' | 'noRequest';
+
+/** One container's CPU or memory, and what to set instead. */
+export interface SizeAdvice {
+	workload: ObjectRef;
+	kind: string;
+	container: string;
+	resource: 'cpu' | 'memory';
+	request: string | null;
+	limit: string | null;
+	/** The request in cores or bytes. */
+	requested: number | null;
+	/** CPU in cores (95th percentile with history), memory in bytes (the peak). */
+	used: number;
+	suggestedRequest: string | null;
+	suggestedLimit: string | null;
+	reason: SizeReason;
+	/** Cores or bytes a smaller request frees; negative when the request grows. */
+	freed: number;
+}
+
+export interface RightSizing {
+	source: string;
+	/** Use over a week; else one sample of now. */
+	history: boolean;
+	advice: SizeAdvice[];
+}
+
 export interface CertificateAlert {
 	object: ObjectRef;
 	health: Health;
@@ -1126,6 +1155,10 @@ export interface Backend {
 	gitops(target: ObjectRef, action: GitOpsAction): Promise<void>;
 	/** Asks cert-manager to issue a Certificate again now, like `cmctl renew`. */
 	renewCertificate(target: ObjectRef): Promise<void>;
+	/** Containers whose requests or limits are far from what they use. */
+	rightSizing(namespace: string | null): Promise<RightSizing>;
+	/** Sets one container's requests and limits in a workload's pod template. */
+	setResources(target: ObjectRef, container: string, requests: Record<string, string>, limits: Record<string, string>): Promise<void>;
 	/** The Flux or Argo CD object that manages an object, if any. */
 	managedBy(target: ObjectRef): Promise<Manager | null>;
 	setImages(target: ObjectRef, images: ContainerImage[]): Promise<void>;

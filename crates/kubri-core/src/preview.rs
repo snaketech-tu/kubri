@@ -31,6 +31,14 @@ pub enum Change {
         container: String,
         memory: String,
     },
+    /// One container's requests and limits in a workload's pod template.
+    Resources {
+        container: String,
+        #[serde(default)]
+        requests: std::collections::BTreeMap<String, String>,
+        #[serde(default)]
+        limits: std::collections::BTreeMap<String, String>,
+    },
 }
 
 /// An object now and after the change, without what changes on every write.
