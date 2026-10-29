@@ -33,6 +33,7 @@
 				[':new [kind name --image …]', 'Create from a template or YAML, like kubectl create'],
 				[':popeye', 'Sanitizer: problems, scored'],
 				[':integrations', 'Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager'],
+				[':rightsizing', 'Requests far from what containers use'],
 				[':bench', 'HTTP benchmarks'],
 				[':pf', 'Port-forwards'],
 				[':config', 'k9s aliases, hotkeys, plugins and skins'],

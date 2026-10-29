@@ -145,6 +145,8 @@ export const httpBackend: Backend = {
 	suspendCronJob: (target, suspend) => request('POST', '/cronjob/suspend', { target, suspend }),
 	gitops: (target, action) => request('POST', '/gitops', { target, action }),
 	renewCertificate: (target) => request('POST', '/certificate/renew', { target }),
+	rightSizing: (namespace) => request('GET', `/right-sizing${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
+	setResources: (target, container, requests, limits) => request('POST', '/object/resources', { target, container, requests, limits }),
 	managedBy: (target) => request('POST', '/object/managed-by', { target }),
 	setImages: (target, images) => request('POST', '/object/images', { target, images }),
 	rollback: async (target) => (await request<{ name: string }>('POST', '/replicaset/rollback', { target })).name,

@@ -11,6 +11,7 @@ export type KubectlOp =
 	| { op: 'debug'; container?: string | null; image?: string | null; copy?: boolean }
 	| { op: 'nodeShell'; image?: string | null }
 	| { op: 'memory'; container: string; memory?: string | null }
+	| { op: 'resources'; container: string; requests: Record<string, string>; limits: Record<string, string> }
 	| { op: 'portForward'; local?: number | null; remote?: number | null; address?: string | null }
 	| { op: 'cordon' }
 	| { op: 'uncordon' }
@@ -76,6 +77,13 @@ export function kubectlCommand(context: string | null | undefined, target: Objec
 				: run('debug', '-it', target.name, `--image=${op.image || 'busybox'}`, ...(op.container ? [`--target=${op.container}`] : []));
 		case 'memory':
 			return run('set', 'resources', ref, '-c', op.container, `--limits=memory=${op.memory || 'MEMORY'}`);
+		case 'resources': {
+			const flag = (name: string, values: Record<string, string>) => {
+				const set = Object.entries(values).filter(([, v]) => v);
+				return set.length ? [`--${name}=${set.map(([k, v]) => `${k}=${v}`).join(',')}`] : [];
+			};
+			return run('set', 'resources', ref, '-c', op.container, ...flag('requests', op.requests), ...flag('limits', op.limits));
+		}
 		case 'nodeShell':
 			return command(context, null, ['debug', `node/${target.name}`, '-it', '--profile=sysadmin', `--image=${op.image || 'busybox'}`, '--', 'chroot', '/host', 'sh']);
 		case 'portForward': {

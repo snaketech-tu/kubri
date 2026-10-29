@@ -447,7 +447,7 @@ pub(crate) async fn query_range(
     parse_matrix(&answer)
 }
 
-fn encode(text: &str) -> String {
+pub(crate) fn encode(text: &str) -> String {
     let mut out = String::new();
     for byte in text.bytes() {
         match byte {
@@ -458,7 +458,7 @@ fn encode(text: &str) -> String {
     out
 }
 
-fn check(answer: &Value) -> Result<()> {
+pub(crate) fn check(answer: &Value) -> Result<()> {
     if answer.get("status").and_then(Value::as_str) == Some("error") {
         let message = answer
             .get("error")

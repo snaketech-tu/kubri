@@ -161,6 +161,7 @@ export type Page =
 	| 'create'
 	| 'sanitizer'
 	| 'integrations'
+	| 'rightsizing'
 	| 'config';
 
 export type Dialog =
@@ -183,6 +184,20 @@ export type Dialog =
 	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef }
 	/** A Flux or Argo CD action; `autoSync` turns Argo CD's auto-sync off or on, as it is now. */
 	| { kind: 'gitops'; resource: ResourceInfo; target: ObjectRef; action: GitOpsAction | 'autoSync' }
+	/** One container's requests and limits, prefilled from right-sizing advice. */
+	| {
+			kind: 'resources';
+			resource: ResourceInfo;
+			target: ObjectRef;
+			container: string;
+			/** `cpu` or `memory`. */
+			name: string;
+			request: string;
+			limit: string;
+			current: { request: string | null; limit: string | null };
+			/** Why, as the advice says it. */
+			note: string;
+	  }
 	/** Has cert-manager issue a Certificate again now. */
 	| { kind: 'renew'; resource: ResourceInfo; target: ObjectRef }
 	/** A debug container in a pod, a debug copy of it, or a shell on a node. */
@@ -678,6 +693,9 @@ class AppState {
 			case 'integrations':
 				this.showIntegrations();
 				break;
+			case 'rightsizing':
+				this.showRightSizing();
+				break;
 			case 'portforwards':
 				this.showPortForwards();
 				break;
@@ -712,6 +730,13 @@ class AppState {
 	showIntegrations() {
 		if (drafts.block(() => this.showIntegrations())) return;
 		this.page = 'integrations';
+		this.details = null;
+	}
+
+	/** Containers whose requests or limits are far from what they use. */
+	showRightSizing() {
+		if (drafts.block(() => this.showRightSizing())) return;
+		this.page = 'rightsizing';
 		this.details = null;
 	}
 

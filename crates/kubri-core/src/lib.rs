@@ -37,6 +37,7 @@ mod rbac;
 pub mod redact;
 mod references;
 mod resource;
+mod rightsizing;
 mod sanitizer;
 mod schema;
 mod selector;
@@ -95,6 +96,7 @@ pub use pulse::{CertificateAlert, EventPulse, KindPulse, Pulse, RecentEvent, Uti
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
+pub use rightsizing::{RightSizing, SizeAdvice, SizeReason};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
 pub use settings::{
     AgentSettings, ColumnSettings, ContextSettings, CustomColumn, DiffSettings, FavoriteForward, Settings,
@@ -711,6 +713,17 @@ impl Kubri {
             ),
             Change::Images { images } => {
                 let patch = workload::image_patch(info.kind == "Pod", &images)?;
+                (
+                    api.get(&obj.name).await?,
+                    api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,
+                )
+            }
+            Change::Resources {
+                container,
+                requests,
+                limits,
+            } => {
+                let patch = rightsizing::resources_patch(&container, &requests, &limits)?;
                 (
                     api.get(&obj.name).await?,
                     api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,

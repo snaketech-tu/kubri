@@ -20,7 +20,7 @@ use kubri_core::{
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
 use kubri_core::{Charts, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
-use kubri_core::{GitOpsAction, Manager};
+use kubri_core::{GitOpsAction, Manager, RightSizing};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -73,6 +73,8 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/cronjob/suspend", post(suspend_cronjob))
         .route("/gitops", post(gitops))
         .route("/certificate/renew", post(renew_certificate))
+        .route("/right-sizing", get(right_sizing))
+        .route("/object/resources", post(set_resources))
         .route("/object/managed-by", post(managed_by))
         .route("/replicaset/rollback", post(rollback))
         .route("/events", get(events))
@@ -551,6 +553,31 @@ struct GitOps {
 
 async fn gitops(State(kubri): State<Arc<Kubri>>, Json(req): Json<GitOps>) -> ApiResult<()> {
     Ok(Json(kubri.gitops(&req.target, req.action).await?))
+}
+
+async fn right_sizing(
+    State(kubri): State<Arc<Kubri>>,
+    Query(q): Query<NamespaceQuery>,
+) -> ApiResult<RightSizing> {
+    Ok(Json(kubri.right_sizing(q.namespace()).await?))
+}
+
+#[derive(Deserialize)]
+struct SetResources {
+    target: ObjectRef,
+    container: String,
+    #[serde(default)]
+    requests: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    limits: std::collections::BTreeMap<String, String>,
+}
+
+async fn set_resources(State(kubri): State<Arc<Kubri>>, Json(req): Json<SetResources>) -> ApiResult<()> {
+    Ok(Json(
+        kubri
+            .set_resources(&req.target, &req.container, &req.requests, &req.limits)
+            .await?,
+    ))
 }
 
 async fn renew_certificate(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<()> {
@@ -1215,6 +1242,10 @@ mod tests {
             ("/cronjob/suspend", format!(r#"{target},"suspend":true}}"#)),
             ("/gitops", format!(r#"{target},"action":"reconcile"}}"#)),
             ("/certificate/renew", format!("{target}}}")),
+            (
+                "/object/resources",
+                format!(r#"{target},"container":"app","requests":{{"cpu":"100m"}}}}"#),
+            ),
             ("/replicaset/rollback", format!("{target}}}")),
             (
                 "/object/images",
