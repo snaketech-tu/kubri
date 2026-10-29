@@ -109,6 +109,9 @@ See [Development](#development).
         <li>RBAC: who may do what, as a matrix of verbs</li>
         <li>Helm: install charts from repositories, OCI or Artifact Hub, upgrade with a diff, compare revisions and spot drift</li>
         <li>A Popeye-style sanitizer with a grade</li>
+        <li>Prometheus charts for CPU, memory, restarts, network and requests, with Grafana dashboards and Loki history</li>
+        <li>Flux, Argo CD and cert-manager: status, reconcile, sync and renew, and a warning before changing what they manage</li>
+        <li>Right-sizing: containers that request far more or less than they use, with the change to fix it</li>
       </ul>
     </td>
   </tr>
@@ -183,6 +186,10 @@ See [Development](#development).
     <td valign="top"><img src="docs/assets/screenshots/create.png" alt="Create with a Deployment's YAML and a form for its name, replicas, image, port and resources"><br><b>Create</b>: templates, short forms like <code>:new deploy web --image nginx</code> and forms that write the YAML</td>
     <td valign="top"><img src="docs/assets/screenshots/helm-upgrade.png" alt="A Helm upgrade review: the changed values and the Deployment whose replicas and image change"><br><b>Helm upgrade</b>: change values and see every object that changes before you upgrade</td>
   </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/metrics.png" alt="A Deployment's CPU and memory per pod from Prometheus, against its request and limit, with a link to its Grafana dashboard"><br><b>Metrics</b>: Prometheus history against requests and limits, and the matching Grafana dashboard</td>
+    <td valign="top"><img src="docs/assets/screenshots/right-sizing.png" alt="Right-sizing: containers whose requests are far from their use, with suggested values"><br><b>Right-sizing</b>: what each container requests and uses, and what to set instead (<kbd>:rightsizing</kbd>)</td>
+  </tr>
 </table>
 
 ## Coming from k9s
@@ -219,6 +226,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 - [AI agents (MCP)](docs/AGENTS.md): connecting Claude Code, Claude Desktop or another agent, the tools it gets, and what it may not do.
 - [Explain](docs/EXPLAIN.md): asking a model about a pod, logs, a finding or a failed action with your own key, and what is hidden.
 - [Creating and changing](docs/CREATE.md): Create, forms and cloning, Helm install, upgrade, compare and drift, columns, bulk changes and port-forwards that stay.
+- [Integrations](docs/INTEGRATIONS.md): Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager and right-sizing, found without configuration.
 - [Logs and debugging](docs/DEBUGGING.md): searching logs by field, the workspace, debug containers, node shells and the fixes Kubri offers.
 - [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.
 - [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.
