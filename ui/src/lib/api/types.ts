@@ -88,6 +88,29 @@ export type DebugRequest =
 	/** A privileged pod on the node with a shell in the node's namespaces. */
 	| { kind: 'node'; node: string; namespace: string | null; image: string | null };
 
+/** A higher memory limit for a container that ran out of memory, on the workload that owns the pod. */
+export interface MemoryFix {
+	/** The Deployment, StatefulSet or DaemonSet to change; null for a pod nothing owns. */
+	workload: ObjectRef | null;
+	container: string;
+	limit: string | null;
+	request: string | null;
+	suggested: string;
+}
+
+/** Why a node would refuse a pending pod; no reasons where Kubri finds none. */
+export interface NodeFit {
+	node: string;
+	reasons: string[];
+}
+
+/** Which pods a Service picks, and which nearly match. */
+export interface ServiceCheck {
+	selector: Record<string, string>;
+	pods: { name: string; ready: boolean; missingPorts: string[] }[];
+	near: { name: string; differences: string[] }[];
+}
+
 /** Where to connect once the debug container runs. */
 export interface DebugSession {
 	pod: ObjectRef;
@@ -167,7 +190,9 @@ export type Change =
 	| { type: 'patch'; patch: unknown }
 	| { type: 'scale'; replicas: number }
 	| { type: 'restart' }
-	| { type: 'images'; images: ContainerImage[] };
+	| { type: 'images'; images: ContainerImage[] }
+	/** One container's memory limit in a workload's pod template. */
+	| { type: 'memory'; container: string; memory: string };
 
 /** An object now and after a change, without status and fields that change on every write. */
 export interface Preview {
@@ -845,6 +870,13 @@ export interface Backend {
 	restart(target: ObjectRef): Promise<void>;
 	/** Starts a debug container and says where to connect to it. */
 	debug(request: DebugRequest): Promise<DebugSession>;
+	/** A higher memory limit for a container of a pod, on the workload that owns it. */
+	memoryFix(target: ObjectRef, container: string): Promise<MemoryFix>;
+	setMemoryLimit(target: ObjectRef, container: string, memory: string): Promise<void>;
+	/** Why each node would refuse a pending pod. */
+	scheduling(target: ObjectRef): Promise<NodeFit[]>;
+	/** Which pods a Service picks. */
+	serviceCheck(target: ObjectRef): Promise<ServiceCheck>;
 	/** Where Enter leads from an object; null when it has nowhere to go but its details. */
 	drill(target: ObjectRef): Promise<Drill | null>;
 	/** What uses a ConfigMap, Secret, PVC, ServiceAccount or PriorityClass, like k9s `u`. */

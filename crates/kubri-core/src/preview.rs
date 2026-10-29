@@ -26,6 +26,11 @@ pub enum Change {
     Images {
         images: Vec<ContainerImage>,
     },
+    /// One container's memory limit in a workload's pod template.
+    Memory {
+        container: String,
+        memory: String,
+    },
 }
 
 /// An object now and after the change, without what changes on every write.

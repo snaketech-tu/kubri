@@ -10,6 +10,7 @@ import {
 	type Drill,
 	type ExplainSubject,
 	type Guard,
+	type MemoryFix,
 	type HelmRelease,
 	type K9sConfig,
 	type ObjectRef,
@@ -164,7 +165,9 @@ export type Dialog =
 	| { kind: 'image'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef }
 	/** A debug container in a pod, a debug copy of it, or a shell on a node. */
-	| { kind: 'debug'; on: 'pod' | 'node'; target: ObjectRef }
+	| { kind: 'debug'; on: 'pod' | 'node'; target: ObjectRef; way?: 'ephemeral' | 'copy'; container?: string }
+	/** A higher memory limit for a container, on the workload that owns its pod. */
+	| { kind: 'memory'; resource: ResourceInfo; target: ObjectRef; fix: MemoryFix }
 	/** The kubectl commands for an object's actions, to copy. */
 	| { kind: 'kubectl'; title: string; commands: { label: string; command: string }[] }
 	/** Explains an action RBAC refuses, and what would allow it. */

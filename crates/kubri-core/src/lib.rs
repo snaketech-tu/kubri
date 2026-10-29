@@ -11,6 +11,7 @@ pub mod diagnose;
 mod discovery;
 mod error;
 pub mod explain;
+mod fixes;
 mod health;
 mod helm;
 mod k9s;
@@ -63,6 +64,7 @@ pub use context::{ContextInfo, write_in_cluster_kubeconfig};
 pub use debug::{DebugRequest, DebugSession, DebugSettings};
 pub use error::{Error, Result};
 pub use explain::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject, Provider};
+pub use fixes::{MemoryFix, NearMiss, NodeFit, PodMatch, ServiceCheck};
 pub use health::Health;
 pub use helm::{HelmRelease, HelmReleaseDetails};
 pub use k9s::{
@@ -671,6 +673,13 @@ impl Kubri {
             ),
             Change::Images { images } => {
                 let patch = workload::image_patch(info.kind == "Pod", &images)?;
+                (
+                    api.get(&obj.name).await?,
+                    api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,
+                )
+            }
+            Change::Memory { container, memory } => {
+                let patch = fixes::memory_patch(&container, &memory)?;
                 (
                     api.get(&obj.name).await?,
                     api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,

@@ -18,6 +18,7 @@ use kubri_core::{
     ResourceInfo, ResourceRef, SanitizerReport, Settings, TableScope, Terminal, TerminalOptions,
     TerminalOutput, Usage, XrayNode,
 };
+use kubri_core::{MemoryFix, NodeFit, ServiceCheck};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -55,6 +56,10 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/object/scale", post(scale))
         .route("/object/restart", post(restart))
         .route("/debug", post(debug))
+        .route("/fix/memory", post(memory_fix))
+        .route("/fix/memory/apply", post(set_memory_limit))
+        .route("/fix/scheduling", post(scheduling))
+        .route("/fix/service", post(service_check))
         .route("/object/drill", post(drill))
         .route("/object/used-by", post(used_by))
         .route("/object/images", post(set_images))
@@ -427,6 +432,35 @@ struct Target {
 
 async fn debug(State(kubri): State<Arc<Kubri>>, Json(req): Json<DebugRequest>) -> ApiResult<DebugSession> {
     Ok(Json(kubri.debug(req).await?))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MemoryRequest {
+    target: ObjectRef,
+    container: String,
+    #[serde(default)]
+    memory: String,
+}
+
+async fn memory_fix(State(kubri): State<Arc<Kubri>>, Json(req): Json<MemoryRequest>) -> ApiResult<MemoryFix> {
+    Ok(Json(kubri.memory_fix(&req.target, &req.container).await?))
+}
+
+async fn set_memory_limit(State(kubri): State<Arc<Kubri>>, Json(req): Json<MemoryRequest>) -> ApiResult<()> {
+    Ok(Json(
+        kubri
+            .set_memory_limit(&req.target, &req.container, &req.memory)
+            .await?,
+    ))
+}
+
+async fn scheduling(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Vec<NodeFit>> {
+    Ok(Json(kubri.scheduling(&req.target).await?))
+}
+
+async fn service_check(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<ServiceCheck> {
+    Ok(Json(kubri.service_check(&req.target).await?))
 }
 
 async fn restart(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<()> {
@@ -993,6 +1027,10 @@ mod tests {
             ("/object/restart", format!("{target}}}")),
             ("/cronjob/trigger", format!("{target}}}")),
             ("/debug", r#"{"kind":"node","node":"n1"}"#.to_owned()),
+            (
+                "/fix/memory/apply",
+                format!(r#"{target},"container":"app","memory":"1Gi"}}"#),
+            ),
             ("/cronjob/suspend", format!(r#"{target},"suspend":true}}"#)),
             ("/replicaset/rollback", format!("{target}}}")),
             (
