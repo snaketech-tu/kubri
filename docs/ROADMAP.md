@@ -41,3 +41,4 @@ The plan for 0.3 to 1.0 is in [IMPLEMENTATION-PLAN-v2.md](IMPLEMENTATION-PLAN-v2
 - ✅ 0.4 AI: Kubri as an MCP server for AI agents, and Explain with your own model.
 - ✅ 0.5 Logs and debugging: structured logs, a workspace of log and shell tabs, debug containers and node shells, and fixes from the likely problem.
 - ✅ 0.6 Create and change: Create from templates, files and URLs with a dry run, forms and cloning, Helm install, upgrade, compare and drift, columns, bulk changes and port-forwards that stay.
+- ✅ 0.7 Integrations: Prometheus charts, Grafana dashboards, Loki history, Flux and Argo CD status and actions, cert-manager expiry and renewal, and right-sizing.
