@@ -53,6 +53,7 @@ export const tauriBackend: Backend = {
 	settings: () => invoke('settings'),
 	setContextSettings: (name, settings) => invoke('set_context_settings', { name, settings }),
 	setDiffSettings: (settings) => invoke('set_diff_settings', { settings }),
+	setColumnSettings: (kind, columns) => invoke('set_column_settings', { kind, columns }),
 	setAgentSettings: (settings) => invoke('set_agent_settings', { settings }),
 	agentConnection: () => invoke('agents_connection'),
 	newAgentToken: () => invoke('agents_new_token'),

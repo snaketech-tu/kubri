@@ -32,6 +32,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings", get(settings))
         .route("/settings/context", put(set_context_settings))
         .route("/settings/diff", put(set_diff_settings))
+        .route("/settings/columns", put(set_column_settings))
         .route("/settings/agents", put(set_agent_settings))
         .route("/settings/explain", put(set_explain_settings))
         .route("/explain/key", get(explain_key).put(set_explain_key))
@@ -188,6 +189,19 @@ async fn set_diff_settings(
     Json(req): Json<DiffSettings>,
 ) -> ApiResult<Settings> {
     Ok(Json(kubri.set_diff_settings(req)?))
+}
+
+#[derive(Deserialize)]
+struct SetColumnSettings {
+    kind: String,
+    columns: kubri_core::ColumnSettings,
+}
+
+async fn set_column_settings(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<SetColumnSettings>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_column_settings(&req.kind, req.columns)?))
 }
 
 async fn set_agent_settings(

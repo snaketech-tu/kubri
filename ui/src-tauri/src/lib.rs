@@ -126,6 +126,17 @@ fn set_diff_settings(kubri: State<'_, Arc<Kubri>>, settings: DiffSettings) -> Co
 }
 
 #[tauri::command]
+fn set_column_settings(
+    kubri: State<'_, Arc<Kubri>>,
+    kind: String,
+    columns: kubri_core::ColumnSettings,
+) -> CommandResult<Settings> {
+    kubri
+        .set_column_settings(&kind, columns)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn guard(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Guard> {
     Ok(kubri.guard().await)
 }
@@ -791,6 +802,7 @@ pub fn run() {
             settings,
             set_context_settings,
             set_diff_settings,
+            set_column_settings,
             agents::set_agent_settings,
             agents::agents_connection,
             agents::agents_new_token,

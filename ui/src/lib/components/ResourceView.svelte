@@ -3,7 +3,7 @@
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { canDelete, copyLines, saveFile } from '../actions';
+	import { canDelete, canRestart, canScale, copyLines, saveFile } from '../actions';
 	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
 	import { age, cpu, memory } from '../format';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
@@ -14,7 +14,9 @@
 	import { filterRows, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
 	import { navPlace } from '../nav';
+	import { NO_COLUMNS, isShown, kindKey, ordered, pathsOf } from '../columns';
 	import ActionBar from './ActionBar.svelte';
+	import ColumnChooser from './ColumnChooser.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 
 	let {
@@ -46,7 +48,15 @@
 	const metricsKind = $derived<MetricsKind | null>(isPods(resource) ? 'pods' : isNodes(resource) ? 'nodes' : null);
 	const writable = $derived(!app.readOnly);
 
-	$effect(() => table.start(resource, ns, scope?.scope ?? null, retry > 0));
+	/** How this kind's list shows its columns, from the settings. */
+	const columnKey = $derived(kindKey(resource));
+	const columnSettings = $derived(app.settings.columns?.[columnKey] ?? NO_COLUMNS);
+	const paths = $derived(pathsOf(columnSettings));
+	let chooserOpen = $state(false);
+
+	$effect(() =>
+		table.start(resource, ns, paths ? { ...(scope?.scope ?? {}), paths } : (scope?.scope ?? null), retry > 0)
+	);
 	$effect(() => {
 		if (metricsKind) return metrics.start(metricsKind, ns);
 	});
@@ -86,27 +96,37 @@
 		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' }
 	];
 
-	type DisplayColumn =
+	type DisplayColumn = (
 		| { kind: 'namespace'; label: string; index: -1 }
-		| { kind: 'cell'; label: string; index: number; age: boolean; name: boolean }
-		| ({ kind: 'metric' } & MetricColumn);
+		| { kind: 'cell'; label: string; index: number; age: boolean; name: boolean; custom: boolean }
+		| ({ kind: 'metric' } & MetricColumn)
+	) & { wideOnly: boolean };
 
-	const columns = $derived.by(() => {
+	/** Every column the list can show, in their own order, before the settings and the wide view. */
+	const allColumns = $derived.by(() => {
 		const out: DisplayColumn[] = [];
-		if (resource.namespaced && !ns) out.push({ kind: 'namespace', label: 'Namespace', index: -1 });
-		const cells = table.columns
-			.map((c, index) => ({ c, index }))
-			.filter(({ c }) => wide || c.priority === 0);
-		for (const { c, index } of cells) {
+		if (resource.namespaced && !ns) out.push({ kind: 'namespace', label: 'Namespace', index: -1, wideOnly: false });
+		for (const [index, c] of table.columns.entries()) {
 			const isAge = isAgeColumn(c);
 			if (isAge && metricsKind) {
 				const metricColumns = metricsKind === 'nodes' ? NODE_METRICS : POD_METRICS;
-				out.push(...metricColumns.filter((m) => wide || !m.wide).map((m) => ({ kind: 'metric' as const, ...m })));
+				out.push(...metricColumns.map((m) => ({ kind: 'metric' as const, ...m, wideOnly: m.wide })));
 			}
-			out.push({ kind: 'cell', label: c.name, index, age: isAge, name: c.format === 'name' });
+			// A custom column comes back named by its path.
+			const custom = c.format === 'jsonpath' ? columnSettings.custom.find((x) => x.path === c.name) : undefined;
+			out.push({
+				kind: 'cell',
+				label: custom?.name ?? c.name,
+				index,
+				age: isAge,
+				name: c.format === 'name',
+				custom: c.format === 'jsonpath',
+				wideOnly: c.priority > 0
+			});
 		}
-		return out;
+		return ordered(out, columnSettings);
 	});
+	const columns = $derived(allColumns.filter((c) => isShown(c, columnSettings, wide)));
 
 	/** The rows of this view: what the scope's owner owns, if it names one. */
 	const owned = $derived.by(() => {
@@ -384,6 +404,24 @@
 			{ group: 'Marked', label: 'Mark all', keys: ['ctrl+a'], primary: 0, run: () => rows.forEach((r) => selection.add(r.key)) },
 			{ group: 'Marked', label: 'Unmark all', keys: ['ctrl+\\'], primary: 0, run: () => selection.clear() }
 		);
+		if (writable && canScale(resource) && !isPods(resource)) {
+			out.push({
+				group: 'Change',
+				label: `Scale ${chosen.length}…`,
+				keys: ['s'],
+				primary: 0,
+				run: () => (app.dialog = { kind: 'scaleMany', resource, targets: chosen.map(target) })
+			});
+		}
+		if (writable && canRestart(resource)) {
+			out.push({
+				group: 'Change',
+				label: `Restart ${chosen.length}…`,
+				keys: ['r'],
+				primary: 0,
+				run: () => (app.dialog = { kind: 'restartMany', resource, targets: chosen.map(target) })
+			});
+		}
 		if (writable && canDelete(resource)) {
 			out.push({
 				group: 'Delete',
@@ -398,11 +436,30 @@
 	}
 
 	/** The row menu, from a right click or the row's ⋯ button. Marked rows go together. */
-	function openMenu(row: Row, x: number, y: number, align: 'left' | 'right' = 'left') {
+	function openMenu(row: Row, x: number, y: number, align: 'left' | 'right' = 'left', column?: DisplayColumn) {
 		cursorKey = row.key;
 		const marked = chosenRows();
 		const actions = selection.has(row.key) && marked.length > 1 ? markedActions(marked) : actionsFor(row, [row]);
-		app.menu = { actions, x, y, align };
+		app.menu = { actions: column ? [...copyActions(row, column), ...actions] : actions, x, y, align };
+	}
+
+	/** Copying the cell right-clicked, or its whole column as the list shows it. */
+	function copyActions(row: Row, column: DisplayColumn): MenuAction[] {
+		const text = cellText(row, column);
+		return [
+			{
+				group: 'Copy',
+				label: text ? `Copy “${text.length > 32 ? `${text.slice(0, 31)}…` : text}”` : 'Copy cell',
+				keys: [],
+				run: () => copyLines([text], ['value', 'values'])
+			},
+			{
+				group: 'Copy',
+				label: `Copy the ${column.label} column`,
+				keys: [],
+				run: () => copyLines(rows.map((r) => cellText(r, column)), ['value', 'values'])
+			}
+		];
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -524,7 +581,10 @@
 						return true;
 				}
 			}
-			const action = actionFor(actionsFor(current, chosenRows()), keyOf(e));
+			const chosen = chosenRows();
+			// With several rows marked, s, r and c work on all of them.
+			const actions = actionsFor(current, chosen);
+			const action = actionFor(selection.size > 1 ? [...markedActions(chosen), ...actions] : actions, keyOf(e));
 			action?.run();
 			return !!action;
 		})();
@@ -570,6 +630,27 @@
 						Wide
 					</button>
 				{/if}
+				<div class="chooser">
+					<button
+						class="toggle"
+						class:on={chooserOpen}
+						aria-expanded={chooserOpen}
+						onclick={() => (chooserOpen = !chooserOpen)}
+						title="Choose, order and add columns for {resource.kind} lists"
+					>
+						Columns
+					</button>
+					{#if chooserOpen}
+						<ColumnChooser
+							kind={resource.kind}
+							columns={allColumns}
+							settings={columnSettings}
+							{wide}
+							onchange={(next) => app.setColumnSettings(columnKey, next)}
+							onclose={() => (chooserOpen = false)}
+						/>
+					{/if}
+				</div>
 				<button class="toggle" onclick={exportCsv} title="Save the list as CSV (Ctrl+S)">
 					<Icon name="download" size={15} /> CSV
 				</button>
@@ -681,6 +762,11 @@
 								{@const color = tone(row, column, text)}
 								{@const icon = statusIcon(column, color)}
 								<td
+									oncontextmenu={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										openMenu(row, e.clientX, e.clientY, 'left', column);
+									}}
 									class={color}
 									class:name={column.kind === 'cell' && column.name}
 									class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
@@ -927,6 +1013,9 @@
 	}
 	.tabs button:hover {
 		color: var(--text);
+	}
+	.chooser {
+		position: relative;
 	}
 	.tabs button[aria-selected='true'] {
 		border-bottom-color: var(--accent);

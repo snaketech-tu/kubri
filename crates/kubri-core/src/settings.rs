@@ -56,6 +56,54 @@ impl ContextSettings {
     }
 }
 
+/// How a list shows one kind: which columns, in which order, and extra JSONPath columns.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ColumnSettings {
+    /// Columns not shown, by name.
+    pub hidden: Vec<String>,
+    /// Columns of the wide view shown without it.
+    pub shown: Vec<String>,
+    /// Column names in the order to show them; columns not named follow in their own order.
+    pub order: Vec<String>,
+    /// Extra columns read from each object, like `kubectl get -o custom-columns`.
+    pub custom: Vec<CustomColumn>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CustomColumn {
+    pub name: String,
+    /// A JSONPath such as `.spec.nodeName` or `.spec.containers[*].image`.
+    pub path: String,
+}
+
+impl ColumnSettings {
+    fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
+
+    /// Trims names and checks every path, so a list never starts with one it cannot read.
+    fn normalized(mut self) -> Result<Self> {
+        for column in &mut self.custom {
+            column.name = column.name.trim().to_owned();
+            column.path = column.path.trim().to_owned();
+            if column.name.is_empty() {
+                column.name = column.path.clone();
+            }
+            crate::jsonpath::JsonPath::parse(&column.path).map_err(Error::Unsupported)?;
+        }
+        let mut seen = std::collections::HashSet::new();
+        if let Some(twice) = self.custom.iter().find(|c| !seen.insert(c.path.clone())) {
+            return Err(Error::Unsupported(format!(
+                "the column {} is there twice",
+                twice.path
+            )));
+        }
+        Ok(self)
+    }
+}
+
 /// Which actions show a server-side dry-run diff before they run. YAML edits always do.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -108,11 +156,24 @@ pub struct Settings {
     pub agents: AgentSettings,
     pub explain: crate::ExplainSettings,
     pub debug: crate::DebugSettings,
+    /// Per kind, by `group/Kind` (`/Pod` for the core group).
+    pub columns: BTreeMap<String, ColumnSettings>,
 }
 
 impl Settings {
     pub fn context(&self, name: &str) -> ContextSettings {
         self.contexts.get(name).cloned().unwrap_or_default()
+    }
+
+    /// Sets how lists show a kind; the defaults remove its entry.
+    pub(crate) fn set_columns(&mut self, kind: &str, columns: ColumnSettings) -> Result<()> {
+        let columns = columns.normalized()?;
+        if columns.is_default() {
+            self.columns.remove(kind);
+        } else {
+            self.columns.insert(kind.to_owned(), columns);
+        }
+        Ok(())
     }
 
     /// Sets a context's settings; the defaults remove its entry.

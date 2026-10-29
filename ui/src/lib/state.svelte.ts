@@ -7,6 +7,7 @@ import {
 	backend,
 	type AccessCheck,
 	type ClusterInfo,
+	type ColumnSettings,
 	type BenchInfo,
 	type ContextInfo,
 	type ContextSettings,
@@ -113,7 +114,8 @@ const DEFAULT_SETTINGS: Settings = {
 	diff: { scale: false, restart: false, image: true, labels: true },
 	agents: { http: false, port: 7879, secrets: false },
 	explain: { provider: 'none', baseUrl: '', model: '' },
-	debug: { image: 'busybox' }
+	debug: { image: 'busybox' },
+	columns: {}
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
@@ -157,6 +159,9 @@ export type Dialog =
 	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[]; statuses?: Record<string, string> }
 	| { kind: 'scale'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'restart'; resource: ResourceInfo; target: ObjectRef }
+	/** Several marked objects at once. */
+	| { kind: 'scaleMany'; resource: ResourceInfo; targets: ObjectRef[] }
+	| { kind: 'restartMany'; resource: ResourceInfo; targets: ObjectRef[] }
 	| { kind: 'labels'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'portforward'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'benchmark'; forward: PortForwardInfo; preset?: BenchInfo }
@@ -379,6 +384,15 @@ class AppState {
 		} catch (err) {
 			this.toast(errorMessage(err), 'bad');
 			return false;
+		}
+	}
+
+	/** Saves how lists show a kind. */
+	async setColumnSettings(kind: string, columns: ColumnSettings) {
+		try {
+			this.settings = await backend.setColumnSettings(kind, columns);
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
 		}
 	}
 

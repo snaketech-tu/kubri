@@ -65,6 +65,7 @@ impl Builtin {
                         Error::Unsupported(format!("{} {} does not select pods", source.kind, target.name))
                     })?),
                     field_selector: None,
+                    paths: None,
                 },
                 owner_uid: None,
                 title: title("Pods"),
@@ -82,6 +83,7 @@ impl Builtin {
                 scope: TableScope {
                     label_selector: None,
                     field_selector: Some(format!("spec.nodeName={}", target.name)),
+                    paths: None,
                 },
                 owner_uid: None,
                 title: format!("Pods on {}", target.name),
@@ -144,6 +146,7 @@ pub(crate) fn jump(
     let scope = TableScope {
         label_selector: render("labelSelector", &rule.label_selector)?,
         field_selector: render("fieldSelector", &rule.field_selector)?,
+        paths: None,
     };
     if scope.label_selector.is_none() && scope.field_selector.is_none() {
         return Err(invalid("selectors", "set labelSelector or fieldSelector".into()));
