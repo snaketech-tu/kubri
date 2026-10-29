@@ -34,6 +34,7 @@
 				[':popeye', 'Sanitizer: problems, scored'],
 				[':integrations', 'Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager'],
 				[':rightsizing', 'Requests far from what containers use'],
+				[':fleet', 'Every context at once, with its health'],
 				[':bench', 'HTTP benchmarks'],
 				[':pf', 'Port-forwards'],
 				[':config', 'k9s aliases, hotkeys, plugins and skins'],

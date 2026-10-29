@@ -49,6 +49,11 @@
 	</div>
 	<input class="filter" bind:value={filter} aria-label="Find a resource type" placeholder="Find resources…" />
 	<div class="scroll">
+		<button class:active={app.page === 'fleet'} onclick={() => app.showFleet()} title=":fleet">
+			<Icon name="fleet" />
+			<span class="label">Clusters</span>
+			<span class="hint">:fleet</span>
+		</button>
 		<button class:active={app.page === 'pulses'} onclick={() => app.showPulses()} title=":pulses">
 			<Icon name="overview" />
 			<span class="label">Overview</span>

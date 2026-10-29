@@ -737,6 +737,24 @@ export interface KindPulse {
 	error: string | null;
 }
 
+/** One context on the fleet page. */
+export interface FleetCluster {
+	context: string;
+	server: string | null;
+	/** The API server's version; null when it could not be reached. */
+	version: string | null;
+	/** Why it could not be reached, or why it could not be listed in time. */
+	error: string | null;
+	/** How long the API server took to say its version. */
+	millis: number;
+	/** Nodes, pods, Deployments, StatefulSets and DaemonSets. */
+	kinds: KindPulse[];
+	/** Requested and allocatable, in millicores. */
+	cpu: [number, number] | null;
+	/** Requested and allocatable, in bytes. */
+	memory: [number, number] | null;
+}
+
 export interface RecentEvent extends EventInfo {
 	objectKind: string;
 	object: ObjectRef;
@@ -1121,6 +1139,8 @@ export interface Backend {
 		onEvent: (event: TableEvent) => void
 	): () => void;
 	getObject(target: ObjectRef): Promise<KubeObject>;
+	/** The object in its own context, also one Kubri is not connected to, for Compare. */
+	getObjectElsewhere(target: ObjectRef): Promise<KubeObject>;
 	replaceObject(target: ObjectRef, value: KubeObject): Promise<KubeObject>;
 	/** Runs a change as a dry run, to show what it would do. */
 	preview(target: ObjectRef, change: Change): Promise<Preview>;
@@ -1155,6 +1175,8 @@ export interface Backend {
 	gitops(target: ObjectRef, action: GitOpsAction): Promise<void>;
 	/** Asks cert-manager to issue a Certificate again now, like `cmctl renew`. */
 	renewCertificate(target: ObjectRef): Promise<void>;
+	/** How a context is doing, without connecting to it. */
+	fleetCluster(context: string): Promise<FleetCluster>;
 	/** Containers whose requests or limits are far from what they use. */
 	rightSizing(namespace: string | null): Promise<RightSizing>;
 	/** Sets one container's requests and limits in a workload's pod template. */

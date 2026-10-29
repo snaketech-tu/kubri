@@ -82,6 +82,7 @@ export const tauriBackend: Backend = {
 	},
 
 	getObject: (target) => invoke('get_object', { target }),
+	getObjectElsewhere: (target) => invoke('get_object_elsewhere', { target }),
 	replaceObject: (target, value) => invoke('replace_object', { target, value }),
 	patchObject: (target, patch) => invoke('patch_object', { target, patch }),
 	deleteObject: (target, options) => invoke('delete_object', { target, options: options ?? null }),
@@ -100,6 +101,7 @@ export const tauriBackend: Backend = {
 	suspendCronJob: (target, suspend) => invoke('suspend_cronjob', { target, suspend }),
 	gitops: (target, action) => invoke('gitops', { target, action }),
 	renewCertificate: (target) => invoke('renew_certificate', { target }),
+	fleetCluster: (context) => invoke('fleet_cluster', { context }),
 	rightSizing: (namespace) => invoke('right_sizing', { namespace }),
 	setResources: (target, container, requests, limits) => invoke('set_resources', { target, container, requests, limits }),
 	managedBy: (target) => invoke('managed_by', { target }),

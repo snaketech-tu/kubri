@@ -20,6 +20,7 @@
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
 	import Dock from '#lib/components/Dock.svelte';
 	import DebugDialog from '#lib/components/DebugDialog.svelte';
+	import CompareDialog from '#lib/components/CompareDialog.svelte';
 	import ForbiddenDialog from '#lib/components/ForbiddenDialog.svelte';
 	import AgentRequests from '#lib/components/AgentRequests.svelte';
 	import HelmView from '#lib/components/HelmView.svelte';
@@ -34,6 +35,7 @@
 	import SanitizerView from '#lib/components/SanitizerView.svelte';
 	import IntegrationsView from '#lib/components/IntegrationsView.svelte';
 	import RightSizingView from '#lib/components/RightSizingView.svelte';
+	import FleetView from '#lib/components/FleetView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
@@ -440,7 +442,9 @@
 				class:wide={app.panelWide}
 				style:--panel-width={app.panelWidth ? `${app.panelWidth}px` : null}
 			>
-				{#if app.cluster && !app.connecting}
+				{#if app.page === 'fleet'}
+					<FleetView />
+				{:else if app.cluster && !app.connecting}
 					{#if app.page === 'portforwards'}
 						<PortForwardsView />
 					{:else if app.page === 'benchmarks'}
@@ -506,6 +510,7 @@
 									Choose context <Icon name="arrow" size={16} />
 								</button>
 								<button onclick={() => app.load()}>Try again</button>
+								{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>See all clusters</button>{/if}
 							</div>
 						{/if}
 						<p class="small">Your k9s aliases, hotkeys, plugins and skins keep working.</p>
@@ -546,6 +551,8 @@
 	<KubectlDialog dialog={app.dialog} />
 {:else if app.dialog?.kind === 'debug'}
 	<DebugDialog dialog={app.dialog} />
+{:else if app.dialog?.kind === 'compare'}
+	<CompareDialog dialog={app.dialog} />
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}
