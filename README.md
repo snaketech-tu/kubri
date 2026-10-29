@@ -174,6 +174,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 - [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.
 - [Releasing](docs/RELEASING.md): how a version is published.
 - [Roadmap](docs/ROADMAP.md): the steps toward k9s parity and what each one covered.
+- [Kubri and Headlamp](docs/HEADLAMP-COMPARISON.md): where Headlamp does better today, and what to adopt.
 
 ## Development
 
