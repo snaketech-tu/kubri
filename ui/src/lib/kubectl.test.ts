@@ -43,7 +43,7 @@ describe('kubectlCommand', () => {
 		expect(kubectlCommand(null, pod, { op: 'debug', copy: true, container: 'app' })).toBe(
 			'kubectl -n shop debug web-1 --copy-to=web-1-debug --container=app -it -- sh'
 		);
-		const node: ObjectRef = { resource: { group: '', version: 'v1', plural: 'nodes' }, name: 'n1' };
+		const node: ObjectRef = { resource: { group: '', version: 'v1', plural: 'nodes' }, namespace: null, name: 'n1' };
 		expect(kubectlCommand(null, node, { op: 'nodeShell' })).toBe(
 			'kubectl debug node/n1 -it --profile=sysadmin --image=busybox -- chroot /host sh'
 		);
