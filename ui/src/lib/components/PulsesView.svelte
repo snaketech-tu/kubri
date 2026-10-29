@@ -8,8 +8,8 @@
 <script lang="ts">
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
-	import { backend, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization } from '../api';
-	import { age, errorMessage, memory } from '../format';
+	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization } from '../api';
+	import { age, errorMessage, memory, relative } from '../format';
 	import { attentionItems, fill, kindLabel, meterTone, record } from '../pulse';
 	import { app, findResource } from '../state.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
@@ -122,6 +122,11 @@
 	const attention = $derived(attentionItems(pulse?.events.recent ?? []));
 	const scopeText = $derived(namespace ? `Namespace ${namespace}` : 'All namespaces');
 
+	function openCertificate(alert: CertificateAlert) {
+		const resource = findResource(app.resources, alert.object.resource);
+		if (resource) app.showDetails(resource, { ...alert.object, context: app.cluster?.context });
+	}
+
 	function openEvent(event: RecentEvent) {
 		const resource = findResource(app.resources, event.object.resource);
 		if (resource) app.showDetails(resource, { ...event.object, resource });
@@ -144,7 +149,8 @@
 		CronJob: 'cronjob',
 		Node: 'node',
 		PersistentVolumeClaim: 'volume',
-		PersistentVolume: 'volume'
+		PersistentVolume: 'volume',
+		Certificate: 'lock'
 	};
 
 	function activate(index: number) {
@@ -320,6 +326,31 @@
 							{/each}
 						</ul>
 					</section>
+
+					{#if pulse.certificates.length}
+						<section class="card" aria-labelledby="certificates-title">
+							<div class="card-head">
+								<h2 id="certificates-title">Certificates <span class="n">{pulse.certificates.length}</span></h2>
+								<button class="link" onclick={() => openList(pulse!.certificates[0].object.resource)}>
+									All <Icon name="arrow" size={15} />
+								</button>
+							</div>
+							<ul class="events">
+								{#each pulse.certificates as alert (`${alert.object.namespace}/${alert.object.name}`)}
+									<li>
+										<button onclick={() => openCertificate(alert)} title="Open {alert.object.name}">
+											<span class="when" title={alert.notAfter ?? undefined}>{alert.notAfter ? relative(alert.notAfter, now) : '—'}</span>
+											<span class="tag {alert.health === 'failed' ? 'bad' : 'warn'}">{alert.health === 'failed' ? 'Critical' : 'Warning'}</span>
+											<span class="what">
+												<span class="message">{alert.detail}</span>
+												<span class="muted">{alert.object.namespace ? `${alert.object.namespace} / ` : ''}{alert.object.name}</span>
+											</span>
+										</button>
+									</li>
+								{/each}
+							</ul>
+						</section>
+					{/if}
 
 					<section class="card" aria-labelledby="trend-title">
 						<div class="card-head">

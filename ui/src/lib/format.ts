@@ -12,6 +12,13 @@ export function age(timestamp: string | null | undefined, now: number): string {
 	return days < 730 ? `${days}d` : `${Math.floor(days / 365)}y`;
 }
 
+/** A time before or after `now`: `3d ago`, `in 60d`. */
+export function relative(timestamp: string | null | undefined, now: number): string {
+	if (!timestamp || Number.isNaN(Date.parse(timestamp))) return '';
+	const at = Date.parse(timestamp);
+	return at > now ? `in ${age(new Date(now).toISOString(), at)}` : `${age(timestamp, now) || '0s'} ago`;
+}
+
 /** CPU in millicores, like `kubectl top`: 250m, 1.5. */
 export function cpu(millicores: number): string {
 	if (millicores >= 10_000) return `${(millicores / 1000).toFixed(1)}`;

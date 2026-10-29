@@ -1,5 +1,6 @@
 import { access, need } from './access.svelte';
 import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, runGitOps, startPlugin } from './actions';
+import { isCertificates } from './certs';
 import { backend, type AccessCheck, type ObjectRef, type Owner, type ResourceInfo, type TerminalMode } from './api';
 import { hasCharts } from './charts';
 import { creating } from './create.svelte';
@@ -232,6 +233,10 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 			add('Change', 'Sync…', ['s'], dialog(() => ({ kind: 'gitops', resource, target, action: 'sync' })), { primary: 4, needs: on('patch') });
 			add('Change', 'Refresh', ['r'], () => void runGitOps(target, 'refresh'), { needs: on('patch') });
 			add('Change', 'Auto-sync…', ['t'], dialog(() => ({ kind: 'gitops', resource, target, action: 'autoSync' })), { needs: on('patch') });
+		}
+		if (isCertificates(resource)) {
+			const status = need('patch', resource, ns, { subresource: 'status', name: target.name });
+			add('Change', 'Renew now…', ['r'], dialog(() => ({ kind: 'renew', resource, target })), { primary: 4, needs: status });
 		}
 		if (canEdit(resource)) add('Change', 'Edit', ['e'], show('yaml', { editing: true }), { primary: 7, id: 'edit', needs: on('update'), kubectl: k({ op: 'edit' }) });
 		if (canScale(resource) && !isPods(resource)) {

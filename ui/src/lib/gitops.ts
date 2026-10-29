@@ -33,7 +33,8 @@ export interface ManagedObject {
 	message?: string;
 }
 
-export interface GitOpsStatus {
+/** What the overview says about an object a tool manages, from its status. */
+export interface ToolStatus {
 	state: string;
 	health: Health | null;
 	message: string | null;
@@ -58,13 +59,13 @@ interface Condition {
 }
 
 /** The state of a Flux object or an Argo CD Application, from its status; null for other kinds. */
-export function gitopsStatus(resource: ResourceRef, object: unknown): GitOpsStatus | null {
+export function gitopsStatus(resource: ResourceRef, object: unknown): ToolStatus | null {
 	if (isFlux(resource)) return fluxStatus(object);
 	if (isArgoApp(resource)) return argoStatus(object);
 	return null;
 }
 
-function fluxStatus(object: unknown): GitOpsStatus {
+function fluxStatus(object: unknown): ToolStatus {
 	const conditions = (get(object, 'status.conditions') as Condition[] | undefined) ?? [];
 	const ready = conditions.find((c) => c.type === 'Ready');
 	const stalled = conditions.find((c) => c.type === 'Stalled' && c.status === 'True');
@@ -77,7 +78,7 @@ function fluxStatus(object: unknown): GitOpsStatus {
 	else if (ready) [state, health] = ['Reconciling', 'warning'];
 	if (suspended) [state, health] = [`Suspended · ${state}`, 'warning'];
 
-	const facts: GitOpsStatus['facts'] = [];
+	const facts: ToolStatus['facts'] = [];
 	const add = (label: string, value: string | null, time = false) => value && facts.push({ label, value, time });
 	const applied = text(object, 'status.lastAppliedRevision') ?? text(object, 'status.artifact.revision');
 	const attempted = text(object, 'status.lastAttemptedRevision');
@@ -107,7 +108,7 @@ function fluxStatus(object: unknown): GitOpsStatus {
 	return { state, health, message: ready?.status === 'True' ? null : (stalled?.message ?? ready?.message ?? null), facts, managed };
 }
 
-function argoStatus(object: unknown): GitOpsStatus {
+function argoStatus(object: unknown): ToolStatus {
 	const sync = text(object, 'status.sync.status') ?? 'Unknown';
 	const healthState = text(object, 'status.health.status') ?? 'Unknown';
 	const phase = text(object, 'status.operationState.phase');
@@ -120,7 +121,7 @@ function argoStatus(object: unknown): GitOpsStatus {
 		? (text(object, 'status.operationState.message') ?? conditions[0]?.message ?? null)
 		: (conditions.find((c) => /Error$/.test(c.type))?.message ?? null);
 
-	const facts: GitOpsStatus['facts'] = [];
+	const facts: ToolStatus['facts'] = [];
 	const add = (label: string, value: string | null, time = false) => value && facts.push({ label, value, time });
 	const source = (get(object, 'spec.source') ?? (get(object, 'spec.sources') as unknown[] | undefined)?.[0]) as Json | undefined;
 	add('Revision', text(object, 'status.sync.revision'));

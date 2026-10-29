@@ -23,7 +23,7 @@ pub(crate) struct Status {
 }
 
 impl Status {
-    fn new(health: Health, detail: impl Into<String>) -> Self {
+    pub(crate) fn new(health: Health, detail: impl Into<String>) -> Self {
         Self {
             health,
             detail: detail.into(),

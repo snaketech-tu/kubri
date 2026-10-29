@@ -9,7 +9,7 @@ Kubri finds the tools most clusters run and uses them without setup. Open **Inte
 | Loki | A Service like `loki`, `loki-gateway` or `loki-read` | Log history beyond a pod's lifetime, in the log workspace. |
 | Flux | The `kustomize.toolkit.fluxcd.io` or `helm.toolkit.fluxcd.io` API group | State, revision and managed objects of Kustomizations, HelmReleases and sources; reconcile, suspend and resume. |
 | Argo CD | The `argoproj.io` Applications | Sync state, health and managed objects of Applications; sync, refresh and auto-sync. |
-| cert-manager | The `cert-manager.io` API group | Lists of Certificates and issuers. |
+| cert-manager | The `cert-manager.io` API group | Expiry and readiness of Certificates in their list, the overview and the sanitizer; renew now. |
 
 Kubri reaches Prometheus, Grafana and Loki through the API server's service proxy, with your kubeconfig's credentials, so nothing has to be exposed or port-forwarded. Your user needs `get` on `services/proxy` in their namespace, which cluster admins have. Only opening Grafana in the browser needs a port-forward, which Kubri starts the first time and keeps under Port-forwards.
 
@@ -64,6 +64,19 @@ The overview of a Flux object or an Application says whether it is ready, synced
 The actions change the objects the controllers watch, the way their CLIs do, so they need `patch` on them and no Flux or Argo CD login.
 
 An object that Flux or Argo CD manages says so in its overview, when it is edited and in the dialogs that change it: which Kustomization, HelmRelease or Application manages it, and whether changes made by hand stay or are put back, at the next reconcile or right away with Argo CD's self-heal. Kubri finds the manager by the labels Flux sets and by Argo CD's tracking annotation or its `app.kubernetes.io/instance` label.
+
+## cert-manager
+
+The Certificate list gets **Expires** and **Renews** columns, as times from now. A Certificate's overview shows whether it is ready, when it expires and renews, its issuer, Secret and names.
+
+Kubri judges a Certificate the way it judges a Deployment:
+
+- **Failed** when it is expired, not ready, or in the last week (or sixth) of its lifetime.
+- **Warning** in the last three weeks (or third) of its lifetime, past the point cert-manager renews by default, or when it was never issued.
+
+Short-lived certificates are judged by their lifetime, so a 24-hour certificate is fine with 20 hours left. The overview (`:pulses`) counts Certificates under Resource health and lists the ones that need a look, failed first, then the soonest to expire. The sanitizer has a Certificate section with the same findings.
+
+**Renew now** (<kbd>r</kbd>) has cert-manager issue a Certificate again, as `cmctl renew` does, by adding an `Issuing` condition. It needs `patch` on `certificates/status`.
 
 ## AI agents
 

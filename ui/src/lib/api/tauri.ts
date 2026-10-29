@@ -99,6 +99,7 @@ export const tauriBackend: Backend = {
 	triggerCronJob: (target) => invoke('trigger_cronjob', { target }),
 	suspendCronJob: (target, suspend) => invoke('suspend_cronjob', { target, suspend }),
 	gitops: (target, action) => invoke('gitops', { target, action }),
+	renewCertificate: (target) => invoke('renew_certificate', { target }),
 	managedBy: (target) => invoke('managed_by', { target }),
 	setImages: (target, images) => invoke('set_images', { target, images }),
 	rollback: (target) => invoke('rollback', { target }),

@@ -4,6 +4,7 @@
 		copyLines,
 		deleteObjects,
 		launchPlugin,
+		renewCertificate,
 		patchMetadata,
 		pluginCommand,
 		restart,
@@ -356,6 +357,9 @@
 				case 'suspend':
 					ok = await suspendCronJob(dialog.target, dialog.suspend);
 					break;
+				case 'renew':
+					ok = await renewCertificate(dialog.target);
+					break;
 				case 'gitops': {
 					const action = dialog.action === 'autoSync' ? (autoSync?.on ? 'autoSyncOff' : 'autoSyncOn') : dialog.action;
 					ok = await runGitOps(dialog.target, action);
@@ -573,6 +577,8 @@
 				return 'Run CronJob now';
 			case 'suspend':
 				return dialog.suspend ? 'Suspend CronJob' : 'Resume CronJob';
+			case 'renew':
+				return 'Renew certificate';
 			case 'gitops':
 				return dialog.action === 'autoSync' ? 'Auto-sync' : `${GITOPS_TITLES[dialog.action]} ${dialog.resource.kind}`;
 			case 'image':
@@ -608,6 +614,7 @@
 					helmUninstall: 'Uninstall',
 					plugin: 'Run',
 					trigger: 'Run',
+					renew: 'Renew',
 					image: 'Set',
 					rollback: 'Roll back',
 					memory: 'Set limit'
@@ -914,6 +921,11 @@
 		{:else}
 			<p>Resume <strong>{name(dialog.target)}</strong>? It starts Jobs on its schedule again.</p>
 		{/if}
+	{:else if dialog.kind === 'renew'}
+		<p>
+			Renew <strong>{name(dialog.target)}</strong> now? cert-manager issues a new certificate from its issuer and replaces the one in its
+			Secret, as cmctl renew does. Pods that read the Secret get the new one when they reload it.
+		</p>
 	{:else if dialog.kind === 'gitops'}
 		{#if dialog.action === 'suspend'}
 			<p>

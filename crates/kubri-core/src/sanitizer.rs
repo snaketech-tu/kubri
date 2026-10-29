@@ -151,6 +151,10 @@ pub(crate) struct Inventory {
     pub policies: Listed<NetworkPolicy>,
     pub roles: Listed<Role>,
     pub role_bindings: Listed<RoleBinding>,
+    /// cert-manager Certificates, when cert-manager is installed.
+    pub certificates: Option<Listed<serde_json::Value>>,
+    /// When the scan ran, to judge expiry against.
+    pub now: k8s_openapi::jiff::Timestamp,
     pub cluster: Option<ClusterInventory>,
 }
 
@@ -186,6 +190,8 @@ impl Default for Inventory {
             policies: Ok(Vec::new()),
             roles: Ok(Vec::new()),
             role_bindings: Ok(Vec::new()),
+            certificates: None,
+            now: "2026-10-29T12:00:00Z".parse().unwrap(),
             cluster: None,
         }
     }
@@ -227,7 +233,18 @@ pub(crate) async fn scan(
         listed(scoped::<Service>(c, ns)),
         metadata(scoped::<ConfigMap>(c, ns)),
     );
-    let (secrets, service_accounts, claims, autoscalers, budgets, ingresses, policies, roles, role_bindings) = futures::join!(
+    let (
+        secrets,
+        service_accounts,
+        claims,
+        autoscalers,
+        budgets,
+        ingresses,
+        policies,
+        roles,
+        role_bindings,
+        certificates,
+    ) = futures::join!(
         metadata(scoped::<Secret>(c, ns)),
         listed(scoped::<ServiceAccount>(c, ns)),
         listed(scoped::<PersistentVolumeClaim>(c, ns)),
@@ -237,6 +254,7 @@ pub(crate) async fn scan(
         listed(scoped::<NetworkPolicy>(c, ns)),
         listed(scoped::<Role>(c, ns)),
         listed(scoped::<RoleBinding>(c, ns)),
+        crate::certmanager::list(c, ns),
     );
     let cluster = match namespace {
         Some(_) => None,
@@ -277,6 +295,8 @@ pub(crate) async fn scan(
         policies,
         roles,
         role_bindings,
+        certificates,
+        now: k8s_openapi::jiff::Timestamp::now(),
         cluster,
     })
 }
@@ -675,6 +695,31 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
         ));
     }
 
+    if let Some(certificates) = &inventory.certificates {
+        let objects = certificates.as_ref().map(|certs| {
+            certs.iter().map(|c| {
+                let text = |p: &str| {
+                    c.pointer(p)
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                };
+                let issues = Issue::of_health("certificate", crate::certmanager::status(c, inventory.now))
+                    .into_iter()
+                    .collect();
+                (
+                    text("/metadata/namespace"),
+                    text("/metadata/name").unwrap_or_default(),
+                    issues,
+                )
+            })
+        });
+        sections.extend(tally(
+            "Certificate".into(),
+            crate::certmanager::resource(),
+            objects,
+        ));
+    }
+
     sections.sort_by(|a, b| {
         let worst = |s: &SanitizerSection| s.score.map_or(u16::MAX, u16::from);
         worst(a).cmp(&worst(b)).then_with(|| a.kind.cmp(&b.kind))
@@ -713,9 +758,26 @@ fn section<K>(
 where
     K: Resource<DynamicType = ()>,
 {
-    let kind = K::kind(&()).into_owned();
-    let resource = resource_ref::<K>();
-    let objects = match listed {
+    let objects = listed.as_ref().map(|objects| {
+        objects.iter().filter(|o| keep(o)).map(|o| {
+            let meta = o.meta();
+            (
+                meta.namespace.clone(),
+                meta.name.clone().unwrap_or_default(),
+                check(o),
+            )
+        })
+    });
+    tally(K::kind(&()).into_owned(), resource_ref::<K>(), objects)
+}
+
+/// The section of one kind from each object's issues; kinds without objects are left out.
+fn tally(
+    kind: String,
+    resource: ResourceRef,
+    objects: std::result::Result<impl Iterator<Item = (Option<String>, String, Vec<Issue>)>, &String>,
+) -> Option<SanitizerSection> {
+    let objects = match objects {
         Ok(objects) => objects,
         Err(error) => {
             return Some(SanitizerSection {
@@ -742,9 +804,8 @@ where
         findings: Vec::new(),
         failed: None,
     };
-    for object in objects.iter().filter(|o| keep(o)) {
+    for (namespace, name, mut issues) in objects {
         section.total += 1;
-        let mut issues = check(object);
         let level = issues.iter().map(|i| i.level).max();
         match level {
             Some(Level::Error) => section.error += 1,
@@ -753,10 +814,9 @@ where
         }
         if let Some(level) = level {
             issues.sort_by_key(|i| std::cmp::Reverse(i.level));
-            let meta = object.meta();
             section.findings.push(Finding {
-                namespace: meta.namespace.clone(),
-                name: meta.name.clone().unwrap_or_default(),
+                namespace,
+                name,
                 level,
                 issues,
             });

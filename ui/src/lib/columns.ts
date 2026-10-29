@@ -18,6 +18,7 @@ const BUILTIN: Record<string, ColumnSettings> = {
 	'source.toolkit.fluxcd.io/HelmRepository': ARTIFACT,
 	'source.toolkit.fluxcd.io/HelmChart': ARTIFACT,
 	'source.toolkit.fluxcd.io/Bucket': ARTIFACT,
+	'cert-manager.io/Certificate': custom(['Expires', '.status.notAfter'], ['Renews', '.status.renewalTime']),
 	'argoproj.io/Application': custom(['Revision', '.status.sync.revision'], ['Last sync', '.status.operationState.phase'])
 };
 

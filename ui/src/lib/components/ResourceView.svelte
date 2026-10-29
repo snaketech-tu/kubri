@@ -5,7 +5,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { canDelete, canRestart, canScale, copyLines, saveFile } from '../actions';
 	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
-	import { age, cpu, memory } from '../format';
+	import { age, cpu, memory, relative } from '../format';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, type Subject } from '../objects';
 	import { isNodes, isPods } from '../pods';
@@ -95,6 +95,8 @@
 		MEM,
 		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' }
 	];
+
+	const TIMESTAMP = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/;
 
 	type DisplayColumn = (
 		| { kind: 'namespace'; label: string; index: -1 }
@@ -301,7 +303,10 @@
 			case 'cell': {
 				if (column.age) return age(row.created, now);
 				const value = row.cells[column.index];
-				return value === null || value === undefined ? '' : String(value);
+				if (value === null || value === undefined) return '';
+				// Times in custom columns, like a certificate's expiry, read as ages.
+				if (column.custom && typeof value === 'string' && TIMESTAMP.test(value)) return relative(value, now);
+				return String(value);
 			}
 		}
 	}

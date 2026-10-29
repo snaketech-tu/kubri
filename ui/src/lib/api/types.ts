@@ -758,6 +758,15 @@ export interface Pulse {
 	cpu: Utilization;
 	/** In bytes. */
 	memory: Utilization;
+	/** cert-manager Certificates that expire soon or are not ready, soonest first. */
+	certificates: CertificateAlert[];
+}
+
+export interface CertificateAlert {
+	object: ObjectRef;
+	health: Health;
+	detail: string;
+	notAfter: string | null;
 }
 
 export interface XrayNode {
@@ -1115,6 +1124,8 @@ export interface Backend {
 	suspendCronJob(target: ObjectRef, suspend: boolean): Promise<void>;
 	/** A Flux or Argo CD action, as their CLIs run it. */
 	gitops(target: ObjectRef, action: GitOpsAction): Promise<void>;
+	/** Asks cert-manager to issue a Certificate again now, like `cmctl renew`. */
+	renewCertificate(target: ObjectRef): Promise<void>;
 	/** The Flux or Argo CD object that manages an object, if any. */
 	managedBy(target: ObjectRef): Promise<Manager | null>;
 	setImages(target: ObjectRef, images: ContainerImage[]): Promise<void>;
