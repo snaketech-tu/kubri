@@ -33,6 +33,9 @@
 		type ForwardablePort
 	} from '../pods';
 	import { app, type Dialog } from '../state.svelte';
+	import { hasUsers } from '../pods';
+	import { summarizeUsers } from '../references';
+	import type { Reference } from '../api';
 
 	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' }> } = $props();
 
@@ -78,6 +81,23 @@
 	// Delete
 	let force = $state(false);
 	let propagation = $state<NonNullable<DeleteOptions['propagation']>>('background');
+	/** What uses the objects about to be deleted, which breaks without them; null while looking. */
+	let users = $state<{ target: string; refs: Reference[] }[] | null>(null);
+	$effect(() => {
+		if (dialog.kind !== 'delete' || !hasUsers(dialog.resource)) return;
+		const targets = dialog.targets.slice(0, 20);
+		let current = true;
+		Promise.all(
+			targets.map((t) =>
+				backend
+					.usedBy(t)
+					.then((refs) => ({ target: name(t), refs }))
+					// Not knowing is no reason to block a delete.
+					.catch(() => ({ target: name(t), refs: [] as Reference[] }))
+			)
+		).then((found) => current && (users = found.filter((u) => u.refs.length)));
+		return () => (current = false);
+	});
 
 	// Scale
 	let replicas = $state<number | null>(null);
@@ -719,6 +739,27 @@
 				</li>
 			{/each}
 		</ul>
+		{#if hasUsers(dialog.resource)}
+			{#if users === null}
+				<p class="muted">Looking for what uses {dialog.targets.length === 1 ? 'it' : 'them'}…</p>
+			{:else if users.length}
+				<div class="blast" role="alert">
+					<strong>Still in use.</strong>
+					{#each users as u (u.target)}
+						<p>
+							{dialog.targets.length === 1 ? 'It' : u.target} is used by {summarizeUsers(u.refs)}, which
+							{u.refs.length === 1 ? 'breaks or stops starting' : 'break or stop starting'} without it:
+						</p>
+						<ul>
+							{#each u.refs.slice(0, 8) as r (r.kind + r.namespace + r.name)}
+								<li>{r.kind} <span class="mono">{r.name}</span>{r.how ? ` (${r.how})` : ''}</li>
+							{/each}
+							{#if u.refs.length > 8}<li class="muted">and {u.refs.length - 8} more</li>{/if}
+						</ul>
+					{/each}
+				</div>
+			{/if}
+		{/if}
 		<label class="row"><input type="checkbox" bind:checked={force} /> Force (no grace period)</label>
 		<label class="row">
 			Dependents
@@ -1294,6 +1335,24 @@
 	.warn {
 		color: var(--warn);
 		font-size: 13px;
+	}
+	.blast {
+		margin: 0 0 14px;
+		padding: 10px 12px;
+		border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--bad) 8%, transparent);
+		font-size: 13px;
+	}
+	.blast strong {
+		color: var(--bad);
+	}
+	.blast p {
+		margin: 4px 0;
+	}
+	.blast ul {
+		margin: 0 0 4px;
+		padding-left: 18px;
 	}
 	.issues {
 		margin: 6px 0 10px;

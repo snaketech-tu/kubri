@@ -17,10 +17,10 @@ export const isReplicaSets = (resource: ResourceRef) => resource.group === 'apps
 export const isCRDs = (resource: ResourceRef) =>
 	resource.group === 'apiextensions.k8s.io' && resource.plural === 'customresourcedefinitions';
 
-/** Kinds k9s finds the users of with `u`: the pod specs that name them. */
+/** Kinds k9s finds the users of with `u`: the pod specs that name them, and the routes to a Service. */
 export function hasUsers(resource: ResourceRef) {
 	return (
-		(resource.group === '' && ['configmaps', 'secrets', 'persistentvolumeclaims', 'serviceaccounts'].includes(resource.plural)) ||
+		(resource.group === '' && ['configmaps', 'secrets', 'persistentvolumeclaims', 'serviceaccounts', 'services'].includes(resource.plural)) ||
 		(resource.group === 'scheduling.k8s.io' && resource.plural === 'priorityclasses')
 	);
 }

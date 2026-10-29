@@ -1,5 +1,7 @@
-//! What uses a ConfigMap, Secret, PersistentVolumeClaim, ServiceAccount or PriorityClass, like
-//! k9s `u` (UsedBy): the workloads and bare pods whose pod spec names it.
+//! What uses a ConfigMap, Secret, PersistentVolumeClaim, ServiceAccount, PriorityClass or
+//! Service, like k9s `u` (UsedBy): the workloads and bare pods whose pod spec names it, and the
+//! Ingresses and HTTPRoutes that send traffic to a Service or serve TLS from a Secret. The
+//! delete dialog lists them as what deleting it breaks.
 
 use serde::Serialize;
 use serde_json::Value;
@@ -14,6 +16,9 @@ pub struct Reference {
     pub kind: String,
     pub namespace: Option<String>,
     pub name: String,
+    /// How it uses it, when not through its pod spec: `TLS` or `backend`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub how: Option<String>,
 }
 
 /// The kinds Kubri finds the users of.
@@ -24,6 +29,7 @@ pub(crate) enum Used {
     Claim,
     ServiceAccount,
     PriorityClass,
+    Service,
 }
 
 /// The kinds whose pod specs are searched, with their API versions. Pods only count without an
@@ -37,6 +43,10 @@ pub(crate) const USERS: [(&str, &str); 6] = [
     ("v1", "Pod"),
 ];
 
+/// What routes traffic: Ingresses name Services as backends and Secrets for TLS.
+const INGRESS: (&str, &str) = ("networking.k8s.io/v1", "Ingress");
+const ROUTE: (&str, &str) = ("gateway.networking.k8s.io/v1", "HTTPRoute");
+
 impl Used {
     pub fn of(resource: &ResourceInfo) -> Option<Self> {
         match (resource.reference.group.as_str(), resource.kind.as_str()) {
@@ -45,6 +55,25 @@ impl Used {
             ("", "PersistentVolumeClaim") => Some(Self::Claim),
             ("", "ServiceAccount") => Some(Self::ServiceAccount),
             ("scheduling.k8s.io", "PriorityClass") => Some(Self::PriorityClass),
+            ("", "Service") => Some(Self::Service),
+            _ => None,
+        }
+    }
+
+    /// The kinds that may use it, with their API versions.
+    pub fn users(self) -> Vec<(&'static str, &'static str)> {
+        match self {
+            Self::Service => vec![INGRESS, ROUTE],
+            Self::Secret => USERS.iter().copied().chain([INGRESS]).collect(),
+            _ => USERS.to_vec(),
+        }
+    }
+
+    /// How `object` of `kind` uses the object `name`, when it is not through a pod spec.
+    pub fn how(self, kind: &str) -> Option<&'static str> {
+        match (self, kind) {
+            (Self::Secret, "Ingress") => Some("TLS"),
+            (Self::Service, _) => Some("backend"),
             _ => None,
         }
     }
@@ -58,6 +87,34 @@ impl Used {
             .is_some_and(|owners| !owners.is_empty());
         if owned && matches!(kind, "Pod" | "Job") {
             return false;
+        }
+        let is = |value: &Value| value.as_str() == Some(name);
+        match (self, kind) {
+            (Self::Secret, "Ingress") => {
+                return list(&object["spec"]["tls"]).iter().any(|t| is(&t["secretName"]));
+            }
+            (Self::Service, "Ingress") => {
+                let spec = &object["spec"];
+                return is(&spec["defaultBackend"]["service"]["name"])
+                    || list(&spec["rules"]).iter().any(|r| {
+                        list(&r["http"]["paths"])
+                            .iter()
+                            .any(|p| is(&p["backend"]["service"]["name"]))
+                    });
+            }
+            // Backends in another namespace are not found: only this namespace is listed.
+            (Self::Service, "HTTPRoute") => {
+                return list(&object["spec"]["rules"]).iter().any(|r| {
+                    list(&r["backendRefs"]).iter().any(|b| {
+                        b["kind"].as_str().unwrap_or("Service") == "Service"
+                            && b["group"].as_str().unwrap_or("").is_empty()
+                            && b["namespace"].is_null()
+                            && is(&b["name"])
+                    })
+                });
+            }
+            (Self::Service, _) => return false,
+            _ => {}
         }
         pod_spec(kind, object).is_some_and(|spec| self.in_spec(spec, name))
     }
@@ -98,6 +155,7 @@ impl Used {
             // Pods without one run as `default`.
             Self::ServiceAccount => spec["serviceAccountName"].as_str().unwrap_or("default") == name,
             Self::PriorityClass => is(&spec["priorityClassName"]),
+            Self::Service => false,
         }
     }
 }
@@ -157,6 +215,40 @@ mod tests {
         assert!(Used::Claim.by("Deployment", &web, "data"));
         assert!(Used::ServiceAccount.by("Deployment", &web, "default"));
         assert!(!Used::PriorityClass.by("Deployment", &web, "high"));
+    }
+
+    #[test]
+    fn finds_ingresses_and_routes_of_services_and_tls_secrets() {
+        let ingress = json!({
+            "metadata": { "name": "shop" },
+            "spec": {
+                "tls": [{ "hosts": ["shop.example"], "secretName": "shop-tls" }],
+                "defaultBackend": { "service": { "name": "fallback", "port": { "number": 80 } } },
+                "rules": [{ "http": { "paths": [{ "path": "/", "backend": { "service": { "name": "web" } } }] } }]
+            }
+        });
+        assert!(Used::Secret.by("Ingress", &ingress, "shop-tls"));
+        assert!(!Used::Secret.by("Ingress", &ingress, "web"));
+        assert!(Used::Service.by("Ingress", &ingress, "web"));
+        assert!(Used::Service.by("Ingress", &ingress, "fallback"));
+        assert!(!Used::Service.by("Ingress", &ingress, "shop-tls"));
+        assert_eq!(Used::Secret.how("Ingress"), Some("TLS"));
+        assert_eq!(Used::Secret.how("Deployment"), None);
+
+        let route = json!({
+            "metadata": { "name": "shop" },
+            "spec": { "rules": [{ "backendRefs": [
+                { "name": "web", "port": 80 },
+                { "name": "other", "namespace": "elsewhere", "port": 80 },
+                { "kind": "Backend", "group": "example.com", "name": "custom" }
+            ] }] }
+        });
+        assert!(Used::Service.by("HTTPRoute", &route, "web"));
+        assert!(!Used::Service.by("HTTPRoute", &route, "other"));
+        assert!(!Used::Service.by("HTTPRoute", &route, "custom"));
+        assert!(!Used::Service.by("Deployment", &deployment(json!({})), "web"));
+        assert!(Used::Secret.users().contains(&INGRESS));
+        assert!(!Used::ConfigMap.users().contains(&INGRESS));
     }
 
     #[test]
