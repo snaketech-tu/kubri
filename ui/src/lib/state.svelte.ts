@@ -156,6 +156,8 @@ export type Dialog =
 	| { kind: 'suspend'; resource: ResourceInfo; target: ObjectRef; suspend: boolean }
 	| { kind: 'image'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef }
+	/** The kubectl commands for an object's actions, to copy. */
+	| { kind: 'kubectl'; title: string; commands: { label: string; command: string }[] }
 	/** Explains an action RBAC refuses, and what would allow it. */
 	| { kind: 'forbidden'; action: string; check: AccessCheck; target: ObjectRef | null };
 

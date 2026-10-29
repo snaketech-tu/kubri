@@ -10,12 +10,12 @@ use axum::routing::{any, delete, get, post, put};
 use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
-    AccessCheck, BenchInfo, BenchRequest, ClusterInfo, ContainerImage, ContextList, ContextSettings,
+    AccessCheck, BenchInfo, BenchRequest, Change, ClusterInfo, ContainerImage, ContextList, ContextSettings,
     DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, Guard, HelmRelease,
     HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
-    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac, Reference, ResourceInfo,
-    ResourceRef, SanitizerReport, Settings, TableScope, Terminal, TerminalOptions, TerminalOutput, Usage,
-    XrayNode,
+    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Preview, Pulse, Rbac, Reference,
+    ResourceInfo, ResourceRef, SanitizerReport, Settings, TableScope, Terminal, TerminalOptions,
+    TerminalOutput, Usage, XrayNode,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
                 .patch(patch_object)
                 .delete(delete_object),
         )
+        .route("/object/preview", post(preview))
         .route("/object/scale", post(scale))
         .route("/object/restart", post(restart))
         .route("/object/drill", post(drill))
@@ -319,6 +320,16 @@ struct Delete {
 
 async fn delete_object(State(kubri): State<Arc<Kubri>>, Json(req): Json<Delete>) -> ApiResult<()> {
     Ok(Json(kubri.delete(&req.target, &req.options).await?))
+}
+
+#[derive(Deserialize)]
+struct PreviewRequest {
+    target: ObjectRef,
+    change: Change,
+}
+
+async fn preview(State(kubri): State<Arc<Kubri>>, Json(req): Json<PreviewRequest>) -> ApiResult<Preview> {
+    Ok(Json(kubri.preview(&req.target, req.change).await?))
 }
 
 #[derive(Deserialize)]

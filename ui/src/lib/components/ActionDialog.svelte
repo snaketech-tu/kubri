@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
 	import {
+		copyLines,
 		deleteObjects,
 		launchPlugin,
 		patchMetadata,
@@ -14,7 +15,9 @@
 		triggerCronJob
 	} from '../actions';
 	import { parseHeaders } from '../bench';
-	import { backend, type ContainerImage, type DeleteOptions, type DrainReport } from '../api';
+	import { backend, type Change, type ContainerImage, type DeleteOptions, type DrainReport, type Preview } from '../api';
+	import { helmCommand, kubectlCommand } from '../kubectl';
+	import DiffView from './DiffView.svelte';
 	import { errorMessage } from '../format';
 	import { inputError, inputVariables } from '../k9s';
 	import {
@@ -27,7 +30,7 @@
 	} from '../pods';
 	import { app, type Dialog } from '../state.svelte';
 
-	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' }> } = $props();
+	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' }> } = $props();
 
 	let busy = $state(false);
 	let error = $state<string | null>(null);
@@ -207,6 +210,13 @@
 		error = null;
 		let ok = false;
 		try {
+			// First the dry run, where the settings ask for one; Apply then runs it for real.
+			const change = previewChange();
+			if (change && 'target' in dialog && JSON.stringify(change) !== previewed) {
+				preview = await backend.preview(dialog.target, change);
+				previewed = JSON.stringify(change);
+				return;
+			}
 			switch (dialog.kind) {
 				case 'delete':
 					ok = await deleteObjects(dialog.resource, dialog.targets.map((t) => ({ ...t, context })), {
@@ -290,9 +300,7 @@
 					ok = await rollback(dialog.target);
 					break;
 				case 'image': {
-					const changed = (images ?? [])
-						.map((c) => ({ ...c, image: newImages[c.name]?.trim() ?? c.image }))
-						.filter((c, i) => c.image !== images?.[i].image);
+					const changed = changedImages();
 					if (changed.some((c) => !c.image)) throw new Error('An image cannot be empty');
 					if (!changed.length) throw new Error('Change an image first');
 					ok = await setImages(dialog.target, changed);
@@ -314,12 +322,106 @@
 			}
 		} catch (err) {
 			error = errorMessage(err);
+		} finally {
+			busy = false;
 		}
-		busy = false;
 		if (ok) close();
 		// The button was disabled while working, which moved focus out of the dialog.
 		else tick().then(() => confirmButton?.focus());
 	}
+
+	function changedImages(): ContainerImage[] {
+		return (images ?? [])
+			.map((c) => ({ ...c, image: newImages[c.name]?.trim() ?? c.image }))
+			.filter((c, i) => c.image !== images?.[i].image);
+	}
+
+	/** The labels and annotations patch as typed, or null while a line does not parse. */
+	function metadataPatch() {
+		try {
+			return {
+				labels: diff(original.labels, fromLines(labelsText)),
+				annotations: diff(original.annotations, fromLines(annotationsText))
+			};
+		} catch {
+			return null;
+		}
+	}
+
+	// Dry run
+	/** The diff of the last dry run, and the change it was for. */
+	let preview = $state<Preview | null>(null);
+	let previewed = $state<string | null>(null);
+
+	/** The change to dry-run before this action runs, when the settings ask for a diff. */
+	function previewChange(): Change | null {
+		const wanted = app.settings.diff;
+		switch (dialog.kind) {
+			case 'scale':
+				return wanted.scale && replicas !== null ? { type: 'scale', replicas } : null;
+			case 'restart':
+				return wanted.restart ? { type: 'restart' } : null;
+			case 'image': {
+				const changed = changedImages();
+				return wanted.image && changed.length && changed.every((c) => c.image) ? { type: 'images', images: changed } : null;
+			}
+			case 'labels': {
+				const patch = metadataPatch();
+				return wanted.labels && patch ? { type: 'patch', patch: { metadata: patch } } : null;
+			}
+			default:
+				return null;
+		}
+	}
+	/** The dry run on screen is for the change as it is now typed. */
+	const reviewing = $derived.by(() => {
+		const change = previewChange();
+		return !!preview && !!change && JSON.stringify(change) === previewed;
+	});
+	/** A dry run is due before the button runs the action. */
+	const needsPreview = $derived(previewChange() !== null && !reviewing);
+
+	/** The same as a kubectl or helm command, as the fields now say. */
+	const commandLine = $derived.by(() => {
+		const ctx = context;
+		switch (dialog.kind) {
+			case 'delete':
+				return kubectlCommand(ctx, dialog.targets[0], {
+					op: 'delete',
+					targets: dialog.targets,
+					options: { force, gracePeriodSeconds: force ? 0 : null, propagation }
+				});
+			case 'scale':
+				return kubectlCommand(ctx, dialog.target, { op: 'scale', replicas });
+			case 'restart':
+				return kubectlCommand(ctx, dialog.target, { op: 'restart' });
+			case 'labels': {
+				const patch = metadataPatch();
+				return kubectlCommand(ctx, dialog.target, { op: 'labels', ...(patch ?? {}) });
+			}
+			case 'portforward':
+				return kubectlCommand(ctx, dialog.target, { op: 'portForward', local: localPort, remote: remotePort, address: address.trim() });
+			case 'drain':
+				return kubectlCommand(ctx, dialog.target, {
+					op: 'drain',
+					options: { ignoreDaemonsets, deleteEmptydirData, force: forceDrain, gracePeriodSeconds: gracePeriod }
+				});
+			case 'trigger':
+				return kubectlCommand(ctx, dialog.target, { op: 'trigger' });
+			case 'suspend':
+				return kubectlCommand(ctx, dialog.target, { op: 'suspend', suspend: dialog.suspend });
+			case 'image':
+				return kubectlCommand(ctx, dialog.target, { op: 'image', images: changedImages() });
+			case 'rollback':
+				return kubectlCommand(ctx, dialog.target, { op: 'rollback' });
+			case 'helmRollback':
+				return helmCommand(ctx, dialog.release, { op: 'rollback', revision: dialog.revision });
+			case 'helmUninstall':
+				return helmCommand(ctx, dialog.release, { op: 'uninstall' });
+			default:
+				return null;
+		}
+	});
 
 	function onkeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
@@ -441,6 +543,7 @@
 
 <dialog
 	class="dialog"
+	class:wide={reviewing}
 	aria-label={title}
 	{onkeydown}
 	oncancel={(e) => {
@@ -704,6 +807,22 @@
 		{/if}
 	{/if}
 
+	{#if reviewing && preview}
+		<div class="preview">
+			<DiffView before={preview.before} after={preview.after} maxHeight="260px" />
+		</div>
+	{/if}
+
+	{#if commandLine && !report}
+		<details class="command-line">
+			<summary>Same as <code>{commandLine.split(' ')[0]}</code></summary>
+			<div class="command-row">
+				<pre>{commandLine}</pre>
+				<button class="copy" onclick={() => copyLines([commandLine], ['command', 'commands'])}>Copy</button>
+			</div>
+		</details>
+	{/if}
+
 	{#if needsConfirmation}
 		<label class="confirmation">
 			<span>
@@ -724,7 +843,7 @@
 			disabled={busy || !confirmed}
 			onclick={confirm}
 		>
-			{busy ? 'Working…' : report ? 'Close' : confirmLabel}
+			{busy ? 'Working…' : report ? 'Close' : needsPreview ? 'Review changes' : confirmLabel}
 		</button>
 	</div>
 </dialog>
@@ -738,6 +857,43 @@
 		display: grid;
 		gap: 8px;
 		margin-top: 16px;
+	}
+	.preview {
+		margin-top: 14px;
+	}
+	.command-line {
+		margin-top: 12px;
+		font-size: 12.5px;
+		color: var(--text-muted);
+	}
+	.command-line summary {
+		cursor: pointer;
+	}
+	.command-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+		margin-top: 6px;
+	}
+	.command-row pre {
+		flex: 1;
+		margin: 0;
+		padding: 7px 9px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--bg);
+		color: var(--text);
+		font-family: var(--mono);
+		font-size: 12px;
+		white-space: pre-wrap;
+		word-break: break-all;
+	}
+	.copy {
+		padding: 4px 9px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface-1);
+		font-size: 12px;
 	}
 	.confirmation .production {
 		color: var(--bad);
@@ -757,6 +913,9 @@
 		box-shadow: var(--shadow);
 		color: var(--text);
 		outline: none;
+	}
+	.dialog.wide {
+		width: min(760px, calc(100vw - 32px));
 	}
 	.dialog::backdrop {
 		background: rgb(16 21 34 / 45%);

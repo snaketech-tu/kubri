@@ -82,6 +82,7 @@ export const httpBackend: Backend = {
 	reloadContexts: () => request('POST', '/contexts/reload'),
 	switchContext: (name) => request('PUT', '/context', { name }),
 	resources: () => request('GET', '/resources'),
+	preview: (target, change) => request('POST', '/object/preview', { target, change }),
 	access: (checks, fresh = false) => request('POST', '/access', { checks, fresh }),
 	whoAmI: () => request('GET', '/whoami'),
 	readableNamespaces: () => request('GET', '/namespaces/readable'),

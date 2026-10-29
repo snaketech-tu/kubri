@@ -51,6 +51,20 @@ export interface SettingsReply {
 	error: string | null;
 }
 
+/** A change to try as a server-side dry run. */
+export type Change =
+	| { type: 'replace'; value: KubeObject }
+	| { type: 'patch'; patch: unknown }
+	| { type: 'scale'; replicas: number }
+	| { type: 'restart' }
+	| { type: 'images'; images: ContainerImage[] };
+
+/** An object now and after a change, without status and fields that change on every write. */
+export interface Preview {
+	before: unknown;
+	after: unknown;
+}
+
 /** One action as RBAC sees it, like `kubectl auth can-i`. */
 export interface AccessCheck {
 	verb: string;
@@ -680,6 +694,8 @@ export interface Backend {
 	): () => void;
 	getObject(target: ObjectRef): Promise<KubeObject>;
 	replaceObject(target: ObjectRef, value: KubeObject): Promise<KubeObject>;
+	/** Runs a change as a dry run, to show what it would do. */
+	preview(target: ObjectRef, change: Change): Promise<Preview>;
 	/** JSON merge patch. */
 	patchObject(target: ObjectRef, patch: unknown): Promise<KubeObject>;
 	deleteObject(target: ObjectRef, options?: DeleteOptions): Promise<void>;

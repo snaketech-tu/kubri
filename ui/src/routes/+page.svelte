@@ -18,6 +18,7 @@
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
 	import ForbiddenDialog from '#lib/components/ForbiddenDialog.svelte';
 	import HelmView from '#lib/components/HelmView.svelte';
+	import KubectlDialog from '#lib/components/KubectlDialog.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
 	import PluginTerminal from '#lib/components/PluginTerminal.svelte';
@@ -508,6 +509,8 @@
 {#if app.menu}<ActionMenu menu={app.menu} />{/if}
 {#if app.dialog?.kind === 'forbidden'}
 	<ForbiddenDialog dialog={app.dialog} />
+{:else if app.dialog?.kind === 'kubectl'}
+	<KubectlDialog dialog={app.dialog} />
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}

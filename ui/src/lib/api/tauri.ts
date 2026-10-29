@@ -45,6 +45,7 @@ export const tauriBackend: Backend = {
 	reloadContexts: () => invoke('reload_contexts'),
 	switchContext: (name) => invoke('switch_context', { name }),
 	resources: () => invoke('resources'),
+	preview: (target, change) => invoke('preview', { target, change }),
 	access: (checks, fresh = false) => invoke('access', { checks, fresh }),
 	whoAmI: () => invoke('who_am_i'),
 	readableNamespaces: () => invoke('readable_namespaces'),
