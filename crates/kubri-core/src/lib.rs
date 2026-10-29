@@ -3,6 +3,7 @@
 //! [`Kubri`] owns the merged kubeconfig and the connection to the selected context.
 //! Both frontends talk to the cluster only through it.
 
+mod auth;
 mod bench;
 mod context;
 mod discovery;
@@ -109,6 +110,18 @@ pub struct Kubri {
     read_only: AtomicBool,
 }
 
+/// The client configuration for `context`, read the way kubectl reads it.
+async fn client_config(kubeconfig: &Kubeconfig, context: &str) -> Result<Config> {
+    let options = KubeConfigOptions {
+        context: Some(context.to_owned()),
+        ..Default::default()
+    };
+    let mut config = Config::from_custom_kubeconfig(kubeconfig.clone(), &options).await?;
+    auth::ignore_lone_client_key(&mut config.auth_info);
+    proxy::skip_proxy_like_kubectl(&mut config, kubeconfig, context);
+    Ok(config)
+}
+
 impl Kubri {
     /// Loads the kubeconfig from `KUBECONFIG` (all listed files, merged) or `~/.kube/config`.
     /// A missing or broken kubeconfig is not fatal: it is reported by [`Kubri::contexts`].
@@ -187,13 +200,8 @@ impl Kubri {
             .and_then(|c| c.namespace.clone())
             .unwrap_or_else(|| "default".to_owned());
 
-        let options = KubeConfigOptions {
-            context: Some(context.to_owned()),
-            ..Default::default()
-        };
         let session = tokio::time::timeout(CONNECT_TIMEOUT, async {
-            let mut config = Config::from_custom_kubeconfig(kubeconfig.clone(), &options).await?;
-            proxy::skip_proxy_like_kubectl(&mut config, &kubeconfig, context);
+            let config = client_config(&kubeconfig, context).await?;
             let server = config.cluster_url.to_string().trim_end_matches('/').to_owned();
             let client = Client::try_from(config)?;
             let version = client.apiserver_version().await?.git_version;
