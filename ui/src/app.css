@@ -1,13 +1,13 @@
 :root {
-	--bg: #f7f8fa;
+	--bg: #f6f7fb;
 	--surface-1: #ffffff;
-	--surface-2: #eef1f5;
-	--border: #dde2ea;
-	--border-subtle: #edf0f4;
-	--text: #1b2230;
-	--text-muted: #6b7486;
-	--accent: #326ce5;
-	--accent-strong: #2456c4;
+	--surface-2: #eef1f7;
+	--border: #e1e5ef;
+	--border-subtle: #edf0f7;
+	--text: #20283d;
+	--text-muted: #63708a;
+	--accent: #4b64f4;
+	--accent-strong: #354ac4;
 	/* Text on an accent background. */
 	--on-accent: #ffffff;
 	--ok: #1f9d55;
@@ -16,7 +16,7 @@
 	/* Amber for chart marks: --warn is darkened for text and sits too close to --bad as a fill. */
 	--warn-mark: #e9a219;
 	--shadow: 0 12px 32px rgb(16 24 40 / 14%);
-	--syntax-key: #2456c4;
+	--syntax-key: #354ac4;
 	--syntax-string: #1f7a45;
 	--syntax-literal: #a3500f;
 	--mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
@@ -25,21 +25,21 @@
 
 @media (prefers-color-scheme: dark) {
 	:root:not(.light) {
-		--bg: #0f131a;
-		--surface-1: #151a23;
-		--surface-2: #1e2531;
-		--border: #2a3240;
-		--border-subtle: #1c222d;
-		--text: #e4e8ef;
-		--text-muted: #8b94a7;
-		--accent: #5b8def;
-		--accent-strong: #8fb1f5;
+		--bg: #101522;
+		--surface-1: #171f30;
+		--surface-2: #222d43;
+		--border: #33415b;
+		--border-subtle: #1b2438;
+		--text: #e5eaf5;
+		--text-muted: #a5b2ca;
+		--accent: #a6b3ff;
+		--accent-strong: #b7c2ff;
 		--ok: #3ccf7e;
 		--warn: #e5a73b;
 		--bad: #f06b6b;
 		--warn-mark: #e5a73b;
 		--shadow: 0 12px 32px rgb(0 0 0 / 45%);
-		--syntax-key: #8fb1f5;
+		--syntax-key: #b7c2ff;
 		--syntax-string: #7fd4a0;
 		--syntax-literal: #f0b46b;
 		color-scheme: dark;
@@ -48,21 +48,21 @@
 
 /* A skin picks light or dark itself; this repeats the dark colors above for it. */
 :root.dark {
-	--bg: #0f131a;
-	--surface-1: #151a23;
-	--surface-2: #1e2531;
-	--border: #2a3240;
-	--border-subtle: #1c222d;
-	--text: #e4e8ef;
-	--text-muted: #8b94a7;
-	--accent: #5b8def;
-	--accent-strong: #8fb1f5;
+	--bg: #101522;
+	--surface-1: #171f30;
+	--surface-2: #222d43;
+	--border: #33415b;
+	--border-subtle: #1b2438;
+	--text: #e5eaf5;
+	--text-muted: #a5b2ca;
+	--accent: #a6b3ff;
+	--accent-strong: #b7c2ff;
 	--ok: #3ccf7e;
 	--warn: #e5a73b;
 	--bad: #f06b6b;
 	--warn-mark: #e5a73b;
 	--shadow: 0 12px 32px rgb(0 0 0 / 45%);
-	--syntax-key: #8fb1f5;
+	--syntax-key: #b7c2ff;
 	--syntax-string: #7fd4a0;
 	--syntax-literal: #f0b46b;
 	color-scheme: dark;
@@ -117,4 +117,54 @@ input:focus,
 select:focus {
 	border-color: var(--accent);
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+button:disabled {
+	cursor: default;
+	opacity: 0.55;
+}
+
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 3px;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+	accent-color: var(--accent);
+}
+
+table {
+	font-variant-numeric: tabular-nums;
+}
+
+/* Dark accents are light, so text on them turns dark. Skins pick their own contrast. */
+@media (prefers-color-scheme: dark) {
+	:root:not(.light):not(.skinned) {
+		--on-accent: #101522;
+	}
+}
+:root.dark:not(.skinned) {
+	--on-accent: #101522;
+}
+
+@media (max-width: 720px) {
+	input,
+	select,
+	textarea {
+		max-width: 100%;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation: none !important;
+		transition: none !important;
+		scroll-behavior: auto !important;
+	}
 }

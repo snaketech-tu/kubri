@@ -57,11 +57,11 @@
 	// Kubri's own colors, light or dark as the system is.
 	const kubriTheme: SkinTheme = matchMedia('(prefers-color-scheme: dark)').matches
 		? {
-				vars: { '--bg': '#0f131a', '--text': '#e4e8ef', '--accent': '#5b8def', '--ok': '#3ccf7e', '--warn': '#e5a73b', '--bad': '#f06b6b' },
+				vars: { '--bg': '#101522', '--text': '#e5eaf5', '--accent': '#a6b3ff', '--ok': '#3ccf7e', '--warn': '#e5a73b', '--bad': '#f06b6b' },
 				scheme: 'dark'
 			}
 		: {
-				vars: { '--bg': '#f7f8fa', '--text': '#1b2230', '--accent': '#326ce5', '--ok': '#1f9d55', '--warn': '#c27c0e', '--bad': '#d64545' },
+				vars: { '--bg': '#f6f7fb', '--text': '#20283d', '--accent': '#4b64f4', '--ok': '#1f9d55', '--warn': '#c27c0e', '--bad': '#d64545' },
 				scheme: 'light'
 			};
 </script>
@@ -211,9 +211,9 @@
 
 {#snippet swatch(theme: SkinTheme | null | undefined)}
 	{@const v = theme?.vars ?? {}}
-	<span class="swatch" style:background={v['--bg'] ?? (theme?.scheme === 'light' ? '#f7f8fa' : '#0f131a')}>
-		<span class="line" style:background={v['--text'] ?? (theme?.scheme === 'light' ? '#1b2230' : '#e4e8ef')}></span>
-		<span class="line short" style:background={v['--accent'] ?? '#5b8def'}></span>
+	<span class="swatch" style:background={v['--bg'] ?? (theme?.scheme === 'light' ? '#f6f7fb' : '#101522')}>
+		<span class="line" style:background={v['--text'] ?? (theme?.scheme === 'light' ? '#20283d' : '#e5eaf5')}></span>
+		<span class="line short" style:background={v['--accent'] ?? '#a6b3ff'}></span>
 		<span class="dots">
 			<span style:background={v['--ok'] ?? '#3ccf7e'}></span>
 			<span style:background={v['--warn'] ?? '#e5a73b'}></span>

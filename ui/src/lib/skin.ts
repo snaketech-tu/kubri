@@ -14,13 +14,45 @@ export function resolveColor(color: string): string | null {
 
 let applied: string[] = [];
 
+/** Light or dark picked in Kubri; null follows the system. */
+export type Scheme = 'light' | 'dark' | null;
+const SCHEME_KEY = 'kubri.scheme';
+let scheme: Scheme = null;
+
+export function storedScheme(): Scheme {
+	try {
+		const value = localStorage.getItem(SCHEME_KEY);
+		return value === 'light' || value === 'dark' ? value : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Puts Kubri's own colors in light or dark; a skin on screen keeps its scheme until it is taken off. */
+export function applyScheme(next: Scheme) {
+	scheme = next;
+	try {
+		if (next) localStorage.setItem(SCHEME_KEY, next);
+		else localStorage.removeItem(SCHEME_KEY);
+	} catch {
+		// Lasts until the page is reloaded.
+	}
+	const root = document.documentElement;
+	if (root.classList.contains('skinned')) return;
+	root.classList.remove('light', 'dark');
+	if (next) root.classList.add(next);
+}
+
 /** Puts a skin's colors on the page, or Kubri's own back with null. */
 export function applyTheme(theme: SkinTheme | null) {
 	const root = document.documentElement;
 	for (const name of applied) root.style.removeProperty(name);
 	root.classList.remove('skinned', 'light', 'dark');
 	applied = [];
-	if (!theme) return;
+	if (!theme) {
+		if (scheme) root.classList.add(scheme);
+		return;
+	}
 	for (const [name, value] of Object.entries(theme.vars)) root.style.setProperty(name, value);
 	applied = Object.keys(theme.vars);
 	root.classList.add('skinned', theme.scheme);

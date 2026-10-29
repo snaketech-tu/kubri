@@ -100,6 +100,7 @@ export type TableEvent =
 	| { type: 'error'; message: string };
 
 export interface ObjectRef {
+	context?: string;
 	resource: ResourceRef;
 	namespace: string | null;
 	name: string;

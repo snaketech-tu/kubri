@@ -596,6 +596,7 @@ mod tests {
             id: 7,
             context: "test".into(),
             target: ObjectRef {
+                context: None,
                 resource: crate::ResourceRef {
                     group: String::new(),
                     version: "v1".into(),

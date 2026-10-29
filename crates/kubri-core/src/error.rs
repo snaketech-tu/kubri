@@ -22,6 +22,9 @@ pub enum Error {
     Kubeconfig(#[from] kube::config::KubeconfigError),
     #[error("{}", kube_message(.0))]
     Kube(#[from] kube::Error),
+    /// The target was picked in another context than the one Kubri is connected to now.
+    #[error("the target belongs to context `{0}`, not the current one; review it again")]
+    ContextChanged(String),
     #[error("timed out while connecting to the cluster")]
     Timeout,
     /// Changes are turned off; the text says why.

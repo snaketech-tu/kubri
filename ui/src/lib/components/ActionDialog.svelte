@@ -33,7 +33,18 @@
 	let error = $state<string | null>(null);
 	let confirmButton = $state<HTMLButtonElement>();
 	let firstField = $state<HTMLInputElement | HTMLTextAreaElement>();
-	let box = $state<HTMLDivElement>();
+	let box = $state<HTMLDialogElement>();
+	let cancelButton = $state<HTMLButtonElement>();
+	/** The context the targets were reviewed in; the dialog refuses to run in another. */
+	const context = untrack(() => app.cluster?.context);
+	/** What the user typed to confirm a bulk or production action. */
+	let confirmation = $state('');
+	// A modal dialog keeps the focus inside; closing it returns the focus to where it was.
+	$effect(() => {
+		const previous = document.activeElement as HTMLElement | null;
+		box?.showModal();
+		return () => previous?.focus();
+	});
 
 	// Delete
 	let force = $state(false);
@@ -139,7 +150,7 @@
 				})
 				.catch((err) => (error = errorMessage(err)));
 		} else {
-			queueMicrotask(() => confirmButton?.focus());
+			queueMicrotask(() => danger ? cancelButton?.focus() : confirmButton?.focus());
 		}
 	});
 
@@ -180,19 +191,25 @@
 	}
 
 	function close() {
+		if (busy) return;
 		app.dialog = null;
 	}
 
 	async function confirm() {
 		// Enter pressed twice must not start a second port-forward or delete twice.
 		if (busy) return;
+		if (context !== app.cluster?.context || app.connecting) {
+			error = 'The context changed. Close this dialog and review the targets again.';
+			return;
+		}
+		if (needsConfirmation && confirmation !== 'confirm') return;
 		busy = true;
 		error = null;
 		let ok = false;
 		try {
 			switch (dialog.kind) {
 				case 'delete':
-					ok = await deleteObjects(dialog.resource, dialog.targets, {
+					ok = await deleteObjects(dialog.resource, dialog.targets.map((t) => ({ ...t, context })), {
 						force,
 						gracePeriodSeconds: force ? 0 : null,
 						propagation
@@ -309,6 +326,11 @@
 			e.preventDefault();
 			close();
 		} else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || !(e.target instanceof HTMLTextAreaElement))) {
+			// Enter confirms a destructive action only from its own button, never by accident.
+			if (danger && e.target !== confirmButton) {
+				if (!(e.target instanceof HTMLButtonElement)) e.preventDefault();
+				return;
+			}
 			if (e.target instanceof HTMLButtonElement && e.target !== confirmButton) return;
 			e.preventDefault();
 			confirm();
@@ -398,21 +420,39 @@
 			(dialog.kind === 'drain' && !report) ||
 			(dialog.kind === 'plugin' && dialog.plugin.dangerous)
 	);
+	/** Bulk deletes and destructive actions in a context labeled production ask to type "confirm". */
+	const needsConfirmation = $derived(
+		danger &&
+			((dialog.kind === 'delete' && dialog.targets.length > 1) || /\bprod(uction)?\b/i.test(app.environment))
+	);
 </script>
 
-<div class="backdrop" onclick={close} role="presentation"></div>
-<div class="dialog" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" {onkeydown} bind:this={box}>
+<dialog
+	class="dialog"
+	aria-label={title}
+	{onkeydown}
+	oncancel={(e) => {
+		e.preventDefault();
+		close();
+	}}
+	bind:this={box}
+>
 	<h2>{title}</h2>
+	<p class="action-context">
+		<strong>{context}</strong>{app.environment ? ` · ${app.environment}` : ''} ·
+		{dialog.kind === 'delete' ? `${dialog.targets.length} selected` : 'Review the target before you continue'}
+	</p>
 
 	{#if dialog.kind === 'delete'}
 		<p>
 			{dialog.targets.length === 1 ? 'This deletes' : `This deletes ${dialog.targets.length} objects:`}
 		</p>
 		<ul class="targets">
-			{#each dialog.targets.slice(0, 6) as t (name(t))}
-				<li>{name(t)}</li>
+			{#each dialog.targets as t (name(t))}
+				<li>
+					{name(t)}{#if dialog.statuses?.[name(t)]}<span class="muted"> · {dialog.statuses[name(t)]}</span>{/if}
+				</li>
 			{/each}
-			{#if dialog.targets.length > 6}<li class="muted">and {dialog.targets.length - 6} more</li>{/if}
 		</ul>
 		<label class="row"><input type="checkbox" bind:checked={force} /> Force (no grace period)</label>
 		<label class="row">
@@ -652,44 +692,56 @@
 		{/if}
 	{/if}
 
-	{#if error}<p class="error">{error}</p>{/if}
+	{#if needsConfirmation}
+		<label class="confirmation">
+			<span>Type <code>confirm</code> to continue</span>
+			<input bind:value={confirmation} autocomplete="off" spellcheck="false" />
+		</label>
+	{/if}
+	{#if error}<p class="error" role="alert">{error}</p>{/if}
 
 	<div class="buttons">
-		{#if !report}<button class="secondary" onclick={close}>Cancel</button>{/if}
+		{#if !report}<button class="secondary" bind:this={cancelButton} disabled={busy} onclick={close}>Cancel</button>{/if}
 		<button
 			class="primary"
 			class:danger
 			bind:this={confirmButton}
-			disabled={busy}
+			disabled={busy || (needsConfirmation && confirmation !== 'confirm')}
 			onclick={confirm}
 		>
 			{busy ? 'Working…' : report ? 'Close' : confirmLabel}
 		</button>
 	</div>
-</div>
+</dialog>
 
 <style>
-	.backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 50;
-		background: rgb(0 0 0 / 35%);
+	.action-context {
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.confirmation {
+		display: grid;
+		gap: 8px;
+		margin-top: 16px;
 	}
 	.dialog {
 		position: fixed;
-		top: 50%;
-		left: 50%;
+		inset: 0;
 		z-index: 51;
 		width: min(480px, calc(100vw - 32px));
-		max-height: 85vh;
+		max-height: 85dvh;
+		margin: auto;
 		overflow: auto;
 		padding: 20px 22px;
-		transform: translate(-50%, -50%);
 		border: 1px solid var(--border);
 		border-radius: 12px;
 		background: var(--surface-1);
 		box-shadow: var(--shadow);
+		color: var(--text);
 		outline: none;
+	}
+	.dialog::backdrop {
+		background: rgb(16 21 34 / 45%);
 	}
 	h2 {
 		margin: 0 0 12px;
@@ -698,9 +750,12 @@
 	p {
 		margin: 0 0 10px;
 	}
+	/* Every target is listed, to review before deleting; long lists scroll. */
 	.targets {
+		max-height: 220px;
 		margin: 0 0 14px;
 		padding-left: 18px;
+		overflow: auto;
 		font-family: var(--mono);
 		font-size: 12.5px;
 	}

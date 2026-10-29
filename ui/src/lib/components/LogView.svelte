@@ -5,6 +5,7 @@
 	import { forControl } from '../keys';
 	import { logMatcher, logRanges, sourceLabels, stripAnsi } from '../pods';
 	import { app } from '../state.svelte';
+	import Icon from './Icon.svelte';
 
 	let {
 		target,
@@ -17,7 +18,7 @@
 		containers: string[];
 		previous?: boolean;
 		/** A container to show, asked for from Describe; a new object each time. */
-		container?: { name: string } | null;
+		container?: { name: string; previous?: boolean } | null;
 		/** The logs are on screen and take the k9s log keys. */
 		active?: boolean;
 	} = $props();
@@ -54,7 +55,9 @@
 	let marks = 0;
 
 	$effect(() => {
-		if (wanted) container = wanted.name;
+		if (!wanted) return;
+		container = wanted.name;
+		if (wanted.previous !== undefined) previous = wanted.previous;
 	});
 
 	let lines = $state.raw<Line[]>([]);
@@ -69,6 +72,21 @@
 	const showSource = $derived(sources.length > 1);
 	const matches = $derived(logMatcher(filter));
 	const visible = $derived(filter ? lines.filter((l) => l.error || l.mark || matches(l.text)) : lines);
+
+	/** Which instance and stream the lines come from, so that a view never passes for another. */
+	const streamState = $derived.by((): { tone: 'warn' | 'ok' | ''; text: string } => {
+		if (previous) return { tone: 'warn', text: 'Previous container instance, which ended. These lines do not update.' };
+		if (status === 'connecting') return { tone: '', text: 'Connecting to the log stream…' };
+		if (status === 'ended') return { tone: '', text: follow ? 'The stream ended. Reconnect to continue.' : 'Snapshot of the current instance.' };
+		return { tone: 'ok', text: follow ? 'Streaming the current container instance.' : 'Snapshot of the current instance.' };
+	});
+
+	/** Colors lines by their level, when they name one; lines without one stay plain. */
+	function level(text: string): 'bad' | 'warn' | '' {
+		if (/\b(ERROR|FATAL|PANIC|CRITICAL|error|fatal|panic)\b/.test(text)) return 'bad';
+		if (/\b(WARN|WARNING|warn|warning)\b/.test(text)) return 'warn';
+		return '';
+	}
 
 	$effect(() => {
 		void restarts;
@@ -213,35 +231,57 @@
 <svelte:window onkeydowncapture={onkeydown} />
 
 <div class="logs">
+	<div class="log-context">
+		<Icon name="pod" size={16} />
+		<span><strong>{app.cluster?.context}</strong> / {target.namespace ?? 'cluster'} / {target.name}</span>
+		{#if container || containers.length === 1}<span class="container">{container || containers[0]}</span>{/if}
+	</div>
 	<div class="toolbar">
 		{#if containers.length > 1}
-			<select bind:value={container} title="Container">
+			<select bind:value={container} title="Container" aria-label="Container">
 				<option value="">All containers</option>
 				{#each containers as c (c)}<option value={c}>{c}</option>{/each}
 			</select>
 		{/if}
-		<select bind:value={range} title="How far back to start (0–6)">
+		<select
+			value={previous ? 'previous' : 'current'}
+			onchange={(e) => (previous = e.currentTarget.value === 'previous')}
+			title="The running container, or the one before it, which ended"
+			aria-label="Container instance"
+		>
+			<option value="current">Current instance</option>
+			<option value="previous">Previous · ended</option>
+		</select>
+		<select bind:value={range} title="How far back to start (0–6)" aria-label="Time range">
 			{#each [...RANGES] as [key, r] (key)}<option value={key}>{r.label}</option>{/each}
 		</select>
+		<label class="search">
+			<Icon name="search" size={15} />
+			<input bind:value={filter} aria-label="Filter log lines" placeholder="Search these logs… /regex/" />
+		</label>
+		<button class="export" onclick={save} title="Save the shown lines (Ctrl+S)"><Icon name="download" size={15} /> Export</button>
+	</div>
+	<div class="options">
 		<label><input type="checkbox" bind:checked={follow} /> Follow</label>
 		<label title="t"><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
-		<label title="Logs of the previous, crashed container"><input type="checkbox" bind:checked={previous} /> Previous</label>
 		<label title="w"><input type="checkbox" bind:checked={wrap} /> Wrap</label>
 		<label title="Keep the latest line in view (s)"><input type="checkbox" checked={stick} onchange={toggleAutoscroll} /> Autoscroll</label>
-		<input class="filter" bind:value={filter} placeholder="Filter…  /regex/" />
 		<span class="spacer"></span>
 		<button onclick={() => (lines = [])} title="Clear the view (Shift+C)">Clear</button>
 		<button onclick={mark} title="Draw a line to tell what comes after it (m)">Mark</button>
 		<button onclick={copy} title="Copy the shown lines (c)">Copy</button>
-		<button onclick={save} title="Save the shown lines (Ctrl+S)">Save</button>
 	</div>
 
+	<div class="stream-state {streamState.tone}" role="status">
+		<Icon name={previous ? 'pending' : streamState.tone === 'ok' ? 'event' : 'pending'} size={15} />
+		{streamState.text}{stick ? '' : ' Autoscroll is paused.'}
+	</div>
 	<div class="body" class:wrap bind:this={scroller} {onscroll}>
 		{#if dropped}
 			<div class="note">{dropped} older lines were dropped to keep the view fast.</div>
 		{/if}
 		{#each visible as line (line.id)}
-			<div class="line" class:error={line.error} class:mark={line.mark}>
+			<div class="line {line.error ? 'bad' : level(line.text)}" class:error={line.error} class:mark={line.mark}>
 				{#if showSource && line.source !== null}<span class="source" style:color={COLORS[line.source % COLORS.length]}
 						>{labels[line.source]}</span
 					>{/if}{line.text}
@@ -254,10 +294,14 @@
 		{/if}
 		{#if status === 'ended'}
 			<div class="note end">
-				{follow ? 'The stream ended.' : 'End of log.'}
-				<button onclick={() => restarts++}>{follow ? 'Reconnect' : 'Reload'}</button>
+				{follow && !previous ? 'The stream ended.' : 'End of log.'}
+				<button onclick={() => restarts++}>{follow && !previous ? 'Reconnect' : 'Reload'}</button>
 			</div>
 		{/if}
+	</div>
+	<div class="foot">
+		<span>{visible.length} {visible.length === 1 ? 'line' : 'lines'}{filter ? ` of ${lines.length}` : ''}</span>
+		<span>{previous ? 'Previous instance' : 'Current instance'} · {status === 'streaming' ? 'live' : status}</span>
 	</div>
 
 	{#if !stick}
@@ -266,28 +310,90 @@
 </div>
 
 <style>
+	.log-context {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 16px;
+		border-bottom: 1px solid var(--border-subtle);
+		font-size: 12px;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.log-context strong {
+		color: var(--text);
+	}
+	.container {
+		padding: 1px 7px;
+		border-radius: 5px;
+		background: var(--surface-2);
+		font-family: var(--mono);
+		color: var(--text);
+	}
+	.stream-state {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 16px;
+		background: var(--surface-2);
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.stream-state.warn {
+		background: color-mix(in srgb, var(--warn) 14%, var(--surface-1));
+		color: var(--warn);
+	}
+	.stream-state.ok {
+		background: color-mix(in srgb, var(--ok) 10%, var(--surface-1));
+		color: var(--ok);
+	}
 	.logs {
 		position: relative;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
 	}
-	.toolbar {
+	.toolbar,
+	.options {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 6px 12px;
+		gap: 6px 10px;
 		padding: 8px 16px;
-		border-bottom: 1px solid var(--border-subtle);
 		font-size: 12.5px;
 	}
-	.toolbar select,
-	.toolbar input.filter {
-		padding: 3px 8px;
+	.options {
+		padding-top: 0;
+	}
+	.toolbar select {
+		padding: 5px 8px;
 		font-size: 12.5px;
 	}
-	.toolbar input.filter {
-		width: 160px;
+	.search {
+		flex: 1 1 160px;
+		min-width: 140px;
+		padding: 0 10px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface-1);
+	}
+	.search:focus-within {
+		border-color: var(--accent);
+	}
+	.search input {
+		flex: 1;
+		min-width: 0;
+		padding: 5px 0;
+		border: none;
+		background: none;
+		box-shadow: none;
+		font-size: 12.5px;
+	}
+	.export {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-weight: 600;
 	}
 	label {
 		display: flex;
@@ -300,8 +406,9 @@
 		flex: 1;
 	}
 	.toolbar button,
+	.options button,
 	.end button {
-		padding: 3px 10px;
+		padding: 4px 10px;
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--surface-1);
@@ -328,8 +435,11 @@
 	.line:hover {
 		background: var(--surface-2);
 	}
-	.line.error {
+	.line.bad {
 		color: var(--bad);
+	}
+	.line.warn {
+		color: var(--warn);
 	}
 	.line.mark {
 		height: 0;
@@ -351,6 +461,15 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
+	}
+	.foot {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 6px 16px;
+		border-top: 1px solid var(--border-subtle);
+		font-size: 11.5px;
+		color: var(--text-muted);
 	}
 	.jump {
 		position: absolute;

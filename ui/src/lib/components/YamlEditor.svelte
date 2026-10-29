@@ -17,13 +17,15 @@
 		value,
 		readonly,
 		onsave,
-		oncancel
+		oncancel,
+		onchange
 	}: {
 		value: string;
 		readonly: boolean;
 		onsave?: (text: string) => void;
 		/** Esc while editing; `changed` tells whether the text differs from where editing began. */
 		oncancel?: (changed: boolean) => void;
+		onchange?: (dirty: boolean) => void;
 	} = $props();
 
 	let host = $state<HTMLDivElement>();
@@ -78,6 +80,10 @@
 				doc,
 				extensions: [
 					lineNumbers(),
+					// Tells whether the text differs from where editing began, for the unsaved-changes guard.
+					EditorView.updateListener.of((update) => {
+						if (update.docChanged && !update.state.readOnly) onchange?.(update.state.doc.toString() !== original);
+					}),
 					foldGutter(),
 					history(),
 					highlightActiveLine(),
@@ -116,6 +122,7 @@
 		});
 		if (!ro) {
 			original = view.state.doc.toString();
+			onchange?.(false);
 			view.focus();
 		}
 	});

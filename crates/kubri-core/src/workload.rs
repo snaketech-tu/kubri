@@ -390,6 +390,7 @@ mod tests {
 
     fn target(resource: &ResourceInfo, namespace: Option<&str>, name: &str) -> ObjectRef {
         ObjectRef {
+            context: None,
             resource: resource.reference.clone(),
             namespace: namespace.map(str::to_owned),
             name: name.into(),

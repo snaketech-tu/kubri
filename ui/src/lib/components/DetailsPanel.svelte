@@ -3,12 +3,17 @@
 	import { canEdit, save } from '../actions';
 	import { backend, type EventInfo, type KubeObject, type Reference } from '../api';
 	import { errorMessage } from '../format';
+	import { drafts } from '../navigation.svelte';
 	import { containerNames, hasLogs, hasUsers, isPods } from '../pods';
-	import { app, type Details } from '../state.svelte';
+	import { app, type Details, type DetailsTab } from '../state.svelte';
+	import { cellTone } from '../status';
 	import { drill, drillLabel, objectActions, subjectOf } from '../objects';
 	import ActionBar from './ActionBar.svelte';
 	import Describe from './Describe.svelte';
+	import EventTimeline from './EventTimeline.svelte';
+	import Icon from './Icon.svelte';
 	import LogView from './LogView.svelte';
+	import PodSummary from './PodSummary.svelte';
 	import TerminalView from './TerminalView.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
@@ -45,7 +50,7 @@
 		events = [];
 		load();
 		const timer = setInterval(() => {
-			if (!details.editing && (details.tab === 'describe' || details.tab === 'yaml')) load();
+			if (!details.editing && ['describe', 'events', 'yaml'].includes(details.tab)) load();
 		}, REFRESH);
 		return () => clearInterval(timer);
 	});
@@ -69,7 +74,10 @@
 	// Logs and shells keep running in the background once opened, until another object is shown.
 	let opened = $state({ logs: false, shell: false });
 	/** Containers picked in Describe, for the logs and the shell to switch to. */
-	let picked = $state<{ logs: { name: string } | null; shell: { name: string } | null }>({ logs: null, shell: null });
+	let picked = $state<{ logs: { name: string; previous?: boolean } | null; shell: { name: string } | null }>({
+		logs: null,
+		shell: null
+	});
 	$effect(() => {
 		void details.target;
 		opened = { logs: false, shell: false };
@@ -78,7 +86,13 @@
 
 	function openContainer(name: string, tab: 'logs' | 'shell') {
 		picked[tab] = { name };
-		details.tab = tab;
+		app.showDetails(details.resource, details.target, tab);
+	}
+
+	/** The logs of one container, of the instance that ended or the current one. */
+	function openLogs(name: string, previous: boolean) {
+		picked.logs = { name, previous };
+		app.showDetails(details.resource, details.target, 'logs', { previous });
 	}
 	$effect(() => {
 		if (details.tab === 'logs' || details.tab === 'shell') opened[details.tab] = true;
@@ -102,40 +116,78 @@
 		return stringify(copy, { lineWidth: 0 });
 	});
 
-	async function onsave(text: string) {
+	async function onsave(text: string): Promise<boolean> {
+		if (saving) return false;
 		let value: KubeObject;
 		try {
 			value = parse(text);
 		} catch (err) {
 			saveError = `Invalid YAML: ${errorMessage(err)}`;
-			return;
+			return false;
+		}
+		// Another name or namespace would save a different object; another resourceVersion would
+		// overwrite changes made since the edit began.
+		const meta = value && typeof value === 'object' ? value.metadata : undefined;
+		if (
+			meta?.name !== details.target.name ||
+			meta?.namespace !== object?.metadata.namespace ||
+			meta?.resourceVersion !== object?.metadata.resourceVersion
+		) {
+			saveError = 'Keep the name, namespace and resourceVersion as they are.';
+			return false;
 		}
 		saving = true;
+		drafts.saving = true;
 		saveError = null;
 		const ok = await save(details.target, value);
 		saving = false;
+		drafts.saving = false;
 		if (ok) {
+			drafts.dirty = false;
 			details.editing = false;
 			load();
 		} else {
-			saveError = 'Saving failed. If the object changed in the meantime, cancel and edit again.';
+			saveError = 'Saving failed. Your draft is still here. Review the error before retrying.';
 		}
+		return ok;
 	}
 
-	/** When Esc last warned about unsaved changes. */
-	let warnedAt = 0;
-
-	/** Stops editing. Esc with changes only warns, and throws them away when pressed again. */
-	function cancel(changed = false) {
-		if (changed && Date.now() - warnedAt > 3000) {
-			warnedAt = Date.now();
-			saveError = 'Your changes are not saved. Press Esc again to throw them away, or Ctrl+S to save.';
-			return;
-		}
-		warnedAt = 0;
+	/** Stops editing; with unsaved changes, asks first. */
+	function cancel() {
+		if (drafts.block(cancel)) return;
 		details.editing = false;
 		saveError = null;
 	}
+
+	function tab(value: DetailsTab) {
+		app.showDetails(details.resource, details.target, value);
+	}
+
+	// What leaving the edit does: save the editor's text, or drop it.
+	$effect(() => {
+		drafts.save = () => (editor ? onsave(editor.text()) : Promise.resolve(false));
+		drafts.discard = () => {
+			details.editing = false;
+			saveError = null;
+		};
+		return () => {
+			drafts.save = null;
+			drafts.discard = null;
+			drafts.dirty = false;
+		};
+	});
+
+	/** A pod's state in a word, as its list shows it: why a container waits, or else the phase. */
+	const status = $derived.by(() => {
+		if (object?.kind !== 'Pod') return null;
+		const statuses: any[] = [
+			...(object.status?.initContainerStatuses ?? []),
+			...(object.status?.containerStatuses ?? [])
+		];
+		const reason = statuses.map((s) => s.state?.waiting?.reason ?? s.state?.terminated?.reason).find(Boolean);
+		const text: string | undefined = object.metadata.deletionTimestamp ? 'Terminating' : (reason ?? object.status?.phase);
+		return text ? { text, tone: cellTone('Status', text) } : null;
+	});
 
 	/** The tabs show these already. */
 	const TABS = new Set(['describe', 'yaml', 'logs', 'shell', 'usedBy']);
@@ -148,16 +200,21 @@
 		}).filter((a) => !a.id || !TABS.has(a.id))
 	);
 
-	const title = $derived(
-		details.target.namespace ? `${details.target.namespace}/${details.target.name}` : details.target.name
-	);
+	const warnings = $derived(events.filter((e) => e.kind === 'Warning').length);
 </script>
 
-<aside>
+<aside aria-label="{details.resource.kind} inspector">
 	<header>
 		<div class="title">
-			<span class="kind">{details.resource.kind}</span>
-			<h2 title={title}>{title}</h2>
+			<span class="kind">{details.resource.kind} inspector</span>
+			<h2 title={details.target.name}>{details.target.name}</h2>
+			<p class="context-path">{app.cluster?.context} / {details.target.namespace ?? 'cluster-scoped'}</p>
+			{#if status}
+				<p class="status {status.tone}">
+					<Icon name={status.tone === 'ok' ? 'ok' : status.tone === 'bad' ? 'critical' : 'pending'} size={15} />
+					{status.text}
+				</p>
+			{/if}
 		</div>
 		<div class="window">
 			<button
@@ -167,20 +224,21 @@
 				title={app.maximized ? 'Restore (f)' : 'Maximize (f)'}
 				aria-label={app.maximized ? 'Restore' : 'Maximize'}>{app.maximized ? '⤡' : '⤢'}</button
 			>
-			<button class="icon close" onclick={close} title="Close (Esc)" aria-label="Close">×</button>
+			<button class="icon close" onclick={close} title="Close (Esc)" aria-label="Close"><Icon name="close" /></button>
 		</div>
 	</header>
 
-	<ActionBar {actions} hints={false} compact />
-
-	<nav>
-		<button class:active={details.tab === 'describe'} onclick={() => (details.tab = 'describe')}>Describe <kbd>d</kbd></button>
-		<button class:active={details.tab === 'yaml'} onclick={() => (details.tab = 'yaml')}>YAML <kbd>y</kbd></button>
+	<nav aria-label="Inspector views">
+		<button class:active={details.tab === 'describe'} onclick={() => tab('describe')}>Overview <kbd>d</kbd></button>
+		<button class:active={details.tab === 'events'} onclick={() => tab('events')}>
+			Events <span class="n" class:alert={warnings}>{events.length}</span>
+		</button>
+		<button class:active={details.tab === 'yaml'} onclick={() => tab('yaml')}>YAML <kbd>y</kbd></button>
 		{#if logs}
-			<button class:active={details.tab === 'logs'} onclick={() => (details.tab = 'logs')}>Logs <kbd>l</kbd></button>
+			<button class:active={details.tab === 'logs'} onclick={() => tab('logs')}>Logs <kbd>l</kbd></button>
 		{/if}
 		{#if shell}
-			<button class:active={details.tab === 'shell'} onclick={() => (details.tab = 'shell')}>Shell <kbd>s</kbd></button>
+			<button class:active={details.tab === 'shell'} onclick={() => tab('shell')}>Shell <kbd>s</kbd></button>
 		{/if}
 		<span class="spacer"></span>
 		{#if details.tab === 'yaml'}
@@ -227,16 +285,24 @@
 		{:else if !object}
 			{#if !error}<p class="muted">Loading…</p>{/if}
 		{:else if details.tab === 'describe'}
-			<Describe
-				{object}
-				{events}
-				{now}
-				decoded={details.decoded ?? false}
-				ondecode={() => (details.decoded = !details.decoded)}
-				oncontainer={openContainer}
-				{shell}
-				usedBy={hasUsers(details.resource) ? usedBy : undefined}
-			/>
+			<div class="scroll">
+				<PodSummary {object} onlogs={logs ? openLogs : undefined} />
+				<Describe
+					{object}
+					{events}
+					{now}
+					decoded={details.decoded ?? false}
+					ondecode={() => (details.decoded = !details.decoded)}
+					oncontainer={openContainer}
+					onevents={() => tab('events')}
+					{shell}
+					usedBy={hasUsers(details.resource) ? usedBy : undefined}
+				/>
+			</div>
+		{:else if details.tab === 'events'}
+			<div class="scroll events">
+				<EventTimeline {events} {now} />
+			</div>
 		{:else}
 			{#key showManaged}
 				<YamlEditor
@@ -244,11 +310,13 @@
 					readonly={!details.editing}
 					{onsave}
 					oncancel={cancel}
+					onchange={(dirty) => (drafts.dirty = dirty)}
 					bind:this={editor}
 				/>
 			{/key}
 		{/if}
 	</div>
+	<ActionBar {actions} hints={false} compact />
 </aside>
 
 <style>
@@ -262,23 +330,64 @@
 	}
 	header {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: space-between;
 		gap: 12px;
-		padding: 14px 16px 8px 20px;
+		padding: 18px 16px 12px 20px;
+	}
+	.context-path {
+		margin: 4px 0 0;
+		font-size: 12px;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.status {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 8px 0 0;
+		font-size: 12.5px;
+		font-weight: 600;
+	}
+	.status.ok {
+		color: var(--ok);
+	}
+	.status.warn {
+		color: var(--warn);
+	}
+	.status.bad {
+		color: var(--bad);
+	}
+	.n {
+		margin-left: 2px;
+		padding: 0 5px;
+		border-radius: 4px;
+		background: var(--surface-2);
+		font-size: 11px;
+		font-weight: 600;
+	}
+	.n.alert {
+		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
+		color: var(--bad);
+	}
+	.scroll {
+		overflow: auto;
+	}
+	.events {
+		padding: 18px 20px;
 	}
 	.title {
 		min-width: 0;
 	}
 	.kind {
 		font-size: 11px;
-		font-weight: 600;
-		letter-spacing: 0.06em;
+		font-weight: 650;
+		letter-spacing: 0.1em;
 		text-transform: uppercase;
-		color: var(--accent-strong);
+		color: var(--text-muted);
 	}
 	h2 {
-		margin: 2px 0 0;
+		margin: 6px 0 0;
 		font-size: 16px;
 		font-family: var(--mono);
 		overflow: hidden;
@@ -290,8 +399,11 @@
 		gap: 2px;
 	}
 	.icon {
+		display: grid;
+		place-items: center;
 		width: 30px;
 		height: 30px;
+		padding: 0;
 		border: none;
 		border-radius: 6px;
 		background: none;
@@ -304,12 +416,18 @@
 	.icon:hover {
 		background: var(--surface-2);
 	}
+	/* Narrow windows scroll the tabs rather than the page. */
 	nav {
 		display: flex;
 		align-items: center;
 		gap: 4px;
 		padding: 0 16px 0 14px;
 		border-bottom: 1px solid var(--border);
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	nav > * {
+		flex: none;
 	}
 	nav > button:not(.primary):not(.secondary) {
 		padding: 8px 10px;
@@ -319,8 +437,9 @@
 		color: var(--text-muted);
 	}
 	nav > button.active {
-		color: var(--text);
+		color: var(--accent-strong);
 		border-bottom-color: var(--accent);
+		font-weight: 600;
 	}
 	.spacer {
 		flex: 1;

@@ -1,4 +1,8 @@
 <script lang="ts">
+	import { drafts } from '#lib/navigation.svelte.js';
+	import { applyScheme } from '#lib/skin.js';
+	import Icon from '#lib/components/Icon.svelte';
+	import { isTauri } from '@tauri-apps/api/core';
 	import { untrack } from 'svelte';
 	import { forControl } from '#lib/keys.js';
 	import logo from '#lib/assets/logo.svg';
@@ -48,6 +52,8 @@
 		app.error = null;
 		app.load();
 	});
+
+	$effect(() => untrack(() => applyScheme(app.scheme)));
 
 	// k9s plugin and hotkey keys.
 	$effect(() => listenForBindings());
@@ -223,115 +229,200 @@
 
 	// Help stays last.
 	const hints = $derived([...viewHints.slice(0, -1), ...pluginHints, ...viewHints.slice(-1)]);
+
+	const dark = $derived(
+		app.scheme ? app.scheme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+	);
+
+	function signOut() {
+		if (!drafts.block(() => session.signOut())) session.signOut();
+	}
+
+	let environmentEditor = $state<HTMLDetailsElement>();
 </script>
 
 <svelte:window {onkeydown} {onmouseup} />
 
-<div class="shell">
-	<header>
-		<div class="brand">
-			<img src={logo} alt="" width="26" height="26" />
-			<span>Kubri</span>
-		</div>
-		<div class="history">
-			<button
-				onclick={() => app.go(-1)}
-				onmousedown={keepFocus}
-				disabled={!app.canGoBack}
-				title="Back ([ or Alt+←)"
-				aria-label="Back"
-			>
-				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+<div class="shell" class:maximized={app.details && app.maximized} class:inspecting={app.details}>
+	<Sidebar />
+	<div class="workspace">
+		<header>
+			<div class="brand">
+				<img src={logo} alt="" width="24" height="24" />
+				<span>kubri</span>
+			</div>
+			<div class="history">
+				<button
+					onclick={() => app.go(-1)}
+					onmousedown={keepFocus}
+					disabled={!app.canGoBack}
+					title="Back ([ or Alt+←)"
+					aria-label="Back"
+				>
+					<Icon name="back" size={16} />
+				</button>
+				<button
+					onclick={() => app.go(1)}
+					onmousedown={keepFocus}
+					disabled={!app.canGoForward}
+					title="Forward (] or Alt+→)"
+					aria-label="Forward"
+				>
+					<Icon name="next" size={16} />
+				</button>
+			</div>
+			<ContextSwitcher />
+			{#if app.cluster}
+				<details class="environment" bind:this={environmentEditor}>
+					<summary class:set={app.environment} title="Label this context, such as Production">
+						{app.environment || 'Add label'}
+					</summary>
+					<label>
+						Environment label for {app.cluster.context}
+						<input
+							value={app.environment}
+							onchange={(e) => app.setEnvironment(e.currentTarget.value)}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' || e.key === 'Escape') {
+									app.setEnvironment(e.currentTarget.value);
+									environmentEditor?.removeAttribute('open');
+								}
+							}}
+							placeholder="e.g. Production"
+						/>
+						<span class="note">With a production label, destructive actions ask you to type “confirm”.</span>
+					</label>
+				</details>
+			{/if}
+			<span class="divider"></span>
+			<NamespacePicker />
+			<button class="palette-button" onclick={() => (app.paletteOpen = true)} aria-label="Search or run a command">
+				<Icon name="search" size={17} />
+				<span>Search or run a command</span>
+				<kbd>Ctrl K</kbd>
 			</button>
 			<button
-				onclick={() => app.go(1)}
-				onmousedown={keepFocus}
-				disabled={!app.canGoForward}
-				title="Forward (] or Alt+→)"
-				aria-label="Forward"
+				class="square"
+				onclick={() => app.toggleScheme()}
+				disabled={!!app.skin}
+				title={app.skin ? `The skin ${app.skin} sets the colors` : dark ? 'Use light colors' : 'Use dark colors'}
+				aria-label={dark ? 'Use light colors' : 'Use dark colors'}
 			>
-				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+				<Icon name={dark ? 'sun' : 'moon'} />
 			</button>
-		</div>
-		<ContextSwitcher />
-		<NamespacePicker />
-		{#if app.readOnly}
-			<span class="read-only" title="Kubri does not change this cluster: no edits, deletes, scaling or shells">Read-only</span>
-		{/if}
-		<button class="palette-button" onclick={() => (app.paletteOpen = true)}>
-			<span>Go to resource or command…</span>
-			<kbd>:</kbd>
-		</button>
-		<button class="help" onclick={() => (app.helpOpen = true)} title="Keys and commands (?)" aria-label="Help">?</button>
-		{#if session.required}
-			<button class="sign-out" onclick={() => session.signOut()}>Sign out</button>
-		{/if}
-	</header>
+			<button
+				class="mode"
+				class:locked={app.readOnly}
+				aria-pressed={app.readOnly}
+				disabled={!app.cluster || app.k9s?.readOnly}
+				onclick={() => app.toggleReadOnly()}
+				title={app.k9s?.readOnly
+					? 'k9s readOnly is set: Kubri does not change this cluster'
+					: app.readOnly
+						? 'Read-only in Kubri: no edits, deletes, scaling or shells. Click to allow changes.'
+						: 'Changes are allowed; Kubernetes permissions still apply. Click to make Kubri read-only.'}
+			>
+				<Icon name={app.readOnly ? 'lock' : 'unlock'} size={15} />
+				{app.readOnly ? 'Read-only' : 'Editable'}
+			</button>
+			<button class="square help" onclick={() => (app.helpOpen = true)} title="Keys and commands (?)" aria-label="Help">
+				?
+			</button>
+			{#if session.required}
+				<button class="sign-out" onclick={signOut}>Sign out</button>
+			{/if}
+		</header>
 
-	{#if app.error}
-		<div class="error">
-			<span>{app.error}</span>
-			<button onclick={() => (app.error = null)} aria-label="Dismiss">×</button>
-		</div>
-	{/if}
-
-	<main class:with-details={app.details} class:maximized={app.details && app.maximized}>
-		<Sidebar />
-		{#if app.page === 'portforwards'}
-			<PortForwardsView />
-		{:else if app.page === 'benchmarks'}
-			<BenchmarksView />
-		{:else if app.page === 'config'}
-			<ConfigView />
-		{:else if app.page === 'sanitizer'}
-			{#key `${app.cluster?.context}/${app.namespace}`}
-				<SanitizerView />
-			{/key}
-		{:else if app.page === 'pulses'}
-			{#key `${app.cluster?.context}/${app.namespace}`}
-				<PulsesView />
-			{/key}
-		{:else if app.page === 'xray' && app.xrayResource}
-			{#key `${app.cluster?.context}/${app.namespace}/${app.xrayResource.plural}`}
-				<XrayView resource={app.xrayResource} />
-			{/key}
-		{:else if app.page === 'rbac'}
-			{#key `${app.cluster?.context}/${app.namespace}`}
-				<RbacView />
-			{/key}
-		{:else if app.page === 'helm'}
-			{#key `${app.cluster?.context}/${app.namespace}`}
-				<HelmView />
-			{/key}
-		{:else if app.selected}
-			{#key `${app.cluster?.context}/${app.selected.group}/${app.selected.version}/${app.selected.plural}/${JSON.stringify(app.scope)}`}
-				<ResourceView resource={app.selected} namespace={app.namespace} scope={app.scope} />
-			{/key}
-		{:else}
-			<div class="placeholder">
-				{#if app.contexts.length === 0 && !app.error}
-					Looking for your kubeconfig…
-				{:else if !app.cluster}
-					Pick a context to connect to a cluster.
-				{:else}
-					Pick a resource on the left or press <kbd>:</kbd>.
-				{/if}
+		{#if app.error}
+			<div class="error" role="alert">
+				<span>{app.error}</span>
+				<button onclick={() => (app.error = null)} aria-label="Dismiss">×</button>
 			</div>
 		{/if}
-		{#if app.details}
-			<DetailsPanel details={app.details} />
-		{/if}
-	</main>
 
-	<footer>
-		{#each hints as [key, label], i (key + i)}
-			{#if keyFromLabel(key)}
-				<button onclick={() => press(key)} onmousedown={keepFocus} title="{label} ({key})"><kbd>{key}</kbd>{label}</button>
+		<main class:with-details={app.details} class:maximized={app.details && app.maximized}>
+			{#if app.cluster && !app.connecting}
+				{#if app.page === 'portforwards'}
+					<PortForwardsView />
+				{:else if app.page === 'benchmarks'}
+					<BenchmarksView />
+				{:else if app.page === 'config'}
+					<ConfigView />
+				{:else if app.page === 'sanitizer'}
+					{#key `${app.cluster?.context}/${app.namespace}`}
+						<SanitizerView />
+					{/key}
+				{:else if app.page === 'pulses'}
+					{#key `${app.cluster?.context}/${app.namespace}`}
+						<PulsesView />
+					{/key}
+				{:else if app.page === 'xray' && app.xrayResource}
+					{#key `${app.cluster?.context}/${app.namespace}/${app.xrayResource.plural}`}
+						<XrayView resource={app.xrayResource} />
+					{/key}
+				{:else if app.page === 'rbac'}
+					{#key `${app.cluster?.context}/${app.namespace}`}
+						<RbacView />
+					{/key}
+				{:else if app.page === 'helm'}
+					{#key `${app.cluster?.context}/${app.namespace}`}
+						<HelmView />
+					{/key}
+				{:else if app.selected}
+					{#key `${app.cluster?.context}/${app.selected.group}/${app.selected.version}/${app.selected.plural}/${JSON.stringify(app.scope)}`}
+						<ResourceView resource={app.selected} namespace={app.namespace} scope={app.scope} />
+					{/key}
+				{:else}
+					<div class="placeholder">Choose a resource or press <kbd>:</kbd>.</div>
+				{/if}
 			{:else}
-				<span><kbd>{key}</kbd>{label}</span>
+				<section class="connect">
+					<img src={logo} alt="" width="56" height="56" />
+					<span class="eyebrow">Your cluster, in focus</span>
+					<h1>{app.connecting ? `Connecting to ${app.connecting}…` : 'Connect to a cluster.'}</h1>
+					<p>
+						{isTauri()
+							? 'Choose a context from your kubeconfig. Reload it after you update your credentials.'
+							: 'Choose a context configured on kubri-server. The server holds the credentials.'}
+					</p>
+					{#if !app.connecting}
+						<div class="connect-actions">
+							<button
+								class="primary"
+								onclick={() => {
+									app.contextMenuOpen = true;
+									app.reloadContexts(true);
+								}}
+							>
+								Choose context <Icon name="arrow" size={16} />
+							</button>
+							<button onclick={() => app.load()}>Try again</button>
+						</div>
+					{/if}
+					<p class="small">Your k9s aliases, hotkeys, plugins and skins keep working.</p>
+				</section>
 			{/if}
-		{/each}
-	</footer>
+			{#if app.details}
+				<DetailsPanel details={app.details} />
+			{/if}
+		</main>
+
+		<footer>
+			<span class="status" class:live={app.cluster && !app.connecting} role="status">
+				<span class="dot"></span>
+				{app.connecting ? `Connecting to ${app.connecting}…` : app.cluster ? `Live · ${app.cluster.context}` : 'Not connected'}
+			</span>
+			<span class="hints">
+				{#each hints as [key, label], i (key + i)}
+					{#if keyFromLabel(key)}
+						<button onclick={() => press(key)} onmousedown={keepFocus} title="{label} ({key})"><kbd>{key}</kbd>{label}</button>
+					{:else}
+						<span><kbd>{key}</kbd>{label}</span>
+					{/if}
+				{/each}
+			</span>
+		</footer>
+	</div>
 </div>
 
 {#if app.paletteOpen}<CommandPalette />{/if}
@@ -345,99 +436,176 @@
 
 <style>
 	.shell {
+		display: grid;
+		grid-template-columns: 220px minmax(0, 1fr);
+		height: 100dvh;
+	}
+	/* Logs and shells can take the whole window. */
+	.shell.maximized {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.shell.maximized > :global(nav) {
+		display: none;
+	}
+	.workspace {
 		display: flex;
 		flex-direction: column;
-		height: 100vh;
+		min-width: 0;
+		min-height: 0;
 	}
 	header {
 		display: flex;
 		align-items: center;
-		gap: 20px;
-		padding: 10px 16px;
+		gap: 10px;
+		min-height: 64px;
+		padding: 8px 20px;
 		border-bottom: 1px solid var(--border);
 		background: var(--surface-1);
 	}
+	/* The sidebar shows the brand; the header takes it over when the sidebar is hidden. */
 	.brand {
-		display: flex;
+		display: none;
 		align-items: center;
-		gap: 8px;
-		width: 132px;
-		font-size: 17px;
+		gap: 7px;
+		font-size: 21px;
 		font-weight: 700;
-		letter-spacing: -0.01em;
+		letter-spacing: -0.045em;
 	}
-	.read-only {
-		padding: 2px 9px;
-		border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--warn) 12%, transparent);
+	.history {
+		display: flex;
+		gap: 2px;
+	}
+	.history button,
+	.square {
+		display: grid;
+		place-items: center;
+		width: 34px;
+		height: 34px;
+		flex: none;
+		padding: 0;
+		border: 1px solid transparent;
+		border-radius: 8px;
+		background: none;
+		color: var(--text);
+	}
+	.history button:hover:not(:disabled),
+	.square:hover:not(:disabled) {
+		background: var(--surface-2);
+	}
+	.square {
+		border-color: var(--border);
+	}
+	.help {
+		display: none;
+		font-weight: 700;
+	}
+	.environment {
+		position: relative;
+		flex: none;
+	}
+	.environment summary {
+		padding: 3px 7px;
+		border: 1px dashed var(--border);
+		border-radius: 5px;
+		font-size: 10.5px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		list-style: none;
+		cursor: pointer;
+		color: var(--text-muted);
+	}
+	.environment summary::-webkit-details-marker {
+		display: none;
+	}
+	.environment summary.set {
+		border: 1px solid transparent;
+		background: color-mix(in srgb, var(--warn) 16%, var(--surface-1));
 		color: var(--warn);
+	}
+	.environment label {
+		position: absolute;
+		top: calc(100% + 8px);
+		left: 0;
+		z-index: 20;
+		display: grid;
+		gap: 8px;
+		width: 280px;
+		padding: 14px;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		box-shadow: var(--shadow);
 		font-size: 12px;
 		font-weight: 600;
-		white-space: nowrap;
+	}
+	.environment .note {
+		color: var(--text-muted);
+		font-weight: 400;
+	}
+	.divider {
+		width: 1px;
+		height: 26px;
+		flex: none;
+		background: var(--border);
 	}
 	.palette-button {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
+		gap: 10px;
 		margin-left: auto;
-		width: 280px;
-		padding: 6px 10px;
+		width: 260px;
+		min-width: 0;
+		padding: 7px 8px 7px 12px;
 		border: 1px solid var(--border);
 		border-radius: 8px;
-		background: var(--surface-2);
+		background: var(--bg);
 		color: var(--text-muted);
 		font-size: 13px;
+	}
+	.palette-button span {
+		flex: 1;
+		overflow: hidden;
+		text-align: left;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.palette-button:hover {
 		border-color: var(--accent);
 	}
-	.history {
-		display: flex;
-		gap: 4px;
+	.palette-button kbd {
+		margin: 0;
 	}
-	.history button,
-	.help {
-		display: grid;
-		place-items: center;
-		width: 32px;
-		height: 32px;
-		padding: 0;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface-2);
-		color: var(--text);
-	}
-	.history button:hover:not(:disabled),
-	.help:hover {
-		border-color: var(--accent);
-	}
-	.history button:disabled {
-		color: var(--text-muted);
-		opacity: 0.5;
-	}
-	.history svg {
-		width: 16px;
-		height: 16px;
-		fill: none;
-		stroke: currentColor;
-		stroke-width: 2;
-		stroke-linecap: round;
-		stroke-linejoin: round;
-	}
-	.help {
-		margin-left: -8px;
-		font-weight: 700;
-	}
-	.sign-out {
-		margin-left: -8px;
+	.mode {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		flex: none;
 		padding: 6px 10px;
 		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface-2);
+		border-radius: 7px;
+		background: var(--surface-1);
+		font-size: 12px;
+		font-weight: 600;
 		color: var(--text-muted);
-		font-size: 13px;
+		white-space: nowrap;
+	}
+	.mode.locked {
+		border-color: transparent;
+		background: color-mix(in srgb, var(--ok) 14%, var(--surface-1));
+		color: var(--ok);
+	}
+	.mode:hover:not(:disabled) {
+		border-color: var(--accent);
+	}
+	.sign-out {
+		flex: none;
+		padding: 6px 10px;
+		border: 1px solid var(--border);
+		border-radius: 7px;
+		background: none;
+		color: var(--text-muted);
+		font-size: 12px;
 	}
 	.sign-out:hover {
 		border-color: var(--accent);
@@ -447,7 +615,7 @@
 		display: flex;
 		justify-content: space-between;
 		gap: 12px;
-		padding: 8px 16px;
+		padding: 8px 20px;
 		background: color-mix(in srgb, var(--bad) 14%, var(--surface-1));
 		color: var(--bad);
 	}
@@ -460,11 +628,11 @@
 	main {
 		flex: 1;
 		display: grid;
-		grid-template-columns: 240px minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr);
 		min-height: 0;
 	}
 	main.with-details {
-		grid-template-columns: 240px minmax(0, 1fr) minmax(380px, 44%);
+		grid-template-columns: minmax(0, 1fr) clamp(360px, 34vw, 540px);
 	}
 	/* The list stays mounted so its shortcuts keep working. */
 	main.maximized {
@@ -478,17 +646,97 @@
 		place-items: center;
 		color: var(--text-muted);
 	}
+	.connect {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		padding: 32px 20px;
+		text-align: center;
+		overflow: auto;
+	}
+	.eyebrow {
+		margin-top: 10px;
+		font-size: 11px;
+		font-weight: 650;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.connect h1 {
+		margin: 0;
+		font-size: 32px;
+		letter-spacing: -0.03em;
+	}
+	.connect p {
+		max-width: 460px;
+		margin: 0;
+		color: var(--text-muted);
+		line-height: 1.6;
+	}
+	.connect .small {
+		margin-top: 18px;
+		font-size: 12px;
+	}
+	.connect-actions {
+		display: flex;
+		gap: 8px;
+		margin-top: 14px;
+	}
+	.connect-actions button {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 9px 16px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: var(--surface-1);
+		font-weight: 600;
+	}
+	.connect-actions .primary {
+		border-color: var(--accent);
+		background: var(--accent);
+		color: var(--on-accent);
+	}
 	footer {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 2px 6px;
-		padding: 6px 16px;
+		align-items: center;
+		gap: 12px;
+		padding: 4px 16px;
 		border-top: 1px solid var(--border);
 		background: var(--surface-1);
 		font-size: 12px;
 		color: var(--text-muted);
 	}
-	footer > * {
+	.status {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		flex: none;
+		white-space: nowrap;
+	}
+	.status .dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--text-muted);
+	}
+	.status.live {
+		color: var(--ok);
+	}
+	.status.live .dot {
+		background: var(--ok);
+	}
+	.hints {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 2px 4px;
+		margin-left: auto;
+		min-width: 0;
+	}
+	.hints > * {
 		display: inline-flex;
 		align-items: center;
 		padding: 2px 6px;
@@ -498,7 +746,7 @@
 		color: inherit;
 		font-size: 12px;
 	}
-	footer > button:hover {
+	.hints > button:hover {
 		border-color: var(--border);
 		background: var(--surface-2);
 		color: var(--text);
@@ -512,5 +760,93 @@
 		font-family: var(--mono);
 		font-size: 11px;
 		color: var(--text);
+	}
+
+	@media (max-width: 1280px) {
+		.palette-button {
+			width: 36px;
+			flex: none;
+			justify-content: center;
+			padding: 7px;
+		}
+		.palette-button span,
+		.palette-button kbd {
+			display: none;
+		}
+	}
+	/* The inspector takes the place of the list and the sidebar. */
+	@media (max-width: 1100px) {
+		.shell.inspecting {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.shell.inspecting > :global(nav) {
+			display: none;
+		}
+		.shell.inspecting .brand {
+			display: flex;
+		}
+		main.with-details {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		main.with-details > :global(:not(aside)) {
+			display: none;
+		}
+	}
+	@media (max-width: 900px) {
+		.history,
+		.divider {
+			display: none;
+		}
+	}
+	/* One column: the header, then the sidebar as a strip of links, then the page. */
+	@media (max-width: 720px) {
+		.shell {
+			display: flex;
+			flex-direction: column;
+		}
+		.workspace {
+			display: contents;
+		}
+		.shell > :global(nav) {
+			order: 1;
+		}
+		.error {
+			order: 2;
+		}
+		main {
+			order: 3;
+		}
+		footer {
+			order: 4;
+		}
+		header {
+			flex-wrap: wrap;
+			gap: 6px;
+			min-height: 0;
+			padding: 8px 12px;
+		}
+		.brand {
+			display: flex;
+			margin-right: auto;
+		}
+		.help {
+			display: grid;
+		}
+		.palette-button {
+			order: 5;
+			flex: 1 1 100%;
+			width: 100%;
+			justify-content: flex-start;
+			padding: 7px 8px 7px 12px;
+		}
+		.palette-button span {
+			display: block;
+		}
+		.hints {
+			display: none;
+		}
+		.connect h1 {
+			font-size: 26px;
+		}
 	}
 </style>

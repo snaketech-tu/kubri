@@ -245,7 +245,7 @@ impl Kubri {
     /// Fetches one object in full.
     pub async fn get(&self, obj: &ObjectRef) -> Result<Value> {
         let api = self
-            .session()
+            .object_session(obj)
             .await?
             .api(&obj.resource, obj.namespace.as_deref())?;
         Ok(serde_json::to_value(api.get(&obj.name).await?)?)
@@ -256,7 +256,7 @@ impl Kubri {
     pub async fn replace(&self, obj: &ObjectRef, object: Value) -> Result<Value> {
         self.ensure_writable().await?;
         let api = self
-            .session()
+            .object_session(obj)
             .await?
             .api(&obj.resource, obj.namespace.as_deref())?;
         let object: DynamicObject = serde_json::from_value(object)?;
@@ -268,7 +268,7 @@ impl Kubri {
     pub async fn patch(&self, obj: &ObjectRef, patch: Value) -> Result<Value> {
         self.ensure_writable().await?;
         let api = self
-            .session()
+            .object_session(obj)
             .await?
             .api(&obj.resource, obj.namespace.as_deref())?;
         let saved = api
@@ -280,7 +280,7 @@ impl Kubri {
     pub async fn delete(&self, obj: &ObjectRef, options: &DeleteOptions) -> Result<()> {
         self.ensure_writable().await?;
         let api = self
-            .session()
+            .object_session(obj)
             .await?
             .api(&obj.resource, obj.namespace.as_deref())?;
         api.delete(&obj.name, &options.to_params()).await?;
@@ -290,7 +290,7 @@ impl Kubri {
     /// Sets the replica count through the `scale` subresource, so CRDs that support it work too.
     pub async fn scale(&self, obj: &ObjectRef, replicas: u32) -> Result<()> {
         self.ensure_writable().await?;
-        let session = self.session().await?;
+        let session = self.object_session(obj).await?;
         let info = session.info_for(&obj.resource)?;
         if !info.subresources.iter().any(|s| s == "scale") {
             return Err(Error::Unsupported(format!("{} cannot be scaled", info.kind)));
@@ -306,7 +306,7 @@ impl Kubri {
     /// `kubectl rollout restart`.
     pub async fn restart(&self, obj: &ObjectRef) -> Result<()> {
         self.ensure_writable().await?;
-        let session = self.session().await?;
+        let session = self.object_session(obj).await?;
         let info = session.info_for(&obj.resource)?;
         if !matches!(info.kind.as_str(), "Deployment" | "StatefulSet" | "DaemonSet") {
             return Err(Error::Unsupported(format!("{} cannot be restarted", info.kind)));
@@ -326,7 +326,7 @@ impl Kubri {
     /// pods of a workload, Service or node, or the Jobs of a CronJob. `None` for the rest,
     /// which Enter describes.
     pub async fn drill(&self, target: &ObjectRef) -> Result<Option<Drill>> {
-        let session = self.session().await?;
+        let session = self.object_session(target).await?;
         let info = session.info_for(&target.resource)?;
         let config = self.k9s_config().await;
         let rule = workload::find_jump(&config.jumps, &info.reference);
@@ -355,7 +355,7 @@ impl Kubri {
     /// --from=cronjob/…`. Returns the Job's name.
     pub async fn trigger_cronjob(&self, target: &ObjectRef) -> Result<String> {
         self.ensure_writable().await?;
-        let session = self.session().await?;
+        let session = self.object_session(target).await?;
         if session.info_for(&target.resource)?.kind != "CronJob" {
             return Err(Error::Unsupported("only CronJobs can be triggered".into()));
         }
@@ -379,7 +379,7 @@ impl Kubri {
     /// Suspends a CronJob, so it starts no more Jobs, or resumes it.
     pub async fn suspend_cronjob(&self, target: &ObjectRef, suspend: bool) -> Result<()> {
         self.ensure_writable().await?;
-        let session = self.session().await?;
+        let session = self.object_session(target).await?;
         if session.info_for(&target.resource)?.kind != "CronJob" {
             return Err(Error::Unsupported("only CronJobs can be suspended".into()));
         }
@@ -395,7 +395,7 @@ impl Kubri {
     /// PriorityClass, like k9s `u`: the workloads, CronJobs and bare pods whose pod spec names
     /// it, in its namespace (in all of them for a PriorityClass).
     pub async fn used_by(&self, target: &ObjectRef) -> Result<Vec<Reference>> {
-        let session = self.session().await?;
+        let session = self.object_session(target).await?;
         let info = session.info_for(&target.resource)?;
         let used = references::Used::of(info)
             .ok_or_else(|| Error::Unsupported(format!("Kubri does not look up what uses a {}", info.kind)))?;
@@ -425,7 +425,7 @@ impl Kubri {
     /// `kubectl set image`.
     pub async fn set_images(&self, target: &ObjectRef, images: &[ContainerImage]) -> Result<()> {
         self.ensure_writable().await?;
-        let session = self.session().await?;
+        let session = self.object_session(target).await?;
         let info = session.info_for(&target.resource)?;
         if !workload::has_images(info) {
             return Err(Error::Unsupported(format!("{} has no images to set", info.kind)));
@@ -442,7 +442,7 @@ impl Kubri {
     /// `kubectl rollout undo --to-revision`. Returns the Deployment's name.
     pub async fn rollback(&self, target: &ObjectRef) -> Result<String> {
         self.ensure_writable().await?;
-        let session = self.session().await?;
+        let session = self.object_session(target).await?;
         let info = session.info_for(&target.resource)?;
         if (info.reference.group.as_str(), info.kind.as_str()) != ("apps", "ReplicaSet") {
             return Err(Error::Unsupported("rollbacks start from a ReplicaSet".into()));
@@ -759,7 +759,7 @@ impl Kubri {
         target: &ObjectRef,
         options: LogOptions,
     ) -> Result<impl Stream<Item = LogEvent> + Send + 'static> {
-        let session = self.session().await?;
+        let session = self.object_session(target).await?;
         let pods = session.pods_of(target).await?;
         let mut sources = logs::sources(&pods, options.container.as_deref());
         if sources.is_empty() {
@@ -786,7 +786,7 @@ impl Kubri {
     pub async fn open_terminal(&self, target: &ObjectRef, options: TerminalOptions) -> Result<Terminal> {
         // A shell can change anything the container can.
         self.ensure_writable().await?;
-        let session = self.session().await?;
+        let session = self.object_session(target).await?;
         if !session.is_core(&target.resource, "Pod")? {
             return Err(Error::Unsupported("terminals open in pods".into()));
         }
@@ -904,6 +904,15 @@ impl Kubri {
             "drained"
         );
         Ok(report)
+    }
+
+    /// The session to act on `target` in; refuses a target picked in another context.
+    async fn object_session(&self, target: &ObjectRef) -> Result<Arc<Session>> {
+        let session = self.session().await?;
+        match &target.context {
+            Some(context) if context != &session.info.context => Err(Error::ContextChanged(context.clone())),
+            _ => Ok(session),
+        }
     }
 
     async fn session(&self) -> Result<Arc<Session>> {
@@ -1097,6 +1106,28 @@ mod tests {
     fn list(kind: &str, items: Value) -> String {
         serde_json::json!({ "apiVersion": "v1", "kind": format!("{kind}List"), "metadata": {}, "items": items })
             .to_string()
+    }
+
+    #[tokio::test]
+    async fn rejects_objects_bound_to_a_different_context() {
+        let (client, requests) = testing::client(|_| panic!("stale target must not reach the cluster"));
+        let kubri = connected(client).await;
+        let target = ObjectRef {
+            context: Some("previous-cluster".into()),
+            resource: ResourceRef {
+                group: String::new(),
+                version: "v1".into(),
+                plural: "pods".into(),
+            },
+            namespace: Some("shop".into()),
+            name: "worker".into(),
+        };
+        assert!(matches!(kubri.get(&target).await, Err(Error::ContextChanged(_))));
+        assert!(matches!(
+            kubri.delete(&target, &DeleteOptions::default()).await,
+            Err(Error::ContextChanged(_))
+        ));
+        assert!(requests.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

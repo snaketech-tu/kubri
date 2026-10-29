@@ -1,40 +1,69 @@
+import { untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
+import { errorMessage } from './format';
 import { backend, type Column, type MetricsKind, type ResourceRef, type Row, type TableScope, type Usage } from './api';
 
 /** A live table of objects. Call `start` from an `$effect` and return its result to clean up. */
 export class LiveTable {
 	#rows = new SvelteMap<string, Row>();
 	columns = $state<Column[]>([]);
+	/** Only until the first list arrives or fails; a retry with rows kept does not count. */
 	loading = $state(true);
 	error = $state<string | null>(null);
 	rows = $derived([...this.#rows.values()]);
+	/** When the last update arrived, in milliseconds; 0 before the first. */
+	updated = $state(0);
+	/** A list arrived since the watch began, so an empty list is truly empty. */
+	hasLoaded = $state(false);
+	/** What the rows shown belong to. */
+	#key = '';
 
-	/** `scope` narrows the list with selectors, as after Enter on a Deployment. */
-	start(resource: ResourceRef, namespace: string | null, scope: TableScope | null = null) {
-		this.#rows.clear();
-		this.columns = [];
-		this.loading = true;
-		this.error = null;
-		return backend.watchTable(resource, namespace, scope, (event) => {
-			switch (event.type) {
-				case 'reset':
-					this.#rows.clear();
-					for (const row of event.rows) this.#rows.set(row.key, row);
-					this.columns = event.columns;
-					this.loading = false;
-					this.error = null;
-					break;
-				case 'upsert':
-					this.#rows.set(event.row.key, event.row);
-					break;
-				case 'delete':
-					this.#rows.delete(event.row.key);
-					break;
-				case 'error':
-					this.error = event.message;
-					this.loading = false;
-					break;
+	/**
+	 * `scope` narrows the list with selectors, as after Enter on a Deployment. `preserve` keeps the
+	 * rows of the same list while the watch starts again, as after Retry; another list never shows them.
+	 */
+	start(resource: ResourceRef, namespace: string | null, scope: TableScope | null = null, preserve = false) {
+		return untrack(() => {
+			const key = JSON.stringify([resource, namespace, scope]);
+			if (!preserve || this.#key !== key) {
+				this.#rows.clear();
+				this.columns = [];
+				this.updated = 0;
+				this.hasLoaded = false;
 			}
+			this.#key = key;
+			this.loading = !this.hasLoaded;
+			this.error = null;
+			// Events of a stopped watch must not reach the next one's rows.
+			let stopped = false;
+			const stop = backend.watchTable(resource, namespace, scope, (event) => {
+				if (stopped) return;
+				switch (event.type) {
+					case 'reset':
+						this.#rows.clear();
+						for (const row of event.rows) this.#rows.set(row.key, row);
+						this.columns = event.columns;
+						this.loading = false;
+						this.hasLoaded = true;
+						break;
+					case 'upsert':
+						this.#rows.set(event.row.key, event.row);
+						break;
+					case 'delete':
+						this.#rows.delete(event.row.key);
+						break;
+					case 'error':
+						this.error = event.message;
+						this.loading = false;
+						return;
+				}
+				this.updated = Date.now();
+				this.error = null;
+			});
+			return () => {
+				stopped = true;
+				stop();
+			};
 		});
 	}
 }
@@ -45,19 +74,32 @@ const METRICS_INTERVAL = 15_000;
 export class LiveMetrics {
 	usage = $state(new Map<string, Usage>());
 	available = $state(false);
+	error = $state<string | null>(null);
+	updated = $state(0);
 
 	start(kind: MetricsKind, namespace: string | null) {
 		this.usage = new Map();
 		this.available = false;
+		this.error = null;
+		this.updated = 0;
 		let stopped = false;
+		// A slow answer must not overlap the next poll.
+		let polling = false;
 		const poll = async () => {
+			if (polling) return;
+			polling = true;
 			try {
 				const list = await backend.metrics(kind, namespace);
 				if (stopped) return;
 				this.usage = new Map(list.map((u) => [`${u.namespace ?? ''}/${u.name}`, u]));
 				this.available = true;
-			} catch {
-				if (!stopped) this.available = false;
+				this.error = null;
+				this.updated = Date.now();
+			} catch (err) {
+				// The last values stay, marked stale by the error.
+				if (!stopped) this.error = errorMessage(err);
+			} finally {
+				polling = false;
 			}
 		};
 		poll();

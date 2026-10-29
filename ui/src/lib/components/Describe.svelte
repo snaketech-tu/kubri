@@ -6,6 +6,7 @@
 	import { rulesOf } from '../rbac';
 	import { cellTone } from '../status';
 	import { app, findResource } from '../state.svelte';
+	import EventTimeline from './EventTimeline.svelte';
 	import RulesMatrix from './RulesMatrix.svelte';
 
 	let {
@@ -16,7 +17,8 @@
 		ondecode,
 		oncontainer,
 		shell = false,
-		usedBy
+		usedBy,
+		onevents
 	}: {
 		object: KubeObject;
 		events: EventInfo[];
@@ -30,7 +32,12 @@
 		shell?: boolean;
 		/** What uses a ConfigMap, Secret, PVC, ServiceAccount or PriorityClass. */
 		usedBy?: Reference[] | { error: string } | 'loading';
+		/** Shows all events, when there are more than the overview lists. */
+		onevents?: () => void;
 	} = $props();
+
+	/** Events the overview lists before "All events". */
+	const LATEST = 3;
 
 	/** Shows a user in its list, with the cursor on it. */
 	function showUser(ref: Reference) {
@@ -187,6 +194,7 @@
 </script>
 
 <div class="describe">
+	<h3 class="first">At a glance</h3>
 	<dl class="facts">
 		{#each facts as [label, value, go] (label)}
 			<dt>{label}</dt>
@@ -199,6 +207,14 @@
 			</dd>
 		{/each}
 	</dl>
+
+	<h3 class="with-tool">
+		What happened
+		{#if onevents && events.length > LATEST}
+			<button onclick={onevents}>All {events.length} events</button>
+		{/if}
+	</h3>
+	<EventTimeline {events} {now} limit={onevents ? LATEST : Infinity} />
 
 	{#if labels.length}
 		<h3>Labels</h3>
@@ -336,25 +352,6 @@
 		</table>
 	{/if}
 
-	<h3>Events</h3>
-	{#if events.length}
-		<table>
-			<thead><tr><th>Type</th><th>Reason</th><th>Age</th><th>From</th><th>Message</th></tr></thead>
-			<tbody>
-				{#each events as e, i (i)}
-					<tr>
-						<td class={e.kind === 'Warning' ? 'bad' : 'muted'}>{e.kind}</td>
-						<td>{e.reason}</td>
-						<td class="muted">{age(e.lastSeen, now)}{e.count > 1 ? ` (×${e.count})` : ''}</td>
-						<td class="muted">{e.source}</td>
-						<td class="wrap">{e.message}</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-	{:else}
-		<p class="muted">No recent events.</p>
-	{/if}
 </div>
 
 <style>
@@ -364,17 +361,17 @@
 		font-size: 13px;
 	}
 	h3 {
-		margin: 20px 0 8px;
-		font-size: 11px;
-		font-weight: 600;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		color: var(--text-muted);
+		margin: 22px 0 10px;
+		font-size: 14px;
+		font-weight: 650;
+	}
+	h3.first {
+		margin-top: 0;
 	}
 	.facts {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 6px 16px;
+		gap: 8px 20px;
 		margin: 0;
 	}
 	.facts dt {

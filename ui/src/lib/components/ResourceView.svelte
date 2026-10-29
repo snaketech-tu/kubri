@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { completedPods } from '../cleanup';
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -12,7 +13,9 @@
 	import { cellTone, type Tone } from '../status';
 	import { filterRows, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
+	import { navPlace } from '../nav';
 	import ActionBar from './ActionBar.svelte';
+	import Icon, { type IconName } from './Icon.svelte';
 
 	let {
 		resource,
@@ -24,9 +27,13 @@
 	const metrics = new LiveMetrics();
 	const selection = new SvelteSet<string>();
 	let filter = $state('');
+	/** Bumped by Retry; the watch then starts again and keeps the rows it had. */
+	let retry = $state(0);
 	let wide = $state(false);
 	/** Only rows that need a look, like k9s Ctrl+Z. */
 	let faults = $state(false);
+	/** Only running pods. */
+	let runningOnly = $state(false);
 	let sort = $state<SortState>({ column: -1, descending: false });
 	let cursorKey = $state<string | null>(null);
 	/** Where Ctrl+Space marks a range from. */
@@ -39,7 +46,7 @@
 	const metricsKind = $derived<MetricsKind | null>(isPods(resource) ? 'pods' : isNodes(resource) ? 'nodes' : null);
 	const writable = $derived(!app.readOnly);
 
-	$effect(() => table.start(resource, ns, scope?.scope ?? null));
+	$effect(() => table.start(resource, ns, scope?.scope ?? null, retry > 0));
 	$effect(() => {
 		if (metricsKind) return metrics.start(metricsKind, ns);
 	});
@@ -67,10 +74,10 @@
 	const POD_METRICS: MetricColumn[] = [
 		CPU,
 		MEM,
-		{ label: '%CPU/R', index: -4, wide: false, value: (u) => percent(u.cpu, u.requests?.cpu), format: 'percent', threshold: 'cpu' },
-		{ label: '%CPU/L', index: -5, wide: true, value: (u) => percent(u.cpu, u.limits?.cpu), format: 'percent', threshold: 'cpu' },
-		{ label: '%Mem/R', index: -6, wide: false, value: (u) => percent(u.memory, u.requests?.memory), format: 'percent', threshold: 'memory' },
-		{ label: '%Mem/L', index: -7, wide: true, value: (u) => percent(u.memory, u.limits?.memory), format: 'percent', threshold: 'memory' }
+		{ label: 'CPU / request', index: -4, wide: false, value: (u) => percent(u.cpu, u.requests?.cpu), format: 'percent', threshold: 'cpu' },
+		{ label: 'CPU / limit', index: -5, wide: true, value: (u) => percent(u.cpu, u.limits?.cpu), format: 'percent', threshold: 'cpu' },
+		{ label: 'Memory / request', index: -6, wide: false, value: (u) => percent(u.memory, u.requests?.memory), format: 'percent', threshold: 'memory' },
+		{ label: 'Memory / limit', index: -7, wide: true, value: (u) => percent(u.memory, u.limits?.memory), format: 'percent', threshold: 'memory' }
 	];
 	const NODE_METRICS: MetricColumn[] = [
 		CPU,
@@ -92,7 +99,7 @@
 			.filter(({ c }) => wide || c.priority === 0);
 		for (const { c, index } of cells) {
 			const isAge = isAgeColumn(c);
-			if (isAge && metrics.available) {
+			if (isAge && metricsKind) {
 				const metricColumns = metricsKind === 'nodes' ? NODE_METRICS : POD_METRICS;
 				out.push(...metricColumns.filter((m) => wide || !m.wide).map((m) => ({ kind: 'metric' as const, ...m })));
 			}
@@ -106,8 +113,29 @@
 		const owner = scope?.ownerUid;
 		return owner ? table.rows.filter((r) => r.owners.some((o) => o.uid === owner)) : table.rows;
 	});
+	const statusIndex = $derived(table.columns.findIndex((c) => /^(status|phase)$/i.test(c.name)));
+	const isRunning = (r: Row) => statusIndex !== -1 && r.cells[statusIndex] === 'Running';
+	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r)));
+	const running = $derived(isPods(resource) ? owned.filter(isRunning) : []);
 	/** With Ctrl+Z, only the rows that need a look. */
-	const scoped = $derived(faults ? owned.filter((r) => isFaulty(table.columns, r)) : owned);
+	const scoped = $derived(faults ? faulty : runningOnly ? running : owned);
+
+	function showTab(tab: 'all' | 'attention' | 'running') {
+		faults = tab === 'attention';
+		runningOnly = tab === 'running';
+	}
+
+	const place = $derived(navPlace(resource));
+	/** Why the list may be wrong or empty: never shown as "no objects". */
+	const problem = $derived(
+		!table.error
+			? null
+			: table.hasLoaded
+				? `Connection interrupted. Showing the rows from ${age(new Date(table.updated).toISOString(), now) || '0s'} ago.`
+				: /forbidden|403|unauthorized|permission/i.test(table.error)
+					? 'Access denied.'
+					: 'Could not load the list.'
+	);
 
 	const rows = $derived.by(() => {
 		const filtered = filterRows(scoped, filter);
@@ -175,7 +203,7 @@
 	});
 
 	function target(row: Row): ObjectRef {
-		return { resource: refOf(resource), namespace: row.namespace, name: row.name };
+		return { context: app.cluster?.context, resource: refOf(resource), namespace: row.namespace, name: row.name };
 	}
 
 	/** The marked rows, or else the one under the cursor. */
@@ -247,7 +275,7 @@
 				return row.namespace ?? '';
 			case 'metric': {
 				const value = metricValue(row, column);
-				if (value === null || value === undefined) return '';
+				if (value === null || value === undefined) return '—';
 				return column.format === 'cpu' ? cpu(value) : column.format === 'memory' ? memory(value) : `${value}%`;
 			}
 			case 'cell': {
@@ -261,7 +289,7 @@
 	/** Colors status cells, and percentages by the k9s thresholds. */
 	function tone(row: Row, column: DisplayColumn, text: string): Tone {
 		if (column.kind === 'cell') return cellTone(column.label, text);
-		if (column.kind !== 'metric' || !column.threshold) return '';
+		if (column.kind !== 'metric' || !column.threshold || column.label.endsWith('/ request')) return '';
 		const value = metricValue(row, column);
 		if (value === null || value === undefined) return '';
 		const limits = app.k9s?.thresholds[column.threshold] ?? { warn: 70, critical: 90 };
@@ -282,16 +310,23 @@
 		if (!(await drill(resource, target(row)))) open(row);
 	}
 
-	/** Pods in a state k9s sanitizes away with `z`: done, failed or stuck. */
-	const SANITIZED = /^(Completed|Pending|CrashLoopBackOff|Error|ImagePullBackOff|ContainerStatusUnknown|Evicted|OOMKilled)$/;
-
+	/** Offers the successfully finished pods of the list for deletion, with their status to review. */
 	function sanitize() {
-		const done = rows.filter((r) => SANITIZED.test(cell(r, 'Status') ?? ''));
+		const done = completedPods(table.columns, rows);
 		if (!done.length) {
-			app.toast('No pods are completed, failed or stuck', 'bad');
+			app.toast('No successfully completed pods in this view');
 			return;
 		}
-		app.dialog = { kind: 'delete', resource, targets: done.map(target) };
+		const statuses = Object.fromEntries(
+			done.map((r) => [`${r.namespace ? `${r.namespace}/` : ''}${r.name}`, cell(r, 'Status') ?? ''])
+		);
+		app.dialog = { kind: 'delete', resource, targets: done.map(target), statuses };
+	}
+
+	/** An icon next to status words, so that the state does not hang on color alone. */
+	function statusIcon(column: DisplayColumn, tone: Tone): IconName | null {
+		if (column.kind !== 'cell' || !/^(status|phase|state)$/i.test(column.label)) return null;
+		return tone === 'ok' ? 'ok' : tone === 'warn' ? 'pending' : tone === 'bad' ? 'critical' : null;
 	}
 
 	function exportCsv() {
@@ -398,7 +433,7 @@
 						exportCsv();
 						return true;
 					case 'z':
-						faults = !faults;
+						showTab(faults ? 'all' : 'attention');
 						return true;
 				}
 			} else if (e.altKey) {
@@ -469,9 +504,9 @@
 					case 'M':
 						return sortByMetric('Mem');
 					case 'X':
-						return sortByMetric(isNodes(resource) ? '%CPU' : '%CPU/R');
+						return sortByMetric(isNodes(resource) ? '%CPU' : 'CPU / request');
 					case 'Z':
-						return sortByMetric(isNodes(resource) ? '%Mem' : '%Mem/R');
+						return sortByMetric(isNodes(resource) ? '%Mem' : 'Memory / request');
 					case '0':
 						app.namespace = '';
 						return true;
@@ -481,7 +516,7 @@
 							app.maximized = false;
 						} else if (selection.size) selection.clear();
 						else if (filter) filter = '';
-						else if (faults) faults = false;
+						else if (faults || runningOnly) showTab('all');
 						// Back to the list the scope came from, as in k9s.
 						else if (scope) {
 							if (!app.go(-1)) app.scope = null;
@@ -508,128 +543,198 @@
 
 <section>
 	<header>
-		<div class="title">
-			<h1>{resource.kind}</h1>
-			<span class="count">{rows.length}{rows.length !== owned.length ? ` / ${owned.length}` : ''}</span>
-			<code>{resource.group ? `${resource.group}/` : ''}{resource.version}</code>
+		<nav class="crumbs" aria-label="Breadcrumb">
+			<span>{place.section}</span>
+			<Icon name="next" size={12} />
+			<span>{place.label}</span>
 			{#if scope}
-				<span class="chip">
-					{scope.title}
-					<button onclick={() => (app.scope = null)} title="Show all {resource.kind} objects" aria-label="Show all">×</button>
-				</span>
+				<Icon name="next" size={12} />
+				<span>{scope.title}</span>
 			{/if}
-			{#if faults}
-				<span class="chip bad">
-					Faults
-					<button onclick={() => (faults = false)} title="Show all rows (Ctrl+Z)" aria-label="Show all rows">×</button>
-				</span>
-			{/if}
-		</div>
-		<div class="tools">
-			{#if hiddenColumns}
-				<button class="toggle" class:on={wide} aria-pressed={wide} onclick={() => (wide = !wide)} title="Show all columns (w)">Wide</button>
-			{/if}
-			<button class="toggle" class:on={faults} aria-pressed={faults} onclick={() => (faults = !faults)} title="Only rows that need a look (Ctrl+Z)">
-				Faults
-			</button>
-			<button class="toggle" onclick={exportCsv} title="Save the list as CSV (Ctrl+S)">CSV</button>
-			<input class="filter" bind:this={filterInput} bind:value={filter} placeholder="Filter…  (/)   regex, !, -f, -l app=web" />
+		</nav>
+		<div class="heading">
+			<div class="title">
+				<h1>{place.label}</h1>
+				<span class="count">{owned.length}</span>
+				<code>{resource.group ? `${resource.group}/` : ''}{resource.version}</code>
+				{#if scope}
+					<span class="chip">
+						{scope.title}
+						<button onclick={() => (app.scope = null)} title="Show all {resource.kind} objects" aria-label="Show all">×</button>
+					</span>
+				{/if}
+			</div>
+			<div class="tools">
+				{#if hiddenColumns}
+					<button class="toggle" class:on={wide} aria-pressed={wide} onclick={() => (wide = !wide)} title="Show all columns (w)">
+						Wide
+					</button>
+				{/if}
+				<button class="toggle" onclick={exportCsv} title="Save the list as CSV (Ctrl+S)">
+					<Icon name="download" size={15} /> CSV
+				</button>
+			</div>
 		</div>
 	</header>
 
-	{#if table.error}
-		<div class="banner">{table.error}</div>
+	{#if problem}
+		<div class="banner" role="alert">
+			<Icon name="critical" />
+			<span><strong>{problem}</strong> {table.error}</span>
+			<button onclick={() => retry++}>Retry</button>
+		</div>
+	{/if}
+	{#if metricsKind && metrics.error}
+		<div class="metrics-note" role="status">
+			Metrics {metrics.available ? 'are stale' : 'are unavailable'}{metrics.updated
+				? `, last measured ${age(new Date(metrics.updated).toISOString(), now)} ago`
+				: ''}: {metrics.error}
+		</div>
 	{/if}
 
-	{#if selection.size}
-		{@const marked = chosenRows()}
-		<ActionBar actions={markedActions(marked)} marked>{marked.length} marked</ActionBar>
-	{:else if current}
-		<ActionBar actions={actionsFor(current, [current])}>{current.name}</ActionBar>
-	{/if}
+	<div class="card">
+		<div class="toolbar">
+			<label class="search">
+				<Icon name="search" size={17} />
+				<input
+					bind:this={filterInput}
+					bind:value={filter}
+					aria-label="Filter {place.label.toLowerCase()}"
+					placeholder="Filter by name, /regex/, -l app=web or -f text"
+				/>
+				<kbd>/</kbd>
+			</label>
+		</div>
+		<div class="tabs" role="tablist" aria-label="Show">
+			<button role="tab" aria-selected={!faults && !runningOnly} onclick={() => showTab('all')}>
+				All <span class="n">{owned.length}</span>
+			</button>
+			<button role="tab" aria-selected={faults} onclick={() => showTab('attention')} title="Only rows that need a look (Ctrl+Z)">
+				Needs attention <span class="n" class:alert={faulty.length}>{faulty.length}</span>
+			</button>
+			{#if isPods(resource)}
+				<button role="tab" aria-selected={runningOnly} onclick={() => showTab('running')}>
+					Running <span class="n">{running.length}</span>
+				</button>
+			{/if}
+		</div>
 
-	<div class="table-wrap" bind:this={scroller}>
-		<table>
-			<thead>
-				<tr>
-					<th class="check"></th>
-					{#each columns as column (column.label + column.index)}
-						<th
-							class:numeric={column.kind === 'metric'}
-							class:sorted={sort.column === column.index}
-							onclick={() => sortBy(column.index)}
-						>
-							{column.label}
-							{#if sort.column === column.index}<span class="arrow">{sort.descending ? '↓' : '↑'}</span>{/if}
-						</th>
-					{/each}
-					<th class="more" aria-label="Actions"></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each rows as row, i (row.key)}
-					<tr
-						class:cursor={i === cursor}
-						class:checked={selection.has(row.key)}
-						onclick={() => (cursorKey = row.key)}
-						ondblclick={() => enter(row)}
-						oncontextmenu={(e) => {
-							e.preventDefault();
-							openMenu(row, e.clientX, e.clientY);
-						}}
-					>
-						<td class="check">
-							<input
-								type="checkbox"
-								tabindex="-1"
-								checked={selection.has(row.key)}
-								onclick={(e) => {
-									e.stopPropagation();
-									toggleMark(row);
-								}}
-							/>
-						</td>
+		<div class="actions">
+			{#if selection.size}
+				{@const marked = chosenRows()}
+				<ActionBar actions={markedActions(marked)} marked>{marked.length} marked</ActionBar>
+			{:else if current}
+				<ActionBar actions={actionsFor(current, [current])}>{current.name}</ActionBar>
+			{/if}
+		</div>
+
+		<div class="table-wrap" bind:this={scroller}>
+			<table>
+				<thead>
+					<tr>
+						<th class="check"></th>
 						{#each columns as column (column.label + column.index)}
-							{@const text = cellText(row, column)}
-							<td
-								class={tone(row, column, text)}
-								class:name={column.kind === 'cell' && column.name}
-								class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
+							<th
 								class:numeric={column.kind === 'metric'}
+								class:sorted={sort.column === column.index}
+								aria-sort={sort.column === column.index ? (sort.descending ? 'descending' : 'ascending') : 'none'}
 							>
-								{text}
-							</td>
+								<button class="sort" onclick={() => sortBy(column.index)}>
+									{column.label}
+									<span class="arrow" aria-hidden="true">
+										{sort.column === column.index ? (sort.descending ? '↓' : '↑') : '↕'}
+									</span>
+								</button>
+							</th>
 						{/each}
-						<td class="more">
-							<button
-								tabindex="-1"
-								aria-label="Actions for {row.name}"
-								title="Actions (right click)"
-								onclick={(e) => {
-									e.stopPropagation();
-									const rect = e.currentTarget.getBoundingClientRect();
-									openMenu(row, rect.right, rect.bottom + 4, 'right');
-								}}
-								ondblclick={(e) => e.stopPropagation()}>⋯</button
-							>
-						</td>
+						<th class="more" aria-label="Actions"></th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
-		{#if table.loading}
-			<p class="empty">Loading…</p>
-		{:else if rows.length === 0}
-			<p class="empty">
-				{filter
-					? 'Nothing matches the filter.'
-					: faults
-						? 'Nothing needs a look.'
-						: scope
-							? `No ${scope.title}.`
-							: `No ${resource.kind} objects${ns ? ` in ${ns}` : ''}.`}
-			</p>
-		{/if}
+				</thead>
+				<tbody>
+					{#each rows as row, i (row.key)}
+						<tr
+							class:cursor={i === cursor}
+							class:checked={selection.has(row.key)}
+							onclick={() => (cursorKey = row.key)}
+							ondblclick={() => enter(row)}
+							oncontextmenu={(e) => {
+								e.preventDefault();
+								openMenu(row, e.clientX, e.clientY);
+							}}
+						>
+							<td class="check">
+								<input
+									type="checkbox"
+									aria-label="Mark {row.name}"
+									checked={selection.has(row.key)}
+									onclick={(e) => {
+										e.stopPropagation();
+										toggleMark(row);
+									}}
+								/>
+							</td>
+							{#each columns as column (column.label + column.index)}
+								{@const text = cellText(row, column)}
+								{@const color = tone(row, column, text)}
+								{@const icon = statusIcon(column, color)}
+								<td
+									class={color}
+									class:name={column.kind === 'cell' && column.name}
+									class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
+									class:numeric={column.kind === 'metric'}
+								>
+									{#if column.kind === 'cell' && column.name}
+										<button
+											class="open"
+											title="Describe {row.name}"
+											onclick={(e) => {
+												e.stopPropagation();
+												open(row);
+											}}>{text}</button
+										>
+									{:else if icon}
+										<span class="status"><Icon name={icon} size={15} />{text}</span>
+									{:else}
+										{text}
+									{/if}
+								</td>
+							{/each}
+							<td class="more">
+								<button
+									aria-label="Actions for {row.name}"
+									title="Actions (right click)"
+									onclick={(e) => {
+										e.stopPropagation();
+										const rect = e.currentTarget.getBoundingClientRect();
+										openMenu(row, rect.right, rect.bottom + 4, 'right');
+									}}
+									ondblclick={(e) => e.stopPropagation()}>⋯</button
+								>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+			{#if table.loading}
+				<p class="empty">Loading…</p>
+			{:else if rows.length === 0 && !problem}
+				<p class="empty">
+					{filter
+						? 'Nothing matches the filter.'
+						: faults
+							? 'Nothing needs a look.'
+							: runningOnly
+								? 'No pods are running.'
+								: scope
+									? `No ${scope.title}.`
+									: `No ${resource.kind} objects${ns ? ` in ${ns}` : ''}.`}
+				</p>
+			{/if}
+		</div>
+		<div class="foot">
+			<span>{rows.length} of {owned.length} {place.label.toLowerCase()}</span>
+			{#if metricsKind}<span>— not measured</span>{/if}
+		</div>
 	</div>
 </section>
 
@@ -639,14 +744,25 @@
 		flex-direction: column;
 		min-height: 0;
 		min-width: 0;
+		padding: 0 24px 20px;
 	}
 	header {
+		padding: 20px 0 16px;
+	}
+	.crumbs {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-bottom: 6px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.heading {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
 		gap: 8px 16px;
-		padding: 14px 20px 10px;
 	}
 	.title {
 		display: flex;
@@ -656,15 +772,13 @@
 	}
 	h1 {
 		margin: 0;
-		font-size: 20px;
+		font-size: 26px;
+		letter-spacing: -0.03em;
 	}
 	.count {
-		white-space: nowrap;
-		padding: 1px 8px;
-		border-radius: 999px;
-		background: var(--surface-2);
-		font-size: 12px;
+		font-size: 18px;
 		font-weight: 600;
+		color: var(--text-muted);
 	}
 	.chip {
 		display: inline-flex;
@@ -678,11 +792,6 @@
 		font-size: 12px;
 		font-weight: 600;
 		white-space: nowrap;
-	}
-	.chip.bad {
-		border-color: color-mix(in srgb, var(--bad) 45%, transparent);
-		background: color-mix(in srgb, var(--bad) 10%, transparent);
-		color: var(--bad);
 	}
 	.chip button {
 		padding: 0 4px;
@@ -702,38 +811,148 @@
 	}
 	.tools {
 		display: flex;
-		/* Its own line when the title needs the room, as next to the details panel. */
-		flex: 1 0 auto;
-		justify-content: flex-end;
 		gap: 8px;
-		min-width: 200px;
 	}
 	.toggle {
-		padding: 0 12px;
-		border-radius: 6px;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 12px;
 		border: 1px solid var(--border);
+		border-radius: 7px;
 		background: var(--surface-1);
-		font-size: 13px;
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.toggle:hover {
+		border-color: var(--text-muted);
 	}
 	.toggle.on {
 		border-color: var(--accent);
 		color: var(--accent-strong);
 	}
-	.filter {
-		flex: 0 1 280px;
-		min-width: 140px;
-	}
 	.banner {
-		margin: 0 20px 10px;
-		padding: 8px 12px;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px;
+		margin-bottom: 12px;
+		padding: 10px 14px;
+		border: 1px solid color-mix(in srgb, var(--bad) 30%, var(--border));
 		border-radius: 8px;
-		background: color-mix(in srgb, var(--bad) 15%, transparent);
+		background: color-mix(in srgb, var(--bad) 8%, var(--surface-1));
 		color: var(--bad);
+		font-size: 13px;
+	}
+	.banner span {
+		flex: 1;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.banner button {
+		padding: 5px 12px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface-1);
+		color: var(--text);
+		font-weight: 600;
+	}
+	.metrics-note {
+		margin-bottom: 12px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.card {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		overflow: hidden;
+	}
+	.toolbar {
+		padding: 14px 16px 6px;
+	}
+	.search {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 0 8px 0 12px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: var(--surface-1);
+		color: var(--text-muted);
+	}
+	.search:focus-within {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+	}
+	.search input {
+		flex: 1;
+		min-width: 0;
+		padding: 8px 0;
+		border: none;
+		background: none;
+		color: var(--text);
+		box-shadow: none;
+	}
+	kbd {
+		padding: 0 5px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		font-family: var(--mono);
+		font-size: 11px;
+	}
+	.tabs {
+		display: flex;
+		gap: 20px;
+		padding: 0 16px;
+		border-bottom: 1px solid var(--border);
+	}
+	.tabs button {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 10px 0 9px;
+		border: none;
+		border-bottom: 2px solid transparent;
+		background: none;
+		color: var(--text-muted);
+		font-size: 12.5px;
+	}
+	.tabs button:hover {
+		color: var(--text);
+	}
+	.tabs button[aria-selected='true'] {
+		border-bottom-color: var(--accent);
+		color: var(--accent-strong);
+		font-weight: 650;
+	}
+	.n {
+		padding: 0 6px;
+		border-radius: 4px;
+		background: var(--surface-2);
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.n.alert {
+		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
+		color: var(--bad);
+	}
+	.actions :global(.bar) {
+		margin: 0;
+		border: none;
+		border-bottom: 1px solid var(--border-subtle);
+		border-radius: 0;
+		padding: 6px 12px;
 	}
 	.table-wrap {
 		flex: 1;
+		min-height: 0;
 		overflow: auto;
-		padding: 0 12px 16px;
 	}
 	table {
 		width: 100%;
@@ -744,28 +963,42 @@
 		position: sticky;
 		top: 0;
 		z-index: 1;
-		padding: 8px 10px;
-		background: var(--bg);
+		padding: 0 10px;
+		background: var(--surface-1);
 		border-bottom: 1px solid var(--border);
 		text-align: left;
-		font-size: 11px;
+		font-size: 12px;
 		font-weight: 600;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
 		color: var(--text-muted);
 		white-space: nowrap;
-		cursor: pointer;
-		user-select: none;
+	}
+	.sort {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		padding: 9px 0;
+		border: none;
+		background: none;
+		color: inherit;
+		font: inherit;
 	}
 	th:hover,
 	th.sorted {
 		color: var(--text);
 	}
 	.arrow {
-		margin-left: 2px;
+		font-size: 10px;
+		opacity: 0.45;
+	}
+	th.sorted .arrow {
+		opacity: 1;
+	}
+	th.numeric .sort {
+		flex-direction: row-reverse;
 	}
 	td {
-		padding: 6px 10px;
+		height: 40px;
+		padding: 4px 10px;
 		border-bottom: 1px solid var(--border-subtle);
 		white-space: nowrap;
 		max-width: 420px;
@@ -773,21 +1006,24 @@
 		text-overflow: ellipsis;
 	}
 	.check {
-		width: 28px;
-		padding-right: 0;
+		width: 34px;
+		padding: 0 0 0 14px;
 	}
 	.check input {
 		opacity: 0;
 		margin: 0;
 	}
+	.check input:focus-visible {
+		opacity: 1;
+	}
 	.more {
-		width: 34px;
-		padding: 2px 6px;
+		width: 40px;
+		padding: 2px 10px 2px 6px;
 		text-align: right;
 	}
 	.more button {
 		width: 26px;
-		height: 22px;
+		height: 24px;
 		padding: 0;
 		border: 1px solid transparent;
 		border-radius: 6px;
@@ -798,7 +1034,8 @@
 		opacity: 0;
 	}
 	tr:hover .more button,
-	tr.cursor .more button {
+	tr.cursor .more button,
+	.more button:focus-visible {
 		opacity: 1;
 	}
 	.more button:hover {
@@ -815,18 +1052,39 @@
 		cursor: default;
 	}
 	tbody tr:hover {
-		background: var(--surface-1);
+		background: color-mix(in srgb, var(--surface-2) 55%, transparent);
 	}
 	tbody tr.checked {
-		background: color-mix(in srgb, var(--accent) 8%, transparent);
+		background: color-mix(in srgb, var(--accent) 7%, transparent);
 	}
 	tbody tr.cursor {
-		background: color-mix(in srgb, var(--accent) 16%, transparent);
+		background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
 		box-shadow: inset 3px 0 0 var(--accent);
+	}
+	.open {
+		max-width: 100%;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-weight: 600;
+		text-align: left;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.open:hover {
+		color: var(--accent-strong);
+		text-decoration: underline;
 	}
 	.name {
 		font-family: var(--mono);
 		font-size: 12.5px;
+	}
+	.status {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
 	}
 	.muted {
 		color: var(--text-muted);
@@ -845,8 +1103,27 @@
 		color: var(--bad);
 	}
 	.empty {
-		padding: 24px;
+		padding: 28px;
 		text-align: center;
 		color: var(--text-muted);
+	}
+	.foot {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 8px 16px;
+		border-top: 1px solid var(--border-subtle);
+		font-size: 11.5px;
+		color: var(--text-muted);
+	}
+
+	@media (max-width: 720px) {
+		section {
+			padding: 0 12px 12px;
+		}
+		.tabs {
+			gap: 14px;
+			overflow-x: auto;
+		}
 	}
 </style>

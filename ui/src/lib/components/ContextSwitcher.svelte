@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { app } from '../state.svelte';
+	import Icon from './Icon.svelte';
 
 	let query = $state('');
 	let input = $state<HTMLInputElement>();
@@ -40,24 +41,28 @@
 <svelte:window onkeydown={onwindowkeydown} />
 
 <div class="switcher">
-	<button class="current" onclick={toggle} title="Switch context (Ctrl+Shift+C)">
+	<button
+		class="current"
+		onclick={toggle}
+		title={app.cluster && !app.connecting
+			? `${app.cluster.server} · ${app.cluster.version}\nSwitch context (Ctrl+Shift+C)`
+			: 'Switch context (Ctrl+Shift+C)'}
+		aria-haspopup="listbox"
+		aria-expanded={app.contextMenuOpen}
+	>
 		<span class="dot" class:connecting={app.connecting} class:online={app.cluster && !app.connecting}></span>
 		<span class="label">
+			<span class="meta">{app.connecting ? 'Connecting…' : 'Context'}</span>
 			<span class="name">{app.connecting ?? app.cluster?.context ?? 'No context'}</span>
-			{#if app.cluster && !app.connecting}
-				<span class="meta">{app.cluster.server} · {app.cluster.version}</span>
-			{:else if app.connecting}
-				<span class="meta">Connecting…</span>
-			{/if}
 		</span>
-		<span class="chevron">▾</span>
+		<span class="chevron"><Icon name="chevron" size={16} /></span>
 	</button>
 
 	{#if app.contextMenuOpen}
 		<div class="backdrop" onclick={() => (app.contextMenuOpen = false)} role="presentation"></div>
 		<div class="menu" role="listbox">
 			<div class="search">
-				<input bind:this={input} bind:value={query} {onkeydown} placeholder="Search contexts…" />
+				<input bind:this={input} bind:value={query} {onkeydown} aria-label="Search contexts" placeholder="Search contexts…" />
 				<button class="reload" onclick={() => app.reloadContexts()} title="Reload kubeconfig">↻</button>
 			</div>
 			<ul>
@@ -92,16 +97,19 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		min-width: 260px;
-		max-width: 420px;
-		padding: 6px 12px;
+		min-width: 150px;
+		max-width: 260px;
+		padding: 5px 8px;
+		border: 1px solid transparent;
 		border-radius: 8px;
-		background: var(--surface-2);
-		border: 1px solid var(--border);
+		background: none;
 		text-align: left;
 	}
 	.current:hover {
-		border-color: var(--accent);
+		background: var(--surface-2);
+	}
+	.current .meta {
+		font-size: 10.5px;
 	}
 	.label {
 		display: flex;
@@ -123,6 +131,7 @@
 		white-space: nowrap;
 	}
 	.chevron {
+		display: flex;
 		color: var(--text-muted);
 	}
 	.dot {
@@ -155,7 +164,7 @@
 		top: calc(100% + 6px);
 		left: 0;
 		z-index: 11;
-		width: 420px;
+		width: min(420px, calc(100vw - 32px));
 		max-height: 60vh;
 		display: flex;
 		flex-direction: column;
