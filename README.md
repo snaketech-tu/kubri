@@ -72,12 +72,15 @@ See [Development](#development).
         <li>k9s filters: regular expressions, <code>!</code> to invert, <code>-f</code> fuzzy, <code>-l app=web</code></li>
         <li><kbd>Enter</kbd> drills down, <kbd>Shift</kbd>+<kbd>J</kbd> jumps to the owner, <kbd>[</kbd> <kbd>]</kbd> go back and forth</li>
         <li>CPU and memory against requests, limits and node capacity</li>
+        <li>Choose, order and add columns per kind, JSONPath columns included; copy a cell or a whole column</li>
       </ul>
     </td>
     <td width="50%" valign="top">
       <b>Act</b>
       <ul>
-        <li>Delete, scale, restart, set images and roll back</li>
+        <li>Create from templates, files, URLs or the clipboard (<kbd>:new</kbd>), with forms for common kinds and a dry run first</li>
+        <li>Clone an object to another namespace or context</li>
+        <li>Delete, scale, restart, set images and roll back, one object or many</li>
         <li>Edit YAML, labels and annotations</li>
         <li>Run and suspend CronJobs</li>
         <li>Cordon, uncordon and drain nodes with the checks of <code>kubectl drain</code></li>
@@ -94,7 +97,7 @@ See [Development](#development).
         <li>A workspace of log and shell tabs that keep running while you browse, docked below or beside the list, two side by side</li>
         <li>Debug containers, debug copies of crash-looping pods and node shells</li>
         <li>A fix with each likely problem: a higher memory limit with its diff, why each node refuses a pending pod, why a Service has no endpoints</li>
-        <li>Port-forwards, with HTTP benchmarks on top</li>
+        <li>Port-forwards that stay: favorites start with Kubri and move to a new pod after a restart, with HTTP benchmarks on top</li>
         <li>Decoded Secrets, and what uses a ConfigMap or Secret</li>
       </ul>
     </td>
@@ -104,7 +107,8 @@ See [Development](#development).
         <li>Pulses: health per kind, usage trends and recent warnings</li>
         <li>XRay: each workload down to its pods, containers and references</li>
         <li>RBAC: who may do what, as a matrix of verbs</li>
-        <li>Helm releases, and a Popeye-style sanitizer with a grade</li>
+        <li>Helm: install charts from repositories, OCI or Artifact Hub, upgrade with a diff, compare revisions and spot drift</li>
+        <li>A Popeye-style sanitizer with a grade</li>
       </ul>
     </td>
   </tr>
@@ -175,6 +179,10 @@ See [Development](#development).
     <td valign="top"><img src="docs/assets/screenshots/logs.png" alt="A Deployment's merged logs as a table of JSON fields, filtered by status>=500"><br><b>Structured logs</b>: fields as columns, filters like <code>status>=500</code>, and a rate strip</td>
     <td valign="top"><img src="docs/assets/screenshots/workspace.png" alt="The pod list with a shell and a Deployment's logs side by side in the workspace below"><br><b>Workspace</b>: logs and shells that keep running while you browse</td>
   </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/create.png" alt="Create with a Deployment's YAML and a form for its name, replicas, image, port and resources"><br><b>Create</b>: templates, short forms like <code>:new deploy web --image nginx</code> and forms that write the YAML</td>
+    <td valign="top"><img src="docs/assets/screenshots/helm-upgrade.png" alt="A Helm upgrade review: the changed values and the Deployment whose replicas and image change"><br><b>Helm upgrade</b>: change values and see every object that changes before you upgrade</td>
+  </tr>
 </table>
 
 ## Coming from k9s
@@ -210,6 +218,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 - [Running Kubri in the browser](docs/WEB.md): settings, sign-in, the Docker image, running it in a cluster and behind a proxy.
 - [AI agents (MCP)](docs/AGENTS.md): connecting Claude Code, Claude Desktop or another agent, the tools it gets, and what it may not do.
 - [Explain](docs/EXPLAIN.md): asking a model about a pod, logs, a finding or a failed action with your own key, and what is hidden.
+- [Creating and changing](docs/CREATE.md): Create, forms and cloning, Helm install, upgrade, compare and drift, columns, bulk changes and port-forwards that stay.
 - [Logs and debugging](docs/DEBUGGING.md): searching logs by field, the workspace, debug containers, node shells and the fixes Kubri offers.
 - [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.
 - [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.
