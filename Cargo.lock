@@ -2327,7 +2327,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2352,7 +2352,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-desktop"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "dirs",
  "futures",
@@ -2369,7 +2369,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-server"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
