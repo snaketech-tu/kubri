@@ -4,6 +4,7 @@
 //! Both frontends talk to the cluster only through it.
 
 mod access;
+mod apply;
 mod bench;
 mod context;
 mod debug;
@@ -57,6 +58,7 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 
 pub use access::{AccessCheck, Identity};
+pub use apply::{ApplyItem, ApplyOutcome, ApplyRequest, fetch_manifest};
 pub use bench::{
     BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
 };

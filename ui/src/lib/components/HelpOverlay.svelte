@@ -30,6 +30,7 @@
 				[':xray deploy [ns]', 'XRay: what each object depends on'],
 				[':rbac', 'Who may do what'],
 				[':helm', 'Helm releases'],
+				[':new [kind name --image …]', 'Create from a template or YAML, like kubectl create'],
 				[':popeye', 'Sanitizer: problems, scored'],
 				[':bench', 'HTTP benchmarks'],
 				[':pf', 'Port-forwards'],

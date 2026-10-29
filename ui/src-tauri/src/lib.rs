@@ -18,7 +18,7 @@ use kubri_core::{
     ResourceInfo, ResourceRef, SanitizerReport, Settings, TableEvent, TableScope, Terminal, TerminalInput,
     TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
-use kubri_core::{MemoryFix, NodeFit, ServiceCheck};
+use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
 use serde_json::Value;
 use tauri::State;
 use tauri::async_runtime::JoinHandle;
@@ -448,6 +448,16 @@ async fn scheduling(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandR
 }
 
 #[tauri::command]
+async fn apply(kubri: State<'_, Arc<Kubri>>, request: ApplyRequest) -> CommandResult<Vec<ApplyItem>> {
+    kubri.apply(request).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn fetch_manifest(url: String) -> CommandResult<String> {
+    kubri_core::fetch_manifest(&url).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn service_check(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<ServiceCheck> {
     kubri.service_check(&target).await.map_err(|e| e.to_string())
 }
@@ -810,6 +820,8 @@ pub fn run() {
             set_memory_limit,
             scheduling,
             service_check,
+            apply,
+            fetch_manifest,
             events,
             metrics,
             pulse,

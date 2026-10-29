@@ -18,7 +18,7 @@ use kubri_core::{
     ResourceInfo, ResourceRef, SanitizerReport, Settings, TableScope, Terminal, TerminalOptions,
     TerminalOutput, Usage, XrayNode,
 };
-use kubri_core::{MemoryFix, NodeFit, ServiceCheck};
+use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -60,6 +60,8 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/fix/memory/apply", post(set_memory_limit))
         .route("/fix/scheduling", post(scheduling))
         .route("/fix/service", post(service_check))
+        .route("/apply", post(apply))
+        .route("/apply/fetch", post(fetch_manifest))
         .route("/object/drill", post(drill))
         .route("/object/used-by", post(used_by))
         .route("/object/images", post(set_images))
@@ -461,6 +463,19 @@ async fn scheduling(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) ->
 
 async fn service_check(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<ServiceCheck> {
     Ok(Json(kubri.service_check(&req.target).await?))
+}
+
+async fn apply(State(kubri): State<Arc<Kubri>>, Json(req): Json<ApplyRequest>) -> ApiResult<Vec<ApplyItem>> {
+    Ok(Json(kubri.apply(req).await?))
+}
+
+#[derive(Deserialize)]
+struct UrlRequest {
+    url: String,
+}
+
+async fn fetch_manifest(Json(req): Json<UrlRequest>) -> ApiResult<String> {
+    Ok(Json(kubri_core::fetch_manifest(&req.url).await?))
 }
 
 async fn restart(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<()> {
@@ -1027,6 +1042,7 @@ mod tests {
             ("/object/restart", format!("{target}}}")),
             ("/cronjob/trigger", format!("{target}}}")),
             ("/debug", r#"{"kind":"node","node":"n1"}"#.to_owned()),
+            ("/apply", r#"{"objects":[]}"#.to_owned()),
             (
                 "/fix/memory/apply",
                 format!(r#"{target},"container":"app","memory":"1Gi"}}"#),
