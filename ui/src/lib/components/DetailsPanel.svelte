@@ -52,7 +52,8 @@
 	let showManaged = $state(false);
 	let saveError = $state<string | null>(null);
 	let saving = $state(false);
-	let now = $state(Date.now());
+	// Ages count to when a snapshot was taken.
+	let now = $state(app.now());
 	let editor = $state<ReturnType<typeof YamlEditor>>();
 
 	async function load() {
@@ -60,7 +61,7 @@
 			const obj = await backend.getObject(details.target);
 			object = obj;
 			error = null;
-			now = Date.now();
+			now = app.now();
 			if (obj.metadata.uid) {
 				events = await backend.events(details.target.namespace, obj.metadata.uid).catch(() => events);
 			}

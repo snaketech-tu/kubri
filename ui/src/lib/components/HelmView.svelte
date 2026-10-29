@@ -189,7 +189,7 @@
 						cell('Status', row.status),
 						cell('Chart', chartLabel(row)),
 						cell('App version', row.appVersion),
-						cell('Age', age(row.updated, Date.now()))
+						cell('Age', age(row.updated, app.now()))
 					]
 				: [];
 			return { resource: null, target: null, release, columns, filter };
@@ -530,7 +530,7 @@
 						<dd class="mono">{shown.appVersion || '—'}</dd>
 						<dt>Updated</dt>
 						<dd>
-							{#if shown.updated}{age(shown.updated, now)} ago <span class="muted">· {new Date(shown.updated).toLocaleString()}</span>{:else}—{/if}
+							{#if shown.updated}{age(shown.updated, app.snapshot?.taken ?? now)} ago <span class="muted">· {new Date(shown.updated).toLocaleString()}</span>{:else}—{/if}
 						</dd>
 						{#if shown.description}
 							<dt>Description</dt>
@@ -686,7 +686,7 @@
 									<td>{@render status(h.status)}</td>
 									<td class="mono">{chartLabel(h)}</td>
 									<td class="mono">{h.appVersion}</td>
-									<td class="muted">{age(h.updated, now)}</td>
+									<td class="muted">{age(h.updated, app.snapshot?.taken ?? now)}</td>
 									<td class="wrap">{h.description}</td>
 									<td>
 										<div class="actions">
@@ -757,7 +757,7 @@
 									<td>{@render status(r.status)}</td>
 									<td class="mono">{chartLabel(r)}</td>
 									<td class="mono">{r.appVersion}</td>
-									<td class="muted">{age(r.updated, now)}</td>
+									<td class="muted">{age(r.updated, app.snapshot?.taken ?? now)}</td>
 								</tr>
 							{/each}
 						</tbody>

@@ -219,6 +219,7 @@ pub(crate) async fn scan(
     client: Client,
     namespace: Option<&str>,
     node_usage: impl Future<Output = Result<Vec<Usage>>>,
+    now: k8s_openapi::jiff::Timestamp,
 ) -> SanitizerReport {
     let c = &client;
     let ns = namespace;
@@ -296,7 +297,7 @@ pub(crate) async fn scan(
         roles,
         role_bindings,
         certificates,
-        now: k8s_openapi::jiff::Timestamp::now(),
+        now,
         cluster,
     })
 }

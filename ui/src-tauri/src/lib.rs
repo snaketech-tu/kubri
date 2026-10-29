@@ -116,6 +116,64 @@ async fn switch_context(kubri: State<'_, Arc<Kubri>>, name: String) -> CommandRe
     kubri.switch_context(&name).await.map_err(|e| e.to_string())
 }
 
+/// Saves a namespace, or the whole cluster, as a snapshot file in the Downloads folder.
+/// Returns the path.
+#[tauri::command]
+async fn take_snapshot(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<String> {
+    let (name, bytes) = kubri
+        .take_snapshot(namespace.as_deref())
+        .await
+        .map_err(|e| e.to_string())?;
+    let dir = dirs::download_dir()
+        .or_else(dirs::home_dir)
+        .ok_or("there is no Downloads folder")?;
+    tauri::async_runtime::spawn_blocking(move || save_new(&dir, &file_name(&name), &bytes))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|path| path.display().to_string())
+}
+
+/// Opens a snapshot file sent as the raw request body, its name in the `x-name` header.
+#[tauri::command]
+async fn open_snapshot(
+    kubri: State<'_, Arc<Kubri>>,
+    request: tauri::ipc::Request<'_>,
+) -> CommandResult<ClusterInfo> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("the snapshot file did not arrive".into());
+    };
+    let name = request
+        .headers()
+        .get("x-name")
+        .and_then(|n| n.to_str().ok())
+        .map(percent_decode);
+    kubri.open_snapshot(bytes, name).await.map_err(|e| e.to_string())
+}
+
+/// Undoes `encodeURIComponent`.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let escaped = (bytes[i] == b'%' && i + 2 < bytes.len())
+            .then(|| std::str::from_utf8(&bytes[i + 1..i + 3]).ok())
+            .flatten()
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+        match escaped {
+            Some(b) => {
+                out.push(b);
+                i += 3;
+            }
+            None => {
+                out.push(bytes[i]);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// The settings, and why the file could not be read if it could not.
 #[derive(serde::Serialize)]
 struct SettingsReply {
@@ -990,6 +1048,8 @@ pub fn run() {
             contexts,
             reload_contexts,
             switch_context,
+            take_snapshot,
+            open_snapshot,
             resources,
             preview,
             schema,

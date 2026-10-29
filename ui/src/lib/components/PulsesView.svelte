@@ -278,7 +278,7 @@
 												{item.event.object.namespace ? `${item.event.object.namespace} / ` : ''}{item.event.object
 													.name}</code
 											>
-											<span>{item.count}× · {age(item.event.lastSeen, now) || 'just now'} ago</span>
+											<span>{item.count}× · {age(item.event.lastSeen, app.snapshot?.taken ?? now) || 'just now'} ago</span>
 										</span>
 									</span>
 									<span class="go">Investigate <Icon name="arrow" size={15} /></span>

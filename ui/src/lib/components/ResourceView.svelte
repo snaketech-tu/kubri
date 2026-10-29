@@ -301,7 +301,7 @@
 				return column.format === 'cpu' ? cpu(value) : column.format === 'memory' ? memory(value) : `${value}%`;
 			}
 			case 'cell': {
-				if (column.age) return age(row.created, now);
+				if (column.age) return age(row.created, app.snapshot?.taken ?? now);
 				const value = row.cells[column.index];
 				if (value === null || value === undefined) return '';
 				// Times in custom columns, like a certificate's expiry, read as ages.

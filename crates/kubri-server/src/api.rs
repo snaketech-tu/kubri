@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, delete, get, post, put};
@@ -34,6 +34,12 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/contexts/inspect", post(inspect_kubeconfig))
         .route("/contexts/added", post(add_contexts).delete(remove_context))
         .route("/context", put(switch_context))
+        .route(
+            "/snapshot",
+            post(take_snapshot)
+                .put(open_snapshot)
+                .layer(DefaultBodyLimit::max(MAX_SNAPSHOT)),
+        )
         .route("/settings", get(settings))
         .route("/settings/context", put(set_context_settings))
         .route("/settings/diff", put(set_diff_settings))
@@ -220,6 +226,45 @@ async fn switch_context(
     Json(req): Json<SwitchContext>,
 ) -> ApiResult<ClusterInfo> {
     Ok(Json(kubri.switch_context(&req.name).await?))
+}
+
+/// The largest snapshot file Kubri opens.
+const MAX_SNAPSHOT: usize = 1 << 30;
+
+#[derive(Deserialize)]
+struct SnapshotQuery {
+    namespace: Option<String>,
+}
+
+/// A snapshot file of a namespace or the whole cluster, as a download.
+async fn take_snapshot(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<SnapshotQuery>,
+) -> Result<Response, ApiError> {
+    let (name, bytes) = kubri.take_snapshot(query.namespace.as_deref()).await?;
+    let disposition = format!("attachment; filename=\"{name}\"");
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, "application/gzip".to_owned()),
+            (axum::http::header::CONTENT_DISPOSITION, disposition),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+#[derive(Deserialize)]
+struct SnapshotFile {
+    name: Option<String>,
+}
+
+/// Opens a snapshot file sent as the request body.
+async fn open_snapshot(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<SnapshotFile>,
+    body: Bytes,
+) -> ApiResult<ClusterInfo> {
+    Ok(Json(kubri.open_snapshot(&body, query.name).await?))
 }
 
 /// The settings, and why the file could not be read if it could not.

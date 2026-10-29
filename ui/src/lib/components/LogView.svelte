@@ -165,6 +165,7 @@
 	const streamState = $derived.by((): { tone: 'warn' | 'ok' | ''; text: string } => {
 		if (loki) return { tone: '', text: lokiSource ? `History from Loki at ${lokiSource}. These lines do not update.` : 'Asking Loki…' };
 		if (previous) return { tone: 'warn', text: 'Previous container instance, which ended. These lines do not update.' };
+		if (app.snapshot) return { tone: '', text: 'The last lines saved in the snapshot. These lines do not update.' };
 		if (status === 'connecting') return { tone: '', text: 'Connecting to the log stream…' };
 		if (status === 'ended') return { tone: '', text: follow ? 'The stream ended. Reconnect to continue.' : 'Snapshot of the current instance.' };
 		return { tone: 'ok', text: follow ? 'Streaming the current container instance.' : 'Snapshot of the current instance.' };
@@ -696,7 +697,7 @@
 	<div class="foot">
 		<span>{shownCount} {shownCount === 1 ? 'line' : 'lines'}{shownCount !== total ? ` of ${total}` : ''}</span>
 		<span
-			>{loki ? 'Loki history' : previous ? 'Previous instance' : 'Current instance'} · {status === 'streaming' ? 'live' : status}</span
+			>{loki ? 'Loki history' : previous ? 'Previous instance' : 'Current instance'} · {app.snapshot ? 'snapshot' : status === 'streaming' ? 'live' : status}</span
 		>
 	</div>
 

@@ -31,6 +31,8 @@ export type Action =
 	| { type: 'search'; query?: string }
 	| { type: 'graph'; namespace?: string }
 	| { type: 'changes'; filter?: ChangesFilter }
+	/** The snapshot dialog; `namespace` null for the whole cluster, unset for the current namespace. */
+	| { type: 'snapshot'; namespace?: string | null }
 	/** One object, in whichever context it is. */
 	| { type: 'object'; target: ObjectRef; kind?: string }
 	| { type: 'config'; section?: ConfigSection }
@@ -59,6 +61,7 @@ const FLEET_COMMANDS = ['fleet', 'home'];
 const SEARCH_COMMANDS = ['search', 'find', 'grep'];
 const GRAPH_COMMANDS = ['graph', 'topology'];
 const CHANGES_COMMANDS = ['changes', 'changed', 'history', 'timeline'];
+const SNAPSHOT_COMMANDS = ['snapshot', 'snap', 'snapshots'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	config: undefined,
 	settings: undefined,
@@ -322,6 +325,17 @@ function builtins(
 		return [changes(filter), ...(filter.hours ? [] : [changes({ ...filter, hours: 1 })])];
 	}
 
+	// `snapshot shop` or `snapshot all`: what to save, the current namespace without one.
+	const snapshot = (arg?: string): Suggestion => ({
+		label: arg ? `snapshot ${arg}` : 'snapshot',
+		detail:
+			arg === 'all'
+				? 'Save the whole cluster to a file to open offline, or open one'
+				: `Save ${arg ? `namespace ${arg}` : 'this namespace'} to a file to open offline, or open one`,
+		action: { type: 'snapshot', namespace: arg === 'all' ? null : arg }
+	});
+	if (SNAPSHOT_COMMANDS.includes(cmd)) return [snapshot(rest[0]), ...(rest[0] ? [] : [snapshot('all')])];
+
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {
 		const roots = xrayResources(resources);
@@ -413,6 +427,7 @@ function builtins(
 	if (cmd.length > 1 && SEARCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push({ ...search, label: 'search' });
 	if (cmd.length > 1 && GRAPH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(graph());
 	if (cmd.length > 1 && CHANGES_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(changes(), changes({ hours: 1 }));
+	if (cmd.length > 2 && SNAPSHOT_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(snapshot());
 	if (cmd.length > 1 && 'config'.startsWith(cmd) && cmd !== 'config') {
 		extra.push(...builtins('config', resources, contexts, namespaces, config).slice(0, 1));
 	}

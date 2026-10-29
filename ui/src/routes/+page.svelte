@@ -25,6 +25,7 @@
 	import AgentRequests from '#lib/components/AgentRequests.svelte';
 	import HelmView from '#lib/components/HelmView.svelte';
 	import KubectlDialog from '#lib/components/KubectlDialog.svelte';
+	import SnapshotDialog from '#lib/components/SnapshotDialog.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
 	import PluginTerminal from '#lib/components/PluginTerminal.svelte';
@@ -57,6 +58,7 @@
 		isSecrets
 	} from '#lib/pods.js';
 	import { backend } from '#lib/api/index.js';
+	import { age } from '#lib/format.js';
 	import { dock } from '#lib/dock.svelte.js';
 	import { session } from '#lib/session.svelte.js';
 	import { app } from '#lib/state.svelte.js';
@@ -370,7 +372,7 @@
 				</button>
 			</div>
 			<ContextSwitcher />
-			{#if app.cluster}
+			{#if app.cluster && !app.snapshot}
 				<details class="environment" bind:this={environmentEditor}>
 					<summary
 						class:set={app.environment}
@@ -429,6 +431,21 @@
 					<strong>Production</strong> · {app.contextName(app.cluster.context)} ·
 					{app.readOnly ? 'changes are off' : 'changes go live; deleting asks you to type the name'}
 				</span>
+			</div>
+		{/if}
+		{#if app.snapshot}
+			{@const snapshot = app.snapshot}
+			<div class="snapshot-banner" role="note">
+				<Icon name="camera" size={15} />
+				<span>
+					<strong>Snapshot</strong> of {snapshot.context} · {snapshot.namespace ? `namespace ${snapshot.namespace}` : 'the whole cluster'}
+					· taken {new Date(snapshot.taken).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+					({age(new Date(snapshot.taken).toISOString(), Date.now()) || '0s'} ago) · read-only, nothing here is live
+					{#if snapshot.leftOut.length}
+						· <span class="left-out" title={snapshot.leftOut.join('\n')}>{snapshot.leftOut.length} left out</span>
+					{/if}
+				</span>
+				<button onclick={() => app.leaveSnapshot()}>Leave snapshot</button>
 			</div>
 		{/if}
 		{#if app.settingsError}
@@ -510,7 +527,7 @@
 					<section class="connect">
 						<img src={logo} alt="" width="56" height="56" />
 						<span class="eyebrow">Your cluster, in focus</span>
-						<h1>{app.connecting ? `Connecting to ${app.connecting}…` : 'Connect to a cluster.'}</h1>
+						<h1>{app.connectingText ?? 'Connect to a cluster.'}</h1>
 						<p>
 							{isTauri()
 								? 'Choose a context from your kubeconfig. Reload it after you update your credentials.'
@@ -542,9 +559,15 @@
 		</div>
 
 		<footer>
-			<span class="status" class:live={app.cluster && !app.connecting} role="status">
+			<span class="status" class:live={app.cluster && !app.connecting && !app.snapshot} role="status">
 				<span class="dot"></span>
-				{app.connecting ? `Connecting to ${app.connecting}…` : app.cluster ? `Live · ${app.contextName(app.cluster.context)}` : 'Not connected'}
+				{app.connectingText
+					? app.connectingText
+					: app.snapshot
+						? `Snapshot · ${app.snapshot.file ?? app.snapshot.context}`
+						: app.cluster
+							? `Live · ${app.contextName(app.cluster.context)}`
+							: 'Not connected'}
 			</span>
 			<span class="hints">
 				{#each hints as [key, label], i (key + i)}
@@ -571,6 +594,8 @@
 	<DebugDialog dialog={app.dialog} />
 {:else if app.dialog?.kind === 'compare'}
 	<CompareDialog dialog={app.dialog} />
+{:else if app.dialog?.kind === 'snapshot'}
+	<SnapshotDialog dialog={app.dialog} />
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}
@@ -711,6 +736,31 @@
 		background: color-mix(in srgb, var(--bad) 14%, var(--surface-1));
 		color: var(--bad);
 		font-size: 12.5px;
+	}
+	.snapshot-banner {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 5px 12px 5px 20px;
+		background: color-mix(in srgb, var(--accent) 12%, var(--surface-1));
+		color: var(--text);
+		font-size: 12.5px;
+	}
+	.snapshot-banner span {
+		flex: 1;
+		min-width: 0;
+	}
+	.snapshot-banner .left-out {
+		text-decoration: underline dotted;
+		cursor: help;
+	}
+	.snapshot-banner button {
+		flex: none;
+		padding: 3px 10px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface-1);
+		font-size: 12px;
 	}
 	.mode.unlocked {
 		border-color: transparent;

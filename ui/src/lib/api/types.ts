@@ -29,6 +29,27 @@ export interface ClusterInfo {
 	server: string;
 	version: string;
 	defaultNamespace: string;
+	/** Set when this is a snapshot opened from a file, not a live cluster. */
+	snapshot?: SnapshotInfo;
+}
+
+/** What a snapshot file holds. */
+export interface SnapshotInfo {
+	/** The context it was taken from. */
+	context: string;
+	server: string;
+	kubernetes: string;
+	/** The namespace saved; null for the whole cluster. */
+	namespace: string | null;
+	/** When it was taken, in milliseconds. */
+	taken: number;
+	kubri: string;
+	objects: number;
+	/** Containers whose recent log lines it holds. */
+	logs: number;
+	/** What it does not hold and why, like `secrets: forbidden`. */
+	leftOut: string[];
+	file?: string;
 }
 
 /** What Kubri remembers about a context, in its own settings file. */
@@ -1300,6 +1321,11 @@ export interface Backend {
 	/** Removes a context added in Kubri. */
 	removeContext(name: string): Promise<ContextList>;
 	switchContext(name: string): Promise<ClusterInfo>;
+	/** Saves a namespace, or the whole cluster for null, to a snapshot file. Returns where the
+	 * desktop app saved it; the browser downloads it and returns null. */
+	takeSnapshot(namespace: string | null): Promise<string | null>;
+	/** Opens a snapshot file in place of a cluster, read-only. */
+	openSnapshot(file: File): Promise<ClusterInfo>;
 	resources(): Promise<ResourceInfo[]>;
 	/** Whether each check is allowed; null where the API server cannot say. */
 	access(checks: AccessCheck[], fresh?: boolean): Promise<(boolean | null)[]>;

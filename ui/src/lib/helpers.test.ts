@@ -87,6 +87,16 @@ describe('command palette', () => {
 		expect(suggest('history', resources, contexts, []).map((s) => s.label)).toEqual(['changes', 'changes 1h']);
 		expect(suggest('changes 30m', resources, contexts, [])[0].label).toBe('changes 30m');
 		expect(suggest('chan', resources, contexts, []).map((s) => s.label)).toContain('changes 1h');
+
+		// `snapshot` saves the current namespace, `snapshot all` the cluster.
+		expect(suggest(':snapshot', resources, contexts, []).map((s) => s.action)).toEqual([
+			{ type: 'snapshot', namespace: undefined },
+			{ type: 'snapshot', namespace: null }
+		]);
+		expect(suggest('snap shop', resources, contexts, [])).toEqual([
+			expect.objectContaining({ label: 'snapshot shop', action: { type: 'snapshot', namespace: 'shop' } })
+		]);
+		expect(suggest('snaps', resources, contexts, []).map((s) => s.label)).toContain('snapshot');
 	});
 
 	it('searches with everything after the command', () => {
