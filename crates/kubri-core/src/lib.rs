@@ -74,7 +74,12 @@ pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
-pub use settings::{ContextSettings, DiffSettings, Settings};
+pub use settings::{AgentSettings, ContextSettings, DiffSettings, Settings};
+
+/// Kubri's config folder, where its settings live.
+pub fn config_dir() -> Option<std::path::PathBuf> {
+    settings::dir()
+}
 pub use table::{Column, Owner, Row, TableEvent, TableScope};
 pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
 pub use workload::{ContainerImage, Drill};
@@ -118,6 +123,8 @@ pub struct Kubri {
     benchmarks: std::sync::Mutex<bench::Benchmarks>,
     /// Started read-only, whatever the k9s configuration says.
     read_only: AtomicBool,
+    /// Acting for an AI agent: changes need the context's consent in the settings.
+    agent: AtomicBool,
     settings: std::sync::RwLock<SettingsFile>,
     /// Locked contexts unlocked until then, by name. Never saved: a restart locks them again.
     unlocks: std::sync::Mutex<HashMap<String, std::time::Instant>>,
@@ -171,17 +178,34 @@ impl Kubri {
     pub fn load() -> Self {
         let kubri = Self::with_kubeconfig(kubeconfig::read());
         if let Some(path) = settings::path() {
-            let mut file = kubri.settings_file();
-            match settings::read(&path) {
-                Ok(settings) => file.settings = settings,
-                Err(err) => {
-                    tracing::warn!("cannot read the settings: {err}");
-                    file.error = Some(err);
-                }
-            }
-            file.path = Some(path);
+            kubri.settings_file().path = Some(path);
+            kubri.reload_settings();
         }
         kubri
+    }
+
+    /// Reads the settings file again, as when another Kubri process changed it.
+    pub fn reload_settings(&self) {
+        let mut file = self.settings_file();
+        let Some(path) = file.path.clone() else {
+            return;
+        };
+        match settings::read(&path) {
+            Ok(settings) => {
+                file.settings = settings;
+                file.error = None;
+            }
+            Err(err) => {
+                tracing::warn!("cannot read the settings: {err}");
+                file.error = Some(err);
+            }
+        }
+    }
+
+    /// Acts for an AI agent from now on: a context can only be changed where its settings
+    /// allow agents to, and never a production context.
+    pub fn set_agent(&self) {
+        self.agent.store(true, Ordering::Relaxed);
     }
 
     pub fn from_kubeconfig(kubeconfig: Kubeconfig) -> Self {
@@ -195,6 +219,7 @@ impl Kubri {
             forwards: Default::default(),
             benchmarks: Default::default(),
             read_only: AtomicBool::new(false),
+            agent: AtomicBool::new(false),
             settings: std::sync::RwLock::new(SettingsFile {
                 path: None,
                 settings: Settings::default(),
@@ -253,6 +278,14 @@ impl Kubri {
         Ok(settings)
     }
 
+    /// Sets what AI agents may do.
+    pub fn set_agent_settings(&self, value: AgentSettings) -> Result<Settings> {
+        self.update_settings(|s| {
+            s.agents = value;
+            Ok(())
+        })
+    }
+
     /// Sets which actions show a dry-run diff.
     pub fn set_diff_settings(&self, value: DiffSettings) -> Result<Settings> {
         self.update_settings(|s| {
@@ -303,6 +336,22 @@ impl Kubri {
             return Guard {
                 read_only: true,
                 reason: Some("this context is set read-only in Kubri".into()),
+                ..Default::default()
+            };
+        }
+        if self.agent.load(Ordering::Relaxed) {
+            let reason = if settings.production {
+                Some("AI agents never change a production context")
+            } else if !settings.agent_writes {
+                Some("AI agents may not change this context; allow it in Kubri's settings")
+            } else if settings.locked {
+                Some("this context is locked; AI agents cannot unlock it")
+            } else {
+                None
+            };
+            return Guard {
+                read_only: reason.is_some(),
+                reason: reason.map(Into::into),
                 ..Default::default()
             };
         }
@@ -1496,6 +1545,39 @@ mod tests {
         assert!(matches!(kubri.contexts().await, Err(Error::NoKubeconfig(_))));
         assert!(matches!(kubri.resources().await, Err(Error::NotConnected)));
         assert!(kubri.cluster().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn agents_change_only_contexts_that_allow_it() {
+        let kubri = Kubri::with_kubeconfig(Err("not found".into()));
+        let allow = |production: bool, locked: bool| ContextSettings {
+            agent_writes: true,
+            production,
+            locked,
+            ..Default::default()
+        };
+        kubri.set_context_settings("dev", allow(false, false)).unwrap();
+        kubri.set_context_settings("prod", allow(true, false)).unwrap();
+        kubri.set_context_settings("locked", allow(false, true)).unwrap();
+        // A person may change all of them, the locked one after unlocking.
+        assert!(!kubri.guard_for(Some("dev")).await.read_only);
+        assert!(!kubri.guard_for(Some("prod")).await.read_only);
+
+        kubri.set_agent();
+        assert!(!kubri.guard_for(Some("dev")).await.read_only);
+        for context in ["prod", "locked", "other"] {
+            let guard = kubri.guard_for(Some(context)).await;
+            assert!(guard.read_only, "{context}");
+            assert!(!guard.can_unlock, "{context}");
+        }
+        assert!(
+            kubri
+                .guard_for(Some("prod"))
+                .await
+                .reason
+                .unwrap()
+                .contains("production")
+        );
     }
 
     fn resource(group: &str, version: &str, plural: &str, kind: &str, namespaced: bool) -> ResourceInfo {

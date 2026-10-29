@@ -35,6 +35,8 @@ Signing in lasts a week (`KUBRI_SESSION_HOURS`), until you sign out, or until th
 | `KUBRI_NO_AUTH` | `--no-auth` | `true` lets everyone in without a password, also on other addresses. Only for use behind a proxy that signs people in itself. |
 | `KUBRI_ALLOWED_HOSTS` | `--allowed-hosts` | Without a password, Kubri only answers to localhost and IP addresses. Other host names it should answer to, separated by commas. |
 | `KUBRI_READ_ONLY` | `--read-only` | `true` never changes the cluster: no edits, deletes, scaling, shells or dangerous plugins, whatever the k9s settings say. Lists, logs and port-forwards still work. The desktop app takes it too. |
+| | `--mcp` | Serves MCP over stdin and stdout for an AI agent instead of the web UI, read-only. See [AI agents](AGENTS.md). |
+| `KUBRI_CONFIG_DIR` | | The folder for Kubri's settings, the agents' token and their call log. Mount a volume there to keep them. |
 | `KUBRI_SESSION_HOURS` | `--session-hours` | How long signing in lasts, from 1 hour to 87600 (ten years). Default 168 (a week). |
 | `KUBRI_UI_DIR` | `--ui-dir` | The built UI. Default `ui/build`; the Docker image sets it. |
 | `HTTPS_PROXY`, `NO_PROXY` | | A proxy to reach clusters through, and the hosts to reach without it, as for kubectl. Localhost never goes through the proxy, and a `proxy-url` in the kubeconfig wins. |

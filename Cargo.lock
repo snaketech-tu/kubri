@@ -2358,6 +2358,7 @@ dependencies = [
  "dirs",
  "futures",
  "kubri-core",
+ "kubri-mcp",
  "open",
  "serde",
  "serde_json",
@@ -2366,6 +2367,23 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "kubri-mcp"
+version = "0.3.0"
+dependencies = [
+ "axum",
+ "futures",
+ "http-body-util",
+ "kubri-core",
+ "ring",
+ "serde",
+ "serde-saphyr",
+ "serde_json",
+ "tokio",
+ "tower",
+ "tracing",
 ]
 
 [[package]]
@@ -2379,6 +2397,7 @@ dependencies = [
  "http-body-util",
  "kube",
  "kubri-core",
+ "kubri-mcp",
  "ring",
  "serde",
  "serde_json",

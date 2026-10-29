@@ -97,12 +97,14 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 	production: false,
 	readOnly: false,
 	locked: false,
-	namespace: ''
+	namespace: '',
+	agentWrites: false
 };
 
 const DEFAULT_SETTINGS: Settings = {
 	contexts: {},
-	diff: { scale: false, restart: false, image: true, labels: true }
+	diff: { scale: false, restart: false, image: true, labels: true },
+	agents: { http: false, port: 7879, secrets: false }
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
@@ -366,6 +368,14 @@ class AppState {
 	async setDiffSettings(diff: Settings['diff']) {
 		try {
 			this.settings = await backend.setDiffSettings(diff);
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+		}
+	}
+
+	async setAgentSettings(agents: Settings['agents']) {
+		try {
+			this.settings = await backend.setAgentSettings(agents);
 		} catch (err) {
 			this.toast(errorMessage(err), 'bad');
 		}

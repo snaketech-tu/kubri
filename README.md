@@ -137,6 +137,7 @@ See [Development](#development).
         <li>Desktop app for Windows, macOS and Linux</li>
         <li>In the browser with a password sign-in, from Docker or in the cluster</li>
         <li>A read-only mode that never changes the cluster</li>
+        <li>An MCP server, so AI agents can read your clusters with your permissions</li>
       </ul>
     </td>
   </tr>
@@ -194,6 +195,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 ## Documentation
 
 - [Running Kubri in the browser](docs/WEB.md): settings, sign-in, the Docker image, running it in a cluster and behind a proxy.
+- [AI agents (MCP)](docs/AGENTS.md): connecting Claude Code, Claude Desktop or another agent, the tools it gets, and what it may not do.
 - [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.
 - [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.
 - [Releasing](docs/RELEASING.md): how a version is published.

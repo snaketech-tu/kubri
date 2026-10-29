@@ -10,10 +10,10 @@ use axum::routing::{any, delete, get, post, put};
 use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
-    AccessCheck, BenchInfo, BenchRequest, Change, ClusterInfo, ContainerImage, ContextList, ContextSettings,
-    DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, Guard, HelmRelease,
-    HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
-    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Preview, Pulse, Rbac, Reference,
+    AccessCheck, AgentSettings, BenchInfo, BenchRequest, Change, ClusterInfo, ContainerImage, ContextList,
+    ContextSettings, DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, Guard,
+    HelmRelease, HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind,
+    ObjectRef, Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Preview, Pulse, Rbac, Reference,
     ResourceInfo, ResourceRef, SanitizerReport, Settings, TableScope, Terminal, TerminalOptions,
     TerminalOutput, Usage, XrayNode,
 };
@@ -29,6 +29,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings", get(settings))
         .route("/settings/context", put(set_context_settings))
         .route("/settings/diff", put(set_diff_settings))
+        .route("/settings/agents", put(set_agent_settings))
         .route("/guard", get(guard))
         .route("/guard/unlock", post(unlock))
         .route("/guard/lock", post(lock))
@@ -170,6 +171,13 @@ async fn set_diff_settings(
     Json(req): Json<DiffSettings>,
 ) -> ApiResult<Settings> {
     Ok(Json(kubri.set_diff_settings(req)?))
+}
+
+async fn set_agent_settings(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<AgentSettings>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_agent_settings(req)?))
 }
 
 async fn guard(State(kubri): State<Arc<Kubri>>) -> ApiResult<Guard> {
