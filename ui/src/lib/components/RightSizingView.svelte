@@ -25,7 +25,8 @@
 		load();
 	});
 
-	const amount = (a: SizeAdvice, value: number) => (a.resource === 'cpu' ? cpu(value * 1000) : memory(value));
+	const amount = (a: SizeAdvice, value: number) =>
+		a.resource === 'cpu' ? (value > 0 && value < 0.0005 ? '<1m' : cpu(value * 1000)) : memory(value);
 	/** What the requests free once lowered, per resource. */
 	const freed = $derived.by(() => {
 		const sum = (resource: string) =>
@@ -124,9 +125,11 @@
 										<div class="muted small">{a.kind}{namespace ? '' : ` · ${a.workload.namespace}`}</div>
 									</td>
 									<td class="mono">{a.container}</td>
-									<td class="why {reason.tone}">
-										{#if reason.tone}<Icon name={reason.tone === 'bad' ? 'critical' : 'warning'} size={14} />{/if}
-										<span><strong>{a.resource === 'cpu' ? 'CPU' : 'Memory'}</strong> · {reason.text}</span>
+									<td>
+										<div class="why {reason.tone}">
+											{#if reason.tone}<Icon name={reason.tone === 'bad' ? 'critical' : 'warning'} size={14} />{/if}
+											<span><strong>{a.resource === 'cpu' ? 'CPU' : 'Memory'}</strong> · {reason.text}</span>
+										</div>
 									</td>
 									<td class="numeric mono">{a.request ?? '—'}</td>
 									<td class="numeric mono">{a.limit ?? '—'}</td>
