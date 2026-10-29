@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { runCommand, runHotkey } from '../actions';
-	import { backend } from '../api';
+	import { backend, type KindView } from '../api';
 	import { kubriUses, parseShortcut, shortcutLabel, skinTheme, type SkinTheme } from '../k9s';
 	import { forControl } from '../keys';
 	import { resolveColor } from '../skin';
@@ -41,8 +41,20 @@
 		reloading = true;
 		requested.clear();
 		previews = {};
-		await app.loadK9s();
+		await Promise.all([app.loadK9s(), app.loadViews()]);
 		reloading = false;
+	}
+
+	/** What a view adds, in a few words. */
+	function shows(view: KindView) {
+		const count = (n: number, one: string, many: string) => (n ? [`${n} ${n === 1 ? one : many}`] : []);
+		return [
+			...count(view.columns.length, 'column', 'columns'),
+			...(view.health.length ? ['health'] : []),
+			...count(view.details.length, 'section', 'sections'),
+			...count(view.actions.length, 'action', 'actions'),
+			...count(view.relations.length, 'relation', 'relations')
+		].join(', ');
 	}
 
 	function key(text: string) {
@@ -188,6 +200,41 @@
 		<AgentSettings />
 
 		<ExplainSettings />
+
+		<div class="block files">
+			<h2 id="config-views">Views <span class="count">{app.views?.views.length ?? 0}</span></h2>
+			<p class="muted">
+				How custom resources show: extra columns, a Health column, sections in the overview, actions and edges in the
+				graph, each from a YAML file. Kubri brings views for Flux, Argo CD and cert-manager; yours go in
+				{#if app.views?.dir}<code>{app.views.dir}</code>{:else}the <code>views</code> folder next to the settings file{/if}
+				and replace a built-in one of the same kind. <a href="https://github.com/snaketech-tu/kubri/blob/main/docs/VIEWS.md" target="_blank" rel="noreferrer">How to write one</a>.
+			</p>
+			{#if app.views?.errors.length}
+				<ul>
+					{#each app.views.errors as error (error)}
+						<li class="bad"><span class="mark" aria-hidden="true">✕</span><span class="error">{error}</span></li>
+					{/each}
+				</ul>
+			{/if}
+			{#if app.views?.views.length}
+				<table>
+					<thead><tr><th>Kind</th><th>Shows</th><th>File</th></tr></thead>
+					<tbody>
+						{#each app.views.views as view (`${view.group}/${view.kind}`)}
+							{@const served = app.resources.some((r) => r.group === view.group && r.kind === view.kind)}
+							<tr>
+								<td>
+									<div>{view.kind}</div>
+									<div class="muted small">{view.group || 'core'}{served ? '' : ' · not in this cluster'}</div>
+								</td>
+								<td class="muted">{shows(view)}</td>
+								<td class="mono">{view.source}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+		</div>
 
 		{#if !config}
 			<p class="empty">Reading the k9s configuration…</p>

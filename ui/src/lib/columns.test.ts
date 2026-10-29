@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NO_COLUMNS, isShown, kindKey, moved, ordered, pathsOf, toggled } from './columns';
+import { NO_COLUMNS, columnsFor, defaultColumns, isShown, kindKey, moved, ordered, pathsOf, toggled } from './columns';
 
 const col = (label: string, wideOnly = false) => ({ label, wideOnly });
 const labels = (cs: { label: string }[]) => cs.map((c) => c.label);
@@ -12,6 +12,15 @@ describe('column settings', () => {
 		expect(pathsOf({ ...NO_COLUMNS, custom: [{ name: 'Node', path: '.spec.nodeName' }, { name: 'Img', path: '.spec.x' }] })).toBe(
 			'.spec.nodeName\n.spec.x'
 		);
+	});
+
+	it('takes the defaults from the view until the settings name the kind', () => {
+		const view = { columns: [{ name: 'Revision', path: '.status.artifact.revision' }] };
+		expect(defaultColumns(undefined)).toBe(NO_COLUMNS);
+		expect(defaultColumns({ columns: [] })).toBe(NO_COLUMNS);
+		expect(columnsFor('x/Y', undefined, view).custom).toEqual(view.columns);
+		const mine = { ...NO_COLUMNS, hidden: ['Age'] };
+		expect(columnsFor('x/Y', { 'x/Y': mine }, view)).toBe(mine);
 	});
 
 	it('hides, shows wide columns and keeps that apart from the wide view', () => {

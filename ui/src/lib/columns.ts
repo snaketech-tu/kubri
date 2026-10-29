@@ -1,35 +1,19 @@
-import type { ColumnSettings, ResourceInfo } from './api';
+import type { ColumnSettings, KindView, ResourceInfo } from './api';
 
 export const NO_COLUMNS: ColumnSettings = { hidden: [], shown: [], order: [], custom: [] };
 
-const custom = (...columns: [string, string][]): ColumnSettings => ({
-	...NO_COLUMNS,
-	custom: columns.map(([name, path]) => ({ name, path }))
-});
-const SUSPENDED: [string, string] = ['Suspended', '.spec.suspend'];
-const ARTIFACT = custom(['Revision', '.status.artifact.revision'], SUSPENDED);
-
-/** Columns kinds get until the settings say otherwise: what Flux and Argo CD leave out. */
-const BUILTIN: Record<string, ColumnSettings> = {
-	'kustomize.toolkit.fluxcd.io/Kustomization': custom(['Revision', '.status.lastAppliedRevision'], SUSPENDED),
-	'helm.toolkit.fluxcd.io/HelmRelease': custom(['Revision', '.status.lastAttemptedRevision'], SUSPENDED),
-	'source.toolkit.fluxcd.io/GitRepository': ARTIFACT,
-	'source.toolkit.fluxcd.io/OCIRepository': ARTIFACT,
-	'source.toolkit.fluxcd.io/HelmRepository': ARTIFACT,
-	'source.toolkit.fluxcd.io/HelmChart': ARTIFACT,
-	'source.toolkit.fluxcd.io/Bucket': ARTIFACT,
-	'cert-manager.io/Certificate': custom(['Expires', '.status.notAfter'], ['Renews', '.status.renewalTime']),
-	'argoproj.io/Application': custom(['Revision', '.status.sync.revision'], ['Last sync', '.status.operationState.phase'])
-};
-
-/** The columns of a kind: its settings, else Kubri's own for it. */
-export function columnsFor(key: string, settings: Record<string, ColumnSettings> | undefined): ColumnSettings {
-	return settings?.[key] ?? defaultColumns(key);
+/** The columns of a kind: its settings, else its view's. */
+export function columnsFor(
+	key: string,
+	settings: Record<string, ColumnSettings> | undefined,
+	view: Pick<KindView, 'columns'> | undefined
+): ColumnSettings {
+	return settings?.[key] ?? defaultColumns(view);
 }
 
-/** Kubri's own columns for a kind, which resetting goes back to. */
-export function defaultColumns(key: string): ColumnSettings {
-	return BUILTIN[key] ?? NO_COLUMNS;
+/** The columns a kind's view gives it, which resetting goes back to. */
+export function defaultColumns(view: Pick<KindView, 'columns'> | undefined): ColumnSettings {
+	return view?.columns.length ? { ...NO_COLUMNS, custom: view.columns.map(({ name, path }) => ({ name, path })) } : NO_COLUMNS;
 }
 
 /** How the settings name a kind: `group/Kind`, `/Pod` for the core group. */

@@ -39,6 +39,7 @@
 	import MetricsPanel from './MetricsPanel.svelte';
 	import PodSummary from './PodSummary.svelte';
 	import ServiceSummary from './ServiceSummary.svelte';
+	import ViewSummary from './ViewSummary.svelte';
 	import TerminalView from './TerminalView.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
@@ -572,6 +573,7 @@
 			<div class="scroll">
 				<ManagedNote target={details.target} />
 				<StatusSummary {object} target={details.target} {now} />
+				<ViewSummary {object} resource={details.resource} {now} />
 				<PodSummary {object} target={details.target} onlogs={logs ? openLogs : undefined} />
 				{#if isServices(details.resource)}<ServiceSummary {object} target={details.target} />{/if}
 				<Describe

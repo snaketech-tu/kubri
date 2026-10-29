@@ -8,6 +8,12 @@ const OK = /^(Running|Active|Bound|Succeeded|Completed|Complete|Ready|Available|
 export function cellTone(column: string, value: unknown): Tone {
 	if (typeof value !== 'string' || !value) return '';
 	const name = column.toLowerCase();
+	// A view's verdict leads with its state; the message after it says why.
+	if (name === 'health') {
+		if (value === 'Healthy') return 'ok';
+		if (value.startsWith('Failed')) return 'bad';
+		return value.startsWith('Warning') ? 'warn' : '';
+	}
 	if (name === 'ready' && /^\d+\/\d+$/.test(value)) {
 		const [ready, total] = value.split('/').map(Number);
 		return ready === total ? 'ok' : 'warn';

@@ -23,6 +23,7 @@ use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
 use kubri_core::{Charts, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
 use kubri_core::{FleetCluster, GitOpsAction, Manager, NewContext, RightSizing, SearchRequest, SearchResult};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
+use kubri_core::{RenderedView, ViewSet};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -88,6 +89,8 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/right-sizing", get(right_sizing))
         .route("/object/resources", post(set_resources))
         .route("/object/managed-by", post(managed_by))
+        .route("/views", get(views))
+        .route("/view", post(render_view))
         .route("/replicaset/rollback", post(rollback))
         .route("/events", get(events))
         .route("/metrics", get(metrics))
@@ -706,6 +709,23 @@ async fn renew_certificate(State(kubri): State<Arc<Kubri>>, Json(req): Json<Targ
 
 async fn managed_by(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Option<Manager>> {
     Ok(Json(kubri.managed_by(&req.target).await?))
+}
+
+async fn views(State(kubri): State<Arc<Kubri>>) -> ApiResult<ViewSet> {
+    Ok(Json(kubri.views().await))
+}
+
+#[derive(Deserialize)]
+struct RenderView {
+    resource: ResourceRef,
+    object: Value,
+}
+
+async fn render_view(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<RenderView>,
+) -> ApiResult<Option<RenderedView>> {
+    Ok(Json(kubri.render_view(&req.resource, &req.object).await?))
 }
 
 #[derive(Deserialize)]

@@ -32,7 +32,9 @@ import {
 	type SavedSearch,
 	type Settings,
 	type TableScope,
-	type TerminalMode
+	type TerminalMode,
+	type KindView,
+	type ViewSet
 } from './api';
 import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
@@ -310,6 +312,8 @@ class AppState {
 	k9s = $state<K9sConfig | null>(null);
 	/** The tools the connected cluster runs, like Prometheus or Flux. */
 	integrations = $state<Integrations | null>(null);
+	/** How custom resource kinds show: columns, health, details and actions from YAML files. */
+	views = $state<ViewSet | null>(null);
 	/** The skin picked for this context: undefined follows k9s, null is Kubri's own colors. */
 	skinChoice = $state<string | null | undefined>(undefined);
 	/** The skin on screen, and why the wanted one is not. */
@@ -1097,6 +1101,21 @@ class AppState {
 		this.startFavoriteForwards();
 		this.integrations = null;
 		this.loadIntegrations(false);
+		this.loadViews();
+	}
+
+	/** Reads the view files again, so an edited one shows on the next connect or reload. */
+	async loadViews() {
+		try {
+			this.views = await backend.views();
+		} catch {
+			// Without them, custom resources show the server's columns.
+		}
+	}
+
+	/** The view of a kind, if one is loaded. */
+	viewOf(resource: Pick<ResourceInfo, 'group' | 'kind'>): KindView | undefined {
+		return this.views?.views.find((v) => v.group === resource.group && v.kind === resource.kind);
 	}
 
 	/** Finds the cluster's tools; `fresh` looks again and asks each whether it answers. */

@@ -50,7 +50,7 @@
 
 	/** How this kind's list shows its columns, from the settings. */
 	const columnKey = $derived(kindKey(resource));
-	const columnSettings = $derived(columnsFor(columnKey, app.settings.columns));
+	const columnSettings = $derived(columnsFor(columnKey, app.settings.columns, app.viewOf(resource)));
 	const paths = $derived(pathsOf(columnSettings));
 	let chooserOpen = $state(false);
 
@@ -650,7 +650,7 @@
 							kind={resource.kind}
 							columns={allColumns}
 							settings={columnSettings}
-							defaults={defaultColumns(columnKey)}
+							defaults={defaultColumns(app.viewOf(resource))}
 							{wide}
 							onchange={(next) => app.setColumnSettings(columnKey, next)}
 							onclose={() => (chooserOpen = false)}

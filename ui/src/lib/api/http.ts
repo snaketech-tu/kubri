@@ -188,6 +188,8 @@ export const httpBackend: Backend = {
 	rightSizing: (namespace) => request('GET', `/right-sizing${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
 	setResources: (target, container, requests, limits) => request('POST', '/object/resources', { target, container, requests, limits }),
 	managedBy: (target) => request('POST', '/object/managed-by', { target }),
+	views: () => request('GET', '/views'),
+	renderView: (resource, object) => request('POST', '/view', { resource, object }),
 	setImages: (target, images) => request('POST', '/object/images', { target, images }),
 	rollback: async (target) => (await request<{ name: string }>('POST', '/replicaset/rollback', { target })).name,
 	events: (namespace, uid) =>

@@ -71,6 +71,10 @@ pub struct TableScope {
     /// Extra columns, one JSONPath per line, like `kubectl get -o custom-columns`. Their cells
     /// follow the server's, and their columns are named by the path with the format `jsonpath`.
     pub paths: Option<String>,
+    /// The kind's view, whose health rules add a Health column after the others.
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub view: Option<std::sync::Arc<crate::views::View>>,
 }
 
 impl TableScope {
@@ -89,7 +93,12 @@ impl TableScope {
             .iter()
             .map(|n| JsonPath::parse(n))
             .collect::<Result<_, _>>()?;
-        Ok(Extra { names, parsed })
+        let health = self.view.clone().filter(|v| !v.health.is_empty());
+        Ok(Extra {
+            names,
+            parsed,
+            health,
+        })
     }
 
     fn list_params(&self) -> ListParams {
@@ -144,21 +153,37 @@ pub enum TableEvent {
 struct Extra {
     names: Vec<String>,
     parsed: Vec<JsonPath>,
+    /// A view with health rules: the last column is its Health.
+    health: Option<std::sync::Arc<crate::views::View>>,
 }
 
 impl Extra {
+    /// Whether rows need whole objects rather than their metadata.
+    fn full(&self) -> bool {
+        !self.parsed.is_empty() || self.health.is_some()
+    }
+
     fn columns(&self) -> impl Iterator<Item = Column> + '_ {
-        self.names.iter().map(|name| Column {
+        let paths = self.names.iter().map(|name| Column {
             name: name.clone(),
             kind: "string".to_owned(),
             format: "jsonpath".to_owned(),
             description: format!("{name} in each object"),
             priority: 0,
-        })
+        });
+        let health = self.health.as_ref().map(|view| Column {
+            name: "Health".to_owned(),
+            kind: "string".to_owned(),
+            format: "health".to_owned(),
+            description: format!("By the rules of the {} view ({})", view.kind, view.source),
+            priority: 0,
+        });
+        paths.chain(health)
     }
 
     fn cells<'a>(&'a self, object: &'a Value) -> impl Iterator<Item = Value> + 'a {
-        self.parsed.iter().map(move |p| p.cell(object))
+        let health = self.health.as_ref().map(|view| view.health_cell(object));
+        self.parsed.iter().map(move |p| p.cell(object)).chain(health)
     }
 }
 
@@ -272,7 +297,7 @@ async fn list_and_watch(
     tx: &mpsc::Sender<TableEvent>,
     listed: &mut bool,
 ) -> Result<(), Failure> {
-    let full = !extra.parsed.is_empty();
+    let full = extra.full();
     let request = with_table_accept(Request::new(url).list(&scope.list_params()), full);
     let list: Value = client.request(request).await?;
     let mut version = list
@@ -540,6 +565,7 @@ mod tests {
             label_selector: Some("app=web".into()),
             field_selector: Some("spec.nodeName=n1".into()),
             paths: None,
+            ..Default::default()
         };
         let list = scope.list_params();
         assert_eq!(list.label_selector.as_deref(), Some("app=web"));
@@ -551,6 +577,7 @@ mod tests {
             label_selector: Some(String::new()),
             field_selector: None,
             paths: None,
+            ..Default::default()
         };
         assert_eq!(empty.list_params().label_selector, None);
     }

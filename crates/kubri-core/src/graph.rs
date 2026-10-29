@@ -11,14 +11,15 @@ use k8s_openapi::api::core::v1::{ConfigMap, Node, PersistentVolumeClaim, Pod, Po
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::{Ingress, IngressServiceBackend};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use kube::api::Api;
+use kube::api::{Api, DynamicObject};
 use kube::{Client, Resource};
 use serde::Serialize;
 
 use crate::health::{self, Health, Status};
 use crate::typed::{list, names, resource_ref, scoped};
+use crate::views::View;
 use crate::xray::{RefKind, is_ready, references, selects};
-use crate::{ResourceRef, Result};
+use crate::{ResourceInfo, ResourceRef, Result};
 
 /// Pods shown per owner, those with problems first; the owner says how many more there are.
 const PODS_PER_OWNER: usize = 8;
@@ -169,6 +170,96 @@ pub(crate) async fn gather(client: Client, namespace: Option<&str>) -> Result<Gr
         missing,
     };
     Ok(build(&inventory))
+}
+
+/// Adds the objects of kinds that have a view, such as Flux Kustomizations or certificates,
+/// with lines to the objects their view's relations name. An object stays when it is connected
+/// or unhealthy, so the graph does not fill up with lone custom objects.
+pub(crate) async fn add_views(
+    graph: &mut Graph,
+    client: &Client,
+    resources: &[ResourceInfo],
+    views: &[View],
+    namespace: Option<&str>,
+) {
+    let kinds: Vec<(&View, &ResourceInfo)> = views
+        .iter()
+        .filter_map(|v| {
+            resources
+                .iter()
+                .find(|r| v.is_for(&r.reference.group, &r.kind) && r.can("list"))
+                .map(|r| (v, r))
+        })
+        .collect();
+    let lists = futures::future::join_all(kinds.iter().map(|(_, r)| async move {
+        let api: Api<DynamicObject> = match (r.namespaced, namespace) {
+            (true, Some(ns)) => Api::namespaced_with(client.clone(), ns, &r.api_resource()),
+            _ => Api::all_with(client.clone(), &r.api_resource()),
+        };
+        api.list(&kube::api::ListParams::default()).await
+    }))
+    .await;
+    // Where a kind lives, to address what a relation names.
+    let cluster_wide: HashSet<&str> = resources
+        .iter()
+        .filter(|r| !r.namespaced)
+        .map(|r| r.kind.as_str())
+        .collect();
+
+    let mut added = Vec::new();
+    let mut edges = Vec::new();
+    for ((view, resource), list) in kinds.iter().zip(lists) {
+        let Ok(list) = list else {
+            graph.missing.push(resource.reference.plural.clone());
+            continue;
+        };
+        for object in list.items {
+            let Ok(value) = serde_json::to_value(&object) else {
+                continue;
+            };
+            let ns = object.metadata.namespace.as_deref();
+            let name = object.metadata.name.clone().unwrap_or_default();
+            let node_id = id(&resource.kind, ns, &name);
+            for (kind, target_ns, target) in view.related(&value) {
+                let target_ns = if cluster_wide.contains(kind.as_str()) {
+                    None
+                } else {
+                    target_ns.or_else(|| ns.map(str::to_owned))
+                };
+                edges.push(GraphEdge {
+                    from: node_id.clone(),
+                    to: id(&kind, target_ns.as_deref(), &target),
+                    kind: EdgeKind::Uses,
+                });
+            }
+            let judged = view.judge(&value);
+            added.push(GraphNode {
+                id: node_id,
+                kind: resource.kind.clone(),
+                name,
+                namespace: ns.map(str::to_owned),
+                resource: Some(resource.reference.clone()),
+                health: judged.as_ref().map_or(Health::Ok, |j| j.health),
+                detail: judged.and_then(|j| j.message).unwrap_or_default(),
+                app: app_of(object.metadata.labels.as_ref()),
+                node: None,
+            });
+        }
+    }
+    let ids: HashSet<String> = graph.nodes.iter().chain(&added).map(|n| n.id.clone()).collect();
+    edges.retain(|e| ids.contains(&e.to) && e.from != e.to);
+    let connected: HashSet<&str> = edges
+        .iter()
+        .flat_map(|e| [e.from.as_str(), e.to.as_str()])
+        .collect();
+    let kept: Vec<GraphNode> = added
+        .into_iter()
+        .filter(|n| connected.contains(n.id.as_str()) || n.health != Health::Ok)
+        .collect();
+    let kept_ids: HashSet<String> = graph.nodes.iter().chain(&kept).map(|n| n.id.clone()).collect();
+    edges.retain(|e| kept_ids.contains(&e.from) && kept_ids.contains(&e.to));
+    graph.nodes.extend(kept);
+    graph.edges.extend(edges);
 }
 
 fn id(kind: &str, namespace: Option<&str>, name: &str) -> String {
