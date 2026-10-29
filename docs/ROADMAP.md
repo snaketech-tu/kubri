@@ -39,3 +39,4 @@ The plan for 0.3 to 1.0 is in [IMPLEMENTATION-PLAN-v2.md](IMPLEMENTATION-PLAN-v2
 
 - ✅ 0.3 Work safely: context names, colors and guard rails, permission-aware actions, copy as kubectl, dry-run diffs, editor help.
 - ✅ 0.4 AI: Kubri as an MCP server for AI agents, and Explain with your own model.
+- ✅ 0.5 Logs and debugging: structured logs, a workspace of log and shell tabs, debug containers and node shells, and fixes from the likely problem.
