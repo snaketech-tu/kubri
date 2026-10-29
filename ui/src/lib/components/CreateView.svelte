@@ -1,18 +1,28 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { backend, type ApplyItem, type ApplyOutcome, type ResourceInfo } from '../api';
-	import { CORE_GROUPS, parseObjects, TEMPLATE_KINDS, workloadOf } from '../create';
+	import { CORE_GROUPS, parseObjects, TEMPLATE_KINDS, toYaml, workloadOf } from '../create';
+	import { FORMS } from '../forms';
 	import { creating } from '../create.svelte';
 	import { errorMessage } from '../format';
 	import { app, findResource } from '../state.svelte';
 	import DiffView from './DiffView.svelte';
+	import FormPanel from './FormPanel.svelte';
 	import Icon from './Icon.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
 	let editor = $state<YamlEditor>();
 	/** For objects that name no namespace. */
-	let namespace = $state(untrack(() => app.namespace) || 'default');
+	let namespace = $state(untrack(() => creating.namespace || app.namespace) || 'default');
+	/** The context to apply in. */
+	let into = $state(untrack(() => creating.into ?? app.cluster?.context ?? ''));
+	$effect(() => {
+		creating.namespace = namespace;
+		creating.into = into === app.cluster?.context ? null : into;
+	});
+	const elsewhere = $derived(!!into && into !== app.cluster?.context);
+	const production = $derived(into ? app.contextSettingsOf(into).production : app.production);
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 	/** The dry run, or once applied, what happened. */
@@ -104,7 +114,7 @@
 		reviewedIn = app.cluster?.context ?? null;
 		busy = true;
 		try {
-			results = await backend.apply({ objects, namespace, dryRun: true, context: reviewedIn });
+			results = await backend.apply({ objects, namespace, dryRun: true, context: reviewedIn, into });
 			applied = false;
 		} catch (err) {
 			error = errorMessage(err);
@@ -117,10 +127,10 @@
 		busy = true;
 		error = null;
 		try {
-			results = await backend.apply({ objects, namespace, dryRun: false, context: reviewedIn });
+			results = await backend.apply({ objects, namespace, dryRun: false, context: reviewedIn, into });
 			applied = true;
 			// Kinds a new CustomResourceDefinition serves join the sidebar and the palette.
-			if (results.some((r) => r.kind === 'CustomResourceDefinition' && (r.outcome === 'created' || r.outcome === 'changed'))) {
+			if (!elsewhere && results.some((r) => r.kind === 'CustomResourceDefinition' && (r.outcome === 'created' || r.outcome === 'changed'))) {
 				app.resources = await backend.resources();
 			}
 			const done = results.filter((r) => r.outcome === 'created' || r.outcome === 'changed').length;
@@ -146,6 +156,19 @@
 		if (editor) creating.text = editor.text();
 	}
 
+	/** The one object in the editor, when there is a form for its kind; read once typing pauses. */
+	let formObject = $state<Record<string, any> | null>(null);
+	let showForm = $state(true);
+	$effect(() => {
+		const text = creating.text;
+		const timer = setTimeout(() => {
+			const { objects } = parseObjects(text);
+			const only = objects.length === 1 ? (objects[0] as Record<string, any>) : null;
+			formObject = only && typeof only === 'object' && FORMS[only.kind] ? only : null;
+		}, 250);
+		return () => clearTimeout(timer);
+	});
+
 	function back() {
 		results = null;
 		applied = false;
@@ -155,6 +178,7 @@
 	function startOver() {
 		back();
 		creating.set('');
+		creating.source = null;
 	}
 
 	const failed = $derived(results?.filter((r) => r.outcome === 'failed').length ?? 0);
@@ -228,14 +252,38 @@
 				<button onclick={() => (urlOpen = !urlOpen)} aria-expanded={urlOpen}><Icon name="ingress" size={15} /> From URL…</button>
 				<button onclick={paste}><Icon name="download" size={15} /> Paste</button>
 				<span class="spacer"></span>
+				{#if formObject}
+					<button class:on={showForm} aria-pressed={showForm} onclick={() => (showForm = !showForm)} title="A form for the {formObject.kind}"
+						>Form</button
+					>
+				{/if}
 				<label class="field">
-					<span>Namespace</span>
-					<select bind:value={namespace} title="For objects that name no namespace">
-						{#if !app.namespaces.includes(namespace)}<option value={namespace}>{namespace}</option>{/if}
-						{#each app.namespaces as n (n)}<option value={n}>{n}</option>{/each}
+					<span>Context</span>
+					<select bind:value={into} title="The cluster to create the objects in" aria-label="Create in context">
+						{#each app.contexts as c (c.name)}<option value={c.name}>{app.contextName(c.name)}</option>{/each}
 					</select>
 				</label>
+				<label class="field">
+					<span>Namespace</span>
+					<input
+						class="namespace"
+						bind:value={namespace}
+						list="create-namespaces"
+						spellcheck="false"
+						title="For objects that name no namespace"
+						aria-label="Namespace for objects that name none"
+					/>
+					<datalist id="create-namespaces">
+						{#each app.namespaces as n (n)}<option value={n}></option>{/each}
+					</datalist>
+				</label>
 			</div>
+			{#if creating.source}
+				<p class="source">
+					<Icon name="config" size={14} /> A copy of <strong>{creating.source}</strong> without what the cluster assigned. Pick
+					another namespace or context, or change the name.
+				</p>
+			{/if}
 			{#if urlOpen}
 				<form class="url" onsubmit={fromUrl}>
 					<!-- svelte-ignore a11y_autofocus -->
@@ -243,15 +291,20 @@
 					<button class="primary" type="submit" disabled={busy}>{busy ? 'Reading…' : 'Load'}</button>
 				</form>
 			{/if}
-			<div class="editor">
-				{#key creating.version}
-					<YamlEditor bind:this={editor} value={creating.text} readonly={false} onsave={(text) => review(text)} onchange={sync} />
-				{/key}
-				{#if !creating.text.trim()}
-					<p class="empty">
-						Add a kind's template, open files, load a URL or paste YAML. Several objects separated by <code>---</code> are applied in
-						dependency order: namespaces and config before the workloads that use them.
-					</p>
+			<div class="work">
+				<div class="editor">
+					{#key creating.version}
+						<YamlEditor bind:this={editor} value={creating.text} readonly={false} onsave={(text) => review(text)} onchange={sync} />
+					{/key}
+					{#if !creating.text.trim()}
+						<p class="empty">
+							Add a kind's template, open files, load a URL or paste YAML. Several objects separated by <code>---</code> are applied
+							in dependency order: namespaces and config before the workloads that use them.
+						</p>
+					{/if}
+				</div>
+				{#if formObject && showForm}
+					<FormPanel object={formObject} onchange={(o) => creating.set(toYaml([o]))} />
 				{/if}
 			</div>
 		{:else}
@@ -259,9 +312,9 @@
 				<strong>{applied ? 'Applied' : 'Dry run'}</strong>
 				<span class="muted">
 					{#if applied}
-						in {reviewedIn}
+						in {app.contextName(into)}
 					{:else}
-						{results.length} {results.length === 1 ? 'object' : 'objects'} checked by the API server in {reviewedIn}; nothing has changed yet
+						{results.length} {results.length === 1 ? 'object' : 'objects'} checked by the API server in {app.contextName(into)}; nothing has changed yet
 					{/if}
 				</span>
 			</div>
@@ -274,7 +327,7 @@
 								<span class="kind">{item.kind}</span>
 								<span class="name">{item.namespace ? `${item.namespace}/` : ''}{item.name || '(no name)'}</span>
 								{#if item.message}<span class="message">{item.message}</span>{/if}
-								{#if applied && item.target && item.outcome !== 'failed'}
+								{#if applied && item.target && item.outcome !== 'failed' && !elsewhere}
 									<button class="link" onclick={(e) => (e.preventDefault(), open(item))}>Open</button>
 								{/if}
 							</summary>
@@ -289,7 +342,7 @@
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		<div class="buttons">
 			{#if !results}
-				{#if app.production}<span class="note"><Icon name="warning" size={14} /> Production context</span>{/if}
+				{#if production}<span class="note"><Icon name="warning" size={14} /> {app.contextName(into)} is a production context</span>{/if}
 				<button class="secondary" onclick={startOver} disabled={busy || !creating.text}>Clear</button>
 				<button class="primary" onclick={() => review()} disabled={busy}>{busy ? 'Checking…' : 'Review'} <kbd>Ctrl+S</kbd></button>
 			{:else if applied}
@@ -299,7 +352,7 @@
 				{#if blocked}<span class="note">{blocked}</span>{/if}
 				<button class="secondary" onclick={back} disabled={busy}>Back to editing <kbd>Esc</kbd></button>
 				<button class="primary" onclick={apply} disabled={busy || !!blocked}>
-					{busy ? 'Applying…' : `Apply ${changes} ${changes === 1 ? 'change' : 'changes'}`}
+					{busy ? 'Applying…' : changes ? `Apply ${changes} ${changes === 1 ? 'change' : 'changes'}` : 'Apply'}
 				</button>
 			{/if}
 		</div>
@@ -370,6 +423,23 @@
 	.muted {
 		color: var(--text-muted);
 	}
+	.field .namespace {
+		width: 160px;
+		padding: 5px 8px;
+		font-family: var(--mono);
+		font-size: 12.5px;
+		color: var(--text);
+	}
+	.source {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
+		padding: 8px 16px;
+		border-bottom: 1px solid var(--border);
+		background: color-mix(in srgb, var(--accent) 6%, var(--surface-1));
+		font-size: 12.5px;
+	}
 	.url {
 		display: flex;
 		gap: 8px;
@@ -382,10 +452,25 @@
 		font-family: var(--mono);
 		font-size: 12.5px;
 	}
+	.work {
+		display: flex;
+		flex: 1;
+		min-height: 0;
+	}
 	.editor {
 		position: relative;
 		flex: 1;
+		min-width: 0;
 		min-height: 0;
+	}
+	.toolbar > button.on {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+	@media (max-width: 900px) {
+		.work {
+			flex-direction: column;
+		}
 	}
 	.editor :global(.cm-editor) {
 		height: 100%;

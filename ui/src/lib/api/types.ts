@@ -118,7 +118,10 @@ export interface ApplyRequest {
 	namespace?: string | null;
 	/** Only a server-side dry run: nothing changes. */
 	dryRun?: boolean;
+	/** Refuse to apply if the connected context is no longer this one. */
 	context?: string | null;
+	/** Apply in this context instead of the connected one. */
+	into?: string | null;
 }
 
 export type ApplyOutcome = 'created' | 'changed' | 'unchanged' | 'unchecked' | 'failed';

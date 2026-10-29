@@ -222,6 +222,73 @@ export function workloadOf(objects: unknown[]): TemplateParams {
 	return {};
 }
 
+/** Annotations the API server or controllers write, which a copy must not carry. */
+const SERVER_ANNOTATIONS = [
+	'kubectl.kubernetes.io/last-applied-configuration',
+	'deployment.kubernetes.io/revision',
+	'meta.helm.sh/release-name',
+	'meta.helm.sh/release-namespace'
+];
+/** Labels controllers set to tie objects to their owner, which would confuse them in a copy. */
+const SERVER_LABELS = [
+	'controller-uid',
+	'batch.kubernetes.io/controller-uid',
+	'pod-template-hash',
+	'job-name',
+	'batch.kubernetes.io/job-name'
+];
+
+/** Drops `keys` from the map at `parent[key]`, and the map if it ends up empty. */
+function dropKeys(parent: Record<string, any> | undefined, key: string, keys: string[]) {
+	const map = parent?.[key];
+	if (!map || typeof map !== 'object') return;
+	for (const k of keys) delete map[k];
+	if (!Object.keys(map).length) delete parent![key];
+}
+
+/**
+ * A copy of `object` to create elsewhere, as `kubectl get -o yaml` would need editing for:
+ * without status, what the API server assigns (uid, versions, cluster IPs, node, volume) and
+ * what ties it to its owner. The namespace is left out, for the target to set.
+ */
+export function cloneable(object: Record<string, any>, name?: string): Record<string, any> {
+	const copy = structuredClone(object);
+	delete copy.status;
+	const meta = copy.metadata ?? {};
+	for (const key of [
+		'uid',
+		'resourceVersion',
+		'generation',
+		'creationTimestamp',
+		'deletionTimestamp',
+		'managedFields',
+		'ownerReferences',
+		'selfLink',
+		'namespace',
+		'finalizers'
+	]) {
+		delete meta[key];
+	}
+	if (name) meta.name = name;
+	dropKeys(meta, 'annotations', SERVER_ANNOTATIONS);
+	dropKeys(meta, 'labels', SERVER_LABELS);
+	const spec = copy.spec;
+	if (spec && typeof spec === 'object') {
+		if (copy.kind === 'Service') {
+			for (const key of ['clusterIP', 'clusterIPs']) delete spec[key];
+			for (const port of spec.ports ?? []) delete port.nodePort;
+		}
+		if (copy.kind === 'Pod') delete spec.nodeName;
+		if (copy.kind === 'PersistentVolumeClaim') delete spec.volumeName;
+		if (copy.kind === 'Job') {
+			// The API server writes a selector of its own uid, and the copy gets a new one.
+			delete spec.selector;
+			dropKeys(spec.template?.metadata, 'labels', SERVER_LABELS);
+		}
+	}
+	return copy;
+}
+
 /** A short form like kubectl create, after `:new`: the kind as typed, then the object. */
 export interface ShortForm {
 	kind: string;
@@ -297,7 +364,7 @@ export function parseShortForm(input: string): ShortForm | null {
 }
 
 /** Splits like a shell: quotes keep spaces. */
-function splitWords(input: string): string[] {
+export function splitWords(input: string): string[] {
 	const words: string[] = [];
 	for (const match of input.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)) words.push(match[1] ?? match[2] ?? match[3]);
 	return words;

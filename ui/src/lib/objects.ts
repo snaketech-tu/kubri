@@ -1,6 +1,7 @@
 import { access, need } from './access.svelte';
 import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, startPlugin } from './actions';
 import { backend, type AccessCheck, type ObjectRef, type Owner, type ResourceInfo, type TerminalMode } from './api';
+import { creating } from './create.svelte';
 import { dock } from './dock.svelte';
 import { errorMessage } from './format';
 import { parseShortcut, pluginApplies, shortcutLabel } from './k9s';
@@ -229,6 +230,7 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 		if (resource.verbs.includes('patch')) {
 			add('Change', 'Labels & annotations…', ['L'], dialog(() => ({ kind: 'labels', resource, target })), { needs: on('patch'), kubectl: k({ op: 'labels' }) });
 		}
+		if (resource.verbs.includes('create') && resource.kind !== 'Event') add('Change', 'Clone to…', [], () => void cloneTo(target));
 	}
 
 	const nodes = findResource(app.resources, { group: '', version: 'v1', plural: 'nodes' });
@@ -336,4 +338,14 @@ export function openObjectMenu(
 	actions.splice(at === -1 ? actions.length : at, 0, list);
 	before?.();
 	app.menu = { actions: [...first, ...actions], x, y, hints: false };
+}
+
+/** Opens the Create page with a copy of the object, for another namespace or context. */
+async function cloneTo(target: ObjectRef) {
+	try {
+		creating.clone(await backend.getObject(target), null);
+		app.showCreate();
+	} catch (err) {
+		app.toast(errorMessage(err), 'bad');
+	}
 }
