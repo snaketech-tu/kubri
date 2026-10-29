@@ -13,6 +13,8 @@ export interface MenuAction {
 	danger?: boolean;
 	/** Worth a button of its own in the action bar, which shows the lowest numbers first. */
 	primary?: number;
+	/** The same as a `kubectl` command, to copy. */
+	kubectl?: string;
 	/** Why it is not allowed, such as "Needs delete on pods in shop"; running it then explains. */
 	disabled?: string;
 	run: () => void;

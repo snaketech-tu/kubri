@@ -9,12 +9,12 @@ use std::sync::{Arc, Mutex};
 
 use futures::{Stream, StreamExt};
 use kubri_core::{
-    AccessCheck, BenchInfo, BenchRequest, ClusterInfo, ContainerImage, ContextList, ContextSettings,
+    AccessCheck, BenchInfo, BenchRequest, Change, ClusterInfo, ContainerImage, ContextList, ContextSettings,
     DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo, Guard, HelmRelease,
     HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind, ObjectRef,
-    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Pulse, Rbac, Reference, ResourceInfo,
-    ResourceRef, SanitizerReport, Settings, TableEvent, TableScope, Terminal, TerminalInput, TerminalOptions,
-    TerminalOutput, Usage, XrayNode,
+    Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Preview, Pulse, Rbac, Reference,
+    ResourceInfo, ResourceRef, SanitizerReport, Settings, TableEvent, TableScope, Terminal, TerminalInput,
+    TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use serde_json::Value;
 use tauri::State;
@@ -134,6 +134,11 @@ async fn unlock(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Guard> {
 #[tauri::command]
 async fn lock(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Guard> {
     kubri.lock().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn preview(kubri: State<'_, Arc<Kubri>>, target: ObjectRef, change: Change) -> CommandResult<Preview> {
+    kubri.preview(&target, change).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -686,6 +691,7 @@ pub fn run() {
             reload_contexts,
             switch_context,
             resources,
+            preview,
             access,
             who_am_i,
             readable_namespaces,

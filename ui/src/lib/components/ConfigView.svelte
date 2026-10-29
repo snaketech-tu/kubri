@@ -114,6 +114,26 @@
 			</div>
 		</div>
 
+		<div class="block">
+			<h2 id="config-diffs">Dry-run diffs</h2>
+			<p class="muted">
+				Before these actions run, Kubri asks the API server for a dry run and shows what would change. YAML edits always
+				show it.
+			</p>
+			<div class="diff-settings">
+				{#each [['scale', 'Scale'], ['restart', 'Restart'], ['image', 'Set image'], ['labels', 'Labels & annotations']] as const as [key, label] (key)}
+					<label>
+						<input
+							type="checkbox"
+							checked={app.settings.diff[key]}
+							onchange={(e) => app.setDiffSettings({ ...app.settings.diff, [key]: e.currentTarget.checked })}
+						/>
+						{label}
+					</label>
+				{/each}
+			</div>
+		</div>
+
 		{#if !config}
 			<p class="empty">Reading the k9s configuration…</p>
 		{:else}
@@ -441,6 +461,16 @@
 	.tag.ok {
 		background: color-mix(in srgb, var(--ok) 16%, transparent);
 		color: var(--ok);
+	}
+	.diff-settings {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 20px;
+	}
+	.diff-settings label {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
 	}
 	.contexts {
 		display: grid;

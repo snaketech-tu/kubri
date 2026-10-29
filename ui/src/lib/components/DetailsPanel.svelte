@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { parse, stringify } from 'yaml';
 	import { canEdit, save } from '../actions';
-	import { backend, type EventInfo, type KubeObject, type Reference } from '../api';
+	import { backend, type EventInfo, type KubeObject, type Preview, type Reference } from '../api';
 	import { errorMessage } from '../format';
 	import { drafts } from '../navigation.svelte';
 	import { containerNames, hasLogs, hasUsers, isPods } from '../pods';
@@ -10,6 +10,7 @@
 	import { drill, drillLabel, objectActions, subjectOf } from '../objects';
 	import ActionBar from './ActionBar.svelte';
 	import Describe from './Describe.svelte';
+	import DiffView from './DiffView.svelte';
 	import EventTimeline from './EventTimeline.svelte';
 	import Icon from './Icon.svelte';
 	import LogView from './LogView.svelte';
@@ -157,7 +158,14 @@
 		return stringify(copy, { lineWidth: 0 });
 	});
 
-	async function onsave(text: string): Promise<boolean> {
+	/** A dry run of the edit, shown as a diff before it is saved. */
+	let review = $state<{ text: string; preview: Preview } | null>(null);
+
+	/**
+	 * Saves the YAML: first as a dry run whose diff the user reviews, then for real. `reviewed`
+	 * skips the dry run, as when saving is chosen while leaving the edit.
+	 */
+	async function onsave(text: string, reviewed = false): Promise<boolean> {
 		if (saving) return false;
 		let value: KubeObject;
 		try {
@@ -177,6 +185,18 @@
 			saveError = 'Keep the name, namespace and resourceVersion as they are.';
 			return false;
 		}
+		if (!reviewed && review?.text !== text) {
+			saving = true;
+			saveError = null;
+			try {
+				review = { text, preview: await backend.preview(details.target, { type: 'replace', value }) };
+			} catch (err) {
+				saveError = `The API server would refuse this: ${errorMessage(err)}`;
+			} finally {
+				saving = false;
+			}
+			return false;
+		}
 		saving = true;
 		drafts.saving = true;
 		saveError = null;
@@ -184,6 +204,7 @@
 		saving = false;
 		drafts.saving = false;
 		if (ok) {
+			review = null;
 			drafts.dirty = false;
 			details.editing = false;
 			load();
@@ -195,6 +216,10 @@
 
 	/** Stops editing; with unsaved changes, asks first. */
 	function cancel() {
+		if (review) {
+			review = null;
+			return;
+		}
 		if (drafts.block(cancel)) return;
 		details.editing = false;
 		saveError = null;
@@ -206,9 +231,10 @@
 
 	// What leaving the edit does: save the editor's text, or drop it.
 	$effect(() => {
-		drafts.save = () => (editor ? onsave(editor.text()) : Promise.resolve(false));
+		drafts.save = () => (editor ? onsave(editor.text(), true) : Promise.resolve(false));
 		drafts.discard = () => {
 			details.editing = false;
+			review = null;
 			saveError = null;
 		};
 		return () => {
@@ -312,10 +338,15 @@
 		<span class="spacer"></span>
 		{#if details.tab === 'yaml'}
 			<label class="managed"><input type="checkbox" bind:checked={showManaged} disabled={details.editing} /> managed fields</label>
-			{#if details.editing}
+			{#if details.editing && review}
+				<button class="secondary" onclick={() => (review = null)}>Back to editing</button>
+				<button class="primary" disabled={saving} onclick={() => review && onsave(review.text, true)}>
+					{saving ? 'Saving…' : 'Save'}
+				</button>
+			{:else if details.editing}
 				<button class="secondary" onclick={() => cancel()}>Cancel</button>
 				<button class="primary" disabled={saving} onclick={() => editor && onsave(editor.text())}>
-					{saving ? 'Saving…' : 'Save'} <kbd>Ctrl+S</kbd>
+					{saving ? 'Checking…' : 'Review & save'} <kbd>Ctrl+S</kbd>
 				</button>
 			{:else if canEdit(details.resource) && !app.readOnly}
 				<button class="secondary" onclick={() => (details.editing = true)} disabled={!object}>Edit <kbd>e</kbd></button>
@@ -373,16 +404,25 @@
 				<EventTimeline {events} {now} />
 			</div>
 		{:else}
-			{#key showManaged}
-				<YamlEditor
-					value={yamlText}
-					readonly={!details.editing}
-					{onsave}
-					oncancel={cancel}
-					onchange={(dirty) => (drafts.dirty = dirty)}
-					bind:this={editor}
-				/>
-			{/key}
+			{#if review}
+				<div class="review">
+					<p>Review the changes before saving. The API server checked them in a dry run.</p>
+					<DiffView before={review.preview.before} after={review.preview.after} maxHeight="none" />
+				</div>
+			{/if}
+			<!-- Hidden, not closed, while the diff is up: the draft stays as it is. -->
+			<div class="editor" class:hidden={review}>
+				{#key showManaged}
+					<YamlEditor
+						value={yamlText}
+						readonly={!details.editing}
+						onsave={(text) => onsave(text)}
+						oncancel={cancel}
+						onchange={(dirty) => (drafts.dirty = dirty)}
+						bind:this={editor}
+					/>
+				{/key}
+			</div>
 		{/if}
 	</div>
 	<ActionBar {actions} hints={false} compact />
@@ -534,12 +574,11 @@
 	/* Narrow windows scroll the tabs rather than the page. */
 	nav {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: 4px;
 		padding: 0 16px 0 14px;
 		border-bottom: 1px solid var(--border);
-		overflow-x: auto;
-		scrollbar-width: none;
 	}
 	nav > * {
 		flex: none;
@@ -614,8 +653,26 @@
 	.tool > :global(*) {
 		flex: 1;
 	}
-	.tool.hidden {
+	.tool.hidden,
+	.editor.hidden {
 		display: none;
+	}
+	.editor {
+		display: flex;
+		flex-direction: column;
+	}
+	.editor > :global(*) {
+		flex: 1;
+		min-height: 0;
+	}
+	.review {
+		overflow: auto;
+		padding: 12px 16px;
+	}
+	.review p {
+		margin: 0 0 10px;
+		color: var(--text-muted);
+		font-size: 13px;
 	}
 	.muted {
 		padding: 20px;

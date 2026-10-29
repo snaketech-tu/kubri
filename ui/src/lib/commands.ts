@@ -1,7 +1,7 @@
 import type { Alias, ContextInfo, ResourceInfo } from './api';
 import { xrayResources } from './xray';
 
-export type ConfigSection = 'contexts' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
+export type ConfigSection = 'contexts' | 'diffs' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
 
 export type Action =
 	| {

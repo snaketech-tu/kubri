@@ -18,6 +18,7 @@ mod node;
 mod objects;
 mod plugin;
 mod portforward;
+mod preview;
 mod proxy;
 mod pulse;
 mod rbac;
@@ -66,6 +67,7 @@ pub use node::{DrainOptions, DrainReport, PodIssue};
 pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
 pub use plugin::{Cell, PluginRun, Release};
 pub use portforward::{PortForwardInfo, PortForwardRequest};
+pub use preview::{Change, Preview};
 pub use pulse::{EventPulse, KindPulse, Pulse, RecentEvent, Utilization};
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
@@ -543,6 +545,68 @@ impl Kubri {
         let object: DynamicObject = serde_json::from_value(object)?;
         let saved = api.replace(&obj.name, &PostParams::default(), &object).await?;
         Ok(serde_json::to_value(saved)?)
+    }
+
+    /// Runs `change` as a server-side dry run (`dryRun=All`) and returns the object as it is
+    /// and as it would be, for a diff. Nothing changes in the cluster.
+    pub async fn preview(&self, obj: &ObjectRef, change: Change) -> Result<Preview> {
+        let session = self.object_session(obj).await?;
+        let info = session.info_for(&obj.resource)?;
+        let api = session.api(&obj.resource, obj.namespace.as_deref())?;
+        let dry = PatchParams {
+            dry_run: true,
+            ..Default::default()
+        };
+        let (before, after) = match change {
+            Change::Replace { value } => {
+                let before = api.get(&obj.name).await?;
+                let object: DynamicObject = serde_json::from_value(value)?;
+                let post = PostParams {
+                    dry_run: true,
+                    ..Default::default()
+                };
+                (before, api.replace(&obj.name, &post, &object).await?)
+            }
+            Change::Patch { patch } => (
+                api.get(&obj.name).await?,
+                api.patch(&obj.name, &dry, &Patch::Merge(patch)).await?,
+            ),
+            Change::Restart => (
+                api.get(&obj.name).await?,
+                api.patch(
+                    &obj.name,
+                    &dry,
+                    &Patch::Merge(objects::restart_patch(
+                        &k8s_openapi::jiff::Timestamp::now().to_string(),
+                    )),
+                )
+                .await?,
+            ),
+            Change::Images { images } => {
+                let patch = workload::image_patch(info.kind == "Pod", &images)?;
+                (
+                    api.get(&obj.name).await?,
+                    api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,
+                )
+            }
+            Change::Scale { replicas } => {
+                if !info.subresources.iter().any(|s| s == "scale") {
+                    return Err(Error::Unsupported(format!("{} cannot be scaled", info.kind)));
+                }
+                let patch = serde_json::json!({ "spec": { "replicas": replicas } });
+                let before = serde_json::to_value(api.get_scale(&obj.name).await?)?;
+                let after =
+                    serde_json::to_value(api.patch_scale(&obj.name, &dry, &Patch::Merge(patch)).await?)?;
+                return Ok(Preview {
+                    before: preview::comparable(before),
+                    after: preview::comparable(after),
+                });
+            }
+        };
+        Ok(Preview {
+            before: preview::comparable(serde_json::to_value(before)?),
+            after: preview::comparable(serde_json::to_value(after)?),
+        })
     }
 
     /// Applies a JSON merge patch, for example to change labels or annotations.

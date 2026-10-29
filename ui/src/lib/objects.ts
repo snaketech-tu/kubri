@@ -3,6 +3,7 @@ import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForwar
 import { backend, type AccessCheck, type ObjectRef, type Owner, type ResourceInfo } from './api';
 import { errorMessage } from './format';
 import { parseShortcut, pluginApplies, shortcutLabel } from './k9s';
+import { kubectlCommand, type KubectlOp } from './kubectl';
 import type { MenuAction } from './menu';
 import {
 	canPortForward,
@@ -172,48 +173,49 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	/** RBAC's view of `verb` on this object, or on its subresource. */
 	const on = (verb: string, subresource = '') => need(verb, resource, ns, { subresource, name: target.name });
 	const pods = { group: '', plural: 'pods' };
+	const k = (op: KubectlOp) => kubectlCommand(app.cluster?.context, target, op);
 
 	const drillTo = drillLabel(resource);
 	if (drillTo && options.enter) add('View', drillTo, [], options.enter, { hint: 'enter', primary: 1 });
-	add('View', 'Describe', ['d'], show('describe'), { primary: 5, id: 'describe', needs: on('get') });
-	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get') });
+	add('View', 'Describe', ['d'], show('describe'), { primary: 5, id: 'describe', needs: on('get'), kubectl: k({ op: 'describe' }) });
+	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get'), kubectl: k({ op: 'yaml' }) });
 	const logs = isPods(resource) ? on('get', 'log') : need('get', pods, ns, { subresource: 'log' });
-	if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2, id: 'logs', needs: logs });
-	if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }), { id: 'previous', needs: logs });
-	if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }), { needs: on('get') });
+	if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2, id: 'logs', needs: logs, kubectl: k({ op: 'logs', workload: !isPods(resource) }) });
+	if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }), { id: 'previous', needs: logs, kubectl: k({ op: 'logs', previous: true }) });
+	if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }), { needs: on('get'), kubectl: k({ op: 'decode' }) });
 	if (hasUsers(resource)) add('View', 'Used by', ['u'], show('describe'), { id: 'usedBy' });
 
 	if (isPods(resource) && writable) {
-		add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3, id: 'shell', needs: on('create', 'exec') });
-		add('Connect', 'Attach', ['a'], show('shell', { mode: 'attach' }), { id: 'attach', needs: on('create', 'attach') });
+		add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3, id: 'shell', needs: on('create', 'exec'), kubectl: k({ op: 'shell' }) });
+		add('Connect', 'Attach', ['a'], show('shell', { mode: 'attach' }), { id: 'attach', needs: on('create', 'attach'), kubectl: k({ op: 'attach' }) });
 	}
 	if (canPortForward(resource)) {
 		const forward = isPods(resource) ? on('create', 'portforward') : need('create', pods, ns, { subresource: 'portforward' });
-		add('Connect', 'Port-forward…', ['F'], () => void portForward(resource, target), { primary: 8, needs: forward });
+		add('Connect', 'Port-forward…', ['F'], () => void portForward(resource, target), { primary: 8, needs: forward, kubectl: k({ op: 'portForward' }) });
 	}
 
 	if (writable) {
 		if (isNodes(resource)) {
-			add('Change', 'Cordon', ['c'], () => void cordon(target.name, true), { primary: 4, needs: on('patch') });
-			add('Change', 'Uncordon', ['u'], () => void cordon(target.name, false), { primary: 4, needs: on('patch') });
-			add('Change', 'Drain…', ['r'], dialog(() => ({ kind: 'drain', resource, target })), { primary: 4, needs: on('patch') });
+			add('Change', 'Cordon', ['c'], () => void cordon(target.name, true), { primary: 4, needs: on('patch'), kubectl: k({ op: 'cordon' }) });
+			add('Change', 'Uncordon', ['u'], () => void cordon(target.name, false), { primary: 4, needs: on('patch'), kubectl: k({ op: 'uncordon' }) });
+			add('Change', 'Drain…', ['r'], dialog(() => ({ kind: 'drain', resource, target })), { primary: 4, needs: on('patch'), kubectl: k({ op: 'drain', options: { ignoreDaemonsets: true } }) });
 		}
 		if (isCronJobs(resource)) {
-			add('Change', 'Trigger now…', ['t'], dialog(() => ({ kind: 'trigger', resource, target })), { primary: 4, needs: need('create', { group: 'batch', plural: 'jobs' }, ns) });
+			add('Change', 'Trigger now…', ['t'], dialog(() => ({ kind: 'trigger', resource, target })), { primary: 4, needs: need('create', { group: 'batch', plural: 'jobs' }, ns), kubectl: k({ op: 'trigger' }) });
 			const suspend = !subject.suspended;
-			add('Change', suspend ? 'Suspend…' : 'Resume…', ['s'], dialog(() => ({ kind: 'suspend', resource, target, suspend })), { needs: on('patch') });
+			add('Change', suspend ? 'Suspend…' : 'Resume…', ['s'], dialog(() => ({ kind: 'suspend', resource, target, suspend })), { needs: on('patch'), kubectl: k({ op: 'suspend', suspend }) });
 		}
-		if (canEdit(resource)) add('Change', 'Edit', ['e'], show('yaml', { editing: true }), { primary: 7, id: 'edit', needs: on('update') });
+		if (canEdit(resource)) add('Change', 'Edit', ['e'], show('yaml', { editing: true }), { primary: 7, id: 'edit', needs: on('update'), kubectl: k({ op: 'edit' }) });
 		if (canScale(resource) && !isPods(resource)) {
-			add('Change', 'Scale…', ['s'], dialog(() => ({ kind: 'scale', resource, target })), { primary: 4, needs: on('patch', 'scale') });
+			add('Change', 'Scale…', ['s'], dialog(() => ({ kind: 'scale', resource, target })), { primary: 4, needs: on('patch', 'scale'), kubectl: k({ op: 'scale' }) });
 		}
-		if (canRestart(resource)) add('Change', 'Restart…', ['r'], dialog(() => ({ kind: 'restart', resource, target })), { primary: 4, needs: on('patch') });
-		if (hasImages(resource)) add('Change', 'Set image…', ['i'], dialog(() => ({ kind: 'image', resource, target })), { needs: on('patch') });
+		if (canRestart(resource)) add('Change', 'Restart…', ['r'], dialog(() => ({ kind: 'restart', resource, target })), { primary: 4, needs: on('patch'), kubectl: k({ op: 'restart' }) });
+		if (hasImages(resource)) add('Change', 'Set image…', ['i'], dialog(() => ({ kind: 'image', resource, target })), { needs: on('patch'), kubectl: k({ op: 'image' }) });
 		if (isReplicaSets(resource)) {
-			add('Change', 'Roll back to this…', ['ctrl+l'], dialog(() => ({ kind: 'rollback', resource, target })), { needs: need('update', { group: 'apps', plural: 'deployments' }, ns) });
+			add('Change', 'Roll back to this…', ['ctrl+l'], dialog(() => ({ kind: 'rollback', resource, target })), { needs: need('update', { group: 'apps', plural: 'deployments' }, ns), kubectl: k({ op: 'rollback', deployment: ownerOf(subject)?.name }) });
 		}
 		if (resource.verbs.includes('patch')) {
-			add('Change', 'Labels & annotations…', ['L'], dialog(() => ({ kind: 'labels', resource, target })), { needs: on('patch') });
+			add('Change', 'Labels & annotations…', ['L'], dialog(() => ({ kind: 'labels', resource, target })), { needs: on('patch'), kubectl: k({ op: 'labels' }) });
 		}
 	}
 
@@ -252,6 +254,11 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 		);
 	}
 
+	add('Copy', 'Copy as kubectl…', [], () => {
+		const commands = out.filter((a) => a.kubectl).map((a) => ({ label: a.label.replace(/…$/, ''), command: a.kubectl! }));
+		app.dialog = { kind: 'kubectl', title: target.name, commands };
+	});
+
 	const focus = options.plugins;
 	if (focus) {
 		for (const plugin of app.k9s?.plugins ?? []) {
@@ -270,7 +277,7 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 		const label = several ? `Delete ${chosen.length}…` : 'Delete…';
 		const run = dialog(() => ({ kind: 'delete', resource, targets: chosen }));
 		// For several objects, the cursor's stands for all: they share a kind and mostly a namespace.
-		add('Delete', label, ['ctrl+d', 'Delete'], run, { danger: true, primary: 0, needs: on('delete') });
+		add('Delete', label, ['ctrl+d', 'Delete'], run, { danger: true, primary: 0, needs: on('delete'), kubectl: k({ op: 'delete', targets: chosen }) });
 	}
 	return out;
 }
