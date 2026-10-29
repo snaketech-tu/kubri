@@ -138,6 +138,7 @@
 		if (app.details?.tab === 'logs') {
 			return [
 				['/', 'search'],
+				['n/N', 'match'],
 				['0–6', 'range'],
 				['t', 'timestamps'],
 				['w', 'wrap'],
