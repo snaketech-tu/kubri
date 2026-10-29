@@ -91,6 +91,7 @@ See [Development](#development).
         <li>Live logs of a pod or a whole workload, all containers merged, with new pods joining during a rollout</li>
         <li>Levels, JSON and logfmt fields as a table, field filters like <code>status>=500</code>, folded stack traces and a rate strip</li>
         <li>Shell or attach in a real terminal</li>
+        <li>A workspace of log and shell tabs that keep running while you browse, docked below or beside the list, two side by side</li>
         <li>Port-forwards, with HTTP benchmarks on top</li>
         <li>Decoded Secrets, and what uses a ConfigMap or Secret</li>
       </ul>

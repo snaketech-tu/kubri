@@ -1,5 +1,6 @@
 import { drafts } from './navigation.svelte';
 import { access } from './access.svelte';
+import { dock } from './dock.svelte';
 import {
 	backend,
 	type AccessCheck,
@@ -821,6 +822,8 @@ class AppState {
 		this.applyGuard({ readOnly: true, reason: 'Kubri is still checking whether it may change this cluster', canUnlock: false, unlockedFor: null });
 		this.refreshGuard();
 		this.resources = resources;
+		const closed = dock.keepContext(cluster.context);
+		if (closed) this.toast(`Closed ${closed} workspace ${closed === 1 ? 'tab' : 'tabs'} of the last context`);
 		this.namespace = this.contextSettingsOf(cluster.context).namespace || ALL_NAMESPACES;
 		this.scope = null;
 		// Views of the last cluster may not exist in this one.

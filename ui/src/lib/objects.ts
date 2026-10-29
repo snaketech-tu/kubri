@@ -1,6 +1,7 @@
 import { access, need } from './access.svelte';
 import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, startPlugin } from './actions';
-import { backend, type AccessCheck, type ObjectRef, type Owner, type ResourceInfo } from './api';
+import { backend, type AccessCheck, type ObjectRef, type Owner, type ResourceInfo, type TerminalMode } from './api';
+import { dock } from './dock.svelte';
 import { errorMessage } from './format';
 import { parseShortcut, pluginApplies, shortcutLabel } from './k9s';
 import { kubectlCommand, type KubectlOp } from './kubectl';
@@ -181,6 +182,9 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get'), kubectl: k({ op: 'yaml' }) });
 	const logs = isPods(resource) ? on('get', 'log') : need('get', pods, ns, { subresource: 'log' });
 	if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2, id: 'logs', needs: logs, kubectl: k({ op: 'logs', workload: !isPods(resource) }) });
+	const keep = (kind: 'logs' | 'shell', extra: { previous?: boolean; mode?: TerminalMode } = {}) => () =>
+		dock.add({ kind, resource, target: { ...target, context: app.cluster?.context }, ...extra });
+	if (hasLogs(resource)) add('View', 'Logs in workspace', [], keep('logs'), { needs: logs });
 	if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }), { id: 'previous', needs: logs, kubectl: k({ op: 'logs', previous: true }) });
 	if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }), { needs: on('get'), kubectl: k({ op: 'decode' }) });
 	if (hasUsers(resource)) add('View', 'Used by', ['u'], show('describe'), { id: 'usedBy' });
@@ -190,6 +194,7 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 
 	if (isPods(resource) && writable) {
 		add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3, id: 'shell', needs: on('create', 'exec'), kubectl: k({ op: 'shell' }) });
+		add('Connect', 'Shell in workspace', [], keep('shell', { mode: 'shell' }), { needs: on('create', 'exec') });
 		add('Connect', 'Attach', ['a'], show('shell', { mode: 'attach' }), { id: 'attach', needs: on('create', 'attach'), kubectl: k({ op: 'attach' }) });
 		add('Connect', 'Debug…', ['D'], dialog(() => ({ kind: 'debug', on: 'pod', target })), { id: 'debug', needs: on('patch', 'ephemeralcontainers'), kubectl: k({ op: 'debug' }) });
 	}
