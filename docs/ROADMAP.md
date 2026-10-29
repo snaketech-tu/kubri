@@ -32,3 +32,7 @@ Kubri aims for feature parity with k9s. The work is split into four steps that b
 - ✅ Cluster sanitizer (Popeye), HTTP benchmarks.
 - ✅ Plugins, hotkeys, aliases and skins, compatible with k9s configuration files.
 - ✅ Packages for Windows, macOS and Linux; Docker image for the web mode with login; documentation.
+
+## Next: beyond Headlamp
+
+The plan for 0.3 to 1.0 is in [IMPLEMENTATION-PLAN-v2.md](IMPLEMENTATION-PLAN-v2.md).
