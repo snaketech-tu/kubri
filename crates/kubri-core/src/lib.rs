@@ -68,7 +68,7 @@ pub use error::{Error, Result};
 pub use explain::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject, Provider};
 pub use fixes::{MemoryFix, NearMiss, NodeFit, PodMatch, ServiceCheck};
 pub use health::Health;
-pub use helm::{HelmRelease, HelmReleaseDetails};
+pub use helm::{HelmChange, HelmChartRef, HelmOutcome, HelmRelease, HelmReleaseDetails, HubChart};
 pub use k9s::{
     Alias, ConfigFile, Hotkey, Jump, K9sConfig, Logger, Plugin, PluginInput, Threshold, Thresholds,
 };
@@ -1053,6 +1053,28 @@ impl Kubri {
         self.ensure_writable().await?;
         let context = self.session().await?.info.context.clone();
         helm::rollback(&context, namespace, name, revision).await
+    }
+
+    /// Installs or upgrades a release, on the connected context. A dry run renders it against
+    /// the cluster without changing anything, so it is allowed when Kubri may not change it.
+    pub async fn helm_change(&self, change: &HelmChange) -> Result<HelmOutcome> {
+        if !change.dry_run {
+            self.ensure_writable().await?;
+        }
+        let session = self.session().await?;
+        helm::change(session.client.clone(), &session.info.context, change).await
+    }
+
+    /// A chart's default values as YAML, like `helm show values`.
+    pub async fn helm_chart_values(&self, chart: &HelmChartRef) -> Result<String> {
+        let context = self.session().await?.info.context.clone();
+        helm::show_values(&context, chart).await
+    }
+
+    /// Charts on Artifact Hub matching `query`, like `helm search hub`.
+    pub async fn helm_search(&self, query: &str) -> Result<Vec<HubChart>> {
+        let context = self.session().await?.info.context.clone();
+        helm::search_hub(&context, query).await
     }
 
     /// Uninstalls a release with `helm uninstall`, on the connected context.

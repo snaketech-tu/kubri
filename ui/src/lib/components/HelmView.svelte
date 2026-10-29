@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { stringify } from 'yaml';
-	import { backend, type HelmRelease, type HelmReleaseDetails } from '../api';
+	import { backend, type ApplyItem, type HelmRelease, type HelmReleaseDetails } from '../api';
 	import { age, errorMessage } from '../format';
 	import {
 		chartLabel,
 		filterReleases,
 		hasValues,
+		manifestDocuments,
 		manifestObjects,
 		manifestResource,
 		previousRevision,
@@ -17,17 +18,22 @@
 	import { forControl } from '../keys';
 	import type { MenuAction } from '../menu';
 	import { app } from '../state.svelte';
+	import DiffView from './DiffView.svelte';
 	import HealthIcon from './HealthIcon.svelte';
+	import HelmChangeView from './HelmChangeView.svelte';
+	import HelmCompare from './HelmCompare.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import SearchField from './SearchField.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
-	type Tab = 'overview' | 'values' | 'manifest' | 'history';
+	type Tab = 'overview' | 'values' | 'manifest' | 'history' | 'compare' | 'drift';
 	const TABS: [Tab, string, string][] = [
 		['overview', 'Overview', 'n'],
 		['values', 'Values', 'v'],
 		['manifest', 'Manifest', 'm'],
-		['history', 'History', 'h']
+		['history', 'History', 'h'],
+		['compare', 'Compare', 'c'],
+		['drift', 'Drift', 'x']
 	];
 	const REFRESH_MS = 30_000;
 
@@ -48,6 +54,14 @@
 	let history = $state<HelmRelease[]>([]);
 	let detailsError = $state<string | null>(null);
 	let historyCursor = $state(0);
+	/** Installing a chart, or upgrading the opened release. */
+	let changing = $state<'install' | 'upgrade' | null>(null);
+	/** The revision the shown one is compared with; null for the one before it. */
+	let compareWith = $state<number | null>(null);
+	let compared = $state<HelmReleaseDetails | null>(null);
+	let compareError = $state<string | null>(null);
+	/** Where the live objects differ from the deployed revision, found with a server-side dry run. */
+	let drift = $state<{ key: string; items: ApplyItem[] | null; error: string | null } | null>(null);
 
 	let scroller = $state<HTMLDivElement>();
 	let filterInput = $state<HTMLInputElement>();
@@ -100,6 +114,48 @@
 		);
 		return () => (cancelled = true);
 	});
+
+	const compareTo = $derived(
+		details
+			? (compareWith ??
+					previousRevision(history, details.revision) ??
+					history.find((h) => h.revision !== details!.revision)?.revision ??
+					null)
+			: null
+	);
+	$effect(() => {
+		const target = opened;
+		const rev = compareTo;
+		if (!target || tab !== 'compare' || rev === null) return;
+		let cancelled = false;
+		compareError = null;
+		backend.helmRelease(target.namespace, target.name, rev).then(
+			(d) => !cancelled && (compared = d),
+			(err) => !cancelled && (compareError = errorMessage(err))
+		);
+		return () => (cancelled = true);
+	});
+
+	$effect(() => {
+		void reloads;
+		const d = shown;
+		if (tab !== 'drift' || !d || revision !== null) return;
+		const key = `${releaseKey(d)}@${d.revision}#${reloads}`;
+		if (drift?.key === key) return;
+		drift = { key, items: null, error: null };
+		backend
+			.apply({
+				objects: manifestDocuments(d.manifest),
+				namespace: d.namespace,
+				dryRun: true,
+				context: app.cluster?.context ?? null
+			})
+			.then(
+				(items) => drift?.key === key && (drift = { key, items, error: null }),
+				(err) => drift?.key === key && (drift = { key, items: null, error: errorMessage(err) })
+			);
+	});
+	const drifted = $derived(drift?.items?.filter((i) => i.outcome !== 'unchanged') ?? []);
 
 	const visible = $derived(filterReleases(releases ?? [], filter));
 	const cursor = $derived.by(() => {
@@ -167,6 +223,9 @@
 			details = null;
 			history = [];
 			historyCursor = 0;
+			compareWith = null;
+			compared = null;
+			drift = null;
 		}
 		tab = to;
 	}
@@ -184,6 +243,7 @@
 		}));
 		if (helm) {
 			actions.push(
+				{ group: 'Change', label: 'Upgrade…', keys: ['u'], run: () => upgrade(release) },
 				{ group: 'Change', label: 'Roll back…', keys: ['r'], run: () => void rollback(release) },
 				{ group: 'Delete', label: 'Uninstall…', keys: ['ctrl+d'], danger: true, run: () => uninstall(release) }
 			);
@@ -204,6 +264,8 @@
 	function viewRevision(rev: number) {
 		const newest = history[0]?.revision;
 		revision = rev === newest ? null : rev;
+		compareWith = null;
+		compared = null;
 		tab = 'overview';
 	}
 
@@ -234,6 +296,25 @@
 		};
 	}
 
+	function upgrade(release: HelmRelease | undefined) {
+		if (!release || !helm) return;
+		open(release, tab);
+		revision = null;
+		changing = 'upgrade';
+	}
+
+	/** After an install or upgrade: the release, as it now is. */
+	function changed(release: { namespace: string; name: string }) {
+		changing = null;
+		opened = release;
+		cursorKey = releaseKey(release);
+		revision = null;
+		details = null;
+		drift = null;
+		tab = 'overview';
+		reloads++;
+	}
+
 	function reload() {
 		revision = null;
 		reloads++;
@@ -246,13 +327,19 @@
 		app.showDetails(resource, { resource, namespace: ns, name: object.name });
 	}
 
+	function compare(rev: number) {
+		compareWith = rev;
+		compared = null;
+		tab = 'compare';
+	}
+
 	/** Whether the open release can go back to revision `target`. */
 	function canRollBack(target: number) {
 		return !!helm && !!latest && target !== latest.revision;
 	}
 
 	function onkeydown(e: KeyboardEvent) {
-		if (app.overlayOpen) return;
+		if (app.overlayOpen || changing) return;
 		if (e.target === filterInput) {
 			if (['Escape', 'Enter', 'ArrowDown'].includes(e.key)) {
 				if (e.key === 'Escape') filter = '';
@@ -293,10 +380,19 @@
 						open(current);
 					}
 					return true;
+				case 'u':
+					upgrade(release);
+					return true;
+				case 'i':
+					if (opened || !helm) return false;
+					changing = 'install';
+					return true;
 				case 'n':
 				case 'v':
 				case 'm':
-				case 'h': {
+				case 'h':
+				case 'c':
+				case 'x': {
 					const to = TABS.find(([, , key]) => key === e.key)![0];
 					if (opened) tab = to;
 					else if (current) open(current, to);
@@ -346,7 +442,15 @@
 {/snippet}
 
 <section>
-	{#if opened}
+	{#if changing === 'install'}
+		<HelmChangeView oncancel={() => (changing = null)} ondone={changed} />
+	{:else if changing === 'upgrade'}
+		{#if shown && revision === null}
+			<HelmChangeView release={shown} oncancel={() => (changing = null)} ondone={changed} />
+		{:else}
+			<p class="muted pad">Loading…</p>
+		{/if}
+	{:else if opened}
 		<PageHeader
 			crumbs={['Explore', { label: 'Helm', onclick: back, title: 'Back to releases (Esc)' }, opened.name]}
 			title={opened.name}
@@ -368,6 +472,9 @@
 						</select>
 					</label>
 				{/if}
+				<button class="btn" onclick={() => upgrade(latest)} disabled={!helm || !latest} title={helm ? 'Upgrade with changed values or another chart version (u)' : 'Needs the helm command'}>
+					Upgrade
+				</button>
 				<button
 					class="btn"
 					onclick={() => rollback(latest, revision ?? undefined)}
@@ -389,7 +496,7 @@
 			</div>
 		{/if}
 		{#if helm === null}
-			<div class="notice warn">Install the <code>helm</code> command where Kubri runs to roll back or uninstall releases.</div>
+			<div class="notice warn">Install the <code>helm</code> command where Kubri runs to upgrade, roll back or uninstall releases.</div>
 		{/if}
 		{#if detailsError}
 			<div class="notice" role="alert">{detailsError}</div>
@@ -470,6 +577,90 @@
 					{/if}
 				{:else if tab === 'manifest'}
 					<YamlEditor value={shown.manifest} readonly oncancel={blurEditor} />
+				{:else if tab === 'compare'}
+					<div class="pad">
+						{#if history.length < 2}
+							<p class="muted">The release has one revision, so there is nothing to compare it with.</p>
+						{:else}
+							<div class="compare-head">
+								<label class="revision">
+									Changes from revision
+									<select
+										value={compareTo ?? ''}
+										onchange={(e) => {
+											compareWith = Number(e.currentTarget.value);
+											compared = null;
+										}}
+									>
+										{#each history.filter((h) => h.revision !== shown.revision) as h (h.revision)}
+											<option value={h.revision}>{h.revision} · {h.status}</option>
+										{/each}
+									</select>
+									to revision {shown.revision}
+								</label>
+								{#if compareTo !== null && canRollBack(compareTo)}
+									<button class="btn small" onclick={() => rollback(latest, compareTo ?? undefined)}>Roll back to {compareTo}</button>
+								{/if}
+							</div>
+							{#if compareError}
+								<p role="alert">{compareError}</p>
+							{:else if compared && compared.revision === compareTo}
+								<HelmCompare
+									namespace={shown.namespace}
+									before={{ values: compared.values, manifest: compared.manifest }}
+									after={{ values: shown.values, manifest: shown.manifest }}
+								/>
+							{:else}
+								<p class="muted">Loading…</p>
+							{/if}
+						{/if}
+					</div>
+				{:else if tab === 'drift'}
+					<div class="pad">
+						{#if revision !== null}
+							<p class="muted">Drift compares the cluster with the deployed revision.</p>
+							<button class="link" onclick={() => (revision = null)}>Show the latest</button>
+						{:else if !drift || (!drift.items && !drift.error)}
+							<p class="muted">Comparing the live objects with the release…</p>
+						{:else if drift.error}
+							<p role="alert">{drift.error}</p>
+						{:else if !drifted.length}
+							<p>
+								<HealthIcon health="ok" /> The {drift.items?.length} objects in the cluster match the release.
+							</p>
+							<p class="muted">Checked with a server-side dry run of the release manifest, like <code>kubectl diff --server-side</code>.</p>
+						{:else}
+							<p>
+								{drifted.length} of {drift.items?.length} objects differ from the release. An upgrade or a rollback puts them back.
+							</p>
+							{#each drifted as item (item.index)}
+								<div class="drift">
+									<div class="drift-head">
+										<span class="kind">{item.kind}</span>
+										<span class="mono">{item.name}</span>
+										<span class="muted">
+											{item.outcome === 'changed'
+												? 'changed in the cluster'
+												: item.outcome === 'created' || item.outcome === 'unchecked'
+													? 'missing from the cluster'
+													: 'could not be checked'}
+										</span>
+									</div>
+									{#if item.outcome === 'failed'}
+										<p class="muted">{item.message}</p>
+									{:else if item.outcome === 'changed'}
+										<DiffView
+											before={item.before}
+											after={item.after}
+											changed="lines between the cluster and the release"
+											maxHeight="360px"
+										/>
+									{/if}
+								</div>
+							{/each}
+						{/if}
+						<p><button class="link" onclick={() => (drift = null)}>Check again</button></p>
+					</div>
 				{:else}
 					<table>
 						<thead>
@@ -500,6 +691,9 @@
 									<td>
 										<div class="actions">
 											<button class="btn small" onclick={() => viewRevision(h.revision)}>View</button>
+											{#if h.revision !== shown.revision}
+												<button class="btn small" onclick={() => compare(h.revision)}>Compare</button>
+											{/if}
 											{#if canRollBack(h.revision)}
 												<button class="btn small" onclick={() => rollback(latest, h.revision)}>Roll back</button>
 											{/if}
@@ -521,6 +715,9 @@
 		>
 			{#snippet tools()}
 				<button class="btn" onclick={() => reloads++} title="Read the releases again">Reload</button>
+				<button class="btn" onclick={() => (changing = 'install')} disabled={!helm} title={helm ? 'Install a chart (i)' : 'Needs the helm command'}>
+					Install chart
+				</button>
 			{/snippet}
 		</PageHeader>
 
@@ -679,6 +876,24 @@
 	}
 	.pad {
 		padding: 16px 20px;
+	}
+	.compare-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 4px;
+	}
+	.drift {
+		display: grid;
+		gap: 8px;
+		margin: 10px 0;
+	}
+	.drift-head {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		font-size: 13px;
 	}
 	.facts {
 		display: grid;

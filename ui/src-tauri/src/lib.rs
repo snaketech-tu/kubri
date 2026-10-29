@@ -19,6 +19,7 @@ use kubri_core::{
     TerminalOptions, TerminalOutput, Usage, XrayNode,
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
+use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde_json::Value;
 use tauri::State;
 use tauri::async_runtime::JoinHandle;
@@ -628,6 +629,21 @@ async fn helm_rollback(
 }
 
 #[tauri::command]
+async fn helm_change(kubri: State<'_, Arc<Kubri>>, change: HelmChange) -> CommandResult<HelmOutcome> {
+    kubri.helm_change(&change).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn helm_chart_values(kubri: State<'_, Arc<Kubri>>, chart: HelmChartRef) -> CommandResult<String> {
+    kubri.helm_chart_values(&chart).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn helm_search(kubri: State<'_, Arc<Kubri>>, query: String) -> CommandResult<Vec<HubChart>> {
+    kubri.helm_search(&query).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn helm_uninstall(
     kubri: State<'_, Arc<Kubri>>,
     namespace: String,
@@ -835,6 +851,9 @@ pub fn run() {
             helm_version,
             helm_rollback,
             helm_uninstall,
+            helm_change,
+            helm_chart_values,
+            helm_search,
             open_url,
             save_text,
             drill,

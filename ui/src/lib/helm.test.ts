@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { HelmRelease, ResourceInfo } from './api';
-import { filterReleases, hasValues, manifestObjects, manifestResource, previousRevision, statusHealth } from './helm';
+import {
+	filterReleases,
+	hasValues,
+	manifestChanges,
+	manifestObjects,
+	manifestResource,
+	previousRevision,
+	statusHealth,
+	valuesDiffer
+} from './helm';
 
 function release(name: string, revision: number, status = 'deployed'): HelmRelease {
 	return {
@@ -71,5 +80,55 @@ describe('helm', () => {
 		const resources = [{ group: 'apps', kind: 'Deployment', plural: 'deployments' }] as ResourceInfo[];
 		expect(manifestResource(resources, objects[1])?.plural).toBe('deployments');
 		expect(manifestResource(resources, objects[0])).toBeUndefined();
+	});
+});
+
+describe('manifest changes', () => {
+	const deploy = (replicas: number) => `---
+# Source: shop/templates/deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop
+spec:
+  replicas: ${replicas}
+`;
+	const svc = `---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shop
+spec:
+  ports: [{ port: 80 }]
+`;
+	const map = (namespace?: string) => `---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shop
+${namespace ? `  namespace: ${namespace}\n` : ''}data: { a: "1" }
+`;
+
+	it('pairs objects by kind, namespace and name, changes first', () => {
+		const changes = manifestChanges(svc + deploy(1) + map(), deploy(3) + svc + '---\nkind: Secret\napiVersion: v1\nmetadata: { name: shop }\n', 'apps');
+		expect(changes.map((c) => [c.kind, c.change])).toEqual([
+			['Deployment', 'changed'],
+			['Secret', 'added'],
+			['ConfigMap', 'removed'],
+			['Service', 'unchanged']
+		]);
+		expect((changes[0].before as any).spec.replicas).toBe(1);
+		expect((changes[0].after as any).spec.replicas).toBe(3);
+	});
+
+	it('treats the release namespace and an explicit one alike', () => {
+		expect(manifestChanges(map(), map('apps'), 'apps').map((c) => c.change)).toEqual(['changed']);
+		expect(manifestChanges(map(), map('other'), 'apps').map((c) => c.change)).toEqual(['added', 'removed']);
+	});
+
+	it('compares values without caring about key order or empty values', () => {
+		expect(valuesDiffer({ a: 1, b: { c: 2, d: 3 } }, { b: { d: 3, c: 2 }, a: 1 })).toBe(false);
+		expect(valuesDiffer(null, {})).toBe(false);
+		expect(valuesDiffer({ a: 1 }, { a: 2 })).toBe(true);
 	});
 });
