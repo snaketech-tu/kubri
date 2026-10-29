@@ -120,6 +120,7 @@ export const tauriBackend: Backend = {
 
 	portForwards: () => invoke('port_forwards'),
 	startPortForward: (request) => invoke('start_port_forward', { request }),
+	startFavoriteForwards: () => invoke('start_favorite_forwards'),
 	stopPortForward: (id) => invoke('stop_port_forward', { id }),
 	benchmarks: () => invoke('benchmarks'),
 	startBenchmark: (request) => invoke('start_benchmark', { request }),

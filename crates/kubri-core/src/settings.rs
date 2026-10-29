@@ -32,6 +32,32 @@ pub struct ContextSettings {
     /// AI agents connected over MCP may change this context, each change confirmed in Kubri.
     /// Production contexts never allow it.
     pub agent_writes: bool,
+    /// Port-forwards that start when Kubri connects to this context.
+    pub forwards: Vec<FavoriteForward>,
+}
+
+/// A port-forward to start whenever Kubri connects to its context, on the same local port.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FavoriteForward {
+    /// A pod, Service or workload; the context comes from where the favorite is kept.
+    pub target: crate::ObjectRef,
+    pub remote_port: u16,
+    pub local_port: u16,
+    /// Where to listen; empty for 127.0.0.1.
+    #[serde(default)]
+    pub address: String,
+}
+
+impl FavoriteForward {
+    /// Whether `forward` is this favorite running.
+    pub fn matches(&self, forward: &crate::PortForwardInfo) -> bool {
+        forward.target.resource == self.target.resource
+            && forward.target.namespace == self.target.namespace
+            && forward.target.name == self.target.name
+            && forward.remote_port == self.remote_port
+            && forward.local_port == self.local_port
+    }
 }
 
 impl ContextSettings {
@@ -276,6 +302,51 @@ mod tests {
             )
             .unwrap();
         settings.diff.scale = true;
+        settings
+            .set_columns(
+                "apps/Deployment",
+                ColumnSettings {
+                    hidden: vec!["Up-to-date".into()],
+                    custom: vec![CustomColumn {
+                        name: " ".into(),
+                        path: " .spec.replicas ".into(),
+                    }],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        // A column without a name is named by its path.
+        assert_eq!(
+            settings.columns["apps/Deployment"].custom[0].name,
+            ".spec.replicas"
+        );
+        assert!(
+            settings
+                .set_columns(
+                    "/Pod",
+                    ColumnSettings {
+                        custom: vec![CustomColumn {
+                            name: "x".into(),
+                            path: ".a[".into(),
+                        }],
+                        ..Default::default()
+                    },
+                )
+                .is_err()
+        );
+        settings
+            .set_columns("apps/Deployment", ColumnSettings::default())
+            .unwrap();
+        assert!(settings.columns.is_empty());
+        let favorite: FavoriteForward = serde_json::from_value(serde_json::json!({
+            "target": { "resource": { "group": "", "version": "v1", "plural": "services" }, "namespace": "shop", "name": "web" },
+            "remotePort": 80, "localPort": 8080
+        }))
+        .unwrap();
+        assert_eq!(favorite.address, "");
+        let mut prod = settings.context("prod");
+        prod.forwards.push(favorite);
+        settings.set_context("prod", prod).unwrap();
         write(&path, &settings).unwrap();
         assert_eq!(read(&path).unwrap(), settings);
         // Unknown and missing fields are fine, so older and newer versions share the file.

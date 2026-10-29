@@ -78,14 +78,16 @@ pub use metrics::{Limits, MetricsKind, Usage, parse_quantity};
 pub use node::{DrainOptions, DrainReport, PodIssue};
 pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
 pub use plugin::{Cell, PluginRun, Release};
-pub use portforward::{PortForwardInfo, PortForwardRequest};
+pub use portforward::{FavoriteStart, PortForwardInfo, PortForwardRequest};
 pub use preview::{Change, Preview};
 pub use pulse::{EventPulse, KindPulse, Pulse, RecentEvent, Utilization};
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
-pub use settings::{AgentSettings, ColumnSettings, ContextSettings, CustomColumn, DiffSettings, Settings};
+pub use settings::{
+    AgentSettings, ColumnSettings, ContextSettings, CustomColumn, DiffSettings, FavoriteForward, Settings,
+};
 
 /// Kubri's config folder, where its settings live.
 pub fn config_dir() -> Option<std::path::PathBuf> {
@@ -1309,35 +1311,69 @@ impl Kubri {
     }
 
     /// Forwards a local port to a pod. For a Service or workload a ready pod is picked, and a
-    /// Service port is mapped to the pod port it targets.
+    /// Service port is mapped to the pod port it targets; when that pod goes away, the forward
+    /// picks another.
     pub async fn start_port_forward(&self, request: PortForwardRequest) -> Result<PortForwardInfo> {
         portforward::validate_address(request.address.as_deref())?;
         let session = self.session().await?;
         let target = &request.target;
         let api = session.pod_api(target.namespace.as_deref())?;
-        let (pod, port) = if session.is_core(&target.resource, "Pod")? {
-            (api.get(&target.name).await?, request.remote_port)
+        let (pod, port) = session.forward_destination(target, request.remote_port).await?;
+        let repick: Option<portforward::Repick> = if session.is_core(&target.resource, "Pod")? {
+            None
         } else {
-            let pods = session.pods_of(target).await?;
-            let pod = portforward::pick_pod(pods)
-                .ok_or_else(|| Error::Unsupported(format!("{} has no ready pod", target.name)))?;
-            let port = if session.is_core(&target.resource, "Service")? {
-                let services: Api<Service> =
-                    Api::namespaced(session.client.clone(), api.namespace().unwrap_or_default());
-                let service = services.get(&target.name).await?;
-                portforward::service_target_port(&service, request.remote_port, &pod)?
-            } else {
-                request.remote_port
-            };
-            (pod, port)
+            let session = Arc::clone(&session);
+            let target = target.clone();
+            let remote_port = request.remote_port;
+            Some(Arc::new(move || {
+                let session = Arc::clone(&session);
+                let target = target.clone();
+                Box::pin(async move {
+                    let (pod, port) = session.forward_destination(&target, remote_port).await?;
+                    Ok((pod.metadata.name.unwrap_or_default(), port))
+                })
+            }))
         };
         let destination = portforward::Destination {
             namespace: pod.metadata.namespace.clone().unwrap_or_default(),
             pod: pod.metadata.name.clone().unwrap_or_default(),
             port,
             api,
+            repick,
         };
         portforward::start(&self.forwards, session.info.context.clone(), request, destination).await
+    }
+
+    /// Starts the connected context's favorite port-forwards that are not running yet, and
+    /// says which could not start.
+    pub async fn start_favorite_forwards(&self) -> Result<Vec<FavoriteStart>> {
+        let context = self.session().await?.info.context.clone();
+        let running = self.port_forwards();
+        let mut out = Vec::new();
+        for favorite in self.settings().context(&context).forwards {
+            let already = running
+                .iter()
+                .any(|f| f.context == context && favorite.matches(f));
+            if already {
+                continue;
+            }
+            let request = PortForwardRequest {
+                target: ObjectRef {
+                    context: Some(context.clone()),
+                    ..favorite.target.clone()
+                },
+                remote_port: favorite.remote_port,
+                local_port: Some(favorite.local_port),
+                address: Some(favorite.address.clone()).filter(|a| !a.is_empty()),
+            };
+            let error = self
+                .start_port_forward(request)
+                .await
+                .err()
+                .map(|e| e.to_string());
+            out.push(FavoriteStart { favorite, error });
+        }
+        Ok(out)
     }
 
     pub fn stop_port_forward(&self, id: u32) -> Result<()> {
@@ -1559,6 +1595,27 @@ impl Session {
     }
 
     /// The pods behind `target`: the pod itself, or the pods a workload or Service selects.
+    /// The pod a forward to `target` reaches, and the port on it: the pod itself, or for a
+    /// Service or workload a ready pod, with a Service port mapped to the pod port it targets.
+    async fn forward_destination(&self, target: &ObjectRef, remote_port: u16) -> Result<(Pod, u16)> {
+        let api = self.pod_api(target.namespace.as_deref())?;
+        if self.is_core(&target.resource, "Pod")? {
+            return Ok((api.get(&target.name).await?, remote_port));
+        }
+        let pods = self.pods_of(target).await?;
+        let pod = portforward::pick_pod(pods)
+            .ok_or_else(|| Error::Unsupported(format!("{} has no ready pod", target.name)))?;
+        let port = if self.is_core(&target.resource, "Service")? {
+            let services: Api<Service> =
+                Api::namespaced(self.client.clone(), api.namespace().unwrap_or_default());
+            let service = services.get(&target.name).await?;
+            portforward::service_target_port(&service, remote_port, &pod)?
+        } else {
+            remote_port
+        };
+        Ok((pod, port))
+    }
+
     async fn pods_of(&self, target: &ObjectRef) -> Result<Vec<Pod>> {
         Ok(self.pods_and_selector(target).await?.0)
     }

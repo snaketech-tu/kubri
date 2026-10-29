@@ -159,6 +159,8 @@
 			return [
 				[':', 'command'],
 				['c', 'copy url'],
+				['o', 'open'],
+				['s', 'favorite'],
 				['b', 'benchmark'],
 				['^d', 'stop'],
 				['?', 'help']

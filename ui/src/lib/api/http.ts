@@ -174,6 +174,7 @@ export const httpBackend: Backend = {
 
 	portForwards: () => request('GET', '/portforwards'),
 	startPortForward: (req) => request('POST', '/portforwards', req),
+	startFavoriteForwards: () => request('POST', '/portforwards/favorites'),
 	stopPortForward: (id) => request('DELETE', `/portforwards/${id}`),
 	benchmarks: () => request('GET', '/benchmarks'),
 	startBenchmark: (req) => request('POST', '/benchmarks', req),

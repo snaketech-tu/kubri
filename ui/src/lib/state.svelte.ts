@@ -8,6 +8,8 @@ import {
 	type AccessCheck,
 	type ClusterInfo,
 	type ColumnSettings,
+	type FavoriteForward,
+	type FavoriteStart,
 	type BenchInfo,
 	type ContextInfo,
 	type ContextSettings,
@@ -106,7 +108,8 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 	readOnly: false,
 	locked: false,
 	namespace: '',
-	agentWrites: false
+	agentWrites: false,
+	forwards: []
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -870,7 +873,76 @@ class AppState {
 		if (this.page === 'xray' && !this.xrayResource) this.page = 'resources';
 		// Hotkeys, plugins and skins can differ per context.
 		this.loadK9s();
+		this.startFavoriteForwards();
 	}
+
+	/** Starts the connected context's favorite port-forwards, as after connecting. */
+	async startFavoriteForwards() {
+		let results: FavoriteStart[];
+		try {
+			results = await backend.startFavoriteForwards();
+		} catch {
+			return;
+		}
+		if (!results.length) return;
+		this.refreshForwards();
+		const failed = results.filter((r) => r.error);
+		const started = results.length - failed.length;
+		if (started) this.toast(`Started ${started} favorite ${started === 1 ? 'port-forward' : 'port-forwards'}`);
+		for (const { favorite, error } of failed) {
+			this.toast(`${favoriteLabel(favorite)} did not start: ${error}`, 'bad');
+		}
+	}
+
+	/** The favorite a running forward is, if it is one. */
+	favoriteOf(forward: PortForwardInfo): FavoriteForward | undefined {
+		return this.contextSettingsOf(forward.context).forwards?.find((f) => isForwardOf(f, forward));
+	}
+
+	/** Keeps a running forward as a favorite of its context, or forgets it. */
+	async toggleFavorite(forward: PortForwardInfo) {
+		const settings = this.contextSettingsOf(forward.context);
+		const kept = settings.forwards ?? [];
+		const known = this.favoriteOf(forward);
+		const { context: _, ...target } = forward.target;
+		const forwards = known
+			? kept.filter((f) => f !== known)
+			: [
+					...kept,
+					{
+						target,
+						remotePort: forward.remotePort,
+						localPort: forward.localPort,
+						address: forward.address === '127.0.0.1' ? '' : forward.address
+					}
+				];
+		if (await this.setContextSettings(forward.context, { ...settings, forwards })) {
+			this.toast(known ? `${favoriteLabel(known)} is no longer a favorite` : `${favoriteLabel(forwards.at(-1)!)} starts whenever Kubri connects to ${this.contextName(forward.context)}`);
+		}
+	}
+
+	/** Forgets a favorite of the connected context. */
+	async removeFavorite(favorite: FavoriteForward) {
+		const context = this.cluster?.context;
+		if (!context) return;
+		const settings = this.contextSettingsOf(context);
+		await this.setContextSettings(context, { ...settings, forwards: (settings.forwards ?? []).filter((f) => f !== favorite) });
+	}
+}
+
+/** Whether a running forward is a favorite. */
+export function isForwardOf(favorite: FavoriteForward, forward: PortForwardInfo) {
+	return (
+		sameResource(favorite.target.resource, forward.target.resource) &&
+		(favorite.target.namespace ?? null) === (forward.target.namespace ?? null) &&
+		favorite.target.name === forward.target.name &&
+		favorite.remotePort === forward.remotePort &&
+		favorite.localPort === forward.localPort
+	);
+}
+
+export function favoriteLabel(f: FavoriteForward) {
+	return `${f.target.resource.plural}/${f.target.name}:${f.remotePort} on port ${f.localPort}`;
 }
 
 export function sameResource(a: ResourceRef, b: ResourceRef) {

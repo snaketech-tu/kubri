@@ -34,6 +34,22 @@ export interface ContextSettings {
 	namespace: string;
 	/** AI agents may change this context, each change confirmed in Kubri. Never on production. */
 	agentWrites: boolean;
+	/** Port-forwards that start when Kubri connects to this context. */
+	forwards: FavoriteForward[];
+}
+
+/** A port-forward that starts whenever Kubri connects to its context, on the same local port. */
+export interface FavoriteForward {
+	target: ObjectRef;
+	remotePort: number;
+	localPort: number;
+	/** Empty for 127.0.0.1. */
+	address: string;
+}
+
+export interface FavoriteStart {
+	favorite: FavoriteForward;
+	error: string | null;
 }
 
 /** Which actions show a dry-run diff first. YAML edits always do. */
@@ -989,6 +1005,8 @@ export interface Backend {
 	openTerminal(target: ObjectRef, options: TerminalOptions, onEvent: (event: TerminalEvent) => void): TerminalSession;
 	portForwards(): Promise<PortForwardInfo[]>;
 	startPortForward(request: PortForwardRequest): Promise<PortForwardInfo>;
+	/** Starts the connected context's favorite forwards that are not running. */
+	startFavoriteForwards(): Promise<FavoriteStart[]>;
 	stopPortForward(id: number): Promise<void>;
 	/** Newest first, with live progress while running. */
 	benchmarks(): Promise<BenchInfo[]>;
