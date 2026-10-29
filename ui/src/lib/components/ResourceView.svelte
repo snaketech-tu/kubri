@@ -584,6 +584,9 @@
 			<button onclick={() => retry++}>Retry</button>
 		</div>
 	{/if}
+	{#if table.notice}
+		<div class="metrics-note" role="status">{table.notice}.</div>
+	{/if}
 	{#if metricsKind && metrics.error}
 		<div class="metrics-note" role="status">
 			Metrics {metrics.available ? 'are stale' : 'are unavailable'}{metrics.updated

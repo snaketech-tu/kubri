@@ -6,6 +6,7 @@
 	import { forControl } from '../keys';
 	import { resolveColor } from '../skin';
 	import { app } from '../state.svelte';
+	import ContextSettingsForm from './ContextSettingsForm.svelte';
 	import PageHeader from './PageHeader.svelte';
 
 	let previews = $state<Record<string, SkinTheme | null>>({});
@@ -71,9 +72,9 @@
 
 <section>
 	<PageHeader
-		crumbs={['Explore', 'k9s config']}
-		title="k9s configuration"
-		subtitle="Aliases, hotkeys, plugins and skins from your k9s files"
+		crumbs={['Explore', 'Settings']}
+		title="Settings"
+		subtitle="Kubri's own settings, and the aliases, hotkeys, plugins and skins from your k9s files"
 	>
 		{#snippet tools()}
 			<button class="btn" onclick={reload} disabled={reloading} title="Read the files again (Shift+R)">
@@ -83,6 +84,36 @@
 	</PageHeader>
 
 	<div class="scroll" bind:this={scroller}>
+		<div class="block">
+			<h2 id="config-contexts">Contexts <span class="count">{app.contexts.length}</span></h2>
+			<p class="muted">
+				Names, colors and guard rails per context, kept in Kubri's settings file. The kubeconfig is never changed.
+			</p>
+			<div class="contexts">
+				{#each app.contexts as ctx (ctx.name)}
+					{@const settings = app.contextSettingsOf(ctx.name)}
+					<details class="context" open={ctx.name === app.cluster?.context && app.configSection === 'contexts'}>
+						<summary>
+							<span class="swatch" style:background={settings.color || 'transparent'}></span>
+							<strong>{app.contextName(ctx.name)}</strong>
+							{#if settings.displayName}<span class="muted small">{ctx.name}</span>{/if}
+							{#if settings.production}<span class="tag bad">production</span>
+							{:else if settings.label}<span class="tag">{settings.label}</span>{/if}
+							{#if settings.readOnly}<span class="tag">read-only</span>
+							{:else if settings.locked}<span class="tag">locked</span>{/if}
+							{#if ctx.name === app.cluster?.context}<span class="tag ok">connected</span>{/if}
+						</summary>
+						<div class="context-form">
+							<ContextSettingsForm
+								context={ctx.name}
+								namespaces={ctx.name === app.cluster?.context ? app.namespaces : []}
+							/>
+						</div>
+					</details>
+				{/each}
+			</div>
+		</div>
+
 		{#if !config}
 			<p class="empty">Reading the k9s configuration…</p>
 		{:else}
@@ -406,6 +437,39 @@
 	.tag.bad {
 		background: color-mix(in srgb, var(--bad) 16%, transparent);
 		color: var(--bad);
+	}
+	.tag.ok {
+		background: color-mix(in srgb, var(--ok) 16%, transparent);
+		color: var(--ok);
+	}
+	.contexts {
+		display: grid;
+		gap: 6px;
+	}
+	.context {
+		border: 1px solid var(--border-subtle);
+		border-radius: 8px;
+	}
+	.context summary {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 12px;
+		cursor: pointer;
+	}
+	.context[open] summary {
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.context .swatch {
+		width: 10px;
+		height: 10px;
+		flex: none;
+		border-radius: 50%;
+		box-shadow: 0 0 0 1px var(--border);
+	}
+	.context-form {
+		max-width: 420px;
+		padding: 12px;
 	}
 	.aliases {
 		display: grid;

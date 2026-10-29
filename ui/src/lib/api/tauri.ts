@@ -45,6 +45,15 @@ export const tauriBackend: Backend = {
 	reloadContexts: () => invoke('reload_contexts'),
 	switchContext: (name) => invoke('switch_context', { name }),
 	resources: () => invoke('resources'),
+	access: (checks, fresh = false) => invoke('access', { checks, fresh }),
+	whoAmI: () => invoke('who_am_i'),
+	readableNamespaces: () => invoke('readable_namespaces'),
+	settings: () => invoke('settings'),
+	setContextSettings: (name, settings) => invoke('set_context_settings', { name, settings }),
+	setDiffSettings: (settings) => invoke('set_diff_settings', { settings }),
+	guard: () => invoke('guard'),
+	unlock: () => invoke('unlock'),
+	lock: () => invoke('lock'),
 
 	watchTable(resource, namespace, scope, onEvent) {
 		const channel = new Channel<TableEvent>();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Grant, Rule, SubjectInfo } from './api';
-import { allows, filterSubjects, isAdmin, matrix, rulesOf } from './rbac';
+import { allows, filterSubjects, grantYaml, isAdmin, matrix, rulesOf } from './rbac';
 
 function rule(apiGroups: string[], resources: string[], verbs: string[], extra: Partial<Rule> = {}): Rule {
 	return { apiGroups, resources, resourceNames: [], nonResourceUrls: [], verbs, ...extra };
@@ -72,5 +72,67 @@ describe('subjects', () => {
 		expect(filterSubjects(subjects, 'shop').map((s) => s.name)).toEqual(['default']);
 		expect(filterSubjects(subjects, 'serviceacc')).toHaveLength(1);
 		expect(filterSubjects(subjects, ' ')).toHaveLength(2);
+	});
+});
+
+describe('grantYaml', () => {
+	const check = { verb: 'delete', group: '', resource: 'pods', subresource: '', namespace: 'shop', name: 'web-1' };
+
+	it('writes a Role and RoleBinding for a user', () => {
+		const yaml = grantYaml(check, { username: 'jane@example.com', groups: [] });
+		expect(yaml).toContain('kind: Role\n');
+		expect(yaml).toContain('  namespace: shop');
+		expect(yaml).toContain('resources: ["pods"]');
+		expect(yaml).toContain('resourceNames: ["web-1"]');
+		expect(yaml).toContain('verbs: ["delete"]');
+		expect(yaml).toContain('  - kind: User\n    name: jane@example.com');
+		expect(yaml).toContain('name: kubri-delete-pods');
+	});
+
+	it('binds service accounts as such, and leaves names out for create', () => {
+		const exec = { ...check, verb: 'create', subresource: 'exec' };
+		const yaml = grantYaml(exec, { username: 'system:serviceaccount:shop:viewer', groups: [] });
+		expect(yaml).toContain('  - kind: ServiceAccount\n    name: viewer\n    namespace: shop');
+		expect(yaml).toContain('resources: ["pods/exec"]');
+		expect(yaml).not.toContain('resourceNames');
+	});
+
+	it('uses cluster roles for cluster-scoped checks', () => {
+		const yaml = grantYaml({ ...check, resource: 'nodes', verb: 'patch', namespace: null }, null);
+		expect(yaml).toContain('kind: ClusterRole\n');
+		expect(yaml).toContain('kind: ClusterRoleBinding\n');
+		expect(yaml).not.toContain('namespace:');
+		expect(yaml).toContain('name: YOUR-USER-NAME');
+	});
+});
+
+describe('filterSubjects with can', () => {
+	const subject = (name: string, rules: Partial<Rule>[]): SubjectInfo => ({
+		kind: 'User',
+		name,
+		namespace: null,
+		grants: [
+			{
+				bindingKind: 'RoleBinding',
+				binding: 'b',
+				roleKind: 'Role',
+				role: 'r',
+				namespace: 'shop',
+				roleState: 'found' as const,
+				rules: rules.map((r) => ({ apiGroups: [''], resources: [], resourceNames: [], nonResourceUrls: [], verbs: [], ...r }))
+			}
+		]
+	});
+	const subjects = [
+		subject('viewer', [{ resources: ['pods', 'pods/log'], verbs: ['get', 'list'] }]),
+		subject('editor', [{ resources: ['pods'], verbs: ['*'] }]),
+		subject('exec', [{ resources: ['pods/*'], verbs: ['create'] }])
+	];
+
+	it('keeps subjects whose rules allow the verb', () => {
+		expect(filterSubjects(subjects, 'can delete pods').map((s) => s.name)).toEqual(['editor']);
+		expect(filterSubjects(subjects, 'can get pods/log').map((s) => s.name)).toEqual(['viewer']);
+		expect(filterSubjects(subjects, 'can create pods/exec').map((s) => s.name)).toEqual(['exec']);
+		expect(filterSubjects(subjects, 'edit').map((s) => s.name)).toEqual(['editor']);
 	});
 });

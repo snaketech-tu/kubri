@@ -1,5 +1,6 @@
+import { access, need } from './access.svelte';
 import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, startPlugin } from './actions';
-import { backend, type ObjectRef, type Owner, type ResourceInfo } from './api';
+import { backend, type AccessCheck, type ObjectRef, type Owner, type ResourceInfo } from './api';
 import { errorMessage } from './format';
 import { parseShortcut, pluginApplies, shortcutLabel } from './k9s';
 import type { MenuAction } from './menu';
@@ -153,48 +154,66 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	const { resource, target } = subject;
 	const writable = !app.readOnly;
 	const out: MenuAction[] = [];
-	const add = (group: string, label: string, keys: string[], run: () => void, more: Partial<MenuAction> = {}) =>
-		out.push({ group, label, keys, run, ...more });
+	/** Adds an action; with `needs`, one RBAC refuses is offered disabled and explains why. */
+	const add = (
+		group: string,
+		label: string,
+		keys: string[],
+		run: () => void,
+		{ needs, ...more }: Partial<MenuAction> & { needs?: AccessCheck } = {}
+	) => {
+		const disabled = needs ? access.denial(needs) : null;
+		const explain = () => (app.dialog = { kind: 'forbidden', action: label.replace(/…$/, ''), check: needs!, target });
+		out.push({ group, label, keys, run: disabled ? explain : run, ...more, ...(disabled ? { disabled } : {}) });
+	};
 	const show = (tab: DetailsTab, extra: DetailsExtra = {}) => () => options.show(tab, extra);
 	const dialog = (make: () => Dialog) => () => (app.dialog = make());
+	const ns = target.namespace;
+	/** RBAC's view of `verb` on this object, or on its subresource. */
+	const on = (verb: string, subresource = '') => need(verb, resource, ns, { subresource, name: target.name });
+	const pods = { group: '', plural: 'pods' };
 
 	const drillTo = drillLabel(resource);
 	if (drillTo && options.enter) add('View', drillTo, [], options.enter, { hint: 'enter', primary: 1 });
-	add('View', 'Describe', ['d'], show('describe'), { primary: 5, id: 'describe' });
-	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml' });
-	if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2, id: 'logs' });
-	if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }), { id: 'previous' });
-	if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }));
+	add('View', 'Describe', ['d'], show('describe'), { primary: 5, id: 'describe', needs: on('get') });
+	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get') });
+	const logs = isPods(resource) ? on('get', 'log') : need('get', pods, ns, { subresource: 'log' });
+	if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2, id: 'logs', needs: logs });
+	if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }), { id: 'previous', needs: logs });
+	if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }), { needs: on('get') });
 	if (hasUsers(resource)) add('View', 'Used by', ['u'], show('describe'), { id: 'usedBy' });
 
 	if (isPods(resource) && writable) {
-		add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3, id: 'shell' });
-		add('Connect', 'Attach', ['a'], show('shell', { mode: 'attach' }), { id: 'attach' });
+		add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3, id: 'shell', needs: on('create', 'exec') });
+		add('Connect', 'Attach', ['a'], show('shell', { mode: 'attach' }), { id: 'attach', needs: on('create', 'attach') });
 	}
-	if (canPortForward(resource)) add('Connect', 'Port-forward…', ['F'], () => void portForward(resource, target), { primary: 8 });
+	if (canPortForward(resource)) {
+		const forward = isPods(resource) ? on('create', 'portforward') : need('create', pods, ns, { subresource: 'portforward' });
+		add('Connect', 'Port-forward…', ['F'], () => void portForward(resource, target), { primary: 8, needs: forward });
+	}
 
 	if (writable) {
 		if (isNodes(resource)) {
-			add('Change', 'Cordon', ['c'], () => void cordon(target.name, true), { primary: 4 });
-			add('Change', 'Uncordon', ['u'], () => void cordon(target.name, false), { primary: 4 });
-			add('Change', 'Drain…', ['r'], dialog(() => ({ kind: 'drain', resource, target })), { primary: 4 });
+			add('Change', 'Cordon', ['c'], () => void cordon(target.name, true), { primary: 4, needs: on('patch') });
+			add('Change', 'Uncordon', ['u'], () => void cordon(target.name, false), { primary: 4, needs: on('patch') });
+			add('Change', 'Drain…', ['r'], dialog(() => ({ kind: 'drain', resource, target })), { primary: 4, needs: on('patch') });
 		}
 		if (isCronJobs(resource)) {
-			add('Change', 'Trigger now…', ['t'], dialog(() => ({ kind: 'trigger', resource, target })), { primary: 4 });
+			add('Change', 'Trigger now…', ['t'], dialog(() => ({ kind: 'trigger', resource, target })), { primary: 4, needs: need('create', { group: 'batch', plural: 'jobs' }, ns) });
 			const suspend = !subject.suspended;
-			add('Change', suspend ? 'Suspend…' : 'Resume…', ['s'], dialog(() => ({ kind: 'suspend', resource, target, suspend })));
+			add('Change', suspend ? 'Suspend…' : 'Resume…', ['s'], dialog(() => ({ kind: 'suspend', resource, target, suspend })), { needs: on('patch') });
 		}
-		if (canEdit(resource)) add('Change', 'Edit', ['e'], show('yaml', { editing: true }), { primary: 7, id: 'edit' });
+		if (canEdit(resource)) add('Change', 'Edit', ['e'], show('yaml', { editing: true }), { primary: 7, id: 'edit', needs: on('update') });
 		if (canScale(resource) && !isPods(resource)) {
-			add('Change', 'Scale…', ['s'], dialog(() => ({ kind: 'scale', resource, target })), { primary: 4 });
+			add('Change', 'Scale…', ['s'], dialog(() => ({ kind: 'scale', resource, target })), { primary: 4, needs: on('patch', 'scale') });
 		}
-		if (canRestart(resource)) add('Change', 'Restart…', ['r'], dialog(() => ({ kind: 'restart', resource, target })), { primary: 4 });
-		if (hasImages(resource)) add('Change', 'Set image…', ['i'], dialog(() => ({ kind: 'image', resource, target })));
+		if (canRestart(resource)) add('Change', 'Restart…', ['r'], dialog(() => ({ kind: 'restart', resource, target })), { primary: 4, needs: on('patch') });
+		if (hasImages(resource)) add('Change', 'Set image…', ['i'], dialog(() => ({ kind: 'image', resource, target })), { needs: on('patch') });
 		if (isReplicaSets(resource)) {
-			add('Change', 'Roll back to this…', ['ctrl+l'], dialog(() => ({ kind: 'rollback', resource, target })));
+			add('Change', 'Roll back to this…', ['ctrl+l'], dialog(() => ({ kind: 'rollback', resource, target })), { needs: need('update', { group: 'apps', plural: 'deployments' }, ns) });
 		}
 		if (resource.verbs.includes('patch')) {
-			add('Change', 'Labels & annotations…', ['L'], dialog(() => ({ kind: 'labels', resource, target })));
+			add('Change', 'Labels & annotations…', ['L'], dialog(() => ({ kind: 'labels', resource, target })), { needs: on('patch') });
 		}
 	}
 
@@ -250,7 +269,8 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	if (writable && canDelete(resource)) {
 		const label = several ? `Delete ${chosen.length}…` : 'Delete…';
 		const run = dialog(() => ({ kind: 'delete', resource, targets: chosen }));
-		add('Delete', label, ['ctrl+d', 'Delete'], run, { danger: true, primary: 0 });
+		// For several objects, the cursor's stands for all: they share a kind and mostly a namespace.
+		add('Delete', label, ['ctrl+d', 'Delete'], run, { danger: true, primary: 0, needs: on('delete') });
 	}
 	return out;
 }

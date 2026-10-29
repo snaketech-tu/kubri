@@ -27,7 +27,7 @@
 	} from '../pods';
 	import { app, type Dialog } from '../state.svelte';
 
-	let { dialog }: { dialog: Dialog } = $props();
+	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' }> } = $props();
 
 	let busy = $state(false);
 	let error = $state<string | null>(null);
@@ -202,7 +202,7 @@
 			error = 'The context changed. Close this dialog and review the targets again.';
 			return;
 		}
-		if (needsConfirmation && confirmation !== 'confirm') return;
+		if (!confirmed) return;
 		busy = true;
 		error = null;
 		let ok = false;
@@ -420,11 +420,23 @@
 			(dialog.kind === 'drain' && !report) ||
 			(dialog.kind === 'plugin' && dialog.plugin.dangerous)
 	);
-	/** Bulk deletes and destructive actions in a context labeled production ask to type "confirm". */
-	const needsConfirmation = $derived(
-		danger &&
-			((dialog.kind === 'delete' && dialog.targets.length > 1) || /\bprod(uction)?\b/i.test(app.environment))
-	);
+	/**
+	 * What to type before a destructive action: on a production context the object's name (the
+	 * context's for several objects or a plugin), elsewhere "confirm" for bulk deletes. Null when
+	 * the button is enough.
+	 */
+	const confirmWord = $derived.by(() => {
+		if (!danger) return null;
+		if (app.production) {
+			if (dialog.kind === 'delete') return dialog.targets.length === 1 ? dialog.targets[0].name : (context ?? 'confirm');
+			if (dialog.kind === 'helmUninstall') return dialog.release.name;
+			if (dialog.kind === 'drain') return dialog.target.name;
+			return context ?? 'confirm';
+		}
+		return dialog.kind === 'delete' && dialog.targets.length > 1 ? 'confirm' : null;
+	});
+	const needsConfirmation = $derived(confirmWord !== null);
+	const confirmed = $derived(confirmWord === null || confirmation.trim() === confirmWord);
 </script>
 
 <dialog
@@ -439,7 +451,7 @@
 >
 	<h2>{title}</h2>
 	<p class="action-context">
-		<strong>{context}</strong>{app.environment ? ` · ${app.environment}` : ''} ·
+		<strong>{context ? app.contextName(context) : ''}</strong>{app.environment ? ` · ${app.environment}` : ''} ·
 		{dialog.kind === 'delete' ? `${dialog.targets.length} selected` : 'Review the target before you continue'}
 	</p>
 
@@ -694,7 +706,10 @@
 
 	{#if needsConfirmation}
 		<label class="confirmation">
-			<span>Type <code>confirm</code> to continue</span>
+			<span>
+				{#if app.production}<strong class="production">Production.</strong>{/if}
+				Type <code>{confirmWord}</code> to continue
+			</span>
 			<input bind:value={confirmation} autocomplete="off" spellcheck="false" />
 		</label>
 	{/if}
@@ -706,7 +721,7 @@
 			class="primary"
 			class:danger
 			bind:this={confirmButton}
-			disabled={busy || (needsConfirmation && confirmation !== 'confirm')}
+			disabled={busy || !confirmed}
 			onclick={confirm}
 		>
 			{busy ? 'Working…' : report ? 'Close' : confirmLabel}
@@ -723,6 +738,9 @@
 		display: grid;
 		gap: 8px;
 		margin-top: 16px;
+	}
+	.confirmation .production {
+		color: var(--bad);
 	}
 	.dialog {
 		position: fixed;

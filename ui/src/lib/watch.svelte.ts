@@ -10,6 +10,8 @@ export class LiveTable {
 	/** Only until the first list arrives or fails; a retry with rows kept does not count. */
 	loading = $state(true);
 	error = $state<string | null>(null);
+	/** Something the core says about the list, such as the namespaces it covers. */
+	notice = $state<string | null>(null);
 	rows = $derived([...this.#rows.values()]);
 	/** When the last update arrived, in milliseconds; 0 before the first. */
 	updated = $state(0);
@@ -34,6 +36,7 @@ export class LiveTable {
 			this.#key = key;
 			this.loading = !this.hasLoaded;
 			this.error = null;
+			this.notice = null;
 			// Events of a stopped watch must not reach the next one's rows.
 			let stopped = false;
 			const stop = backend.watchTable(resource, namespace, scope, (event) => {
@@ -55,6 +58,9 @@ export class LiveTable {
 					case 'error':
 						this.error = event.message;
 						this.loading = false;
+						return;
+					case 'notice':
+						this.notice = event.message;
 						return;
 				}
 				this.updated = Date.now();

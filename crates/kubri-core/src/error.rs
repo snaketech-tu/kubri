@@ -33,6 +33,9 @@ pub enum Error {
     /// Changes are turned off; the text says why.
     #[error("Kubri is read-only ({0}), so it does not change the cluster")]
     ReadOnly(String),
+    /// RBAC does not allow it; the text names the verb, resource and namespace.
+    #[error("not allowed: needs {0}")]
+    Forbidden(String),
     #[error("{0}")]
     Io(#[from] std::io::Error),
 }

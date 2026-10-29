@@ -107,6 +107,9 @@
 			<button
 				role="menuitem"
 				class:danger={action.danger}
+				class:refused={action.disabled}
+				aria-disabled={action.disabled ? 'true' : undefined}
+				title={action.disabled ? `${action.disabled}. Choose it for details.` : undefined}
 				onclick={() => run(action)}
 				onmouseenter={(e) => {
 					active = flat.indexOf(action);
@@ -114,6 +117,7 @@
 				}}
 			>
 				<span>{action.label}</span>
+				{#if action.disabled}<span class="lock" aria-label="not allowed">⊘</span>{/if}
 				{#if hint}<kbd>{hint}</kbd>{/if}
 			</button>
 		{/each}
@@ -188,5 +192,15 @@
 		font-family: var(--mono);
 		font-size: 11px;
 		color: var(--text-muted);
+	}
+	button.refused {
+		color: var(--text-muted);
+	}
+	.lock {
+		margin-left: auto;
+		font-size: 12px;
+	}
+	.lock + kbd {
+		margin-left: 6px;
 	}
 </style>

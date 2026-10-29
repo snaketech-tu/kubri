@@ -58,7 +58,14 @@
 
 {#snippet button(action: MenuAction)}
 	{@const hint = hints ? hintOf(actions, action) : null}
-	<button class:danger={action.danger} onclick={() => action.run()} onmousedown={keepFocus} title={hint ? `${action.label} (${hint})` : action.label}>
+	<button
+		class:danger={action.danger}
+		class:refused={action.disabled}
+		aria-disabled={action.disabled ? 'true' : undefined}
+		onclick={() => action.run()}
+		onmousedown={keepFocus}
+		title={action.disabled ? `${action.disabled}. Click for details.` : hint ? `${action.label} (${hint})` : action.label}
+	>
 		{action.label}
 		{#if hint}<kbd>{hint}</kbd>{/if}
 	</button>
@@ -128,6 +135,18 @@
 	button.danger:hover {
 		border-color: var(--bad);
 		background: color-mix(in srgb, var(--bad) 10%, var(--surface-2));
+	}
+	/* Not allowed: still clickable, to say why. */
+	button.refused {
+		border-style: dashed;
+		background: none;
+		color: var(--text-muted);
+		opacity: 0.75;
+	}
+	button.refused:hover {
+		border-color: var(--border);
+		background: none;
+		opacity: 1;
 	}
 	.chevron {
 		font-size: 11px;
