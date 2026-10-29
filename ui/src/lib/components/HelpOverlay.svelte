@@ -141,6 +141,9 @@
 			[
 				['Enter  or  n', 'Overview and notes'],
 				['v / m / h', 'Values / manifest / history'],
+				['c / x', 'Compare revisions / drift from the cluster'],
+				['u', 'Upgrade with changed values'],
+				['i', 'Install a chart'],
 				['r', 'Roll back (previous or shown revision)'],
 				['Ctrl+D', 'Uninstall'],
 				['Esc', 'Back to the releases']

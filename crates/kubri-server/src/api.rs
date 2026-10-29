@@ -19,6 +19,7 @@ use kubri_core::{
     TerminalOutput, Usage, XrayNode,
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
+use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -81,6 +82,9 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/helm/version", get(helm_version))
         .route("/helm/rollback", post(helm_rollback))
         .route("/helm/uninstall", post(helm_uninstall))
+        .route("/helm/change", post(helm_change))
+        .route("/helm/chart-values", post(helm_chart_values))
+        .route("/helm/search", get(helm_search))
         .route("/k9s", get(k9s_config))
         .route("/k9s/skins/{name}", get(k9s_skin))
         .route("/plugins/run", post(run_plugin))
@@ -647,6 +651,32 @@ async fn helm_version(State(kubri): State<Arc<Kubri>>) -> Json<HelmVersion> {
     })
 }
 
+async fn helm_change(
+    State(kubri): State<Arc<Kubri>>,
+    Json(change): Json<HelmChange>,
+) -> ApiResult<HelmOutcome> {
+    Ok(Json(kubri.helm_change(&change).await?))
+}
+
+async fn helm_chart_values(
+    State(kubri): State<Arc<Kubri>>,
+    Json(chart): Json<HelmChartRef>,
+) -> ApiResult<String> {
+    Ok(Json(kubri.helm_chart_values(&chart).await?))
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    query: String,
+}
+
+async fn helm_search(
+    State(kubri): State<Arc<Kubri>>,
+    Query(search): Query<SearchQuery>,
+) -> ApiResult<Vec<HubChart>> {
+    Ok(Json(kubri.helm_search(&search.query).await?))
+}
+
 #[derive(Deserialize)]
 struct ReleaseAction {
     namespace: String,
@@ -1043,6 +1073,10 @@ mod tests {
             ("/cronjob/trigger", format!("{target}}}")),
             ("/debug", r#"{"kind":"node","node":"n1"}"#.to_owned()),
             ("/apply", r#"{"objects":[]}"#.to_owned()),
+            (
+                "/helm/change",
+                r#"{"namespace":"web","name":"shop","values":""}"#.to_owned(),
+            ),
             (
                 "/fix/memory/apply",
                 format!(r#"{target},"container":"app","memory":"1Gi"}}"#),

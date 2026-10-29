@@ -722,6 +722,45 @@ export interface HelmReleaseDetails extends HelmRelease {
 	manifest: string;
 }
 
+/** A chart by name in a repository URL, as `repo/chart` from a repository added to helm, or `oci://…`. */
+export interface HelmChartRef {
+	chart: string;
+	repo?: string | null;
+	/** The latest when empty. */
+	version?: string | null;
+}
+
+/** An install or upgrade; see `Backend.helmChange`. */
+export interface HelmChange {
+	namespace: string;
+	name: string;
+	/** For an upgrade, none keeps the chart and version the release runs. */
+	chart?: HelmChartRef | null;
+	/** Values as YAML; they replace the values given before. */
+	values: string;
+	install?: boolean;
+	createNamespace?: boolean;
+	dryRun?: boolean;
+}
+
+export interface HelmOutcome extends HelmRelease {
+	notes: string;
+	manifest: string;
+	/** Hooks the chart runs around the change; they are not in the manifest. */
+	hooks: number;
+}
+
+/** A chart found on Artifact Hub. */
+export interface HubChart {
+	name: string;
+	version: string;
+	appVersion: string;
+	description: string;
+	url: string;
+	repoName: string;
+	repoUrl: string;
+}
+
 export interface ConfigFile {
 	path: string;
 	error: string | null;
@@ -953,6 +992,12 @@ export interface Backend {
 	helmVersion(): Promise<string | null>;
 	helmRollback(namespace: string, name: string, revision: number): Promise<string>;
 	helmUninstall(namespace: string, name: string): Promise<string>;
+	/** Installs or upgrades a release with helm; with `dryRun`, renders it against the cluster only. */
+	helmChange(change: HelmChange): Promise<HelmOutcome>;
+	/** A chart's default values as YAML. */
+	helmChartValues(chart: HelmChartRef): Promise<string>;
+	/** Charts on Artifact Hub. */
+	helmSearch(query: string): Promise<HubChart[]>;
 	k9sConfig(): Promise<K9sConfig>;
 	/** A skin file as JSON. */
 	k9sSkin(name: string): Promise<unknown>;

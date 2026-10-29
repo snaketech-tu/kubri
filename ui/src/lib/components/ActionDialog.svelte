@@ -18,6 +18,7 @@
 	import { backend, type Change, type ContainerImage, type DeleteOptions, type DrainReport, type Preview } from '../api';
 	import { helmCommand, kubectlCommand } from '../kubectl';
 	import DiffView from './DiffView.svelte';
+	import HelmCompare from './HelmCompare.svelte';
 	import { errorMessage } from '../format';
 	import { inputError, inputVariables } from '../k9s';
 	import {
@@ -754,6 +755,15 @@
 			Roll <strong>{name(dialog.release)}</strong> back from revision {dialog.release.revision} to revision
 			{dialog.revision}? Helm records this as a new revision.
 		</p>
+		{#await Promise.all([backend.helmRelease(dialog.release.namespace, dialog.release.name), backend.helmRelease(dialog.release.namespace, dialog.release.name, dialog.revision)])}
+			<p class="muted">Comparing the revisions…</p>
+		{:then [now, then]}
+			<div class="rollback-diff">
+				<HelmCompare namespace={now.namespace} before={now} after={then} />
+			</div>
+		{:catch err}
+			<p class="muted">The revisions could not be compared: {errorMessage(err)}</p>
+		{/await}
 	{:else if dialog.kind === 'helmUninstall'}
 		<p>
 			Uninstall <strong>{name(dialog.release)}</strong>? This deletes every object of the release and its history.
@@ -895,6 +905,10 @@
 </dialog>
 
 <style>
+	.rollback-diff {
+		max-height: 50vh;
+		overflow: auto;
+	}
 	.action-context {
 		color: var(--text-muted);
 		overflow-wrap: anywhere;

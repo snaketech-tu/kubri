@@ -68,3 +68,86 @@ export function manifestResource(resources: ResourceInfo[], object: ManifestObje
 	const group = object.apiVersion.includes('/') ? object.apiVersion.split('/')[0] : '';
 	return resources.find((r) => r.group === group && r.kind === object.kind);
 }
+
+type Json = Record<string, unknown>;
+
+/** The objects of a rendered manifest in full, in manifest order. */
+export function manifestDocuments(manifest: string): Json[] {
+	const docs: Json[] = [];
+	for (const doc of parseAllDocuments(manifest)) {
+		if (doc.errors.length) continue;
+		const value = doc.toJS();
+		if (value && typeof value === 'object' && !Array.isArray(value) && typeof value.kind === 'string') docs.push(value);
+	}
+	return docs;
+}
+
+export type ManifestChangeKind = 'added' | 'removed' | 'changed' | 'unchanged';
+
+export interface ManifestChange {
+	kind: string;
+	name: string;
+	namespace: string | null;
+	change: ManifestChangeKind;
+	before: Json | null;
+	after: Json | null;
+}
+
+function identity(o: Json, namespace: string) {
+	const meta = (o.metadata ?? {}) as { name?: unknown; namespace?: unknown };
+	const group = String(o.apiVersion ?? '').includes('/') ? String(o.apiVersion).split('/')[0] : '';
+	return {
+		kind: String(o.kind),
+		name: typeof meta.name === 'string' ? meta.name : '',
+		namespace: typeof meta.namespace === 'string' ? meta.namespace : null,
+		// The version may change between charts while the object stays the same.
+		key: `${group}/${o.kind}/${typeof meta.namespace === 'string' ? meta.namespace : namespace}/${meta.name}`
+	};
+}
+
+function same(a: unknown, b: unknown): boolean {
+	return JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
+}
+
+function sorted(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(sorted);
+	if (value && typeof value === 'object') {
+		return Object.fromEntries(
+			Object.keys(value)
+				.sort()
+				.map((k) => [k, sorted((value as Json)[k])])
+		);
+	}
+	return value;
+}
+
+const ORDER: Record<ManifestChangeKind, number> = { changed: 0, added: 1, removed: 2, unchanged: 3 };
+
+/**
+ * What changes between two rendered manifests of a release, object by object: changes first,
+ * then additions and removals, each in manifest order.
+ */
+export function manifestChanges(before: string, after: string, namespace: string): ManifestChange[] {
+	const old = new Map(manifestDocuments(before).map((o) => [identity(o, namespace).key, o]));
+	const changes: ManifestChange[] = [];
+	for (const o of manifestDocuments(after)) {
+		const id = identity(o, namespace);
+		const was = old.get(id.key) ?? null;
+		old.delete(id.key);
+		const change = !was ? 'added' : same(was, o) ? 'unchanged' : 'changed';
+		changes.push({ kind: id.kind, name: id.name, namespace: id.namespace, change, before: was, after: o });
+	}
+	for (const o of old.values()) {
+		const id = identity(o, namespace);
+		changes.push({ kind: id.kind, name: id.name, namespace: id.namespace, change: 'removed', before: o, after: null });
+	}
+	return changes
+		.map((c, i) => ({ c, i }))
+		.sort((a, b) => ORDER[a.c.change] - ORDER[b.c.change] || a.i - b.i)
+		.map(({ c }) => c);
+}
+
+/** Whether two sets of values differ. */
+export function valuesDiffer(a: unknown, b: unknown) {
+	return !same(hasValues(a) ? a : {}, hasValues(b) ? b : {});
+}

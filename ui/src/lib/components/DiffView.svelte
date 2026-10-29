@@ -6,8 +6,18 @@
 	let {
 		before,
 		after,
-		maxHeight = '360px'
-	}: { before: unknown; after: unknown; maxHeight?: string } = $props();
+		maxHeight = '360px',
+		changed = 'lines, as the API server would store it',
+		unchanged = 'No changes: the API server would store the object as it is.'
+	}: {
+		before: unknown;
+		after: unknown;
+		maxHeight?: string;
+		/** After the line counts, what they compare. */
+		changed?: string;
+		/** Said when nothing differs. */
+		unchanged?: string;
+	} = $props();
 
 	// Nothing before, as for an object about to be created, is no lines rather than `null`.
 	const text = (value: unknown) => (value == null ? '' : stringify(value, { lineWidth: 0 }));
@@ -30,9 +40,9 @@
 	<div class="summary">
 		{#if added || removed}
 			<span class="added">+{added}</span> <span class="removed">−{removed}</span>
-			<span class="muted">lines, as the API server would store it</span>
+			<span class="muted">{changed}</span>
 		{:else}
-			<span class="muted">No changes: the API server would store the object as it is.</span>
+			<span class="muted">{unchanged}</span>
 		{/if}
 	</div>
 	<div class="lines" style:max-height={maxHeight}>
