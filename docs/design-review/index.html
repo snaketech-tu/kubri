@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Kubri — Design & UX study</title>
+  <link rel="icon" type="image/svg+xml" href="logos/link.svg">
+  <link rel="stylesheet" href="mockups.css">
+  <script defer src="mockups.js"></script>
+</head>
+<body>
+  <div class="study-bar">
+    <a class="study-name" href="IMPLEMENTATION-PLAN.md">KUBRI <span>/ LINK DESIGN STUDY</span></a>
+    <nav class="screen-switcher" aria-label="Mockup screens">
+      <button data-screen="overview">01 Overview</button>
+      <button data-screen="pods">02 Pods</button>
+      <button data-screen="logs">03 Logs</button>
+      <button data-screen="connect">04 Connect</button>
+      <button data-screen="brand">05 Logos</button>
+    </nav>
+    <span class="study-note">Interactive concept · demo data</span>
+  </div>
+  <div id="app"></div>
+  <dialog id="modal" aria-labelledby="modal-title"></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
