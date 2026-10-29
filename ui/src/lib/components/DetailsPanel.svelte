@@ -109,6 +109,47 @@
 		app.maximized = false;
 	}
 
+	/** Logs and shells, which take the place of the list unless kept beside it. */
+	const tool = $derived(details.tab === 'logs' || details.tab === 'shell');
+
+	const MIN_WIDTH = 320;
+	let aside = $state<HTMLElement>();
+	let width = $state(0);
+
+	/** Sets the width beside the list, keeping 320px for each side. */
+	function resize(width: number) {
+		const room = aside?.parentElement?.clientWidth ?? window.innerWidth;
+		app.panelWidth = Math.max(MIN_WIDTH, Math.min(room - MIN_WIDTH, width));
+	}
+
+	/** Drags the left edge of the panel. */
+	function onpointerdown(e: PointerEvent) {
+		if (e.button !== 0 || !aside) return;
+		e.preventDefault();
+		const handle = e.currentTarget as HTMLElement;
+		handle.setPointerCapture(e.pointerId);
+		const right = aside.getBoundingClientRect().right;
+		const move = (ev: PointerEvent) => resize(right - ev.clientX);
+		const up = () => {
+			handle.removeEventListener('pointermove', move);
+			handle.removeEventListener('pointerup', up);
+			handle.removeEventListener('pointercancel', up);
+		};
+		handle.addEventListener('pointermove', move);
+		handle.addEventListener('pointerup', up);
+		handle.addEventListener('pointercancel', up);
+	}
+
+	function onresizekey(e: KeyboardEvent) {
+		const step = e.shiftKey ? 80 : 20;
+		if (e.key === 'ArrowLeft') resize(width + step);
+		else if (e.key === 'ArrowRight') resize(width - step);
+		else if (e.key === 'Home') app.panelWidth = null;
+		else return;
+		e.preventDefault();
+		e.stopPropagation();
+	}
+
 	const yamlText = $derived.by(() => {
 		if (!object) return '';
 		const copy = structuredClone($state.snapshot(object)) as KubeObject;
@@ -203,7 +244,24 @@
 	const warnings = $derived(events.filter((e) => e.kind === 'Warning').length);
 </script>
 
-<aside aria-label="{details.resource.kind} inspector">
+<aside aria-label="{details.resource.kind} inspector" class:compact={tool} bind:this={aside} bind:clientWidth={width}>
+	{#if !app.panelWide}
+		<!-- A focusable separator is a widget: it takes the arrow keys. -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+		<div
+			class="resize"
+			role="separator"
+			aria-orientation="vertical"
+			aria-label="Resize the inspector"
+			aria-valuenow={width}
+			aria-valuemin={MIN_WIDTH}
+			tabindex="0"
+			title="Drag to resize, double-click for the default width"
+			{onpointerdown}
+			ondblclick={() => (app.panelWidth = null)}
+			onkeydown={onresizekey}
+		></div>
+	{/if}
 	<header>
 		<div class="title">
 			<span class="kind">{details.resource.kind} inspector</span>
@@ -217,6 +275,17 @@
 			{/if}
 		</div>
 		<div class="window">
+			{#if tool && !app.maximized}
+				<button
+					class="icon beside"
+					class:on={app.toolsBeside}
+					onclick={() => (app.toolsBeside = !app.toolsBeside)}
+					onmousedown={(e) => e.preventDefault()}
+					title={app.toolsBeside ? 'Hide the list and give the whole width to the ' + details.tab : 'Show the list beside the ' + details.tab}
+					aria-label="Show the list beside"
+					aria-pressed={app.toolsBeside}><Icon name="resource" size={17} /></button
+				>
+			{/if}
 			<button
 				class="icon"
 				onclick={() => (app.maximized = !app.maximized)}
@@ -321,6 +390,7 @@
 
 <style>
 	aside {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
@@ -334,6 +404,51 @@
 		justify-content: space-between;
 		gap: 12px;
 		padding: 18px 16px 12px 20px;
+	}
+	.resize {
+		position: absolute;
+		z-index: 2;
+		top: 0;
+		bottom: 0;
+		left: -4px;
+		width: 8px;
+		cursor: col-resize;
+		touch-action: none;
+	}
+	.resize:hover,
+	.resize:focus-visible {
+		outline: none;
+		background: linear-gradient(to right, transparent 3px, var(--accent) 3px, var(--accent) 5px, transparent 5px);
+	}
+	/* Narrow windows give the inspector the whole width anyway. */
+	@media (max-width: 1100px) {
+		.resize,
+		.beside {
+			display: none;
+		}
+	}
+	/* Logs and shells want the height: the title takes one line. */
+	.compact header {
+		align-items: center;
+		padding: 10px 12px 8px 20px;
+	}
+	.compact .title {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px 12px;
+	}
+	.compact .kind {
+		display: none;
+	}
+	.compact h2,
+	.compact .context-path,
+	.compact .status {
+		margin: 0;
+	}
+	.icon.on {
+		background: var(--surface-2);
+		color: var(--accent-strong);
 	}
 	.context-path {
 		margin: 4px 0 0;

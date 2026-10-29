@@ -60,6 +60,7 @@
 		[
 			'Logs',
 			[
+				['/', 'Search the lines; Esc clears'],
 				['0 – 6', 'Tail, all, 1m, 5m, 15m, 30m, 1h'],
 				['t / w', 'Timestamps / wrap'],
 				['s', 'Autoscroll'],

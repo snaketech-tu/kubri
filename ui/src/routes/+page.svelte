@@ -116,6 +116,21 @@
 
 	const viewHints = $derived.by(() => {
 		const panel: [string, string][] = app.details ? [['f', app.maximized ? 'restore' : 'maximize'], ['esc', 'close']] : [];
+		// The log keys, while the logs are on screen.
+		if (app.details?.tab === 'logs') {
+			return [
+				['/', 'search'],
+				['0–6', 'range'],
+				['t', 'timestamps'],
+				['w', 'wrap'],
+				['s', 'autoscroll'],
+				['m', 'mark'],
+				['c', 'copy'],
+				['^s', 'save'],
+				...panel,
+				['?', 'help']
+			] as [string, string][];
+		}
 		if (app.page === 'portforwards') {
 			return [
 				[':', 'command'],
@@ -340,7 +355,11 @@
 			</div>
 		{/if}
 
-		<main class:with-details={app.details} class:maximized={app.details && app.maximized}>
+		<main
+			class:with-details={app.details}
+			class:wide={app.panelWide}
+			style:--panel-width={app.panelWidth ? `${app.panelWidth}px` : null}
+		>
 			{#if app.cluster && !app.connecting}
 				{#if app.page === 'portforwards'}
 					<PortForwardsView />
@@ -631,14 +650,15 @@
 		grid-template-columns: minmax(0, 1fr);
 		min-height: 0;
 	}
+	/* A dragged width never leaves the list less than 320px. */
 	main.with-details {
-		grid-template-columns: minmax(0, 1fr) clamp(360px, 34vw, 540px);
+		grid-template-columns: minmax(0, 1fr) min(var(--panel-width, clamp(360px, 34vw, 540px)), calc(100% - 320px));
 	}
 	/* The list stays mounted so its shortcuts keep working. */
-	main.maximized {
+	main.wide {
 		grid-template-columns: minmax(0, 1fr);
 	}
-	main.maximized > :global(:not(aside)) {
+	main.wide > :global(:not(aside)) {
 		display: none;
 	}
 	.placeholder {
