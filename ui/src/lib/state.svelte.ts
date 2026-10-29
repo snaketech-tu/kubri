@@ -183,6 +183,8 @@ export type Dialog =
 	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef }
 	/** A Flux or Argo CD action; `autoSync` turns Argo CD's auto-sync off or on, as it is now. */
 	| { kind: 'gitops'; resource: ResourceInfo; target: ObjectRef; action: GitOpsAction | 'autoSync' }
+	/** Has cert-manager issue a Certificate again now. */
+	| { kind: 'renew'; resource: ResourceInfo; target: ObjectRef }
 	/** A debug container in a pod, a debug copy of it, or a shell on a node. */
 	| { kind: 'debug'; on: 'pod' | 'node'; target: ObjectRef; way?: 'ephemeral' | 'copy'; container?: string }
 	/** A higher memory limit for a container, on the workload that owns its pod. */

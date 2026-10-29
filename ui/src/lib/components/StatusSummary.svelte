@@ -1,13 +1,14 @@
 <script lang="ts">
 	import type { KubeObject, ObjectRef } from '../api';
-	import { age } from '../format';
+	import { certificateStatus } from '../certs';
+	import { relative } from '../format';
 	import { gitopsStatus, type ManagedObject } from '../gitops';
 	import { app } from '../state.svelte';
 	import HealthIcon from './HealthIcon.svelte';
 
 	let { object, target, now }: { object: KubeObject; target: ObjectRef; now: number } = $props();
 
-	const status = $derived(gitopsStatus(target.resource, object));
+	const status = $derived(gitopsStatus(target.resource, object) ?? certificateStatus(target.resource, object, now));
 	/** The managed objects that need a look first. */
 	const managed = $derived(
 		[...(status?.managed ?? [])].sort((a, b) => rank(b) - rank(a) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
@@ -32,7 +33,7 @@
 </script>
 
 {#if status}
-	<div class="summary" aria-label="GitOps status">
+	<div class="summary" aria-label="Status">
 		<section class="card {status.health ?? ''}">
 			<h3>
 				{#if status.health}<HealthIcon health={status.health} size={11} />{/if}
@@ -43,7 +44,7 @@
 				<dl>
 					{#each status.facts as fact (fact.label)}
 						<dt>{fact.label}</dt>
-						<dd title={fact.time ? fact.value : undefined}>{fact.time ? `${age(fact.value, now)} ago` : fact.value}</dd>
+						<dd title={fact.time ? fact.value : undefined}>{fact.time ? relative(fact.value, now) : fact.value}</dd>
 					{/each}
 				</dl>
 			{/if}

@@ -72,6 +72,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/cronjob/trigger", post(trigger_cronjob))
         .route("/cronjob/suspend", post(suspend_cronjob))
         .route("/gitops", post(gitops))
+        .route("/certificate/renew", post(renew_certificate))
         .route("/object/managed-by", post(managed_by))
         .route("/replicaset/rollback", post(rollback))
         .route("/events", get(events))
@@ -550,6 +551,10 @@ struct GitOps {
 
 async fn gitops(State(kubri): State<Arc<Kubri>>, Json(req): Json<GitOps>) -> ApiResult<()> {
     Ok(Json(kubri.gitops(&req.target, req.action).await?))
+}
+
+async fn renew_certificate(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<()> {
+    Ok(Json(kubri.renew_certificate(&req.target).await?))
 }
 
 async fn managed_by(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Option<Manager>> {
@@ -1209,6 +1214,7 @@ mod tests {
             ),
             ("/cronjob/suspend", format!(r#"{target},"suspend":true}}"#)),
             ("/gitops", format!(r#"{target},"action":"reconcile"}}"#)),
+            ("/certificate/renew", format!("{target}}}")),
             ("/replicaset/rollback", format!("{target}}}")),
             (
                 "/object/images",

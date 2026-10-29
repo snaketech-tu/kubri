@@ -32,7 +32,7 @@
 	import DiffView from './DiffView.svelte';
 	import EventTimeline from './EventTimeline.svelte';
 	import FieldHelp from './FieldHelp.svelte';
-	import GitOpsSummary from './GitOpsSummary.svelte';
+	import StatusSummary from './StatusSummary.svelte';
 	import Icon from './Icon.svelte';
 	import LogView from './LogView.svelte';
 	import ManagedNote from './ManagedNote.svelte';
@@ -570,7 +570,7 @@
 		{:else if details.tab === 'describe'}
 			<div class="scroll">
 				<ManagedNote target={details.target} />
-				<GitOpsSummary {object} target={details.target} {now} />
+				<StatusSummary {object} target={details.target} {now} />
 				<PodSummary {object} target={details.target} onlogs={logs ? openLogs : undefined} />
 				{#if isServices(details.resource)}<ServiceSummary {object} target={details.target} />{/if}
 				<Describe

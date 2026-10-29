@@ -622,6 +622,11 @@ async fn gitops(
 }
 
 #[tauri::command]
+async fn renew_certificate(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<()> {
+    kubri.renew_certificate(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn managed_by(
     kubri: State<'_, Arc<Kubri>>,
     target: ObjectRef,
@@ -948,6 +953,7 @@ pub fn run() {
             loki_logs,
             gitops,
             managed_by,
+            renew_certificate,
             xray,
             sanitize,
             rbac,

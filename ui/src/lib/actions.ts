@@ -121,6 +121,10 @@ export function runGitOps(target: ObjectRef, action: GitOpsAction) {
 	return runAction(`${GITOPS_DONE[action]} ${label(target)}`, () => backend.gitops(target, action));
 }
 
+export function renewCertificate(target: ObjectRef) {
+	return runAction(`Asked cert-manager to renew ${label(target)}`, () => backend.renewCertificate(target));
+}
+
 export function setImages(target: ObjectRef, images: ContainerImage[]) {
 	return runAction(`Set ${images.length === 1 ? 'the image' : 'images'} of ${label(target)}`, () =>
 		backend.setImages(target, images)

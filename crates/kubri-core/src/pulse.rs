@@ -30,7 +30,21 @@ pub struct Pulse {
     pub cpu: Utilization,
     /// In bytes.
     pub memory: Utilization,
+    /// cert-manager Certificates that expire soon or are not ready, soonest first.
+    pub certificates: Vec<CertificateAlert>,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CertificateAlert {
+    pub object: ObjectRef,
+    pub health: Health,
+    pub detail: String,
+    pub not_after: Option<String>,
+}
+
+/// Certificates shown in the overview, at most.
+const CERTIFICATE_ALERTS: usize = 8;
 
 /// How many objects of one kind are healthy.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -95,7 +109,7 @@ pub(crate) async fn gather(
         list(scoped::<DaemonSet>(c, namespace)),
         list(scoped::<ReplicaSet>(c, namespace)),
     );
-    let (jobs, cron_jobs, autoscalers, claims, volumes, events, usage) = futures::join!(
+    let (jobs, cron_jobs, autoscalers, claims, volumes, events, usage, certificates) = futures::join!(
         list(scoped::<Job>(c, namespace)),
         list(scoped::<CronJob>(c, namespace)),
         list(scoped::<HorizontalPodAutoscaler>(c, namespace)),
@@ -103,7 +117,13 @@ pub(crate) async fn gather(
         list(Api::<PersistentVolume>::all(c.clone())),
         list(scoped::<Event>(c, namespace)),
         metrics,
+        crate::certmanager::list(c, namespace),
     );
+    let now = Timestamp::now();
+    let (certificate_pulse, certificates) = match certificates {
+        Some(listed) => certificate_pulse(listed, now),
+        None => (None, Vec::new()),
+    };
 
     let usage = usage.ok();
     let used = |pick: fn(&Usage) -> f64| usage.as_ref().map(|u| u.iter().map(pick).sum());
@@ -131,9 +151,12 @@ pub(crate) async fn gather(
             summarize(autoscalers, health::autoscaler),
             summarize(claims, health::claim),
             summarize(volumes, health::volume),
-        ],
+        ]
+        .into_iter()
+        .chain(certificate_pulse)
+        .collect(),
         events: match events {
-            Ok(events) => tally_events(events, Timestamp::now(), &resolve),
+            Ok(events) => tally_events(events, now, &resolve),
             Err(error) => EventPulse {
                 error: Some(error),
                 ..Default::default()
@@ -141,7 +164,69 @@ pub(crate) async fn gather(
         },
         cpu,
         memory,
+        certificates,
     }
+}
+
+/// How healthy the Certificates are, and those that need a look.
+fn certificate_pulse(
+    listed: Result<Vec<serde_json::Value>, String>,
+    now: Timestamp,
+) -> (Option<KindPulse>, Vec<CertificateAlert>) {
+    let mut pulse = KindPulse {
+        kind: "Certificate".into(),
+        resource: crate::certmanager::resource(),
+        total: 0,
+        ok: 0,
+        warning: 0,
+        failed: 0,
+        error: None,
+    };
+    let certs = match listed {
+        Ok(certs) => certs,
+        Err(error) => {
+            pulse.error = Some(error);
+            return (Some(pulse), Vec::new());
+        }
+    };
+    let mut alerts = Vec::new();
+    for cert in &certs {
+        let status = crate::certmanager::status(cert, now);
+        pulse.total += 1;
+        match status.health {
+            Health::Ok => {
+                pulse.ok += 1;
+                continue;
+            }
+            Health::Warning => pulse.warning += 1,
+            Health::Failed => pulse.failed += 1,
+        }
+        let text = |p: &str| {
+            cert.pointer(p)
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        };
+        alerts.push(CertificateAlert {
+            object: ObjectRef {
+                context: None,
+                resource: crate::certmanager::resource(),
+                namespace: text("/metadata/namespace"),
+                name: text("/metadata/name").unwrap_or_default(),
+            },
+            health: status.health,
+            detail: status.detail,
+            not_after: text("/status/notAfter"),
+        });
+    }
+    // Failed first, then the soonest to expire; those without a date last.
+    alerts.sort_by(|a, b| {
+        b.health
+            .cmp(&a.health)
+            .then_with(|| a.not_after.is_none().cmp(&b.not_after.is_none()))
+            .then_with(|| a.not_after.cmp(&b.not_after))
+    });
+    alerts.truncate(CERTIFICATE_ALERTS);
+    (Some(pulse), alerts)
 }
 
 /// Lists everything, reporting failures as text for [`KindPulse::error`].
