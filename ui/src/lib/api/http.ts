@@ -84,6 +84,36 @@ export const httpBackend: Backend = {
 	addContexts: (text, names) => request('POST', '/contexts/added', { text, names }),
 	removeContext: (name) => request('DELETE', `/contexts/added?${new URLSearchParams({ name })}`),
 	switchContext: (name) => request('PUT', '/context', { name }),
+	async takeSnapshot(namespace) {
+		const query = namespace ? `?${new URLSearchParams({ namespace })}` : '';
+		const response = await fetch(`/api/snapshot${query}`, { method: 'POST' });
+		if (response.status === 401) session.expired();
+		if (!response.ok) {
+			const payload = await response.json().catch(() => null);
+			throw new Error(payload?.error ?? `${response.status} ${response.statusText}`);
+		}
+		const name = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') ?? '')?.[1] ?? 'snapshot.kubri';
+		const url = URL.createObjectURL(await response.blob());
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = name;
+		a.click();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+		return null;
+	},
+	async openSnapshot(file) {
+		const response = await fetch(`/api/snapshot?${new URLSearchParams({ name: file.name })}`, {
+			method: 'PUT',
+			headers: { 'content-type': 'application/octet-stream' },
+			body: file
+		});
+		if (response.status === 401) session.expired();
+		if (!response.ok) {
+			const payload = await response.json().catch(() => null);
+			throw new Error(payload?.error ?? `${response.status} ${response.statusText}`);
+		}
+		return response.json();
+	},
 	resources: () => request('GET', '/resources'),
 	preview: (target, change) => request('POST', '/object/preview', { target, change }),
 	schema: (resource) =>

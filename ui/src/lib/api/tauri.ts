@@ -47,6 +47,9 @@ export const tauriBackend: Backend = {
 	addContexts: (text, names) => invoke('add_contexts', { text, names }),
 	removeContext: (name) => invoke('remove_context', { name }),
 	switchContext: (name) => invoke('switch_context', { name }),
+	takeSnapshot: (namespace) => invoke('take_snapshot', { namespace }),
+	openSnapshot: async (file) =>
+		invoke('open_snapshot', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-name': encodeURIComponent(file.name) } }),
 	resources: () => invoke('resources'),
 	preview: (target, change) => invoke('preview', { target, change }),
 	schema: (resource) => invoke('schema', { resource }),

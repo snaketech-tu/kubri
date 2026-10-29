@@ -153,7 +153,7 @@ fn decode(encoded: &[u8]) -> Result<Record> {
 }
 
 /// Helm's storage format: base64 of gzipped JSON (older releases are not gzipped).
-fn decode_as<T: serde::de::DeserializeOwned>(encoded: &[u8]) -> Result<T> {
+pub(crate) fn decode_as<T: serde::de::DeserializeOwned>(encoded: &[u8]) -> Result<T> {
     let invalid = |e: String| Error::Unsupported(format!("cannot read the Helm release: {e}"));
     let text: Vec<u8> = encoded
         .iter()

@@ -220,7 +220,9 @@ export type Dialog =
 	/** The kubectl commands for an object's actions, to copy. */
 	| { kind: 'kubectl'; title: string; commands: { label: string; command: string }[] }
 	/** Explains an action RBAC refuses, and what would allow it. */
-	| { kind: 'forbidden'; action: string; check: AccessCheck; target: ObjectRef | null };
+	| { kind: 'forbidden'; action: string; check: AccessCheck; target: ObjectRef | null }
+	/** Saves a namespace or the cluster to a snapshot file, or opens one; `namespace` null is the cluster. */
+	| { kind: 'snapshot'; namespace: string | null };
 
 export interface Toast {
 	id: number;
@@ -579,6 +581,66 @@ class AppState {
 		}
 	}
 
+	/** What Kubri is connecting to, or the snapshot file it is opening, in words. */
+	connectingText = $derived(
+		this.connecting === null
+			? null
+			: this.contexts.some((c) => c.name === this.connecting)
+				? `Connecting to ${this.connecting}…`
+				: `Opening ${this.connecting}…`
+	);
+
+	/** The snapshot open instead of a live cluster. */
+	snapshot = $derived(this.cluster?.snapshot ?? null);
+
+	/** The time ages count to: now, or when the open snapshot was taken. */
+	now(): number {
+		return this.snapshot?.taken ?? Date.now();
+	}
+
+	/** Opens the snapshot dialog, for the current namespace unless `namespace` says otherwise. */
+	showSnapshot(namespace?: string | null) {
+		const current = this.namespace === ALL_NAMESPACES ? null : this.namespace;
+		this.dialog = { kind: 'snapshot', namespace: namespace === undefined ? current : namespace };
+	}
+
+	/** Saves a namespace, or the whole cluster, to a snapshot file. */
+	async takeSnapshot(namespace: string | null) {
+		this.toast(`Saving a snapshot of ${namespace ? `namespace ${namespace}` : 'the cluster'}…`);
+		try {
+			const path = await backend.takeSnapshot(namespace);
+			if (path) this.toast(`Saved ${path}`);
+		} catch (err) {
+			this.toast(`Could not save the snapshot: ${errorMessage(err)}`, 'bad');
+		}
+	}
+
+	/** Opens a snapshot file in place of the cluster; switching context leaves it. */
+	async openSnapshot(file: File) {
+		if (drafts.block(() => this.openSnapshot(file))) return;
+		if (this.dialog || this.connecting) {
+			this.toast('Finish the current action before opening a snapshot', 'bad');
+			return;
+		}
+		this.connecting = file.name;
+		this.error = null;
+		try {
+			await this.connected(await backend.openSnapshot(file));
+		} catch (err) {
+			this.error = `Could not open ${file.name}: ${errorMessage(err)}`;
+		} finally {
+			this.connecting = null;
+		}
+	}
+
+	/** Leaves a snapshot for the context it was taken from, if this kubeconfig has it, or the default one. */
+	leaveSnapshot() {
+		const from = this.snapshot?.context;
+		const back = this.contexts.find((c) => c.name === from) ?? this.contexts.find((c) => c.isDefault) ?? this.contexts[0];
+		if (back) this.switchContext(back.name);
+		else this.contextMenuOpen = true;
+	}
+
 	async switchContext(name: string) {
 		if (drafts.block(() => this.switchContext(name))) return;
 		// A dialog was reviewed against the current context; it must not run against the next one.
@@ -743,6 +805,9 @@ class AppState {
 				break;
 			case 'changes':
 				this.showChanges(action.filter);
+				break;
+			case 'snapshot':
+				this.showSnapshot(action.namespace);
 				break;
 			case 'object':
 				await this.openObject(action.target, action.kind);
@@ -1012,7 +1077,9 @@ class AppState {
 		this.resources = resources;
 		const closed = dock.keepContext(cluster.context);
 		if (closed) this.toast(`Closed ${closed} workspace ${closed === 1 ? 'tab' : 'tabs'} of the last context`);
-		this.namespace = this.contextSettingsOf(cluster.context).namespace || ALL_NAMESPACES;
+		this.namespace = cluster.snapshot
+			? (cluster.snapshot.namespace ?? ALL_NAMESPACES)
+			: this.contextSettingsOf(cluster.context).namespace || ALL_NAMESPACES;
 		this.scope = null;
 		// Views of the last cluster may not exist in this one.
 		this.#history = [];

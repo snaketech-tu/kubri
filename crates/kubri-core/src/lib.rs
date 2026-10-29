@@ -48,6 +48,7 @@ mod schema;
 mod search;
 mod selector;
 mod settings;
+mod snapshot;
 mod table;
 mod template;
 mod terminal;
@@ -114,6 +115,7 @@ pub use settings::{
     AgentSettings, ColumnSettings, ContextSettings, CustomColumn, DiffSettings, FavoriteForward, SavedSearch,
     Settings,
 };
+pub use snapshot::SnapshotInfo;
 
 /// Kubri's config folder, where its settings live.
 pub fn config_dir() -> Option<std::path::PathBuf> {
@@ -138,6 +140,9 @@ pub struct ClusterInfo {
     pub version: String,
     /// The context's namespace, or `default`.
     pub default_namespace: String,
+    /// Set when this is a snapshot opened from a file, not a live cluster.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot: Option<SnapshotInfo>,
 }
 
 /// The context switcher's data: every context, and the one Kubri is connected to.
@@ -408,7 +413,7 @@ impl Kubri {
     async fn restart_recorder(&self, session: &Session) {
         let settings = self.settings().history;
         let mut start = None;
-        if self.recording.load(Ordering::Relaxed) && settings.record {
+        if self.recording.load(Ordering::Relaxed) && settings.record && session.info.snapshot.is_none() {
             match self.history_store() {
                 Ok(store) => {
                     let namespaces = self.allowed_namespaces(session).await.unwrap_or_default();
@@ -441,6 +446,10 @@ impl Kubri {
         let store = self.history_store()?;
         let (entries, more) = store.query(&context, query)?;
         let watched = store.watched(&context, query.since, query.until)?;
+        let snapshot = self
+            .cluster()
+            .await
+            .is_some_and(|c| c.snapshot.is_some() && c.context == context);
         let recorder = self
             .recorder
             .lock()
@@ -449,7 +458,9 @@ impl Kubri {
             .filter(|r| r.context() == context)
             .map(|r| r.status())
             .unwrap_or_else(|| RecorderStatus {
-                reason: Some(if !self.recording.load(Ordering::Relaxed) {
+                reason: Some(if snapshot {
+                    "A snapshot does not change, so there is nothing to record".into()
+                } else if !self.recording.load(Ordering::Relaxed) {
                     "This Kubri does not record changes".into()
                 } else if !self.settings().history.record {
                     "Recording is turned off in the settings".into()
@@ -492,8 +503,15 @@ impl Kubri {
 
     /// Whether Kubri may change the connected cluster now, and why not.
     pub async fn guard(&self) -> Guard {
-        let context = self.cluster().await.map(|c| c.context);
-        self.guard_for(context.as_deref()).await
+        let cluster = self.cluster().await;
+        if cluster.as_ref().is_some_and(|c| c.snapshot.is_some()) {
+            return Guard {
+                read_only: true,
+                reason: Some("this is a snapshot: it shows what was saved and cannot change anything".into()),
+                ..Default::default()
+            };
+        }
+        self.guard_for(cluster.map(|c| c.context).as_deref()).await
     }
 
     async fn guard_for(&self, context: Option<&str>) -> Guard {
@@ -672,6 +690,49 @@ impl Kubri {
         Ok(info)
     }
 
+    /// Saves `namespace`, or the whole cluster, to a snapshot file: its name and gzipped bytes.
+    pub async fn take_snapshot(&self, namespace: Option<&str>) -> Result<(String, Vec<u8>)> {
+        let session = self.session().await?;
+        if session.info.snapshot.is_some() {
+            return Err(Error::Unsupported("this is a snapshot already".into()));
+        }
+        let bytes = snapshot::take(&session.client, &session.info, &session.resources, namespace).await?;
+        let name = snapshot::file_name(
+            &session.info.context,
+            namespace,
+            k8s_openapi::jiff::Timestamp::now().as_millisecond(),
+        );
+        tracing::info!(
+            context = session.info.context,
+            namespace,
+            bytes = bytes.len(),
+            "took a snapshot"
+        );
+        Ok((name, bytes))
+    }
+
+    /// Opens a snapshot file in place of a cluster, read-only. Switching to a context leaves it.
+    pub async fn open_snapshot(&self, bytes: &[u8], file: Option<String>) -> Result<ClusterInfo> {
+        let mut snapshot = snapshot::read(bytes)?;
+        snapshot.info.file = file;
+        let saved = snapshot.info.clone();
+        let namespace = saved.namespace.clone().unwrap_or_else(|| "default".to_owned());
+        let info = ClusterInfo {
+            context: format!("{} (snapshot)", saved.context),
+            server: saved.server.clone(),
+            version: saved.kubernetes.clone(),
+            default_namespace: namespace.clone(),
+            snapshot: Some(saved),
+        };
+        let resources = snapshot.served_resources();
+        let client = snapshot::client(snapshot, &namespace);
+        let session = Session::new(info.clone(), client, resources);
+        self.restart_recorder(&session).await;
+        *self.session.write().await = Some(Arc::new(session));
+        tracing::info!(context = info.context, "opened a snapshot");
+        Ok(info)
+    }
+
     /// A connection to `context`, without making it the current one.
     async fn connect(&self, context: &str) -> Result<Session> {
         let kubeconfig = match &*self.kubeconfig.read().await {
@@ -704,6 +765,7 @@ impl Kubri {
                     server,
                     version,
                     default_namespace: namespace,
+                    snapshot: None,
                 },
                 client,
                 resources,
@@ -1257,7 +1319,7 @@ impl Kubri {
             None => session.metrics(MetricsKind::Nodes, None),
         };
         let resolve = |api_version: &str, kind: &str| session.resolve(api_version, kind);
-        Ok(pulse::gather(session.client.clone(), namespace, metrics, resolve).await)
+        Ok(pulse::gather(session.client.clone(), namespace, metrics, resolve, session.now()).await)
     }
 
     /// The XRay tree of every object of `resource` in `namespace`, or in all namespaces.
@@ -1286,7 +1348,7 @@ impl Kubri {
     pub async fn sanitize(&self, namespace: Option<&str>) -> Result<SanitizerReport> {
         let session = self.session().await?;
         let usage = session.metrics(MetricsKind::Nodes, None);
-        Ok(sanitizer::scan(session.client.clone(), namespace, usage).await)
+        Ok(sanitizer::scan(session.client.clone(), namespace, usage, session.now()).await)
     }
 
     /// Every subject of a role binding with the rules it is granted. `namespace` limits role
@@ -1831,6 +1893,15 @@ impl Session {
         }
     }
 
+    /// The time ages and "recent" count to: now, or when a snapshot was taken.
+    fn now(&self) -> k8s_openapi::jiff::Timestamp {
+        self.info
+            .snapshot
+            .as_ref()
+            .and_then(|s| k8s_openapi::jiff::Timestamp::from_millisecond(s.taken).ok())
+            .unwrap_or_else(k8s_openapi::jiff::Timestamp::now)
+    }
+
     fn info_for(&self, resource: &ResourceRef) -> Result<&ResourceInfo> {
         self.by_ref
             .get(resource)
@@ -2069,6 +2140,7 @@ mod tests {
             server: "https://fake".into(),
             version: "v1.36.0".into(),
             default_namespace: "default".into(),
+            snapshot: None,
         };
         *kubri.session.write().await = Some(Arc::new(Session::new(info, client, resources)));
         kubri
@@ -2237,5 +2309,39 @@ mod tests {
             kubri.switch_context("nope").await,
             Err(Error::UnknownContext(name)) if name == "nope"
         ));
+    }
+
+    #[tokio::test]
+    async fn a_snapshot_is_read_only_and_says_what_it_is() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let file = serde_json::json!({
+            "format": "kubri-snapshot", "version": 1,
+            "info": { "context": "prod", "server": "https://prod", "kubernetes": "v1.33.5",
+                      "namespace": "shop", "taken": 1_793_000_000_000_i64, "kubri": "0.9.0",
+                      "objects": 0, "logs": 0, "leftOut": [] },
+            "resources": [], "lists": {}, "logs": {}
+        });
+        let info = kubri
+            .open_snapshot(file.to_string().as_bytes(), Some("prod.kubri".into()))
+            .await
+            .unwrap();
+        assert_eq!(info.context, "prod (snapshot)");
+        assert_eq!(info.default_namespace, "shop");
+        assert_eq!(
+            info.snapshot.as_ref().and_then(|s| s.file.as_deref()),
+            Some("prod.kubri")
+        );
+        let guard = kubri.guard().await;
+        assert!(guard.read_only && !guard.can_unlock, "{guard:?}");
+        assert!(matches!(
+            kubri.take_snapshot(None).await,
+            Err(Error::Unsupported(_))
+        ));
+        assert!(kubri.open_snapshot(b"not a snapshot", None).await.is_err());
+        // A file that does not open leaves the snapshot open.
+        assert_eq!(
+            kubri.cluster().await.map(|c| c.context).as_deref(),
+            Some("prod (snapshot)")
+        );
     }
 }

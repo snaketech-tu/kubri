@@ -99,6 +99,7 @@ pub(crate) async fn gather(
     namespace: Option<&str>,
     metrics: impl Future<Output = Result<Vec<Usage>>>,
     resolve: impl Fn(&str, &str) -> Option<ResourceRef>,
+    now: Timestamp,
 ) -> Pulse {
     let c = &client;
     let (nodes, pods, deployments, stateful_sets, daemon_sets, replica_sets) = futures::join!(
@@ -119,7 +120,6 @@ pub(crate) async fn gather(
         metrics,
         crate::certmanager::list(c, namespace),
     );
-    let now = Timestamp::now();
     let (certificate_pulse, certificates) = match certificates {
         Some(listed) => certificate_pulse(listed, now),
         None => (None, Vec::new()),

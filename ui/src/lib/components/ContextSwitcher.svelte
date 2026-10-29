@@ -61,7 +61,7 @@
 			style:--dot={app.cluster && !app.connecting ? app.contextSettings.color || null : null}
 		></span>
 		<span class="label">
-			<span class="meta">{app.connecting ? 'Connecting…' : 'Context'}</span>
+			<span class="meta">{app.connecting ? (app.contexts.some((c) => c.name === app.connecting) ? 'Connecting…' : 'Opening…') : app.snapshot ? 'Snapshot' : 'Context'}</span>
 			<span class="name">
 				{app.connecting ? app.contextName(app.connecting) : app.cluster ? app.contextName(app.cluster.context) : 'No context'}
 			</span>
@@ -102,11 +102,42 @@
 					<li class="empty">No matching contexts</li>
 				{/each}
 			</ul>
+			<div class="footer">
+				<button
+					onclick={() => {
+						app.contextMenuOpen = false;
+						app.showSnapshot();
+					}}
+				>
+					<Icon name="camera" size={15} /> Snapshots…
+				</button>
+			</div>
 		</div>
 	{/if}
 </div>
 
 <style>
+	.footer {
+		padding: 6px;
+		border-top: 1px solid var(--border);
+	}
+	.footer button {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		padding: 6px 8px;
+		border: none;
+		border-radius: 6px;
+		background: none;
+		color: var(--text-muted);
+		font-size: 12.5px;
+		text-align: left;
+	}
+	.footer button:hover {
+		background: var(--surface-2);
+		color: var(--text);
+	}
 	.switcher {
 		position: relative;
 	}

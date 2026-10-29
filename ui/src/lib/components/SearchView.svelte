@@ -190,7 +190,7 @@
 									<td>{h.kind}</td>
 									<td class="mono">{h.object.namespace ?? '—'}</td>
 									{#if elsewhere}<td class="mono">{h.object.context}</td>{/if}
-									<td class="numeric">{age(h.created, now)}</td>
+									<td class="numeric">{age(h.created, app.snapshot?.taken ?? now)}</td>
 								</tr>
 							{/each}
 						</tbody>

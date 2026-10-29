@@ -37,7 +37,7 @@
 	import { summarizeUsers } from '../references';
 	import type { Reference } from '../api';
 
-	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' }> } = $props();
+	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' | 'snapshot' }> } = $props();
 
 	let busy = $state(false);
 

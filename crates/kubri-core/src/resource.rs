@@ -24,7 +24,7 @@ impl std::fmt::Display for ResourceRef {
 }
 
 /// A resource type served by the connected cluster, including CRDs.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceInfo {
     #[serde(flatten)]

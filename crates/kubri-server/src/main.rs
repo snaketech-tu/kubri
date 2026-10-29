@@ -65,6 +65,9 @@ struct Args {
         value_parser = clap::value_parser!(u64).range(1..=87_600)
     )]
     session_hours: u64,
+    /// Open a snapshot file at start, for looking at a cluster saved by someone else.
+    #[arg(long, value_name = "FILE")]
+    snapshot: Option<PathBuf>,
     /// Serve MCP over stdio for an AI agent instead of the web UI. Agents only read this way.
     #[arg(long)]
     mcp: bool,
@@ -140,6 +143,17 @@ async fn serve(args: Args) -> ExitCode {
     if args.read_only {
         kubri.set_read_only();
         tracing::info!("read-only: Kubri does not change clusters");
+    }
+    if let Some(path) = &args.snapshot {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+        let opened = match std::fs::read(path) {
+            Ok(bytes) => kubri.open_snapshot(&bytes, name).await.map_err(|e| e.to_string()),
+            Err(err) => Err(err.to_string()),
+        };
+        if let Err(err) = opened {
+            tracing::error!("cannot open {}: {err}", path.display());
+            return ExitCode::FAILURE;
+        }
     }
     if !args.ui_dir.join("index.html").exists() {
         tracing::warn!(dir = %args.ui_dir.display(), "UI not found, only the API is served");
