@@ -28,6 +28,7 @@ export type Action =
 	| { type: 'rightsizing' }
 	| { type: 'fleet' }
 	| { type: 'search'; query?: string }
+	| { type: 'graph'; namespace?: string }
 	/** One object, in whichever context it is. */
 	| { type: 'object'; target: ObjectRef; kind?: string }
 	| { type: 'config'; section?: ConfigSection }
@@ -54,6 +55,7 @@ const INTEGRATION_COMMANDS = ['integrations', 'integration', 'prometheus', 'graf
 const SIZING_COMMANDS = ['rightsizing', 'rightsize', 'sizing'];
 const FLEET_COMMANDS = ['fleet', 'home'];
 const SEARCH_COMMANDS = ['search', 'find', 'grep'];
+const GRAPH_COMMANDS = ['graph', 'topology'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	config: undefined,
 	settings: undefined,
@@ -296,6 +298,13 @@ function builtins(
 	};
 	if (SEARCH_COMMANDS.includes(cmd)) return [search];
 
+	const graph = (namespace?: string): Suggestion => ({
+		label: namespace ? `graph ${namespace}` : 'graph',
+		detail: 'XRay graph: how objects connect, and the request paths of Ingresses',
+		action: { type: 'graph', namespace }
+	});
+	if (GRAPH_COMMANDS.includes(cmd)) return [graph(rest[0])];
+
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {
 		const roots = xrayResources(resources);
@@ -385,6 +394,7 @@ function builtins(
 	if (cmd.length > 2 && SIZING_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sizing);
 	if (cmd.length > 1 && FLEET_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(fleet);
 	if (cmd.length > 1 && SEARCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push({ ...search, label: 'search' });
+	if (cmd.length > 1 && GRAPH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(graph());
 	if (cmd.length > 1 && 'config'.startsWith(cmd) && cmd !== 'config') {
 		extra.push(...builtins('config', resources, contexts, namespaces, config).slice(0, 1));
 	}

@@ -161,6 +161,7 @@ export type Page =
 	| 'benchmarks'
 	| 'pulses'
 	| 'xray'
+	| 'graph'
 	| 'rbac'
 	| 'helm'
 	| 'create'
@@ -724,6 +725,9 @@ class AppState {
 			case 'search':
 				this.showSearch(action.query);
 				break;
+			case 'graph':
+				this.showGraph(action.namespace);
+				break;
 			case 'object':
 				await this.openObject(action.target, action.kind);
 				break;
@@ -825,6 +829,14 @@ class AppState {
 		if (drafts.block(() => this.showXray(resource, namespace))) return;
 		this.page = 'xray';
 		this.xrayResource = resource;
+		this.details = null;
+		this.setNamespace(namespace);
+	}
+
+	/** XRay as one graph of how the objects connect, with the request paths of Ingresses. */
+	showGraph(namespace?: string) {
+		if (drafts.block(() => this.showGraph(namespace))) return;
+		this.page = 'graph';
 		this.details = null;
 		this.setNamespace(namespace);
 	}

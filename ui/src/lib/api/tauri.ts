@@ -148,6 +148,7 @@ export const tauriBackend: Backend = {
 	lokiLogs: (request) => invoke('loki_logs', { request }),
 	usageHistory: (namespace, seconds) => invoke('usage_history', { namespace, seconds }),
 	xray: (resource, namespace) => invoke('xray', { resource, namespace }),
+	graph: (namespace) => invoke('graph', { namespace }),
 	sanitize: (namespace) => invoke('sanitize', { namespace }),
 	rbac: (namespace) => invoke('rbac', { namespace }),
 	permissions: (namespace) => invoke('permissions', { namespace }),

@@ -92,7 +92,7 @@
 		{/each}
 
 		<h3>Explore</h3>
-		<button class:active={app.page === 'xray'} onclick={showXray} title=":xray deploy">
+		<button class:active={app.page === 'xray' || app.page === 'graph'} onclick={showXray} title=":xray deploy">
 			<Icon name="topology" />
 			<span class="label">Topology</span>
 			<span class="hint">XRay</span>

@@ -28,6 +28,7 @@
 				['Shift+J', 'Jump to the owner'],
 				[':pulses', 'Cluster overview'],
 				[':xray deploy [ns]', 'XRay: what each object depends on'],
+				[':graph [ns]', 'XRay graph: how objects connect, and Ingress request paths'],
 				[':rbac', 'Who may do what'],
 				[':helm', 'Helm releases'],
 				[':new [kind name --image …]', 'Create from a template or YAML, like kubectl create'],

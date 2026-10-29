@@ -9,6 +9,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, delete, get, post, put};
 use axum::{Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
+use kubri_core::Graph;
 use kubri_core::{
     AccessCheck, AgentSettings, BenchInfo, BenchRequest, Change, ClusterInfo, ContainerImage, ContextList,
     ContextSettings, DebugRequest, DebugSession, DeleteOptions, DiffSettings, DrainOptions, DrainReport,
@@ -94,6 +95,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/integrations/url", post(integration_url))
         .route("/loki/logs", post(loki_logs))
         .route("/xray", get(xray))
+        .route("/graph", get(graph))
         .route("/rbac", get(rbac))
         .route("/sanitize", get(sanitize))
         .route("/permissions", get(permissions))
@@ -808,6 +810,10 @@ struct XrayQuery {
 async fn xray(State(kubri): State<Arc<Kubri>>, Query(query): Query<XrayQuery>) -> ApiResult<Vec<XrayNode>> {
     let namespace = query.namespace.filter(|ns| !ns.is_empty());
     Ok(Json(kubri.xray(&query.resource, namespace.as_deref()).await?))
+}
+
+async fn graph(State(kubri): State<Arc<Kubri>>, Query(query): Query<NamespaceQuery>) -> ApiResult<Graph> {
+    Ok(Json(kubri.graph(query.namespace()).await?))
 }
 
 #[derive(Deserialize)]

@@ -207,6 +207,7 @@
 	>
 		{#if withIssues}<span class="tag bad"><HealthIcon health="failed" />{withIssues} with issues</span>{/if}
 		{#snippet tools()}
+			<button class="btn" onclick={() => app.showGraph()} title="All objects as one graph, with request paths (:graph)">Graph</button>
 			<button class="btn" onclick={expandAll} title="Open every tree">Expand all</button>
 			<button class="btn" onclick={() => expanded.clear()} title="Close every tree">Collapse all</button>
 		{/snippet}

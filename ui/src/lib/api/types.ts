@@ -892,6 +892,59 @@ export interface XrayNode {
 	children: XrayNode[];
 }
 
+/** An object in the XRay graph. */
+export interface GraphNode {
+	/** `Kind/namespace/name`. */
+	id: string;
+	kind: string;
+	name: string;
+	namespace: string | null;
+	/** Set for objects that can be opened; not for missing ones. */
+	resource: ResourceRef | null;
+	health: Health;
+	detail: string;
+	/** From `app.kubernetes.io/name`, `app` or `k8s-app`, or from what it connects to. */
+	app: string | null;
+	/** The node a pod runs on, or a workload's first pod. */
+	node: string | null;
+}
+
+export interface GraphEdge {
+	from: string;
+	to: string;
+	kind: 'routes' | 'selects' | 'owns' | 'uses' | 'runsOn';
+}
+
+export interface PathStep {
+	/** The graph node, if the step is one. */
+	id: string | null;
+	kind: string;
+	name: string;
+	health: Health;
+	detail: string;
+}
+
+/** How a request for one host and path of an Ingress reaches pods. */
+export interface RequestPath {
+	ingress: string;
+	namespace: string | null;
+	host: string | null;
+	path: string;
+	/** Ingress, Service and EndpointSlice, as far as they exist. */
+	steps: PathStep[];
+	pods: PathStep[];
+	/** Why requests do not arrive. */
+	broken: string | null;
+}
+
+export interface Graph {
+	nodes: GraphNode[];
+	edges: GraphEdge[];
+	paths: RequestPath[];
+	/** Kinds that could not be listed. */
+	missing: string[];
+}
+
 /** One rule of a Role or ClusterRole. */
 export interface Rule {
 	apiGroups: string[];
@@ -1293,6 +1346,8 @@ export interface Backend {
 	lokiLogs(request: LokiRequest): Promise<LokiLogs>;
 	/** The XRay trees of every object of `resource`. */
 	xray(resource: ResourceRef, namespace: string | null): Promise<XrayNode[]>;
+	/** The objects of a namespace, or all, as a graph, with the request paths of its Ingresses. */
+	graph(namespace: string | null): Promise<Graph>;
 	/** Checks the objects of a namespace, or of the whole cluster, like Popeye. */
 	sanitize(namespace: string | null): Promise<SanitizerReport>;
 	rbac(namespace: string | null): Promise<Rbac>;
