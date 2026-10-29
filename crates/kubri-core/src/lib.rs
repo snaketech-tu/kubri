@@ -15,6 +15,7 @@ pub mod explain;
 mod fixes;
 mod health;
 mod helm;
+mod integrations;
 mod jsonpath;
 mod k9s;
 mod kubeconfig;
@@ -25,6 +26,7 @@ mod objects;
 mod plugin;
 mod portforward;
 mod preview;
+mod prometheus;
 mod proxy;
 mod pulse;
 mod rbac;
@@ -70,6 +72,7 @@ pub use explain::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject,
 pub use fixes::{MemoryFix, NearMiss, NodeFit, PodMatch, ServiceCheck};
 pub use health::Health;
 pub use helm::{HelmChange, HelmChartRef, HelmOutcome, HelmRelease, HelmReleaseDetails, HubChart};
+pub use integrations::{Endpoint, Integration, IntegrationSettings, Integrations};
 pub use k9s::{
     Alias, ConfigFile, Hotkey, Jump, K9sConfig, Logger, Plugin, PluginInput, Threshold, Thresholds,
 };
@@ -80,6 +83,7 @@ pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
 pub use plugin::{Cell, PluginRun, Release};
 pub use portforward::{FavoriteStart, PortForwardInfo, PortForwardRequest};
 pub use preview::{Change, Preview};
+pub use prometheus::{Chart, ChartLevel, Charts, Marker, Range, Series};
 pub use pulse::{EventPulse, KindPulse, Pulse, RecentEvent, Utilization};
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
@@ -122,11 +126,16 @@ pub struct ContextList {
 struct Session {
     info: ClusterInfo,
     client: Client,
+    /// The same connection without retries, for the service proxy: its 503 means a tool
+    /// has no ready pod, which retrying for half a minute does not change.
+    proxy_client: Client,
     resources: Vec<ResourceInfo>,
     by_ref: HashMap<ResourceRef, usize>,
     access: access::AccessCache,
     /// OpenAPI schemas by kind, fetched once per connection.
     schemas: std::sync::Mutex<HashMap<ResourceRef, Arc<Option<Value>>>>,
+    /// The tools found in the cluster, once looked for.
+    integrations: tokio::sync::Mutex<Option<(IntegrationSettings, Integrations)>>,
 }
 
 pub struct Kubri {
@@ -486,10 +495,13 @@ impl Kubri {
         let session = tokio::time::timeout(CONNECT_TIMEOUT, async {
             let config = client_config(&kubeconfig, context).await?;
             let server = config.cluster_url.to_string().trim_end_matches('/').to_owned();
+            let mut once = config.clone();
+            once.default_retry = false;
+            let proxy_client = Client::try_from(once)?;
             let client = Client::try_from(config)?;
             let version = client.apiserver_version().await?.git_version;
             let resources = discovery::discover(&client).await?;
-            Ok::<_, Error>(Session::new(
+            let mut session = Session::new(
                 ClusterInfo {
                     context: context.to_owned(),
                     server,
@@ -498,7 +510,9 @@ impl Kubri {
                 },
                 client,
                 resources,
-            ))
+            );
+            session.proxy_client = proxy_client;
+            Ok::<_, Error>(session)
         })
         .await
         .map_err(|_| Error::Timeout)??;
@@ -1515,11 +1529,13 @@ impl Session {
             .collect();
         Self {
             info,
+            proxy_client: client.clone(),
             client,
             resources,
             by_ref,
             access: Default::default(),
             schemas: Default::default(),
+            integrations: Default::default(),
         }
     }
 

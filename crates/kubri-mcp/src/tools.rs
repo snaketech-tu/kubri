@@ -295,6 +295,42 @@ const TOOLS: &[Tool] = &[
         ],
     },
     Tool {
+        name: "get_metrics",
+        title: "Get metrics",
+        description: "CPU, memory, restarts, network and request rates of a pod, workload, node or namespace over the last hours, from the cluster's Prometheus: min, average, max and latest per line, and rollouts in that time.",
+        write: false,
+        destructive: false,
+        params: &[
+            RESOURCE,
+            NAME,
+            NAMESPACE,
+            param(
+                "hours",
+                "integer",
+                "How far back, in hours; 1 when left out, at most 720.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
+        name: "query_prometheus",
+        title: "Query Prometheus",
+        description: "Runs a PromQL query over the last hours on the cluster's Prometheus and returns min, average, max and latest of each series.",
+        write: false,
+        destructive: false,
+        params: &[
+            param("query", "string", "The PromQL expression.", true),
+            param(
+                "hours",
+                "integer",
+                "How far back, in hours; 1 when left out, at most 720.",
+                false,
+            ),
+            CONTEXT,
+        ],
+    },
+    Tool {
         name: "scale",
         title: "Scale",
         description: "Sets the replicas of a Deployment, StatefulSet or ReplicaSet. The user confirms it in Kubri first.",
@@ -416,6 +452,34 @@ impl Args<'_> {
     }
 }
 
+/// The time range of `hours`, one hour by default.
+fn hours(args: &Args<'_>) -> Result<kubri_core::Range, String> {
+    let hours = args.int("hours")?.unwrap_or(1).clamp(1, 720) as u64;
+    Ok(kubri_core::Range {
+        seconds: hours * 3600,
+        end: None,
+    })
+}
+
+/// Lines of a chart in a few numbers each, which is what an agent can use.
+fn summarize(series: &[kubri_core::Series]) -> Vec<Value> {
+    series
+        .iter()
+        .filter(|s| !s.points.is_empty())
+        .map(|s| {
+            let values: Vec<f64> = s.points.iter().map(|p| p[1]).collect();
+            let round = |v: f64| (v * 1000.0).round() / 1000.0;
+            json!({
+                "name": s.name,
+                "min": round(values.iter().copied().fold(f64::INFINITY, f64::min)),
+                "avg": round(values.iter().sum::<f64>() / values.len() as f64),
+                "max": round(values.iter().copied().fold(f64::NEG_INFINITY, f64::max)),
+                "latest": round(values[values.len() - 1]),
+            })
+        })
+        .collect()
+}
+
 fn text(err: impl std::fmt::Display) -> String {
     err.to_string()
 }
@@ -529,6 +593,36 @@ pub(crate) async fn call(tool: &Tool, kubri: &Kubri, hub: &Hub, arguments: &Valu
         "cluster_health" => {
             let pulse = kubri.pulse(args.str("namespace")).await.map_err(text)?;
             Ok(render::yaml(&pulse))
+        }
+        "get_metrics" => {
+            let (target, _) = object(kubri, &args, args.need("resource")?).await?;
+            let charts = kubri.charts(&target, hours(&args)?).await.map_err(text)?;
+            let summary: Vec<Value> = charts
+                .charts
+                .iter()
+                .map(|c| json!({ "chart": c.title, "unit": c.unit, "lines": summarize(&c.series), "levels": c.levels }))
+                .collect();
+            let markers: Vec<Value> = charts
+                .markers
+                .iter()
+                .map(|m| json!({ "at": render::unix_time(m.at), "what": m.label }))
+                .collect();
+            Ok(render::yaml(&json!({
+                "source": charts.source,
+                "charts": summary,
+                "events": markers,
+                "noData": charts.missing,
+            })))
+        }
+        "query_prometheus" => {
+            let series = kubri
+                .prometheus_query(args.need("query")?, hours(&args)?)
+                .await
+                .map_err(text)?;
+            if series.is_empty() {
+                return Ok("The query returned no series.".into());
+            }
+            Ok(render::yaml(&summarize(&series)))
         }
         _ => change(tool, kubri, hub, &args, context).await,
     }

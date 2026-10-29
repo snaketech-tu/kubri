@@ -25,12 +25,23 @@
 	let now = $state(Date.now());
 	let cpuHistory = $state.raw<Sample[]>([]);
 	let memoryHistory = $state.raw<Sample[]>([]);
+	/** The last hour from Prometheus, when it is there; live samples continue it. */
+	let stored = $state.raw<{ cpu: Sample[]; memory: Sample[] } | null>(null);
 	let cursor = $state(0);
 	/** The cursor shows once the keys move it, not on a mouse user's first look. */
 	let keyboard = $state(false);
 	let body = $state<HTMLDivElement>();
 
 	const namespace = $derived(app.namespace || null);
+	const HOUR = 3600_000;
+	/** Prometheus' history, then the samples taken since. */
+	const joined = (history: Sample[], live: Sample[]) => {
+		const last = history[history.length - 1]?.at ?? 0;
+		return [...history, ...live.filter((s) => s.at > last)];
+	};
+	const cpuTrend = $derived(stored?.cpu.length ? joined(stored.cpu, cpuHistory) : cpuHistory);
+	const memoryTrend = $derived(stored?.memory.length ? joined(stored.memory, memoryHistory) : memoryHistory);
+	const trendWindow = $derived(stored?.cpu.length ? HOUR : undefined);
 
 	$effect(() => {
 		const ns = namespace;
@@ -60,12 +71,28 @@
 				loading = false;
 			}
 		};
+		const loadHistory = async () => {
+			if (!app.has('prometheus')) return;
+			try {
+				const history = await backend.usageHistory(ns, HOUR / 1000);
+				if (cancelled) return;
+				const samples = (id: string) =>
+					(history.charts.find((c) => c.id === id)?.series[0]?.points ?? []).map(([at, value]) => ({ at: at * 1000, value }));
+				stored = { cpu: samples('cpu'), memory: samples('memory') };
+			} catch {
+				stored = null;
+			}
+		};
+		stored = null;
 		load();
+		loadHistory();
 		const refresh = setInterval(() => document.hidden || load(), REFRESH_MS);
+		const refreshHistory = setInterval(() => document.hidden || loadHistory(), 60_000);
 		const clock = setInterval(() => (now = Date.now()), 1000);
 		return () => {
 			cancelled = true;
 			clearInterval(refresh);
+			clearInterval(refreshHistory);
 			clearInterval(clock);
 		};
 	});
@@ -300,10 +327,12 @@
 							<span class="muted">{namespace ? 'This namespace' : 'Cluster-wide'}</span>
 						</div>
 						<div class="trends">
-							{@render trend('CPU', pulse.cpu, cpuHistory, (m) => `${cores(m)} cores`)}
-							{@render trend('Memory', pulse.memory, memoryHistory, memory)}
+							{@render trend('CPU', pulse.cpu, cpuTrend, (m) => `${cores(m)} cores`)}
+							{@render trend('Memory', pulse.memory, memoryTrend, memory)}
 						</div>
-						<p class="note">Kept for this session; Kubri stores no history.</p>
+						<p class="note">
+							{trendWindow ? 'The last hour from Prometheus, measured use.' : 'Kept for this session; Kubri stores no history.'}
+						</p>
 					</section>
 				</div>
 			</div>
@@ -420,7 +449,7 @@
 			{/if}
 		</span>
 		{#if level}
-			<Sparkline samples={history} {format} label="{label} {level.measured ? 'used' : 'requested'}" {now} />
+			<Sparkline samples={history} {format} label="{label} {level.measured ? 'used' : 'requested'}" {now} window={trendWindow} />
 		{:else}
 			<span class="muted">Not available</span>
 		{/if}

@@ -32,6 +32,7 @@
 	import RbacView from '#lib/components/RbacView.svelte';
 	import ResourceView from '#lib/components/ResourceView.svelte';
 	import SanitizerView from '#lib/components/SanitizerView.svelte';
+	import IntegrationsView from '#lib/components/IntegrationsView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
@@ -445,6 +446,10 @@
 						<BenchmarksView />
 					{:else if app.page === 'config'}
 						<ConfigView />
+					{:else if app.page === 'integrations'}
+						{#key app.cluster?.context}
+							<IntegrationsView />
+						{/key}
 					{:else if app.page === 'sanitizer'}
 						{#key `${app.cluster?.context}/${app.namespace}`}
 							<SanitizerView />

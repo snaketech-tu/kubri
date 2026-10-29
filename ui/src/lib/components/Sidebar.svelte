@@ -85,6 +85,10 @@
 			<Icon name="sanitizer" />
 			<span class="label">Sanitizer</span>
 		</button>
+		<button class:active={app.page === 'integrations'} onclick={() => app.showIntegrations()} title=":integrations">
+			<Icon name="plug" />
+			<span class="label">Integrations</span>
+		</button>
 		<button class:active={app.page === 'portforwards'} onclick={() => app.showPortForwards()} title=":pf">
 			<Icon name="forward" />
 			<span class="label">Port-forwards</span>

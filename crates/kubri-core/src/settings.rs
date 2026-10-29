@@ -34,6 +34,8 @@ pub struct ContextSettings {
     pub agent_writes: bool,
     /// Port-forwards that start when Kubri connects to this context.
     pub forwards: Vec<FavoriteForward>,
+    /// Where Prometheus, Grafana and Loki are, when not found on their own.
+    pub integrations: crate::IntegrationSettings,
 }
 
 /// A port-forward to start whenever Kubri connects to its context, on the same local port.
@@ -71,6 +73,7 @@ impl ContextSettings {
         self.label = self.label.trim().to_owned();
         self.namespace = self.namespace.trim().to_owned();
         self.color = self.color.trim().to_ascii_lowercase();
+        self.integrations = self.integrations.normalized()?;
         let hex = self.color.strip_prefix('#').unwrap_or("");
         if !self.color.is_empty() && (hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit())) {
             return Err(Error::Unsupported(format!(

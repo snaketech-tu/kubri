@@ -2427,6 +2427,7 @@ dependencies = [
  "axum",
  "futures",
  "http-body-util",
+ "k8s-openapi",
  "kubri-core",
  "ring",
  "serde",
