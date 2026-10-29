@@ -185,6 +185,9 @@ export const httpBackend: Backend = {
 	pulse: (namespace) => request('GET', `/pulse?${new URLSearchParams({ namespace: namespace ?? '' })}`),
 	integrations: (fresh) => request('GET', `/integrations?fresh=${fresh}`),
 	charts: (target, range) => request('POST', '/charts', { target, range }),
+	dashboards: (target) => request('POST', '/grafana/dashboards', { target }),
+	integrationUrl: async (id) => ((await request('POST', '/integrations/url', { id })) as { url: string }).url,
+	lokiLogs: (request_) => request('POST', '/loki/logs', request_),
 	usageHistory: (namespace, seconds) =>
 		request('GET', `/usage-history?${new URLSearchParams({ namespace: namespace ?? '', seconds: String(seconds) })}`),
 	xray: (resource, namespace) =>

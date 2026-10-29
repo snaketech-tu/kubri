@@ -136,7 +136,7 @@
 	});
 
 	const logs = $derived(hasLogs(details.resource, object));
-	const charts = $derived(hasCharts(details.resource) && app.has('prometheus'));
+	const charts = $derived(hasCharts(details.resource) && (app.has('prometheus') || app.has('grafana')));
 	// Shells change what runs in the cluster, so read-only leaves them out.
 	const shell = $derived(isPods(details.resource) && !app.readOnly);
 	const containers = $derived(containerNames(object));

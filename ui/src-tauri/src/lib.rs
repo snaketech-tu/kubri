@@ -600,6 +600,27 @@ async fn prometheus_query(
 }
 
 #[tauri::command]
+async fn dashboards(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+) -> CommandResult<kubri_core::Dashboards> {
+    kubri.dashboards(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn integration_url(kubri: State<'_, Arc<Kubri>>, id: String) -> CommandResult<String> {
+    kubri.integration_url(&id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn loki_logs(
+    kubri: State<'_, Arc<Kubri>>,
+    request: kubri_core::LokiRequest,
+) -> CommandResult<kubri_core::LokiLogs> {
+    kubri.loki_logs(&request).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn xray(
     kubri: State<'_, Arc<Kubri>>,
     resource: ResourceRef,
@@ -905,6 +926,9 @@ pub fn run() {
             charts,
             usage_history,
             prometheus_query,
+            dashboards,
+            integration_url,
+            loki_logs,
             xray,
             sanitize,
             rbac,

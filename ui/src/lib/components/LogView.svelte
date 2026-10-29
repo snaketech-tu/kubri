@@ -2,6 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import { backend, type LogEvent, type LogLevel, type LogOptions, type LogSource, type ObjectRef } from '../api';
 	import { copyLines, saveFile } from '../actions';
+	import { errorMessage } from '../format';
 	import { selectedText } from '../explain';
 	import { forControl } from '../keys';
 	import {
@@ -49,6 +50,13 @@
 	const { ranges: RANGES, start: startRange } = logRanges(logger?.tail ?? 100, logger?.sinceSeconds ?? -1);
 	/** The ranges k9s puts on 0 to 6: tail, head (here everything), then 1m to 1h. */
 	const RANGE_KEYS = ['tail', 'all', '1m', '5m', '15m', '30m', '1h'];
+	const LOKI_RANGES: [number, string][] = [
+		[900, 'Last 15 minutes'],
+		[3600, 'Last hour'],
+		[6 * 3600, 'Last 6 hours'],
+		[86400, 'Last day'],
+		[7 * 86400, 'Last 7 days']
+	];
 
 	let container = $state(untrack(() => wanted?.name ?? ''));
 	let follow = $state(true);
@@ -57,6 +65,13 @@
 	let timestamps = $state(logger?.showTime ?? false);
 	let wrap = $state(logger?.textWrap ?? false);
 	let range = $state(startRange);
+	/** Lines from Loki instead of the cluster: history beyond the pods that exist now. */
+	let loki = $state(false);
+	let lokiSeconds = $state(3600);
+	/** The LogQL being edited, and the one that ran; empty runs the object's own query. */
+	let logql = $state('');
+	let ranLogql = $state('');
+	let lokiSource = $state('');
 	let filter = $state('');
 	/** Hide lines that do not match the search, or only highlight them and step through them. */
 	let onlyMatches = $state(true);
@@ -119,6 +134,7 @@
 
 	/** Which instance and stream the lines come from, so that a view never passes for another. */
 	const streamState = $derived.by((): { tone: 'warn' | 'ok' | ''; text: string } => {
+		if (loki) return { tone: '', text: lokiSource ? `History from Loki at ${lokiSource}. These lines do not update.` : 'Asking Loki…' };
 		if (previous) return { tone: 'warn', text: 'Previous container instance, which ended. These lines do not update.' };
 		if (status === 'connecting') return { tone: '', text: 'Connecting to the log stream…' };
 		if (status === 'ended') return { tone: '', text: follow ? 'The stream ended. Reconnect to continue.' : 'Snapshot of the current instance.' };
@@ -206,6 +222,36 @@
 					break;
 			}
 		};
+		if (loki) {
+			let cancelled = false;
+			const request = { target, query: ranLogql.trim() || null, container: container || null, seconds: lokiSeconds };
+			backend.lokiLogs(request).then(
+				(found) => {
+					if (cancelled) return;
+					sources = found.sources;
+					lokiSource = found.source;
+					if (!ranLogql) logql = found.query;
+					if (found.limited && found.lines.length)
+						push({
+							source: null,
+							text: `Loki has more lines: these are the newest ${found.lines.length}. Narrow the range or the query for older ones.`,
+							time: found.lines[0].time,
+							kind: 'marker'
+						});
+					for (const l of found.lines) push({ ...l, text: stripAnsi(l.text), kind: 'line' });
+					status = 'ended';
+				},
+				(err) => {
+					if (cancelled) return;
+					push({ source: null, text: errorMessage(err), kind: 'error' });
+					status = 'ended';
+				}
+			);
+			return () => {
+				cancelled = true;
+				cancelAnimationFrame(frame);
+			};
+		}
 		const stop = backend.streamLogs(target, options, onEvent);
 		return () => {
 			stop();
@@ -381,17 +427,28 @@
 			<span class="container" title="Container">{containers[0]}</span>
 		{/if}
 		<select
-			value={previous ? 'previous' : 'current'}
-			onchange={(e) => (previous = e.currentTarget.value === 'previous')}
-			title="The running container, or the one before it, which ended"
-			aria-label="Container instance"
+			value={loki ? 'loki' : previous ? 'previous' : 'current'}
+			onchange={(e) => {
+				const value = e.currentTarget.value;
+				loki = value === 'loki';
+				previous = value === 'previous';
+			}}
+			title="The running container, the one before it, which ended, or the history Loki kept"
+			aria-label="Log source"
 		>
 			<option value="current">Current instance</option>
 			<option value="previous">Previous · ended</option>
+			{#if app.has('loki')}<option value="loki">Loki history</option>{/if}
 		</select>
-		<select bind:value={range} title="How far back to start (0–6)" aria-label="Time range">
-			{#each [...RANGES] as [key, r] (key)}<option value={key}>{r.label}</option>{/each}
-		</select>
+		{#if loki}
+			<select bind:value={lokiSeconds} title="How far back to search Loki" aria-label="Time range">
+				{#each LOKI_RANGES as [seconds, label] (seconds)}<option value={seconds}>{label}</option>{/each}
+			</select>
+		{:else}
+			<select bind:value={range} title="How far back to start (0–6)" aria-label="Time range">
+				{#each [...RANGES] as [key, r] (key)}<option value={key}>{r.label}</option>{/each}
+			</select>
+		{/if}
 		<select bind:value={minLevel} title="Only lines at this level or above" aria-label="Level">
 			<option value="">All levels</option>
 			<option value="info">Info and above</option>
@@ -424,6 +481,27 @@
 		>
 		<button class="export" onclick={save} title="Save the shown lines (Ctrl+S)"><Icon name="download" size={15} /> Export</button>
 	</div>
+	{#if loki}
+		<form
+			class="logql"
+			onsubmit={(e) => {
+				e.preventDefault();
+				if (logql === ranLogql) restarts++;
+				else ranLogql = logql;
+			}}
+		>
+			<label for="logql">LogQL</label>
+			<input
+				id="logql"
+				bind:value={logql}
+				onkeydown={(e) => e.key === 'Escape' && e.currentTarget.blur()}
+				spellcheck="false"
+				autocomplete="off"
+				placeholder={'{namespace="…", pod=~"…"}'}
+			/>
+			<button type="submit">Run</button>
+		</form>
+	{/if}
 	{#if pods.length > 1}
 		<div class="pods" role="group" aria-label="Pods">
 			<span class="muted">Pods</span>
@@ -445,7 +523,7 @@
 			<Icon name={streamState.tone === 'ok' ? 'event' : 'pending'} size={15} />
 			{streamState.text}{stick ? '' : ' Autoscroll is paused.'}
 		</span>
-		<label><input type="checkbox" bind:checked={follow} /> Follow</label>
+		{#if !loki}<label><input type="checkbox" bind:checked={follow} /> Follow</label>{/if}
 		<label title="t"><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
 		<label title="w"><input type="checkbox" bind:checked={wrap} /> Wrap</label>
 		<label title="Count repeated lines and fold stack traces under their first line"
@@ -581,14 +659,16 @@
 		{/if}
 		{#if status === 'ended'}
 			<div class="note end">
-				{follow && !previous ? 'The stream ended.' : 'End of log.'}
-				<button onclick={() => restarts++}>{follow && !previous ? 'Reconnect' : 'Reload'}</button>
+				{follow && !previous && !loki ? 'The stream ended.' : 'End of log.'}
+				<button onclick={() => restarts++}>{follow && !previous && !loki ? 'Reconnect' : 'Reload'}</button>
 			</div>
 		{/if}
 	</div>
 	<div class="foot">
 		<span>{shownCount} {shownCount === 1 ? 'line' : 'lines'}{shownCount !== total ? ` of ${total}` : ''}</span>
-		<span>{previous ? 'Previous instance' : 'Current instance'} · {status === 'streaming' ? 'live' : status}</span>
+		<span
+			>{loki ? 'Loki history' : previous ? 'Previous instance' : 'Current instance'} · {status === 'streaming' ? 'live' : status}</span
+		>
 	</div>
 
 	{#if !stick}
@@ -603,6 +683,7 @@
 		background: var(--surface-2);
 		font-family: var(--mono);
 		font-size: 12px;
+		font-variant-ligatures: none;
 	}
 	/* Where the lines come from, and how they are shown. */
 	.stream-state {
@@ -654,6 +735,23 @@
 	.toolbar select {
 		padding: 5px 8px;
 		font-size: 12.5px;
+	}
+	.logql {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 0 16px 8px;
+		font-size: 12.5px;
+	}
+	.logql label {
+		color: var(--text-muted);
+	}
+	.logql input {
+		flex: 1;
+		min-width: 0;
+		padding: 5px 8px;
+		font-family: var(--mono);
+		font-size: 12px;
 	}
 	.search {
 		flex: 1 1 220px;

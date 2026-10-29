@@ -13,6 +13,7 @@ mod discovery;
 mod error;
 pub mod explain;
 mod fixes;
+mod grafana;
 mod health;
 mod helm;
 mod integrations;
@@ -20,6 +21,7 @@ mod jsonpath;
 mod k9s;
 mod kubeconfig;
 mod logs;
+mod loki;
 mod metrics;
 mod node;
 mod objects;
@@ -70,6 +72,7 @@ pub use debug::{DebugRequest, DebugSession, DebugSettings};
 pub use error::{Error, Result};
 pub use explain::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject, Provider};
 pub use fixes::{MemoryFix, NearMiss, NodeFit, PodMatch, ServiceCheck};
+pub use grafana::{DashboardLink, Dashboards};
 pub use health::Health;
 pub use helm::{HelmChange, HelmChartRef, HelmOutcome, HelmRelease, HelmReleaseDetails, HubChart};
 pub use integrations::{Endpoint, Integration, IntegrationSettings, Integrations};
@@ -77,6 +80,7 @@ pub use k9s::{
     Alias, ConfigFile, Hotkey, Jump, K9sConfig, Logger, Plugin, PluginInput, Threshold, Thresholds,
 };
 pub use logs::{LogEvent, LogLine, LogOptions, LogSource};
+pub use loki::{LokiLogs, LokiRequest};
 pub use metrics::{Limits, MetricsKind, Usage, parse_quantity};
 pub use node::{DrainOptions, DrainReport, PodIssue};
 pub use objects::{DeleteOptions, EventInfo, ObjectRef, Propagation};
@@ -136,6 +140,8 @@ struct Session {
     schemas: std::sync::Mutex<HashMap<ResourceRef, Arc<Option<Value>>>>,
     /// The tools found in the cluster, once looked for.
     integrations: tokio::sync::Mutex<Option<(IntegrationSettings, Integrations)>>,
+    /// Grafana's dashboards, when they were read and why Grafana's own list was not.
+    grafana: tokio::sync::Mutex<Option<grafana::Cached>>,
 }
 
 pub struct Kubri {
@@ -1536,6 +1542,7 @@ impl Session {
             access: Default::default(),
             schemas: Default::default(),
             integrations: Default::default(),
+            grafana: Default::default(),
         }
     }
 
