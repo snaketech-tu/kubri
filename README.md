@@ -257,6 +257,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 - [Logs and debugging](docs/DEBUGGING.md): searching logs by field, the workspace, debug containers, node shells and the fixes Kubri offers.
 - [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.
 - [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.
+- [Speed](docs/SPEED.md): Kubri and Headlamp with 10,000 pods, measured in CI, and how to run it yourself.
 - [Releasing](docs/RELEASING.md): how a version is published.
 - [Roadmap](docs/ROADMAP.md): the steps toward k9s parity and what each one covered.
 - [Kubri and Headlamp](docs/HEADLAMP-COMPARISON.md): where Headlamp does better today, and what to adopt.
