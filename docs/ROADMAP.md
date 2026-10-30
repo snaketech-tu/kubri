@@ -44,3 +44,4 @@ The plan for 0.3 to 1.0 is in [IMPLEMENTATION-PLAN-v2.md](IMPLEMENTATION-PLAN-v2
 - ✅ 0.7 Integrations: Prometheus charts, Grafana dashboards, Loki history, Flux and Argo CD status and actions, cert-manager expiry and renewal, and right-sizing.
 - ✅ 0.8 Overview: a Clusters page for every context, contexts added in the app, namespace limits, compare across clusters, search with saved searches, the topology graph with request paths, and the blast radius of a delete.
 - ✅ 0.9 Memory: What changed, a timeline of changes with diffs and the times Kubri was not watching; snapshots of a namespace or cluster opened offline; and views that give CRDs columns, health, details, actions and graph edges from YAML.
+- ✅ 1.0 Finish: speed measured against Headlamp in CI with 10,000 pods, zoom and readable skins, a notice for new releases, packages for Homebrew, winget, the AUR and Flathub, and a review pass.
