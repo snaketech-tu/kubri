@@ -344,6 +344,11 @@ class AppState {
 	#restoring = false;
 	/** The k9s `defaultView` applies once, when Kubri starts. */
 	#startup = true;
+	/**
+	 * True until the first context's k9s files are read, so the overview does not open, and list
+	 * every pod for its counts, just before the `defaultView` replaces it.
+	 */
+	starting = $state(true);
 	/** Set by the current view: what it has under the cursor. */
 	focus: (() => Focus) | null = null;
 
@@ -1057,6 +1062,8 @@ class AppState {
 		} catch (err) {
 			this.k9s = null;
 			this.toast(`Could not read the k9s configuration: ${errorMessage(err)}`, 'bad');
+		} finally {
+			this.starting = false;
 		}
 		this.skinChoice = context ? storedSkin(context) : undefined;
 		await this.applySkin();

@@ -523,9 +523,11 @@
 							<SanitizerView />
 						{/key}
 					{:else if app.page === 'pulses'}
-						{#key `${app.cluster?.context}/${app.namespace}`}
-							<PulsesView />
-						{/key}
+						{#if !(app.starting && app.cluster)}
+							{#key `${app.cluster?.context}/${app.namespace}`}
+								<PulsesView />
+							{/key}
+						{/if}
 					{:else if app.page === 'graph'}
 						{#key `${app.cluster?.context}/${app.namespace}`}
 							<GraphView />

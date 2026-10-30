@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { completedPods } from '../cleanup';
 	import { forControl } from '../keys';
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { canDelete, canRestart, canScale, copyLines, saveFile } from '../actions';
 	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
@@ -185,8 +185,37 @@
 	});
 	const current = $derived<Row | undefined>(rows[cursor]);
 
+	// Long lists render only the rows in view and a few around them, so 10,000 pods stay quick.
+	const WINDOWED_FROM = 300;
+	const OVERSCAN = 20;
+	let scrollTop = $state(0);
+	let viewHeight = $state(800);
+	let rowHeight = $state(41);
+	const windowed = $derived(rows.length > WINDOWED_FROM);
+	const first = $derived(windowed ? Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN) : 0);
+	const last = $derived(
+		windowed ? Math.min(rows.length, Math.ceil((scrollTop + viewHeight) / rowHeight) + OVERSCAN) : rows.length
+	);
+	const shown = $derived(windowed ? rows.slice(first, last) : rows);
+
+	// Rows are as high as the zoom and font make them.
+	$effect(() => {
+		if (!shown.length) return;
+		const height = scroller?.querySelector('tbody tr.row')?.getBoundingClientRect().height;
+		if (height) untrack(() => (rowHeight = height));
+	});
+
 	$effect(() => {
 		void cursorKey;
+		// The cursor's row may not be rendered yet: scroll to where it is first.
+		untrack(() => {
+			if (!windowed || !scroller) return;
+			const head = scroller.querySelector('thead')?.getBoundingClientRect().height ?? 0;
+			const top = cursor * rowHeight;
+			if (top < scroller.scrollTop) scroller.scrollTop = top;
+			else if (top + rowHeight > scroller.scrollTop + scroller.clientHeight - head)
+				scroller.scrollTop = top + rowHeight - scroller.clientHeight + head;
+		});
 		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
 	});
 
@@ -718,8 +747,13 @@
 			{/if}
 		</div>
 
-		<div class="table-wrap" bind:this={scroller}>
-			<table>
+		<div
+			class="table-wrap"
+			bind:this={scroller}
+			bind:clientHeight={viewHeight}
+			onscroll={() => (scrollTop = scroller?.scrollTop ?? 0)}
+		>
+			<table aria-rowcount={windowed ? rows.length + 1 : undefined}>
 				<thead>
 					<tr>
 						<th class="check"></th>
@@ -741,8 +775,14 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each rows as row, i (row.key)}
+					{#if first > 0}
+						<tr class="spacer" aria-hidden="true" style:height="{first * rowHeight}px"><td colspan={columns.length + 2}></td></tr>
+					{/if}
+					{#each shown as row, j (row.key)}
+						{@const i = first + j}
 						<tr
+							class="row"
+							aria-rowindex={windowed ? i + 2 : undefined}
 							class:cursor={i === cursor}
 							class:checked={selection.has(row.key)}
 							onclick={() => (cursorKey = row.key)}
@@ -808,6 +848,11 @@
 							</td>
 						</tr>
 					{/each}
+					{#if last < rows.length}
+						<tr class="spacer" aria-hidden="true" style:height="{(rows.length - last) * rowHeight}px"
+							><td colspan={columns.length + 2}></td></tr
+						>
+					{/if}
 				</tbody>
 			</table>
 			{#if table.loading}
@@ -1094,6 +1139,11 @@
 	th.numeric .sort {
 		flex-direction: row-reverse;
 	}
+	.spacer td {
+		height: auto;
+		padding: 0;
+		border: none;
+	}
 	td {
 		height: 40px;
 		padding: 4px 10px;
@@ -1149,7 +1199,7 @@
 	tbody tr {
 		cursor: default;
 	}
-	tbody tr:hover {
+	tbody tr.row:hover {
 		background: color-mix(in srgb, var(--surface-2) 55%, transparent);
 	}
 	tbody tr.checked {
