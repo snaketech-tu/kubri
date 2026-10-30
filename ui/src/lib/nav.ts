@@ -46,5 +46,14 @@ export function navPlace(resource: ResourceRef & { kind: string }): { section: s
 			if (item) return { section: section.title, label: item.label };
 		}
 	}
-	return { section: 'All resources', label: resource.kind };
+	return { section: 'All resources', label: pluralKind(resource.kind, resource.plural) };
+}
+
+/** The kind in its plural, cased like the kind: NetworkPolicy and networkpolicies make NetworkPolicies. */
+export function pluralKind(kind: string, plural: string): string {
+	const k = kind.toLowerCase();
+	let n = 0;
+	while (n < k.length && n < plural.length && k[n] === plural[n]) n++;
+	// A plural that is not the kind with a changed ending, such as a short name, keeps the kind.
+	return n >= k.length - 1 ? kind.slice(0, n) + plural.slice(n) : kind;
 }

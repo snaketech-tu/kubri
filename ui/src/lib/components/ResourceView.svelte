@@ -526,6 +526,12 @@
 					case 'z':
 						showTab(faults ? 'all' : 'attention');
 						return true;
+					// k9s pages with these; the browser's find would miss the rows not drawn anyway.
+					case 'f':
+					case 'b':
+						if (app.details) return false;
+						move(e.key.toLowerCase() === 'f' ? 20 : -20);
+						return true;
 				}
 			} else if (e.altKey) {
 				return false;

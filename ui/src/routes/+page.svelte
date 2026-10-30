@@ -249,6 +249,8 @@
 				['?', 'help']
 			] as [string, string][];
 		}
+		// Pages without list keys of their own; the list's keys would do nothing there.
+		if (app.page !== 'resources') return [[':', 'command'], ...panel, ['?', 'help']] as [string, string][];
 		const r = app.selected;
 		const h: [string, string][] = [
 			[':', 'command'],
