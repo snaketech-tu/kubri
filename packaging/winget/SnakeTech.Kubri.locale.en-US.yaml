@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: SnakeTech.Kubri
+PackageVersion: @VERSION@
+PackageLocale: en-US
+Publisher: SnakeTech
+PublisherUrl: https://github.com/snaketech-tu
+PublisherSupportUrl: https://github.com/snaketech-tu/kubri/issues
+PackageName: Kubri
+PackageUrl: https://github.com/snaketech-tu/kubri
+License: Apache-2.0
+LicenseUrl: https://github.com/snaketech-tu/kubri/blob/main/LICENSE
+ShortDescription: A fast, simple Kubernetes GUI that covers what k9s can do.
+Description: Kubri shows every resource of your Kubernetes clusters live, with logs, shells, port-forwards, Helm, an overview of all clusters and the k9s keys, as a desktop app that uses your kubeconfig.
+Moniker: kubri
+Tags:
+  - kubernetes
+  - k8s
+  - k9s
+  - kubectl
+  - gui
+ReleaseNotesUrl: https://github.com/snaketech-tu/kubri/releases/tag/v@VERSION@
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

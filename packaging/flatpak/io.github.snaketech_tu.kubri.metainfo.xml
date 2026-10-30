@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.snaketech_tu.kubri</id>
+  <name>Kubri</name>
+  <summary>A fast, simple Kubernetes GUI</summary>
+  <developer id="io.github.snaketech_tu">
+    <name>SnakeTech</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <url type="homepage">https://github.com/snaketech-tu/kubri</url>
+  <url type="bugtracker">https://github.com/snaketech-tu/kubri/issues</url>
+  <launchable type="desktop-id">io.github.snaketech_tu.kubri.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <keywords>
+    <keyword>kubernetes</keyword>
+    <keyword>k8s</keyword>
+    <keyword>k9s</keyword>
+    <keyword>kubectl</keyword>
+  </keywords>
+  <description>
+    <p>
+      Kubri shows every resource of your Kubernetes clusters live, with the columns of kubectl get, and covers what
+      k9s can do: logs, shells, port-forwards, Helm, RBAC and the k9s keys, plugins and skins.
+    </p>
+    <ul>
+      <li>An overview of every cluster in your kubeconfig, and a topology graph of how objects connect</li>
+      <li>A log workspace with tabs, structured logs and debug containers</li>
+      <li>Safe changes: context colors, read-only production contexts and a diff before every change</li>
+      <li>What changed in a cluster, and snapshots to look at later</li>
+    </ul>
+    <p>
+      In this Flatpak, Kubri reads ~/.kube and the k9s files in ~/.config/k9s. The sandbox cannot run commands
+      installed on your computer, so kubeconfigs that sign in through one (such as aws or gke-gcloud-auth-plugin),
+      k9s plugins and Helm changes need one of the other downloads on the release page.
+    </p>
+  </description>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Pods, live</caption>
+      <image>https://raw.githubusercontent.com/snaketech-tu/kubri/main/docs/assets/screenshots/pods-light.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Cluster overview</caption>
+      <image>https://raw.githubusercontent.com/snaketech-tu/kubri/main/docs/assets/screenshots/overview.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Logs</caption>
+      <image>https://raw.githubusercontent.com/snaketech-tu/kubri/main/docs/assets/screenshots/logs.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Topology</caption>
+      <image>https://raw.githubusercontent.com/snaketech-tu/kubri/main/docs/assets/screenshots/graph.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="@VERSION@" date="@DATE@">
+      <url type="details">https://github.com/snaketech-tu/kubri/releases/tag/v@VERSION@</url>
+    </release>
+  </releases>
+</component>
