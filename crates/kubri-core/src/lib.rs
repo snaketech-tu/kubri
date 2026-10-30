@@ -55,6 +55,7 @@ mod terminal;
 #[cfg(test)]
 mod testing;
 mod typed;
+mod update;
 mod views;
 mod workload;
 mod xray;
@@ -117,6 +118,7 @@ pub use settings::{
     Settings,
 };
 pub use snapshot::SnapshotInfo;
+pub use update::{LatestRelease, latest_release};
 pub use views::{RenderedView, View, ViewSet};
 
 /// Kubri's config folder, where its settings live.

@@ -115,6 +115,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/helm/release", get(helm_release))
         .route("/helm/history", get(helm_history))
         .route("/helm/version", get(helm_version))
+        .route("/release", get(latest_release))
         .route("/helm/rollback", post(helm_rollback))
         .route("/helm/uninstall", post(helm_uninstall))
         .route("/helm/change", post(helm_change))
@@ -975,6 +976,10 @@ async fn helm_version(State(kubri): State<Arc<Kubri>>) -> Json<HelmVersion> {
     Json(HelmVersion {
         version: kubri.helm_version().await,
     })
+}
+
+async fn latest_release() -> ApiResult<kubri_core::LatestRelease> {
+    Ok(Json(kubri_core::latest_release().await?))
 }
 
 async fn helm_change(

@@ -8,6 +8,7 @@ import {
 	backend,
 	type AccessCheck,
 	type ClusterInfo,
+	type LatestRelease,
 	type ColumnSettings,
 	type FavoriteForward,
 	type FavoriteStart,
@@ -39,6 +40,7 @@ import {
 import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
 import { applyZoom, storedZoom } from './appearance';
+import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } from './releases';
 import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu } from './menu';
@@ -565,6 +567,33 @@ class AppState {
 		applyZoom(zoom).catch((err) => this.toast(`Could not zoom: ${errorMessage(err)}`, 'bad'));
 	}
 
+	/** Whether Kubri asks GitHub for new releases when it starts. */
+	releaseChecks = $state(releaseChecks());
+	/** A release newer than this one, until the user waves it away. */
+	release = $state<LatestRelease | null>(null);
+
+	setReleaseChecks(on: boolean) {
+		this.releaseChecks = on;
+		setReleaseChecks(on);
+		if (on) this.checkRelease();
+		else this.release = null;
+	}
+
+	async checkRelease() {
+		if (!this.releaseChecks) return;
+		try {
+			const latest = await backend.latestRelease();
+			this.release = latest.newer && latest.version !== dismissedRelease() ? latest : null;
+		} catch {
+			// Offline or rate-limited: no notice, and the next start asks again.
+		}
+	}
+
+	dismissRelease() {
+		if (this.release) dismissRelease(this.release.version);
+		this.release = null;
+	}
+
 	/** Where Kubri is, for the history. */
 	view = $derived<View>({
 		page: this.page,
@@ -575,6 +604,7 @@ class AppState {
 	});
 
 	async load() {
+		this.checkRelease();
 		try {
 			await this.loadSettings();
 			const { contexts, cluster } = await backend.contexts();

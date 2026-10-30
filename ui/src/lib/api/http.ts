@@ -251,6 +251,7 @@ export const httpBackend: Backend = {
 	},
 	helmHistory: (namespace, name) => request('GET', `/helm/history?${new URLSearchParams({ namespace, name })}`),
 	helmVersion: () => request<{ version: string | null }>('GET', '/helm/version').then((r) => r.version),
+	latestRelease: () => request('GET', '/release'),
 	helmRollback: (namespace, name, revision) => request('POST', '/helm/rollback', { namespace, name, revision }),
 	helmUninstall: (namespace, name) => request('POST', '/helm/uninstall', { namespace, name }),
 	helmChange: (change) => request('POST', '/helm/change', change),

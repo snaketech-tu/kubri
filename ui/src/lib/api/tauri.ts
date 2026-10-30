@@ -164,6 +164,7 @@ export const tauriBackend: Backend = {
 	helmRelease: (namespace, name, revision) => invoke('helm_release', { namespace, name, revision: revision ?? null }),
 	helmHistory: (namespace, name) => invoke('helm_history', { namespace, name }),
 	helmVersion: () => invoke('helm_version'),
+	latestRelease: () => invoke('latest_release'),
 	helmRollback: (namespace, name, revision) => invoke('helm_rollback', { namespace, name, revision }),
 	helmUninstall: (namespace, name) => invoke('helm_uninstall', { namespace, name }),
 	helmChange: (change) => invoke('helm_change', { change }),
