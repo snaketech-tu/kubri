@@ -893,6 +893,11 @@ async fn helm_history(
 }
 
 #[tauri::command]
+async fn latest_release() -> CommandResult<kubri_core::LatestRelease> {
+    kubri_core::latest_release().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn helm_version(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Option<String>> {
     Ok(kubri.helm_version().await)
 }
@@ -1161,6 +1166,7 @@ pub fn run() {
             helm_release,
             helm_history,
             helm_version,
+            latest_release,
             helm_rollback,
             helm_uninstall,
             helm_change,

@@ -238,6 +238,20 @@
 			</div>
 		</div>
 
+		<div class="block">
+			<h2 id="config-updates">Updates</h2>
+			<div class="diff-settings">
+				<label>
+					<input type="checkbox" checked={app.releaseChecks} onchange={(e) => app.setReleaseChecks(e.currentTarget.checked)} />
+					Tell me when a new release is out
+				</label>
+			</div>
+			<p class="muted small">
+				Kubri asks GitHub for its latest release when it starts, at most every six hours, and shows a notice at the bottom
+				when it is newer than the one running. Nothing else is sent.
+			</p>
+		</div>
+
 		<AgentSettings />
 
 		<ExplainSettings />

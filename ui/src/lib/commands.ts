@@ -3,7 +3,7 @@ import { parseChangesArgs, type ChangesFilter } from './changes';
 import { CORE_GROUPS, parseShortForm, TEMPLATE_KINDS, type TemplateParams } from './create';
 import { xrayResources } from './xray';
 
-export type ConfigSection = 'contexts' | 'diffs' | 'changes' | 'agents' | 'explain' | 'appearance' | 'views' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
+export type ConfigSection = 'contexts' | 'diffs' | 'changes' | 'agents' | 'explain' | 'appearance' | 'updates' | 'views' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
 
 export type Action =
 	| {
@@ -74,6 +74,8 @@ const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	appearance: 'appearance',
 	theme: 'appearance',
 	zoom: 'appearance',
+	updates: 'updates',
+	update: 'updates',
 	skins: 'skins',
 	hotkeys: 'hotkeys',
 	hotkey: 'hotkeys',

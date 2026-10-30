@@ -601,6 +601,15 @@
 							? `Live · ${app.contextName(app.cluster.context)}`
 							: 'Not connected'}
 			</span>
+			{#if app.release}
+				{@const release = app.release}
+				<span class="release">
+					<button onclick={() => backend.openUrl(release.url)} title="Open the release notes and downloads">
+						Kubri {release.version} is out
+					</button>
+					<button class="close" onclick={() => app.dismissRelease()} aria-label="Hide until the next release">×</button>
+				</span>
+			{/if}
 			<span class="hints">
 				{#each hints as [key, label], i (key + i)}
 					{#if keyFromLabel(key)}
@@ -987,6 +996,28 @@
 		gap: 6px;
 		flex: none;
 		white-space: nowrap;
+	}
+	.release {
+		display: inline-flex;
+		align-items: center;
+		flex: none;
+		border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--accent) 8%, var(--surface-1));
+	}
+	.release button {
+		padding: 1px 4px 1px 10px;
+		border: none;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.release .close {
+		padding: 1px 9px 1px 4px;
+		color: var(--text-muted);
+		font-weight: 400;
 	}
 	.status .dot {
 		width: 7px;

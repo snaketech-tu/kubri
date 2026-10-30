@@ -1128,6 +1128,16 @@ export interface SanitizerReport {
 	sections: SanitizerSection[];
 }
 
+/** The latest release of Kubri on GitHub. */
+export interface LatestRelease {
+	version: string;
+	/** The release page with its notes and downloads. */
+	url: string;
+	/** The version running. */
+	current: string;
+	newer: boolean;
+}
+
 export interface HelmRelease {
 	name: string;
 	namespace: string;
@@ -1509,6 +1519,8 @@ export interface Backend {
 	helmHistory(namespace: string, name: string): Promise<HelmRelease[]>;
 	/** The installed helm command's version; rollback and uninstall need it. */
 	helmVersion(): Promise<string | null>;
+	/** Asks GitHub for the latest release of Kubri, at most every few hours. */
+	latestRelease(): Promise<LatestRelease>;
 	helmRollback(namespace: string, name: string, revision: number): Promise<string>;
 	helmUninstall(namespace: string, name: string): Promise<string>;
 	/** Installs or upgrades a release with helm; with `dryRun`, renders it against the cluster only. */
