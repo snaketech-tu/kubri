@@ -124,7 +124,8 @@ async function measure(app, browser) {
 				throw new Error(`not all pods listed after 180 s; the page shows:\n${text.slice(0, 1500)}`);
 			}
 			const more = app.more?.(page);
-			if (more && (await more.isEnabled({ timeout: 0 }).catch(() => false))) await more.click({ timeout: 1000 }).catch(() => {});
+			// Only a button that is there now: Playwright waits for a missing one, and a timeout of 0 waits forever.
+			if (more && (await more.count()) === 1 && (await more.isEnabled().catch(() => false))) await more.click({ timeout: 1000 }).catch(() => {});
 			await pause(50);
 		}
 		const list = now() - opened;

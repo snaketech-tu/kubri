@@ -67,6 +67,7 @@ jobs:
   speed:
     name: Speed
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       HEADLAMP_IMAGE: ghcr.io/headlamp-k8s/headlamp:v0.46.0
     steps:
