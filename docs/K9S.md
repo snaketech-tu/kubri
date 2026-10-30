@@ -118,6 +118,8 @@ Kubri takes the main colors of a skin: the background and text (`body`), the acc
 
 The skin comes from `K9S_SKIN`, the context's `config.yaml` or the global one, as in k9s. You can override it per context on the `:config` page or with `:skin <name>`; `:skin kubri` brings back Kubri's light and dark colors. That choice is kept in the app, not written to your k9s files.
 
+A skin whose text has less than the 4.5:1 contrast WCAG asks for on its background, or whose status colors are hard to see, is marked **Hard to read** in the list, with the reason. Kubri still shows it as it is.
+
 ## What Kubri covers
 
 Compared with k9s 0.51:

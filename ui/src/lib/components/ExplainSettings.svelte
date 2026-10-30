@@ -145,7 +145,9 @@
 	.small {
 		font-size: 12px;
 	}
+	/* Holds the hidden radio buttons, which would otherwise stretch the window. */
 	.providers {
+		position: relative;
 		display: inline-flex;
 		margin-bottom: 14px;
 		border: 1px solid var(--border);

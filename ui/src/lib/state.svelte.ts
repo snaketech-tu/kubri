@@ -38,6 +38,7 @@ import {
 } from './api';
 import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
+import { applyZoom, storedZoom } from './appearance';
 import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu } from './menu';
@@ -547,8 +548,21 @@ class AppState {
 
 	toggleScheme() {
 		const dark = this.scheme ? this.scheme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-		this.scheme = dark ? 'light' : 'dark';
-		applyScheme(this.scheme);
+		this.setScheme(dark ? 'light' : 'dark');
+	}
+
+	/** Light, dark, or null to follow the system. */
+	setScheme(scheme: Scheme) {
+		this.scheme = scheme;
+		applyScheme(scheme);
+	}
+
+	/** The desktop app's zoom level, kept for the next start. */
+	zoom = $state(storedZoom());
+
+	setZoom(zoom: number) {
+		this.zoom = zoom;
+		applyZoom(zoom).catch((err) => this.toast(`Could not zoom: ${errorMessage(err)}`, 'bad'));
 	}
 
 	/** Where Kubri is, for the history. */

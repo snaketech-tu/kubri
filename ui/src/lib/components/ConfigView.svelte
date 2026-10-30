@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { runCommand, runHotkey } from '../actions';
+	import { isTauri } from '@tauri-apps/api/core';
 	import { backend, type KindView } from '../api';
+	import { ZOOMS, skinWarning, stepZoom } from '../appearance';
 	import { kubriUses, parseShortcut, shortcutLabel, skinTheme, type SkinTheme } from '../k9s';
 	import { forControl } from '../keys';
-	import { resolveColor } from '../skin';
+	import { resolveColor, type Scheme } from '../skin';
 	import { app } from '../state.svelte';
 	import AgentSettings from './AgentSettings.svelte';
 	import ExplainSettings from './ExplainSettings.svelte';
@@ -70,16 +72,22 @@
 		}
 	}
 
-	// Kubri's own colors, light or dark as the system is.
-	const kubriTheme: SkinTheme = matchMedia('(prefers-color-scheme: dark)').matches
-		? {
-				vars: { '--bg': '#101522', '--text': '#e5eaf5', '--accent': '#a6b3ff', '--ok': '#3ccf7e', '--warn': '#e5a73b', '--bad': '#f06b6b' },
-				scheme: 'dark'
-			}
-		: {
-				vars: { '--bg': '#f6f7fb', '--text': '#20283d', '--accent': '#4b64f4', '--ok': '#1f9d55', '--warn': '#c27c0e', '--bad': '#d64545' },
-				scheme: 'light'
-			};
+	// Kubri's own colors in light and dark, and as the system is.
+	const lightTheme: SkinTheme = {
+		vars: { '--bg': '#f6f7fb', '--text': '#20283d', '--accent': '#4b64f4', '--ok': '#1f9d55', '--warn': '#c27c0e', '--bad': '#d64545' },
+		scheme: 'light'
+	};
+	const darkTheme: SkinTheme = {
+		vars: { '--bg': '#101522', '--text': '#e5eaf5', '--accent': '#a6b3ff', '--ok': '#3ccf7e', '--warn': '#e5a73b', '--bad': '#f06b6b' },
+		scheme: 'dark'
+	};
+	const kubriTheme = matchMedia('(prefers-color-scheme: dark)').matches ? darkTheme : lightTheme;
+	const desktop = isTauri();
+	const schemes: { value: Scheme; label: string; theme: SkinTheme }[] = [
+		{ value: null, label: 'As the system', theme: kubriTheme },
+		{ value: 'light', label: 'Light', theme: lightTheme },
+		{ value: 'dark', label: 'Dark', theme: darkTheme }
+	];
 </script>
 
 <svelte:window {onkeydown} />
@@ -197,6 +205,39 @@
 			</div>
 		</div>
 
+		<div class="block">
+			<h2 id="config-appearance">Appearance</h2>
+			<p class="muted">Kubri's own colors. A k9s skin, picked per context below, takes their place while it is on.</p>
+			<div class="skins themes" role="radiogroup" aria-label="Colors">
+				{#each schemes as option (option.label)}
+					<button
+						class="skin"
+						class:active={app.scheme === option.value}
+						role="radio"
+						aria-checked={app.scheme === option.value}
+						onclick={() => app.setScheme(option.value)}
+					>
+						{@render swatch(option.theme)}
+						<span class="name">{option.label}</span>
+					</button>
+				{/each}
+			</div>
+			{#if app.skin}<p class="muted small">The skin {app.skin} is on screen, so these show once it is taken off.</p>{/if}
+			<div class="zoom">
+				<span>Zoom</span>
+				{#if desktop}
+					<button onclick={() => app.setZoom(stepZoom(app.zoom, -1))} disabled={app.zoom <= ZOOMS[0]} aria-label="Zoom out">−</button>
+					<select value={app.zoom} onchange={(e) => app.setZoom(Number(e.currentTarget.value))} aria-label="Zoom level">
+						{#each ZOOMS as z (z)}<option value={z}>{Math.round(z * 100)}%</option>{/each}
+					</select>
+					<button onclick={() => app.setZoom(stepZoom(app.zoom, 1))} disabled={app.zoom >= ZOOMS[ZOOMS.length - 1]} aria-label="Zoom in">+</button>
+					<span class="muted small"><kbd>Ctrl +</kbd> <kbd>Ctrl −</kbd> and <kbd>Ctrl 0</kbd> too; kept for the next start</span>
+				{:else}
+					<span class="muted small">Your browser's zoom (<kbd>Ctrl +</kbd>, <kbd>Ctrl −</kbd>), which it keeps for this page</span>
+				{/if}
+			</div>
+		</div>
+
 		<AgentSettings />
 
 		<ExplainSettings />
@@ -272,6 +313,9 @@
 					Picked per context, like in k9s. <code>:skin name</code> switches from the command line.
 				</p>
 				{#if app.skinError}<p class="error">{app.skinError}</p>{/if}
+				{#if app.skin && skinWarning(previews[app.skin])}
+					<p class="warning">{app.skin}: {skinWarning(previews[app.skin])}. Kubri shows it as it is; another skin or Kubri's colors read better.</p>
+				{/if}
 				<div class="skins">
 					<button class="skin" class:active={app.skinChoice === undefined} onclick={() => app.setSkin(undefined)}>
 						{@render swatch(config.skin ? previews[config.skin] : kubriTheme)}
@@ -284,10 +328,12 @@
 						<span class="muted small">light or dark, as the system</span>
 					</button>
 					{#each config.skins as name (name)}
+						{@const warning = skinWarning(previews[name])}
 						<button class="skin" class:active={app.skinChoice === name} onclick={() => app.setSkin(name)}>
 							{@render swatch(previews[name])}
 							<span class="name">{name}</span>
 							{#if app.skin === name}<span class="muted small">on screen</span>{/if}
+							{#if warning}<span class="warning small" title={warning}>Hard to read</span>{/if}
 						</button>
 					{/each}
 				</div>
@@ -486,6 +532,32 @@
 	.skin .name {
 		font-weight: 600;
 		overflow-wrap: anywhere;
+	}
+	.themes {
+		max-width: 520px;
+	}
+	.warning {
+		color: var(--warn);
+	}
+	.zoom {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		margin-top: 14px;
+	}
+	.zoom > span:first-child {
+		font-weight: 600;
+		margin-right: 4px;
+	}
+	.zoom button,
+	.zoom select {
+		min-width: 32px;
+		padding: 4px 8px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface-1);
+		color: var(--text);
 	}
 	.swatch {
 		display: flex;
