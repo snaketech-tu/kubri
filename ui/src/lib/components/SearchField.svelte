@@ -20,7 +20,8 @@
 
 <label class="search">
 	<Icon name="search" size={16} />
-	<input bind:this={input} bind:value aria-label={label} {placeholder} />
+	<!-- Esc leaves the field so the page's keys work again; views that also clear it do that themselves. -->
+	<input bind:this={input} bind:value aria-label={label} {placeholder} onkeydown={(e) => e.key === 'Escape' && e.currentTarget.blur()} />
 	{#if key}<kbd aria-hidden="true">{key}</kbd>{/if}
 </label>
 

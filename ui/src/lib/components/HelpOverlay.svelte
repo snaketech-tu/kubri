@@ -20,6 +20,7 @@
 				['Ctrl+Shift+C', 'Switch context'],
 				['j / k  or  ↑ / ↓', 'Move'],
 				['g / G', 'First / last row'],
+				['Ctrl+F / B  or  PgDn / PgUp', 'A page down / up'],
 				['/', 'Filter: regex, !inverse, -f fuzzy, -l app=web'],
 				['0', 'All namespaces'],
 				['[ / ]  or  Alt+← / →', 'Back / forward'],
