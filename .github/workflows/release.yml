@@ -120,3 +120,107 @@ jobs:
             target/${{ matrix.target }}/release/bundle/msi/*.msi
             target/${{ matrix.target }}/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+  # Fills the Homebrew cask, winget manifests, AUR package and Flatpak manifest with the
+  # release's checksums and publishes each where its secret is set; see docs/RELEASING.md.
+  packages:
+    name: Packages
+    needs: [draft, desktop]
+    if: ${{ github.ref_type == 'tag' && !cancelled() && needs.desktop.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+      FLATHUB_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fill in the packaging
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          mkdir assets
+          gh api "repos/$GITHUB_REPOSITORY/releases/${{ needs.draft.outputs.id }}" \
+            --jq '.assets[] | select(.name | test("\\.dmg$|\\.deb$|-setup\\.exe$")) | "\(.id) \(.name)"' |
+            while read -r id name; do
+              gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "assets/$name"
+            done
+          packaging/render.sh "$version" assets packages
+          # The packages point at the release's downloads, which a draft does not have yet.
+          echo "PUBLISHED=$(gh api "repos/$GITHUB_REPOSITORY/releases/${{ needs.draft.outputs.id }}" --jq '.draft | not')" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: packages
+          include-hidden-files: true
+      - name: Homebrew tap
+        if: env.PUBLISHED == 'true' && env.HOMEBREW_TAP_TOKEN != ''
+        run: |
+          git clone "https://x-access-token:$HOMEBREW_TAP_TOKEN@github.com/snaketech-tu/homebrew-kubri.git" tap
+          mkdir -p tap/Casks
+          cp packages/homebrew/kubri.rb tap/Casks/kubri.rb
+          cd tap
+          git config user.name 'snake.tech'
+          git config user.email 'tolga.urhan@hotmail.de'
+          git add Casks/kubri.rb
+          git commit -m "kubri $VERSION"
+          git push
+      - name: AUR
+        if: env.PUBLISHED == 'true' && env.AUR_SSH_KEY != ''
+        run: |
+          # .SRCINFO comes from makepkg, which runs on Arch as a user other than root.
+          docker run --rm -v "$PWD/packages/aur:/pkg" archlinux:base-devel bash -c \
+            'useradd -m build && cp /pkg/PKGBUILD /home/build/ && chown build /home/build/PKGBUILD &&
+             su build -c "cd ~ && makepkg --printsrcinfo" > /pkg/.SRCINFO'
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur"
+          git clone ssh://aur@aur.archlinux.org/kubri-bin.git aur
+          cp packages/aur/PKGBUILD packages/aur/.SRCINFO aur/
+          cd aur
+          git config user.name 'snake.tech'
+          git config user.email 'tolga.urhan@hotmail.de'
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to $VERSION"
+          git push origin HEAD:master
+      - name: Flathub
+        if: env.PUBLISHED == 'true' && env.FLATHUB_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
+        run: |
+          app=io.github.snaketech_tu.kubri
+          git clone "https://x-access-token:$FLATHUB_TOKEN@github.com/flathub/$app.git" flathub
+          cp packages/flatpak/* flathub/
+          cd flathub
+          git config user.name 'snake.tech'
+          git config user.email 'tolga.urhan@hotmail.de'
+          git checkout -b "update-$VERSION"
+          git add .
+          git commit -m "Update to $VERSION"
+          git push origin "update-$VERSION"
+          gh pr create --repo "flathub/$app" --head "update-$VERSION" --title "Update to $VERSION" \
+            --body "Kubri $VERSION: https://github.com/snaketech-tu/kubri/releases/tag/v$VERSION"
+
+  # winget's own tool opens the pull request to microsoft/winget-pkgs once the package is in it.
+  winget:
+    name: winget
+    needs: [draft, desktop]
+    if: ${{ github.ref_type == 'tag' && !cancelled() && needs.desktop.result == 'success' }}
+    runs-on: windows-latest
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Open the winget pull request
+        if: env.WINGET_TOKEN != ''
+        shell: pwsh
+        run: |
+          # The manifest points at the release's download, which a draft does not have yet.
+          $draft = gh api "repos/$env:GITHUB_REPOSITORY/releases/${{ needs.draft.outputs.id }}" --jq .draft
+          if ($draft -eq 'true') { Write-Output 'The release is a draft; run this job again once it is published.'; exit 0 }
+          $version = "$env:GITHUB_REF_NAME".TrimStart('v')
+          $url = "https://github.com/snaketech-tu/kubri/releases/download/v$version/Kubri_${version}_x64-setup.exe"
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          .\wingetcreate.exe update SnakeTech.Kubri --version $version --urls $url --submit --token $env:WINGET_TOKEN
