@@ -152,10 +152,12 @@ See [Development](#development).
       <b>Run it anywhere</b>
       <ul>
         <li>Desktop app for Windows, macOS and Linux</li>
+        <li>Quick with big clusters: 10,000 pods listed in about a second, <a href="docs/SPEED.md">measured in CI</a></li>
         <li>In the browser with a password sign-in, from Docker or in the cluster</li>
         <li>A read-only mode that never changes the cluster</li>
         <li>An MCP server, so AI agents can read your clusters with your permissions</li>
         <li>Explain: ask your own model why a pod fails, seeing first what is sent</li>
+        <li>Zoom, light and dark, and a notice when a new release is out</li>
       </ul>
     </td>
   </tr>

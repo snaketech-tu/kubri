@@ -54,7 +54,7 @@ These were settled with the project owner before writing the plan:
 | 0.7 ✅ | Integrations | Prometheus charts, Grafana, Loki, Flux, Argo CD, cert-manager, right-sizing | 5 to 6 weeks |
 | 0.8 ✅ | Overview | Fleet home, cluster compare, clusters from the UI, global search, XRay graph | 4 to 5 weeks |
 | 0.9 ✅ | Memory | What changed?, snapshots, declarative CRD views | 4 to 5 weeks |
-| 1.0 | Finish | Speed numbers, zoom and themes, distribution channels, stabilization | 2 to 3 weeks |
+| 1.0 ✅ | Finish | Speed numbers, zoom and themes, distribution channels, stabilization | 2 to 3 weeks |
 
 The order puts safety first because the MCP server in 0.4 relies on it: an AI agent must hit the
 same read-only and permission checks as a person. AI comes early as decided; the log and debug
