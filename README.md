@@ -114,6 +114,8 @@ See [Development](#development).
         <li>Right-sizing: containers that request far more or less than they use, with the change to fix it</li>
         <li>Every cluster on one page, with contexts added from a kubeconfig in the app, and an object compared across clusters</li>
         <li>Search by name, label and field across clusters (<kbd>:search</kbd>), with saved searches in the sidebar</li>
+        <li>What changed: a timeline of rollouts, scaling and config changes with diffs, recorded while Kubri runs (<kbd>:changes</kbd>)</li>
+        <li>Snapshots: a namespace or cluster in one file, opened offline and read-only, for "send me what you see"</li>
       </ul>
     </td>
   </tr>
@@ -143,6 +145,7 @@ See [Development](#development).
       <ul>
         <li>Aliases, hotkeys, plugins, skins and jumps work as they are</li>
         <li><code>readOnly</code>, <code>defaultView</code>, thresholds and log settings, per context</li>
+        <li>Views in YAML give your CRDs columns, a health state, overview sections, actions and graph edges</li>
       </ul>
     </td>
     <td valign="top">
@@ -200,6 +203,14 @@ See [Development](#development).
   <tr>
     <td valign="top"><img src="docs/assets/screenshots/graph.png" alt="Topology graph of a namespace: Ingresses, Services, a Deployment with its Secret and pod, and request paths with two broken links"><br><b>Topology graph</b>: how a namespace connects, and where a request path breaks (<kbd>:graph</kbd>)</td>
     <td valign="top"><img src="docs/assets/screenshots/delete.png" alt="Deleting a Secret: the dialog warns it is used by a Deployment and by an Ingress for TLS"><br><b>Blast radius</b>: what breaks if you delete it, before you confirm</td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/changes.png" alt="What changed in a namespace: a ConfigMap's annotations, a Deployment's new environment variable shown as a diff, and a scale from 2 to 3, with the times Kubri was not watching"><br><b>What changed</b>: rollouts, scaling and config changes with their diffs (<kbd>:changes</kbd>)</td>
+    <td valign="top"><img src="docs/assets/screenshots/snapshot.png" alt="A snapshot of a namespace opened read-only, with a banner naming its context and time, showing the cluster overview"><br><b>Snapshots</b>: what you see, in one file anyone can open offline (<kbd>:snapshot</kbd>)</td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/views.png" alt="A custom resource list with Color, Size and Health columns from a view file, and its details with the view's health and Build section"><br><b>Views</b>: columns, health and details for any CRD from a YAML file (<kbd>:views</kbd>)</td>
+    <td valign="top"></td>
   </tr>
 </table>
 
