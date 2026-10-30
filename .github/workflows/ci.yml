@@ -62,3 +62,53 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+
+  # Kubri and Headlamp against a k3s cluster with 10,000 pods; see docs/SPEED.md.
+  speed:
+    name: Speed
+    runs-on: ubuntu-latest
+    env:
+      HEADLAMP_IMAGE: ghcr.io/headlamp-k8s/headlamp:v0.46.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start k3s
+        run: |
+          curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.33.5+k3s1 INSTALL_K3S_EXEC="--disable=traefik --write-kubeconfig-mode=644" sh -
+          mkdir -p ~/.kube && cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - name: Build UI
+        working-directory: ui
+        run: pnpm install --frozen-lockfile && pnpm build
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: speed
+      - run: cargo build --release -p kubri-server
+      - name: Get Headlamp
+        run: |
+          docker create --name headlamp "$HEADLAMP_IMAGE"
+          docker cp headlamp:/headlamp "$RUNNER_TEMP/headlamp"
+      - name: Fill the cluster
+        run: |
+          kubectl wait --for=condition=Ready node --all --timeout=120s
+          bench/speed/seed.sh 10000
+      - name: Install Playwright
+        run: npm install --no-save --prefix "$RUNNER_TEMP/pw" playwright@1.63.0 && "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Measure
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/pw/node_modules/playwright
+          HEADLAMP_DIR: ${{ runner.temp }}/headlamp
+          BENCH_OUT: speed.json
+        run: node bench/speed/run.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: speed
+          path: speed.json

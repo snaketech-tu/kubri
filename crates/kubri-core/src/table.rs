@@ -9,6 +9,7 @@ use futures::{Stream, StreamExt};
 use kube::Client;
 use kube::api::{ListParams, WatchParams};
 use kube::core::{Request, WatchEvent};
+use serde::de::DeserializeSeed;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -299,13 +300,13 @@ async fn list_and_watch(
 ) -> Result<(), Failure> {
     let full = extra.full();
     let request = with_table_accept(Request::new(url).list(&scope.list_params()), full);
-    let list: Value = client.request(request).await?;
-    let mut version = list
-        .pointer("/metadata/resourceVersion")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_owned();
-    let (columns, rows) = parse_list(list, extra);
+    // Read as text and then into lean rows, which skips `managedFields` instead of holding a
+    // JSON tree of the whole list; for 10,000 pods that is a few hundred megabytes less.
+    let text = client.request_text(request).await?;
+    let page: ListPage = serde_json::from_str(&text).map_err(|err| Failure::Error(err.to_string()))?;
+    drop(text);
+    let mut version = page.metadata.resource_version.clone();
+    let (columns, rows) = parse_list(page, extra);
     if tx.send(TableEvent::Reset { columns, rows }).await.is_err() {
         return Ok(());
     }
@@ -369,21 +370,89 @@ fn is_table(value: &Value) -> bool {
     value.get("kind").and_then(Value::as_str) == Some("Table")
 }
 
-fn parse_list(list: Value, extra: &Extra) -> (Vec<Column>, Vec<Row>) {
-    let (mut columns, rows) = if is_table(&list) {
-        let columns: Vec<Column> = list
-            .get("columnDefinitions")
-            .cloned()
-            .and_then(|c| serde_json::from_value(c).ok())
-            .unwrap_or_default();
-        let rows = table_rows(&list, extra).collect();
-        (columns, rows)
-    } else {
+/// A list as the server sends it: a table, or a plain list from a server that cannot make one.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct ListPage {
+    kind: String,
+    metadata: PageMetadata,
+    column_definitions: Vec<Column>,
+    rows: Vec<PageRow>,
+    items: Vec<Lean>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct PageMetadata {
+    resource_version: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct PageRow {
+    cells: Vec<Value>,
+    object: Lean,
+}
+
+/// An object read without its `metadata.managedFields`, which nothing in a list shows and which
+/// are often half of what the server sends.
+#[derive(Debug, Default)]
+struct Lean(Value);
+
+impl<'de> Deserialize<'de> for Lean {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        LeanSeed(None).deserialize(deserializer).map(Lean)
+    }
+}
+
+/// Reads a JSON map, passing over the key it names; in an object's own map, `metadata` is read
+/// passing over `managedFields`.
+struct LeanSeed(Option<&'static str>);
+
+impl<'de> serde::de::DeserializeSeed<'de> for LeanSeed {
+    type Value = Value;
+
+    fn deserialize<D: serde::Deserializer<'de>>(self, deserializer: D) -> Result<Value, D::Error> {
+        deserializer.deserialize_any(self)
+    }
+}
+
+impl<'de> serde::de::Visitor<'de> for LeanSeed {
+    type Value = Value;
+
+    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str("an object or null")
+    }
+
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Value, A::Error> {
+        let mut out = serde_json::Map::new();
+        while let Some(key) = map.next_key::<String>()? {
+            if Some(key.as_str()) == self.0 {
+                map.next_value::<serde::de::IgnoredAny>()?;
+            } else if key == "metadata" && self.0.is_none() {
+                out.insert(key, map.next_value_seed(LeanSeed(Some("managedFields")))?);
+            } else {
+                out.insert(key, map.next_value()?);
+            }
+        }
+        Ok(Value::Object(out))
+    }
+
+    fn visit_unit<E>(self) -> Result<Value, E> {
+        Ok(Value::Null)
+    }
+}
+
+fn parse_list(list: ListPage, extra: &Extra) -> (Vec<Column>, Vec<Row>) {
+    let (mut columns, rows) = if list.kind == "Table" {
         let rows = list
-            .get("items")
-            .and_then(Value::as_array)
-            .map(|items| items.iter().map(|o| fallback_row(o, extra)).collect())
-            .unwrap_or_default();
+            .rows
+            .into_iter()
+            .map(|row| table_row(row.cells, &row.object.0, extra))
+            .collect();
+        (list.column_definitions, rows)
+    } else {
+        let rows = list.items.iter().map(|o| fallback_row(&o.0, extra)).collect();
         (fallback_columns(), rows)
     };
     columns.extend(extra.columns());
@@ -414,16 +483,18 @@ fn table_rows<'a>(table: &'a Value, extra: &'a Extra) -> impl Iterator<Item = Ro
         .into_iter()
         .flatten()
         .map(move |row| {
-            let mut cells = row
+            let cells = row
                 .get("cells")
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default();
-            let object = row.get("object").unwrap_or(&Value::Null);
-            cells.extend(extra.cells(object));
-            let metadata = object.get("metadata").unwrap_or(&Value::Null);
-            build_row(metadata, cells)
+            table_row(cells, row.get("object").unwrap_or(&Value::Null), extra)
         })
+}
+
+fn table_row(mut cells: Vec<Value>, object: &Value, extra: &Extra) -> Row {
+    cells.extend(extra.cells(object));
+    build_row(object.get("metadata").unwrap_or(&Value::Null), cells)
 }
 
 fn fallback_columns() -> Vec<Column> {
@@ -483,6 +554,26 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn page(list: Value) -> ListPage {
+        serde_json::from_str(&list.to_string()).unwrap()
+    }
+
+    #[test]
+    fn lists_are_read_without_managed_fields() {
+        let mut table = pod_table();
+        table["rows"][0]["object"]["metadata"]["managedFields"] = json!([{ "manager": "kubectl" }]);
+        table["rows"][0]["object"]["spec"] = json!({ "managedFields": "kept" });
+        let read = page(table);
+        assert_eq!(read.metadata.resource_version, "100");
+        let object = &read.rows[0].object.0;
+        assert!(object["metadata"].get("managedFields").is_none());
+        assert_eq!(object["metadata"]["name"], "web-1");
+        assert_eq!(object["spec"]["managedFields"], "kept");
+        let plain = page(json!({ "items": [{ "metadata": { "name": "a", "managedFields": [] } }, null] }));
+        assert_eq!(plain.items[0].0, json!({ "metadata": { "name": "a" } }));
+        assert_eq!(plain.items[1].0, Value::Null);
+    }
+
     fn pod_table() -> Value {
         json!({
             "kind": "Table",
@@ -513,7 +604,7 @@ mod tests {
         let extra = scope.extra().unwrap();
         let mut table = pod_table();
         table["rows"][0]["object"]["spec"] = json!({ "nodeName": "n1" });
-        let (columns, rows) = parse_list(table, &extra);
+        let (columns, rows) = parse_list(page(table), &extra);
         let names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(
             names,
@@ -523,7 +614,7 @@ mod tests {
         assert_eq!(rows[0].cells[3..], [json!("n1"), json!("web")]);
         // Objects the server sends without a table get them too.
         let (_, rows) = parse_list(
-            json!({ "items": [{ "metadata": { "name": "a" }, "spec": { "nodeName": "n2" } }] }),
+            page(json!({ "items": [{ "metadata": { "name": "a" }, "spec": { "nodeName": "n2" } }] })),
             &extra,
         );
         assert_eq!(rows[0].cells[2..], [json!("n2"), Value::Null]);
@@ -536,7 +627,7 @@ mod tests {
 
     #[test]
     fn parses_server_side_tables() {
-        let (columns, rows) = parse_list(pod_table(), &Extra::default());
+        let (columns, rows) = parse_list(page(pod_table()), &Extra::default());
         assert_eq!(columns.len(), 3);
         assert_eq!(columns[2].priority, 1);
         assert_eq!(rows.len(), 1);
@@ -597,7 +688,7 @@ mod tests {
             "items": [{ "metadata": { "name": "a", "namespace": "x",
                                       "creationTimestamp": "2026-10-01T10:00:00Z" } }]
         });
-        let (columns, rows) = parse_list(list, &Extra::default());
+        let (columns, rows) = parse_list(page(list), &Extra::default());
         assert_eq!(
             columns.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
             ["Name", "Age"]
