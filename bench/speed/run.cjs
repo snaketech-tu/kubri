@@ -1,5 +1,6 @@
 // Measures how fast Kubri's web server starts, how much memory it and the page use, and how long
-// the pod list takes to show every pod, and does the same for Headlamp when it is there.
+// the pod list takes to show its first pods and every pod, and does the same for Headlamp when it is
+// there. Headlamp loads 1,000 pods at a time, so the script presses its "Load more" button.
 //
 //   node bench/speed/run.cjs
 //
@@ -54,6 +55,8 @@ const apps = [
 		key: 'headlamp',
 		port: 4466,
 		url: (port) => `http://127.0.0.1:${port}/c/${encodeURIComponent(context)}/pods`,
+		// Headlamp lists pods 1,000 at a time and asks for the rest with a button.
+		more: (page) => page.getByRole('button', { name: 'Load more' }),
 		start(port) {
 			const dir = process.env.HEADLAMP_DIR;
 			const args = ['-html-static-dir', path.join(dir, 'frontend'), '-plugins-dir', path.join(dir, 'plugins')];
@@ -87,6 +90,11 @@ async function ready(url, started, child) {
 	throw new Error(`${url} did not answer within a minute`);
 }
 
+/** True once a seeded pod, named like api-00042, is on the page. */
+function shown() {
+	return /-\d{5}\b/.test(document.body.innerText);
+}
+
 /** True once the page says it shows `of N` items with N at least `pods`, like "10012 of 10012 pods" or "1-15 of 10012". */
 function listed(pods) {
 	for (const [, n] of document.body.innerText.matchAll(/\bof ([\d,.]+)/g)) {
@@ -105,12 +113,20 @@ async function measure(app, browser) {
 		await cdp.send('Performance.enable');
 		const opened = now();
 		await page.goto(app.url(app.port));
-		await page.waitForFunction(listed, pods, { timeout: 180_000, polling: 50 }).catch(async (err) => {
-			await page.screenshot({ path: `speed-${app.key}.png` });
-			const text = await page.evaluate(() => document.body.innerText).catch(() => '');
-			console.error(`${app.name} shows at ${page.url()}:\n${text.slice(0, 1500)}`);
-			throw err;
-		});
+		const deadline = opened + 180_000;
+		await page.waitForFunction(shown, null, { timeout: 180_000, polling: 50 });
+		const first = now() - opened;
+		// Pressing a "Load more" button whenever it can be pressed, as fast as a person never would.
+		while (!(await page.evaluate(listed, pods))) {
+			if (now() > deadline) {
+				await page.screenshot({ path: `speed-${app.key}.png` });
+				const text = await page.evaluate(() => document.body.innerText).catch(() => '');
+				throw new Error(`not all pods listed after 180 s; the page shows:\n${text.slice(0, 1500)}`);
+			}
+			const more = app.more?.(page);
+			if (more && (await more.isEnabled({ timeout: 0 }).catch(() => false))) await more.click({ timeout: 1000 }).catch(() => {});
+			await pause(50);
+		}
 		const list = now() - opened;
 		// Settled memory: what the page keeps once the list is up, not garbage waiting to go.
 		await pause(1000);
@@ -119,7 +135,7 @@ async function measure(app, browser) {
 		const heap = metrics.find((m) => m.name === 'JSHeapUsedSize').value / 1024 / 1024;
 		const server = peakMemory(child.pid);
 		await page.close();
-		return { startupMs: startup, listMs: list, serverMemoryMb: server, browserHeapMb: heap };
+		return { startupMs: startup, firstMs: first, listMs: list, serverMemoryMb: server, browserHeapMb: heap };
 	} finally {
 		child.kill('SIGTERM');
 		await new Promise((resolve) => (child.exitCode !== null ? resolve() : child.once('exit', resolve)));
@@ -128,6 +144,7 @@ async function measure(app, browser) {
 
 const fields = [
 	['startupMs', 'Server start', (v) => `${Math.round(v)} ms`],
+	['firstMs', 'Page open until the first pods show', (v) => `${(v / 1000).toFixed(2)} s`],
 	['listMs', `Page open until all ${pods.toLocaleString('en')} pods are listed`, (v) => `${(v / 1000).toFixed(2)} s`],
 	['serverMemoryMb', 'Server memory, peak', (v) => `${Math.round(v)} MB`],
 	['browserHeapMb', 'Page memory (JavaScript heap)', (v) => `${Math.round(v)} MB`]
