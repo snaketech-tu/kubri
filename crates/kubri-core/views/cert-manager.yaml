@@ -1,0 +1,28 @@
+# cert-manager: when certificates expire and renew, health from the Ready condition, and the
+# Secret and issuer of each certificate.
+group: cert-manager.io
+kind: Certificate
+columns:
+  - { name: Expires, path: .status.notAfter }
+  - { name: Renews, path: .status.renewalTime }
+health:
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }
+relations:
+  - { kind: Secret, name: .spec.secretName }
+  - { kind: .spec.issuerRef.kind, name: .spec.issuerRef.name }
+---
+group: cert-manager.io
+kind: Issuer
+health:
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }
+---
+group: cert-manager.io
+kind: ClusterIssuer
+health:
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }

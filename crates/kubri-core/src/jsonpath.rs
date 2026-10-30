@@ -1,6 +1,7 @@
 //! The part of kubectl's JSONPath that custom columns use: `.spec.nodeName`,
 //! `.spec.containers[*].image`, `.status.conditions[0].type`, `.metadata.labels['app.kubernetes.io/name']`
-//! and `.metadata.labels.app\.kubernetes\.io/name`, with or without the braces and `$`.
+//! and `.metadata.labels.app\.kubernetes\.io/name`, with or without the braces and `$`, and
+//! filters such as `.status.conditions[?(@.type=="Ready")].status`.
 
 use serde_json::Value;
 
@@ -11,6 +12,12 @@ pub(crate) enum Step {
     Index(i64),
     /// Every element of a list, or every value of a map.
     All,
+    /// The elements of a list whose value at `path` is, or with `equal` false is not, `value`.
+    Filter {
+        path: Vec<String>,
+        value: String,
+        equal: bool,
+    },
 }
 
 /// A parsed path, ready to read from many objects.
@@ -45,15 +52,23 @@ impl JsonPath {
                         .strip_prefix('\'')
                         .and_then(|s| s.strip_suffix('\''))
                         .or_else(|| inner.strip_prefix('"').and_then(|s| s.strip_suffix('"')));
-                    steps.push(if inner == "*" {
-                        Step::All
-                    } else if let Some(key) = quoted {
-                        Step::Key(key.to_owned())
-                    } else {
-                        Step::Index(inner.parse().map_err(|_| {
-                            bad(&format!("`[{inner}]` is neither an index, `*` nor a quoted key"))
-                        })?)
-                    });
+                    steps.push(
+                        if let Some(filter) = inner.strip_prefix("?(").and_then(|f| f.strip_suffix(')')) {
+                            parse_filter(filter).ok_or_else(|| {
+                                bad(&format!(
+                                    "`[{inner}]` is not a filter like [?(@.type==\"Ready\")]"
+                                ))
+                            })?
+                        } else if inner == "*" {
+                            Step::All
+                        } else if let Some(key) = quoted {
+                            Step::Key(key.to_owned())
+                        } else {
+                            Step::Index(inner.parse().map_err(|_| {
+                                bad(&format!("`[{inner}]` is neither an index, `*` nor a quoted key"))
+                            })?)
+                        },
+                    );
                     i = end + 1;
                 }
                 c => {
@@ -113,6 +128,13 @@ impl JsonPath {
                         }
                         (Step::All, Value::Array(list)) => list.iter().collect(),
                         (Step::All, Value::Object(map)) => map.values().collect(),
+                        (Step::Filter { path, value, equal }, Value::Array(list)) => list
+                            .iter()
+                            .filter(|item| {
+                                let found = path.iter().try_fold(*item, |v, key| v.get(key));
+                                (found.map(text).as_deref() == Some(value.as_str())) == *equal
+                            })
+                            .collect(),
                         _ => Vec::new(),
                     }
                 })
@@ -128,16 +150,52 @@ impl JsonPath {
             .find(value)
             .into_iter()
             .filter(|v| !v.is_null())
-            .map(|v| match v {
-                Value::String(s) => s.clone(),
-                other => other.to_string(),
-            })
+            .map(text)
             .collect();
         if texts.is_empty() {
             Value::Null
         } else {
             Value::String(texts.join(","))
         }
+    }
+}
+
+/// `@.type=="Ready"` or `@.status.phase != 'Running'`.
+fn parse_filter(filter: &str) -> Option<Step> {
+    let (left, right, equal) = match filter.split_once("!=") {
+        Some((l, r)) => (l, r, false),
+        None => {
+            let (l, r) = filter.split_once("==")?;
+            (l, r, true)
+        }
+    };
+    let path: Vec<String> = left
+        .trim()
+        .strip_prefix("@.")?
+        .split('.')
+        .map(str::to_owned)
+        .collect();
+    if path.iter().any(String::is_empty) {
+        return None;
+    }
+    let right = right.trim();
+    let value = right
+        .strip_prefix('\'')
+        .and_then(|v| v.strip_suffix('\''))
+        .or_else(|| right.strip_prefix('"').and_then(|v| v.strip_suffix('"')))
+        .unwrap_or(right);
+    Some(Step::Filter {
+        path,
+        value: value.to_owned(),
+        equal,
+    })
+}
+
+/// A value as a cell shows it: strings as they are, anything else as JSON.
+pub(crate) fn text(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
     }
 }
 
@@ -180,6 +238,19 @@ mod tests {
         assert_eq!(cell(".status.conditions[0].status"), json!("True"));
         assert_eq!(cell(".spec.missing"), Value::Null);
         assert_eq!(cell(".spec.containers[5].name"), Value::Null);
+        assert_eq!(
+            cell(r#".status.conditions[?(@.type=="Ready")].status"#),
+            json!("True")
+        );
+        assert_eq!(
+            cell(".spec.containers[?(@.name=='proxy')].image"),
+            json!("envoy:1")
+        );
+        assert_eq!(cell(".spec.containers[?(@.name != 'proxy')].name"), json!("app"));
+        assert_eq!(
+            cell(r#"{.status.conditions[?(@.type=="Synced")].status}"#),
+            Value::Null
+        );
     }
 
     #[test]
@@ -188,7 +259,9 @@ mod tests {
             "",
             "{}",
             "..name",
-            ".spec.containers[?(@.name=='app')]",
+            ".spec.containers[?(@.name)]",
+            ".spec.containers[?(name=='app')]",
+            ".spec.containers[?(@.ports[0].containerPort==80)]",
             ".a[",
             ".a[x]",
             "{.a} {.b}",

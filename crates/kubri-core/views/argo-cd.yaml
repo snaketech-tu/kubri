@@ -1,0 +1,11 @@
+# Argo CD: the synced revision and the last sync, and health as Argo CD judges it.
+group: argoproj.io
+kind: Application
+columns:
+  - { name: Revision, path: .status.sync.revision }
+  - { name: Last sync, path: .status.operationState.phase }
+health:
+  - { path: .status.health.status, matches: "^(Degraded|Missing)$", state: failed, message: .status.health.message }
+  - { path: .status.health.status, matches: "^(Progressing|Suspended|Unknown)$", state: warning, message: .status.health.status }
+  - { path: .status.sync.status, equals: OutOfSync, state: warning, message: Out of sync }
+  - { path: .status.health.status, equals: Healthy, state: ok }

@@ -241,6 +241,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 - [What depends on what](docs/TOPOLOGY.md): the topology graph, request paths, Used by and what the delete dialog warns about.
 - [What changed](docs/CHANGES.md): the timeline of changes Kubri recorded, with diffs and the times it was not watching.
 - [Snapshots](docs/SNAPSHOTS.md): a namespace or a cluster saved to one file, opened offline and read-only.
+- [Views for custom resources](docs/VIEWS.md): YAML files that give a CRD columns, a health state, overview sections, actions and graph edges.
 - [Integrations](docs/INTEGRATIONS.md): Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager and right-sizing, found without configuration.
 - [Logs and debugging](docs/DEBUGGING.md): searching logs by field, the workspace, debug containers, node shells and the fixes Kubri offers.
 - [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.

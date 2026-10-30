@@ -54,8 +54,9 @@ The Helm view (`:helm`) lists releases from the records Helm keeps in the cluste
 | `.spec.template.spec.containers[*].image` | every container's image, separated by commas |
 | `.status.conditions[0].type` | one element of a list (`[-1]` for the last) |
 | `.metadata.labels['app.kubernetes.io/name']` | a key with dots, also written `.metadata.labels.app\.kubernetes\.io/name` |
+| `.status.conditions[?(@.type=="Ready")].status` | the elements of a list whose field is (`==`) or is not (`!=`) a value |
 
-Filters (`?()`) and recursive descent (`..`) are not supported. The choices are kept per kind in Kubri's settings file, so they survive a restart and apply in the desktop app and the browser alike. **Reset** goes back to the server's columns.
+Other filters and recursive descent (`..`) are not supported. The choices are kept per kind in Kubri's settings file, so they survive a restart and apply in the desktop app and the browser alike. **Reset** goes back to the kind's [view](VIEWS.md) if it has one, otherwise to the server's columns.
 
 ### Copy and change many
 

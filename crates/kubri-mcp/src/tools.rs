@@ -755,6 +755,7 @@ async fn list_objects(kubri: &Kubri, args: &Args<'_>) -> Result<String, String> 
         label_selector: args.str("label_selector").map(Into::into),
         field_selector: args.str("field_selector").map(Into::into),
         paths: None,
+        ..Default::default()
     };
     let limit = (args.int("limit")?.unwrap_or(DEFAULT_ROWS as i64) as usize).clamp(1, MAX_ROWS);
     let offset = args.int("offset")?.unwrap_or(0) as usize;

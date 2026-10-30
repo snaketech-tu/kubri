@@ -55,6 +55,7 @@ mod terminal;
 #[cfg(test)]
 mod testing;
 mod typed;
+mod views;
 mod workload;
 mod xray;
 
@@ -116,6 +117,7 @@ pub use settings::{
     Settings,
 };
 pub use snapshot::SnapshotInfo;
+pub use views::{RenderedView, View, ViewSet};
 
 /// Kubri's config folder, where its settings live.
 pub fn config_dir() -> Option<std::path::PathBuf> {
@@ -842,11 +844,12 @@ impl Kubri {
         &self,
         resource: &ResourceRef,
         namespace: Option<&str>,
-        scope: TableScope,
+        mut scope: TableScope,
     ) -> Result<impl Stream<Item = TableEvent> + Send + 'static> {
         let session = self.session().await?;
         let api = session.api(resource, namespace)?;
         let info = session.info_for(resource)?;
+        scope.view = self.view_of(info).await.map(Arc::new);
         if namespace.is_none()
             && info.namespaced
             && let Some(allowed) = self.allowed_namespaces(&session).await?
@@ -1340,7 +1343,33 @@ impl Kubri {
     /// the request path of every Ingress rule.
     pub async fn graph(&self, namespace: Option<&str>) -> Result<Graph> {
         let session = self.session().await?;
-        graph::gather(session.client.clone(), namespace).await
+        let mut graph = graph::gather(session.client.clone(), namespace).await?;
+        let views = self.views().await.views;
+        graph::add_views(&mut graph, &session.client, &session.resources, &views, namespace).await;
+        Ok(graph)
+    }
+
+    /// The views in use: Kubri's own and those in the config folder, read again each time so
+    /// that edits apply at once.
+    pub async fn views(&self) -> ViewSet {
+        let dir = views::dir();
+        tokio::task::spawn_blocking(move || views::load(dir.as_deref()))
+            .await
+            .unwrap_or_default()
+    }
+
+    async fn view_of(&self, info: &ResourceInfo) -> Option<views::View> {
+        let views = self.views().await.views;
+        views
+            .into_iter()
+            .find(|v| v.is_for(&info.reference.group, &info.kind))
+    }
+
+    /// The health and detail sections the kind's view gives an object; `None` without a view.
+    pub async fn render_view(&self, resource: &ResourceRef, object: &Value) -> Result<Option<RenderedView>> {
+        let session = self.session().await?;
+        let info = session.info_for(resource)?;
+        Ok(self.view_of(info).await.map(|v| v.render(object)))
     }
 
     /// Checks the objects of `namespace`, or of the whole cluster with nodes, volumes and
@@ -1432,6 +1461,18 @@ impl Kubri {
     pub async fn k9s_config(&self) -> K9sConfig {
         let mut config = self.k9s_files().await;
         config.read_only |= self.read_only.load(Ordering::Relaxed);
+        // Views' actions run as plugins of their kind.
+        if let Ok(session) = self.session().await {
+            for view in self.views().await.views {
+                let found = session
+                    .resources
+                    .iter()
+                    .find(|r| view.is_for(&r.reference.group, &r.kind));
+                if let Some(resource) = found {
+                    config.plugins.extend(view.plugins(&resource.reference.plural));
+                }
+            }
+        }
         config
     }
 

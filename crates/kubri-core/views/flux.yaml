@@ -1,0 +1,83 @@
+# Flux: the revision and suspension kubectl leaves out of the lists, health from the Ready
+# condition, and the source each object is built from.
+group: kustomize.toolkit.fluxcd.io
+kind: Kustomization
+columns:
+  - { name: Revision, path: .status.lastAppliedRevision }
+  - { name: Suspended, path: .spec.suspend }
+health:
+  - { path: .spec.suspend, equals: "true", state: warning, message: Suspended }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }
+relations:
+  - { kind: .spec.sourceRef.kind, name: .spec.sourceRef.name, namespace: .spec.sourceRef.namespace }
+---
+group: helm.toolkit.fluxcd.io
+kind: HelmRelease
+columns:
+  - { name: Revision, path: .status.lastAttemptedRevision }
+  - { name: Suspended, path: .spec.suspend }
+health:
+  - { path: .spec.suspend, equals: "true", state: warning, message: Suspended }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }
+relations:
+  - { kind: .spec.chart.spec.sourceRef.kind, name: .spec.chart.spec.sourceRef.name, namespace: .spec.chart.spec.sourceRef.namespace }
+  - { kind: .spec.chartRef.kind, name: .spec.chartRef.name, namespace: .spec.chartRef.namespace }
+---
+group: source.toolkit.fluxcd.io
+kind: GitRepository
+columns:
+  - { name: Revision, path: .status.artifact.revision }
+  - { name: Suspended, path: .spec.suspend }
+health:
+  - { path: .spec.suspend, equals: "true", state: warning, message: Suspended }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }
+---
+group: source.toolkit.fluxcd.io
+kind: OCIRepository
+columns:
+  - { name: Revision, path: .status.artifact.revision }
+  - { name: Suspended, path: .spec.suspend }
+health:
+  - { path: .spec.suspend, equals: "true", state: warning, message: Suspended }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }
+---
+group: source.toolkit.fluxcd.io
+kind: HelmRepository
+columns:
+  - { name: Revision, path: .status.artifact.revision }
+  - { name: Suspended, path: .spec.suspend }
+health:
+  - { path: .spec.suspend, equals: "true", state: warning, message: Suspended }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }
+---
+group: source.toolkit.fluxcd.io
+kind: HelmChart
+columns:
+  - { name: Revision, path: .status.artifact.revision }
+  - { name: Suspended, path: .spec.suspend }
+health:
+  - { path: .spec.suspend, equals: "true", state: warning, message: Suspended }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }
+---
+group: source.toolkit.fluxcd.io
+kind: Bucket
+columns:
+  - { name: Revision, path: .status.artifact.revision }
+  - { name: Suspended, path: .spec.suspend }
+health:
+  - { path: .spec.suspend, equals: "true", state: warning, message: Suspended }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "True", state: ok }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', equals: "False", state: failed, message: '.status.conditions[?(@.type=="Ready")].message' }
+  - { path: '.status.conditions[?(@.type=="Ready")].status', exists: true, state: warning, message: '.status.conditions[?(@.type=="Ready")].message' }

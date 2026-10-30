@@ -1311,6 +1311,42 @@ export interface PluginRun {
 }
 
 /** The operations both the desktop app and kubri-server offer to the UI. */
+/** How Kubri shows a custom resource kind: from a YAML file, built in or the user's. */
+export interface KindView {
+	group: string;
+	kind: string;
+	columns: CustomColumn[];
+	health: {
+		path: string;
+		equals?: string | null;
+		notEquals?: string | null;
+		matches?: string | null;
+		exists?: boolean | null;
+		state: Health;
+		message?: string | null;
+	}[];
+	details: { title: string; fields: CustomColumn[] }[];
+	actions: { name: string; shortcut: string; description: string; command: string; args: string[] }[];
+	relations: { kind: string; name: string; namespace?: string | null }[];
+	/** The file it came from, `built-in: flux.yaml` for Kubri's own. */
+	source: string;
+}
+
+export interface ViewSet {
+	views: KindView[];
+	/** Files and views that could not be read, each with its reason. */
+	errors: string[];
+	/** The folder user views are read from. */
+	dir: string | null;
+}
+
+/** A view applied to one object. */
+export interface RenderedView {
+	health: { health: Health; message: string | null } | null;
+	/** Each section's fields as name and value; fields that find nothing are left out. */
+	sections: { title: string; fields: [string, string][] }[];
+}
+
 export interface Backend {
 	contexts(): Promise<ContextList>;
 	reloadContexts(): Promise<ContextList>;
@@ -1419,6 +1455,10 @@ export interface Backend {
 	setResources(target: ObjectRef, container: string, requests: Record<string, string>, limits: Record<string, string>): Promise<void>;
 	/** The Flux or Argo CD object that manages an object, if any. */
 	managedBy(target: ObjectRef): Promise<Manager | null>;
+	/** The views for custom resource kinds, read again from their files. */
+	views(): Promise<ViewSet>;
+	/** The health and sections the kind's view gives `object`; null without a view. */
+	renderView(resource: ResourceRef, object: unknown): Promise<RenderedView | null>;
 	setImages(target: ObjectRef, images: ContainerImage[]): Promise<void>;
 	/** Rolls a ReplicaSet's Deployment back to it; returns the Deployment's name. */
 	rollback(target: ObjectRef): Promise<string>;

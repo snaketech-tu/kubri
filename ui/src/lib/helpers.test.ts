@@ -156,6 +156,13 @@ describe('status colors', () => {
 		expect(cellTone('Ready', '2/2')).toBe('ok');
 		expect(cellTone('Name', 'Running')).toBe('');
 	});
+
+	it('colors the health of views by its state, not its message', () => {
+		expect(cellTone('Health', 'Healthy')).toBe('ok');
+		expect(cellTone('Health', 'Failed: Ready is True elsewhere')).toBe('bad');
+		expect(cellTone('Health', 'Warning: Suspended')).toBe('warn');
+		expect(cellTone('Health', 'Warning: secret not found, Failed to fetch')).toBe('warn');
+	});
 });
 
 function row(name: string, namespace: string, cells: unknown[], created = '2026-10-01T00:00:00Z'): Row {

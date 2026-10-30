@@ -786,6 +786,23 @@ async fn renew_certificate(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> C
 }
 
 #[tauri::command]
+async fn views(kubri: State<'_, Arc<Kubri>>) -> CommandResult<kubri_core::ViewSet> {
+    Ok(kubri.views().await)
+}
+
+#[tauri::command]
+async fn render_view(
+    kubri: State<'_, Arc<Kubri>>,
+    resource: ResourceRef,
+    object: serde_json::Value,
+) -> CommandResult<Option<kubri_core::RenderedView>> {
+    kubri
+        .render_view(&resource, &object)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn managed_by(
     kubri: State<'_, Arc<Kubri>>,
     target: ObjectRef,
@@ -1123,6 +1140,8 @@ pub fn run() {
             loki_logs,
             gitops,
             managed_by,
+            views,
+            render_view,
             renew_certificate,
             right_sizing,
             fleet_cluster,
