@@ -1,3 +1,3 @@
 {
-  "kubri": { "startupMs": 500, "listMs": 5000, "serverMemoryMb": 400, "browserHeapMb": 100 }
+  "kubri": { "startupMs": 500, "firstMs": 3000, "listMs": 5000, "serverMemoryMb": 400, "browserHeapMb": 100 }
 }
