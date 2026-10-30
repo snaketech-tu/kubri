@@ -42,6 +42,12 @@ Every action can also be copied as the `kubectl` command that does the same: in 
 
 **What changed** under Settings turns recording changes off or on, and sets how many days they are kept (14) and how large `history.db` may grow (200 MB). See [CHANGES.md](CHANGES.md).
 
+## Appearance
+
+**Appearance** under Settings (`:appearance`) picks Kubri's own colors: as the system, light or dark, the same choice as the moon and sun button at the top. A k9s skin takes their place while it is on; see [K9S.md](K9S.md#skins).
+
+The desktop app zooms with <kbd>Ctrl +</kbd>, <kbd>Ctrl −</kbd> and <kbd>Ctrl 0</kbd> (<kbd>Cmd</kbd> on macOS), or with the zoom buttons there, from 67% to 200%, and opens at the same level next time. In the browser, its own zoom does the same. Kubri is laid out to work up to 200%: in a narrow window the resource list folds behind a button at the top, and in a short one the page scrolls so lists keep room for their rows.
+
 ## The YAML editor
 
 The editor loads the kind's schema from the API server (`/openapi/v3`), so it knows custom resources as well as built-in ones:

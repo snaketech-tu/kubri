@@ -480,7 +480,7 @@
 	}
 	@media (max-width: 900px) {
 		.row {
-			grid-template-columns: 56px 64px 1fr;
+			grid-template-columns: max-content 64px 1fr;
 		}
 		.summary {
 			grid-column: 2 / -1;

@@ -23,6 +23,7 @@
 				['/', 'Filter: regex, !inverse, -f fuzzy, -l app=web'],
 				['0', 'All namespaces'],
 				['[ / ]  or  Alt+← / →', 'Back / forward'],
+				['Ctrl+ +  /  −  /  0', 'Zoom in, out, back to 100% (:appearance for colors)'],
 				['-', 'Last view, and back again'],
 				['Shift+W', 'Warp to the namespace of the row'],
 				['Shift+J', 'Jump to the owner'],

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { drafts } from '#lib/navigation.svelte.js';
 	import { applyScheme } from '#lib/skin.js';
+	import { stepZoom, zoomKey } from '#lib/appearance.js';
 	import Icon from '#lib/components/Icon.svelte';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { untrack } from 'svelte';
@@ -73,6 +74,13 @@
 	});
 
 	$effect(() => untrack(() => applyScheme(app.scheme)));
+	const desktop = isTauri();
+	// The level kept from the last start; the window opens at 100%.
+	$effect(() =>
+		untrack(() => {
+			if (desktop && app.zoom !== 1) app.setZoom(app.zoom);
+		})
+	);
 
 	// k9s plugin and hotkey keys.
 	$effect(() => listenForBindings());
@@ -121,6 +129,12 @@
 	});
 
 	function onkeydown(e: KeyboardEvent) {
+		const zoom = desktop ? zoomKey(e) : null;
+		if (zoom !== null) {
+			e.preventDefault();
+			app.setZoom(stepZoom(app.zoom, zoom));
+			return;
+		}
 		if (app.overlayOpen) return;
 		const typing = forControl(e);
 		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -333,6 +347,14 @@
 							: 'Changes are allowed; Kubernetes permissions still apply. Click to make Kubri read-only.'
 	);
 	const accent = $derived(app.contextSettings.color || null);
+
+	/** In a narrow window the sidebar folds away behind a button, and folds again once a page is picked. */
+	let navOpen = $state(false);
+	$effect(() => {
+		void app.page;
+		void app.selected;
+		navOpen = false;
+	});
 </script>
 
 <svelte:window {onkeydown} {onmouseup} />
@@ -342,6 +364,7 @@
 	class:maximized={app.details && app.maximized}
 	class:inspecting={app.details}
 	class:tinted={accent}
+	class:nav-open={navOpen}
 	style:--context-color={accent}
 >
 	<Sidebar />
@@ -351,6 +374,15 @@
 				<img src={logo} alt="" width="24" height="24" />
 				<span>kubri</span>
 			</div>
+			<button
+				class="square menu-button"
+				onclick={() => (navOpen = !navOpen)}
+				aria-expanded={navOpen}
+				title={navOpen ? 'Hide the resource list' : 'Show the resource list'}
+				aria-label="Resources"
+			>
+				<Icon name={navOpen ? 'close' : 'menu'} />
+			</button>
 			<div class="history">
 				<button
 					onclick={() => app.go(-1)}
@@ -669,6 +701,9 @@
 	.help {
 		display: none;
 		font-weight: 700;
+	}
+	.menu-button {
+		display: none;
 	}
 	.environment {
 		position: relative;
@@ -1035,6 +1070,18 @@
 			display: none;
 		}
 	}
+	/* In a short window, as at 200% zoom, the page scrolls: the header moves away and the page
+	   below it gets the whole height, so lists keep room for their rows. */
+	@media (max-height: 600px) {
+		.shell {
+			height: auto;
+			min-height: 100dvh;
+		}
+		main {
+			flex: none;
+			height: 100dvh;
+		}
+	}
 	/* One column: the header, then the sidebar as a strip of links, then the page. */
 	@media (max-width: 720px) {
 		.shell {
@@ -1046,6 +1093,13 @@
 		}
 		.shell > :global(nav) {
 			order: 1;
+			display: none;
+		}
+		.shell.nav-open > :global(nav) {
+			display: flex;
+		}
+		.menu-button {
+			display: grid;
 		}
 		.error {
 			order: 2;
@@ -1069,15 +1123,12 @@
 		.help {
 			display: grid;
 		}
-		.palette-button {
-			order: 5;
-			flex: 1 1 100%;
-			width: 100%;
-			justify-content: flex-start;
-			padding: 7px 8px 7px 12px;
+		.mode {
+			font-size: 0;
+			gap: 0;
 		}
-		.palette-button span {
-			display: block;
+		.brand span {
+			display: none;
 		}
 		.hints {
 			display: none;
