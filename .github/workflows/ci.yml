@@ -111,4 +111,6 @@ jobs:
         if: always()
         with:
           name: speed
-          path: speed.json
+          path: |
+            speed.json
+            speed-*.png

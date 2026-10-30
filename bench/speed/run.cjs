@@ -107,6 +107,8 @@ async function measure(app, browser) {
 		await page.goto(app.url(app.port));
 		await page.waitForFunction(listed, pods, { timeout: 180_000, polling: 50 }).catch(async (err) => {
 			await page.screenshot({ path: `speed-${app.key}.png` });
+			const text = await page.evaluate(() => document.body.innerText).catch(() => '');
+			console.error(`${app.name} shows at ${page.url()}:\n${text.slice(0, 1500)}`);
 			throw err;
 		});
 		const list = now() - opened;
