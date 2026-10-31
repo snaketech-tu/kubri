@@ -12,6 +12,7 @@
 	import ExplainSettings from './ExplainSettings.svelte';
 	import ContextSettingsForm from './ContextSettingsForm.svelte';
 	import PageHeader from './PageHeader.svelte';
+	import Select from './Select.svelte';
 
 	let previews = $state<Record<string, SkinTheme | null>>({});
 	let reloading = $state(false);
@@ -227,9 +228,13 @@
 				<span>Zoom</span>
 				{#if desktop}
 					<button onclick={() => app.setZoom(stepZoom(app.zoom, -1))} disabled={app.zoom <= ZOOMS[0]} aria-label="Zoom out">−</button>
-					<select value={app.zoom} onchange={(e) => app.setZoom(Number(e.currentTarget.value))} aria-label="Zoom level">
-						{#each ZOOMS as z (z)}<option value={z}>{Math.round(z * 100)}%</option>{/each}
-					</select>
+					<Select
+						value={app.zoom}
+						options={ZOOMS.map((z) => ({ value: z, label: `${Math.round(z * 100)}%` }))}
+						onchange={(z) => app.setZoom(z)}
+						aria-label="Zoom level"
+						compact
+					/>
 					<button onclick={() => app.setZoom(stepZoom(app.zoom, 1))} disabled={app.zoom >= ZOOMS[ZOOMS.length - 1]} aria-label="Zoom in">+</button>
 					<span class="muted small"><kbd>Ctrl +</kbd> <kbd>Ctrl −</kbd> and <kbd>Ctrl 0</kbd> too; kept for the next start</span>
 				{:else}
@@ -564,8 +569,7 @@
 		font-weight: 600;
 		margin-right: 4px;
 	}
-	.zoom button,
-	.zoom select {
+	.zoom button {
 		min-width: 32px;
 		padding: 4px 8px;
 		border: 1px solid var(--border);

@@ -2,6 +2,8 @@
 	import { untrack } from 'svelte';
 	import { backend, type ObjectRef, type TerminalMode } from '../api';
 	import { mountTerminal, TERMINAL_BACKGROUND } from '../terminal';
+	import { plainOptions } from '../select';
+	import Select from './Select.svelte';
 
 	let {
 		target,
@@ -60,15 +62,17 @@
 <div class="terminal" style:--terminal-bg={TERMINAL_BACKGROUND}>
 	<div class="toolbar">
 		{#if containers.length > 1}
-			<select bind:value={container} title="Container">
-				<option value="">Default container</option>
-				{#each containers as c (c)}<option value={c}>{c}</option>{/each}
-			</select>
+			<Select bind:value={container} options={[{ value: '', label: 'Default container' }, ...plainOptions(containers)]} title="Container" compact />
 		{/if}
-		<select bind:value={mode} title="Run a new shell, or connect to the container's main process">
-			<option value="shell">Shell</option>
-			<option value="attach">Attach</option>
-		</select>
+		<Select
+			bind:value={mode}
+			options={[
+				{ value: 'shell', label: 'Shell' },
+				{ value: 'attach', label: 'Attach' }
+			]}
+			title="Run a new shell, or connect to the container's main process"
+			compact
+		/>
 		<span class="status" class:open={status === 'open'} class:exited={status === 'exited'}>
 			{status === 'open' ? `Connected to ${connectedTo}` : status === 'exited' ? 'Ended' : 'Connecting…'}
 		</span>
@@ -91,10 +95,6 @@
 		gap: 10px;
 		padding: 8px 16px;
 		border-bottom: 1px solid var(--border-subtle);
-		font-size: 12.5px;
-	}
-	select {
-		padding: 3px 8px;
 		font-size: 12.5px;
 	}
 	.status {

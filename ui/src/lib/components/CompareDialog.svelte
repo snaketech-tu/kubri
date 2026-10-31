@@ -5,6 +5,7 @@
 	import { errorMessage } from '../format';
 	import { app, type Dialog } from '../state.svelte';
 	import DiffView from './DiffView.svelte';
+	import Select from './Select.svelte';
 
 	let { dialog }: { dialog: Extract<Dialog, { kind: 'compare' }> } = $props();
 	// Read once: the dialog closes by clearing it.
@@ -74,9 +75,7 @@
 			<span class="side">With</span>
 			<label>
 				<span>Context</span>
-				<select bind:value={context}>
-					{#each app.contexts as c (c.name)}<option value={c.name}>{app.contextName(c.name)}</option>{/each}
-				</select>
+				<Select bind:value={context} options={app.contexts.map((c) => ({ value: c.name, label: app.contextName(c.name) }))} mono style="width: 190px" />
 			</label>
 			{#if d.target.namespace !== null}
 				<label>
@@ -184,8 +183,7 @@
 		font-weight: 600;
 		color: var(--text-muted);
 	}
-	input:not([type='checkbox']),
-	select {
+	input:not([type='checkbox']) {
 		min-width: 0;
 		width: 190px;
 		padding: 6px 8px;

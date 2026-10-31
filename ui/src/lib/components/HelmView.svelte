@@ -24,6 +24,7 @@
 	import HelmCompare from './HelmCompare.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import SearchField from './SearchField.svelte';
+	import Select from './Select.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
 	type Tab = 'overview' | 'values' | 'manifest' | 'history' | 'compare' | 'drift';
@@ -261,6 +262,10 @@
 		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
 	}
 
+	function revisionOptions(releases: HelmRelease[]) {
+		return releases.map((h) => ({ value: h.revision, label: `${h.revision} · ${h.status}` }));
+	}
+
 	function viewRevision(rev: number) {
 		const newest = history[0]?.revision;
 		revision = rev === newest ? null : rev;
@@ -462,14 +467,7 @@
 				{#if history.length > 1}
 					<label class="revision">
 						Revision
-						<select
-							value={revision ?? history[0]?.revision}
-							onchange={(e) => viewRevision(Number(e.currentTarget.value))}
-						>
-							{#each history as h (h.revision)}
-								<option value={h.revision}>{h.revision} · {h.status}</option>
-							{/each}
-						</select>
+						<Select value={revision ?? history[0]?.revision} options={revisionOptions(history)} onchange={viewRevision} compact />
 					</label>
 				{/if}
 				<button class="btn" onclick={() => upgrade(latest)} disabled={!helm || !latest} title={helm ? 'Upgrade with changed values or another chart version (u)' : 'Needs the helm command'}>
@@ -585,17 +583,15 @@
 							<div class="compare-head">
 								<label class="revision">
 									Changes from revision
-									<select
-										value={compareTo ?? ''}
-										onchange={(e) => {
-											compareWith = Number(e.currentTarget.value);
+									<Select
+										value={compareTo ?? undefined}
+										options={revisionOptions(history.filter((h) => h.revision !== shown.revision))}
+										onchange={(r) => {
+											compareWith = r;
 											compared = null;
 										}}
-									>
-										{#each history.filter((h) => h.revision !== shown.revision) as h (h.revision)}
-											<option value={h.revision}>{h.revision} · {h.status}</option>
-										{/each}
-									</select>
+										compact
+									/>
 									to revision {shown.revision}
 								</label>
 								{#if compareTo !== null && canRollBack(compareTo)}
@@ -803,11 +799,6 @@
 		gap: 6px;
 		font-size: 12px;
 		color: var(--text-muted);
-	}
-	.revision select {
-		padding: 5px 8px;
-		font-size: 12px;
-		color: var(--text);
 	}
 	.card {
 		display: flex;

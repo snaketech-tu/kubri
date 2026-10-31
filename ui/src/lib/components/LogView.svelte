@@ -23,8 +23,10 @@
 	} from '../logs';
 	import { logRanges, sourceLabels, stripAnsi } from '../pods';
 	import { app } from '../state.svelte';
+	import { plainOptions, type SelectOption } from '../select';
 	import Icon from './Icon.svelte';
 	import LogRate from './LogRate.svelte';
+	import Select from './Select.svelte';
 
 	let {
 		target,
@@ -50,6 +52,12 @@
 	const { ranges: RANGES, start: startRange } = logRanges(logger?.tail ?? 100, logger?.sinceSeconds ?? -1);
 	/** The ranges k9s puts on 0 to 6: tail, head (here everything), then 1m to 1h. */
 	const RANGE_KEYS = ['tail', 'all', '1m', '5m', '15m', '30m', '1h'];
+	const LEVELS: SelectOption<LogLevel | ''>[] = [
+		{ value: '', label: 'All levels' },
+		{ value: 'info', label: 'Info and above' },
+		{ value: 'warn', label: 'Warnings and errors' },
+		{ value: 'error', label: 'Errors only' }
+	];
 	const LOKI_RANGES: [number, string][] = [
 		[900, 'Last 15 minutes'],
 		[3600, 'Last hour'],
@@ -449,42 +457,43 @@
 <div class="logs">
 	<div class="toolbar">
 		{#if containers.length > 1}
-			<select bind:value={container} title="Container" aria-label="Container">
-				<option value="">All containers</option>
-				{#each containers as c (c)}<option value={c}>{c}</option>{/each}
-			</select>
+			<Select bind:value={container} options={[{ value: '', label: 'All containers' }, ...plainOptions(containers)]} title="Container" aria-label="Container" compact />
 		{:else if containers.length === 1}
 			<span class="container" title="Container">{containers[0]}</span>
 		{/if}
-		<select
+		<Select
 			value={loki ? 'loki' : previous ? 'previous' : 'current'}
-			onchange={(e) => {
-				const value = e.currentTarget.value;
+			options={[
+				{ value: 'current', label: 'Current instance' },
+				{ value: 'previous', label: 'Previous · ended' },
+				...(app.has('loki') ? [{ value: 'loki', label: 'Loki history' }] : [])
+			]}
+			onchange={(value) => {
 				loki = value === 'loki';
 				previous = value === 'previous';
 			}}
 			title="The running container, the one before it, which ended, or the history Loki kept"
 			aria-label="Log source"
-		>
-			<option value="current">Current instance</option>
-			<option value="previous">Previous · ended</option>
-			{#if app.has('loki')}<option value="loki">Loki history</option>{/if}
-		</select>
+			compact
+		/>
 		{#if loki}
-			<select bind:value={lokiSeconds} title="How far back to search Loki" aria-label="Time range">
-				{#each LOKI_RANGES as [seconds, label] (seconds)}<option value={seconds}>{label}</option>{/each}
-			</select>
+			<Select
+				bind:value={lokiSeconds}
+				options={LOKI_RANGES.map(([value, label]) => ({ value, label }))}
+				title="How far back to search Loki"
+				aria-label="Time range"
+				compact
+			/>
 		{:else}
-			<select bind:value={range} title="How far back to start (0–6)" aria-label="Time range">
-				{#each [...RANGES] as [key, r] (key)}<option value={key}>{r.label}</option>{/each}
-			</select>
+			<Select
+				bind:value={range}
+				options={[...RANGES].map(([value, r]) => ({ value, label: r.label }))}
+				title="How far back to start (0–6)"
+				aria-label="Time range"
+				compact
+			/>
 		{/if}
-		<select bind:value={minLevel} title="Only lines at this level or above" aria-label="Level">
-			<option value="">All levels</option>
-			<option value="info">Info and above</option>
-			<option value="warn">Warnings and errors</option>
-			<option value="error">Errors only</option>
-		</select>
+		<Select bind:value={minLevel} options={LEVELS} title="Only lines at this level or above" aria-label="Level" compact />
 		<label class="search" title="Search (/). Enter and n go to the next match, Shift+Enter and N to the previous.">
 			<Icon name="search" size={15} />
 			<input
@@ -760,10 +769,6 @@
 		align-items: center;
 		gap: 8px 10px;
 		padding: 8px 16px;
-		font-size: 12.5px;
-	}
-	.toolbar select {
-		padding: 5px 8px;
 		font-size: 12.5px;
 	}
 	.logql {

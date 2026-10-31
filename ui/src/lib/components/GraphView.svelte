@@ -7,6 +7,7 @@
 	import HealthIcon from './HealthIcon.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import SearchField from './SearchField.svelte';
+	import Select from './Select.svelte';
 
 	const REFRESH_MS = 15_000;
 
@@ -177,11 +178,15 @@
 		<div class="toolbar">
 			<label>
 				<span>Group by</span>
-				<select bind:value={groupBy}>
-					<option value="namespace">Namespace</option>
-					<option value="app">Application</option>
-					<option value="node">Node</option>
-				</select>
+				<Select
+					bind:value={groupBy}
+					options={[
+						{ value: 'namespace', label: 'Namespace' },
+						{ value: 'app', label: 'Application' },
+						{ value: 'node', label: 'Node' }
+					]}
+					compact
+				/>
 			</label>
 			<SearchField bind:value={filter} label="Find in the graph" placeholder="Find by name, kind or state…" key="" />
 			<label class="check"><input type="checkbox" bind:checked={problemsOnly} /> Problems</label>

@@ -58,7 +58,8 @@
 		download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
 		camera: 'M4 8h3.5L9 5.5h6L16.5 8H20v11H4zM12 16.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
 		keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
-		menu: 'M4 6h16M4 12h16M4 18h16'
+		menu: 'M4 6h16M4 12h16M4 18h16',
+		check: 'M5 12.5l4.5 4.5L19 7.5'
 	} as const;
 
 	export type IconName = keyof typeof PATHS;

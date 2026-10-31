@@ -10,6 +10,7 @@
 	import FormPanel from './FormPanel.svelte';
 	import Icon from './Icon.svelte';
 	import PageHeader from './PageHeader.svelte';
+	import Select from './Select.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
 	let editor = $state<YamlEditor>();
@@ -235,15 +236,17 @@
 			<div class="toolbar">
 				<label class="field">
 					<span>Add</span>
-					<select bind:value={kind} aria-label="Add a kind's template">
-						<option value="" disabled>Choose a kind…</option>
-						<optgroup label="Common">
-							{#each common as r (key(r))}<option value={key(r)}>{r.kind}</option>{/each}
-						</optgroup>
-						<optgroup label="All kinds">
-							{#each others as r (key(r))}<option value={key(r)}>{r.kind}{r.group ? ` (${r.group})` : ''}</option>{/each}
-						</optgroup>
-					</select>
+					<Select
+						bind:value={kind}
+						options={[
+							...common.map((r) => ({ value: key(r), label: r.kind, group: 'Common' })),
+							...others.map((r) => ({ value: key(r), label: `${r.kind}${r.group ? ` (${r.group})` : ''}`, group: 'All kinds' }))
+						]}
+						placeholder="Choose a kind…"
+						aria-label="Add a kind's template"
+						compact
+						style="max-width: 260px"
+					/>
 				</label>
 				<button onclick={insert} disabled={!kind} title="Add the kind's template, as another document if there is YAML already">Add</button>
 				<span class="divider"></span>
@@ -259,9 +262,14 @@
 				{/if}
 				<label class="field">
 					<span>Context</span>
-					<select bind:value={into} title="The cluster to create the objects in" aria-label="Create in context">
-						{#each app.contexts as c (c.name)}<option value={c.name}>{app.contextName(c.name)}</option>{/each}
-					</select>
+					<Select
+						bind:value={into}
+						options={app.contexts.map((c) => ({ value: c.name, label: app.contextName(c.name) }))}
+						title="The cluster to create the objects in"
+						aria-label="Create in context"
+						compact
+						style="max-width: 260px"
+					/>
 				</label>
 				<label class="field">
 					<span>Namespace</span>
@@ -401,12 +409,6 @@
 		align-items: center;
 		gap: 8px;
 		color: var(--text-muted);
-	}
-	.field select {
-		max-width: 260px;
-		padding: 5px 8px;
-		color: var(--text);
-		font-size: 12.5px;
 	}
 	.spacer {
 		flex: 1;
