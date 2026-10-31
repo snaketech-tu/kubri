@@ -229,7 +229,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Explore', 'Sanitizer']}
+		crumbs={['Sanitizer']}
 		title="Sanitizer"
 		subtitle="Checks objects for common mistakes, like Popeye, {namespace ? `in ${namespace}` : 'in all namespaces'}"
 	>

@@ -95,7 +95,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Explore', 'Settings']}
+		crumbs={['Settings']} prefix="none"
 		title="Settings"
 		subtitle="Kubri's own settings, and the aliases, hotkeys, plugins and skins from your k9s files"
 	>

@@ -95,7 +95,7 @@
 </script>
 
 <section class="page">
-	<PageHeader crumbs={['Explore', 'Integrations']} title="Integrations" subtitle="Tools the cluster runs, found without setup">
+	<PageHeader crumbs={['Integrations']} prefix="context" title="Integrations" subtitle="Tools the cluster runs, found without setup">
 		{#snippet tools()}
 			<button class="btn" onclick={check} disabled={checking}>{checking ? 'Looking…' : 'Look again'}</button>
 		{/snippet}

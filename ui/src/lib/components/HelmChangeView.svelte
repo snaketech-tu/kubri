@@ -189,7 +189,7 @@
 <svelte:window {onkeydown} />
 
 <PageHeader
-	crumbs={['Explore', { label: 'Helm', onclick: oncancel, title: 'Back (Esc)' }, install ? 'Install' : `${name} · upgrade`]}
+	crumbs={[{ label: 'Helm', onclick: oncancel, title: 'Back (Esc)' }, install ? 'Install' : `${name} · upgrade`]}
 	title={install ? 'Install a chart' : `Upgrade ${initial?.name}`}
 	mono={!install}
 	subtitle={install
