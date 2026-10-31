@@ -41,3 +41,17 @@ export function memory(bytes: number): string {
 export function errorMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
+
+/**
+ * The name a pod's workload gave it: `frontend-6f8dcb7dd4-c5zl6` came from `frontend`. A name
+ * that does not look generated has no prefix.
+ */
+export function workloadPrefix(podName: string): string | null {
+	const parts = podName.split('-');
+	return parts.length >= 3 ? parts.slice(0, -2).join('-') : null;
+}
+
+/** Whether an API error says the object is not there (any more). */
+export function isNotFound(message: string): boolean {
+	return /not found/i.test(message);
+}

@@ -19,7 +19,7 @@
 	import { hasCharts } from '../charts';
 	import { backend, type EventInfo, type KubeObject, type Preview, type Reference, type TerminalMode } from '../api';
 	import { dock } from '../dock.svelte';
-	import { errorMessage } from '../format';
+	import { errorMessage, isNotFound, workloadPrefix } from '../format';
 	import { drafts } from '../navigation.svelte';
 	import { containerNames, hasLogs, hasUsers, isPods, isServices } from '../pods';
 	import { app, type Details, type DetailsTab } from '../state.svelte';
@@ -526,7 +526,20 @@
 		{/if}
 	</nav>
 
-	{#if error}
+	{#if error && isNotFound(error)}
+		{@const prefix = isPods(details.resource) ? workloadPrefix(details.target.name) : null}
+		<div class="banner gone" role="alert">
+			<span>
+				This {details.resource.kind.toLowerCase()} no longer exists.
+				{#if prefix}A rollout or restart has probably replaced it.{/if}
+			</span>
+			{#if prefix}
+				<button onclick={() => app.open(details.resource, details.target.namespace ?? 'all', prefix)}>
+					Show current pods
+				</button>
+			{/if}
+		</div>
+	{:else if error}
 		<div class="banner">{error}</div>
 	{/if}
 	{#if saveError}
@@ -891,6 +904,12 @@
 	}
 	.review .conflicts {
 		color: var(--warn);
+	}
+	.banner.gone {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
 	}
 	.banner.notice {
 		display: flex;
