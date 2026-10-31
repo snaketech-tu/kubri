@@ -165,6 +165,8 @@ See [Development](#development).
 
 ## Screenshots
 
+The Link branding captures use synthetic cluster data. See [screenshot capture instructions](docs/SCREENSHOTS.md).
+
 <table>
   <tr>
     <td width="50%" valign="top"><img src="docs/assets/screenshots/overview.png" alt="Cluster overview: pods and nodes, CPU and memory, and the objects that need attention"><br><b>Overview</b>: what needs attention first, with health and trends (<kbd>:pulses</kbd>)</td>

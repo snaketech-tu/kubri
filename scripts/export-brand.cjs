@@ -7,7 +7,8 @@ const root = path.resolve(__dirname, '..');
 (async () => {
   const dir = path.join(root, 'ui/src-tauri/icons');
   const source = fs.readFileSync(path.join(root, 'ui/src/lib/assets/logo.svg'), 'utf8');
-  const icon = source.replace('<title>', '<rect width="64" height="64" rx="14" fill="#4B64F4"/><title>').replace('d="M9 9h12', 'transform="translate(5 5) scale(.84)" d="M9 9h12').replace('d="m21 25', 'transform="translate(5 5) scale(.84)" d="m21 25').replace('fill="#4B64F4"/><path', 'fill="#ffffff"/><path');
+  const inner = source.replace(/^[\s\S]*?<title>[\s\S]*?<\/title>/, '').replace(/<\/svg>\s*$/, '');
+  const icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#101923"/><g transform="translate(9 8) scale(.72)">' + inner + '</g></svg>';
   const images = new Map();
   for (const size of [16,24,32,128,256,512,1024]) images.set(size, await sharp(Buffer.from(icon)).resize(size,size).png().toBuffer());
   for (const [size, name] of [[32,'32x32.png'],[128,'128x128.png'],[256,'128x128@2x.png'],[512,'icon.png']]) fs.writeFileSync(path.join(dir,name),images.get(size));
