@@ -28,6 +28,7 @@
 	import HelmView from '#lib/components/HelmView.svelte';
 	import KubectlDialog from '#lib/components/KubectlDialog.svelte';
 	import SnapshotDialog from '#lib/components/SnapshotDialog.svelte';
+	import ActivityPanel from '#lib/components/ActivityPanel.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
 	import PluginTerminal from '#lib/components/PluginTerminal.svelte';
@@ -644,6 +645,7 @@
 
 {#if app.paletteOpen}<CommandPalette />{/if}
 {#if app.helpOpen}<HelpOverlay />{/if}
+{#if app.activityOpen}<ActivityPanel />{/if}
 {#if app.menu}<ActionMenu menu={app.menu} />{/if}
 <AgentRequests />
 {#if app.dialog?.kind === 'forbidden'}

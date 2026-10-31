@@ -230,6 +230,20 @@ export type Dialog =
 	/** Saves a namespace or the cluster to a snapshot file, or opens one; `namespace` null is the cluster. */
 	| { kind: 'snapshot'; namespace: string | null };
 
+let activityId = 0;
+
+/** One change made in this session. */
+export interface Activity {
+	id: number;
+	at: number;
+	context: string;
+	text: string;
+	ok: boolean;
+	/** Sets things back, where Kubernetes allows it. */
+	undo?: () => Promise<unknown>;
+	undone: boolean;
+}
+
 export interface Toast {
 	id: number;
 	tone: 'ok' | 'bad';
@@ -308,6 +322,30 @@ class AppState {
 	benchmarkId = $state<number | null>(null);
 	paletteOpen = $state(false);
 	helpOpen = $state(false);
+
+	/** Every change made from here in this session, newest first. */
+	activity = $state.raw<Activity[]>([]);
+	activityOpen = $state(false);
+
+	/** Adds a change to the session activity; an entry with `undo` can be taken back. */
+	record(entry: Omit<Activity, 'id' | 'at' | 'context' | 'undone'>): number {
+		const id = ++activityId;
+		this.activity = [{ ...entry, id, at: Date.now(), context: this.cluster?.context ?? '', undone: false }, ...this.activity].slice(0, 200);
+		return id;
+	}
+
+	/** Takes back an entry that can be, and records that it was. */
+	async undoActivity(id: number) {
+		const entry = this.activity.find((a) => a.id === id);
+		if (!entry?.undo || entry.undone) return;
+		try {
+			await entry.undo();
+			this.activity = this.activity.map((a) => (a.id === id ? { ...a, undone: true } : a));
+			this.toast(`Undone: ${entry.text}`);
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+		}
+	}
 	contextMenuOpen = $state(false);
 	/** The actions menu that is open, from a right click or a ⋯ or More button. */
 	menu = $state<Menu | null>(null);
@@ -359,6 +397,7 @@ class AppState {
 	overlayOpen = $derived(
 		this.paletteOpen ||
 			this.helpOpen ||
+			this.activityOpen ||
 			this.contextMenuOpen ||
 			this.menu !== null ||
 			this.dialog !== null ||
