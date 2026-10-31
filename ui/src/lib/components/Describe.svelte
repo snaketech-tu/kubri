@@ -3,6 +3,7 @@
 	import type { EventInfo, KubeObject, Reference } from '../api';
 	import { age } from '../format';
 	import { secretValue } from '../pods';
+	import { relatedOf } from '../references';
 	import { rulesOf } from '../rbac';
 	import { cellTone } from '../status';
 	import { app, findResource } from '../state.svelte';
@@ -93,6 +94,9 @@
 		if (resource) app.openAt(resource, resource.namespaced ? namespace : null, name);
 		else app.toast(`The cluster does not serve ${kind}`, 'bad');
 	}
+
+	/** What the object names in its spec: ConfigMaps, Secrets, claims, the service account. */
+	const related = $derived(relatedOf(object));
 
 	/** A line of the facts, and where clicking its value goes. */
 	type Fact = [label: string, value: string, go?: () => void];
@@ -239,6 +243,19 @@
 			{#each annotations as [k, v] (k)}
 				<dt title={k}>{k}</dt>
 				<dd title={v}>{v}</dd>
+			{/each}
+		</dl>
+	{/if}
+
+	{#if related.length}
+		<h3>Related</h3>
+		<dl class="facts small">
+			{#each related as r (r.kind + r.name)}
+				<dt>{r.kind}</dt>
+				<dd>
+					<button class="link" onclick={() => showObject(r.kind, r.apiVersion, meta.namespace ?? null, r.name)} title="Show {r.name}">{r.name}</button>
+					<span class="muted">{r.how}</span>
+				</dd>
 			{/each}
 		</dl>
 	{/if}
