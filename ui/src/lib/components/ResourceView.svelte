@@ -205,18 +205,26 @@
 		if (height) untrack(() => (rowHeight = height));
 	});
 
-	$effect(() => {
-		void cursorKey;
-		// The cursor's row may not be rendered yet: scroll to where it is first.
-		untrack(() => {
-			if (!windowed || !scroller) return;
+	/** Scrolls the row under the cursor into view, so a command never acts on a row out of sight. */
+	function revealCursor() {
+		if (windowed && scroller) {
 			const head = scroller.querySelector('thead')?.getBoundingClientRect().height ?? 0;
 			const top = cursor * rowHeight;
 			if (top < scroller.scrollTop) scroller.scrollTop = top;
 			else if (top + rowHeight > scroller.scrollTop + scroller.clientHeight - head)
 				scroller.scrollTop = top + rowHeight - scroller.clientHeight + head;
-		});
-		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
+		}
+		return tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
+	}
+
+	// The cursor stays in view when it moves, and when a filter or sort moves the rows around it.
+	// Rows arriving from the cluster do not count: they must not pull the list away from where the user scrolled.
+	$effect(() => {
+		void cursorKey;
+		void filter;
+		void sort.column;
+		void sort.descending;
+		untrack(() => void revealCursor());
 	});
 
 	// Plugins and hotkeys run on the row under the cursor, with its cells as shown.
@@ -633,6 +641,8 @@
 
 	function remove(chosen: Row[]) {
 		if (!chosen.length) return;
+		// Without marks the dialog is for the row under the cursor: bring it into view first.
+		if (!selection.size) void revealCursor();
 		app.dialog = { kind: 'delete', resource, targets: chosen.map(target) };
 	}
 
@@ -749,7 +759,7 @@
 				{@const marked = chosenRows()}
 				<ActionBar actions={markedActions(marked)} marked>{marked.length} marked</ActionBar>
 			{:else if current}
-				<ActionBar actions={actionsFor(current, [current])}>{current.name}</ActionBar>
+				<ActionBar actions={actionsFor(current, [current])}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
 			{/if}
 		</div>
 
