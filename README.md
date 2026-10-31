@@ -29,6 +29,8 @@
   <img src="docs/assets/screenshots/pods-light.png" alt="Kubri listing the pods of a namespace, with CPU and memory against their requests">
 </picture>
 
+**v1.4.0** brings the blue **Link** identity, a refreshed workspace, a warning-first overview and clearer pod investigation. See the [changelog](CHANGELOG.md).
+
 ## Why Kubri
 
 <table>
@@ -125,16 +127,24 @@ See [Development](#development).
 
 ## Screenshots
 
+Captured from Kubri **v1.4.0** with synthetic demo data. The application supports light and dark colors, with the same Link branding on desktop and in the browser.
+
 <table>
   <tr>
-    <td width="50%" valign="top"><img src="docs/assets/screenshots/pulses.png" alt="Pulses: health per kind and CPU and memory trends"><br><b>Pulses</b>: the health of the cluster at a glance</td>
-    <td width="50%" valign="top"><img src="docs/assets/screenshots/xray.png" alt="XRay: deployments down to their pods and containers"><br><b>XRay</b>: from a Deployment down to its containers</td>
+    <td width="50%" valign="top"><img src="docs/assets/screenshots/pulses.png" alt="Kubri v1.4.0 cluster overview with prioritized warnings and resource health"><br><b>Overview</b>: cluster health, prioritized warnings and usage trends</td>
+    <td width="50%" valign="top"><img src="docs/assets/screenshots/describe.png" alt="Kubri v1.4.0 pod inspector beside the resource list"><br><b>Pod inspector</b>: status, events and a direct path to previous-container logs</td>
   </tr>
   <tr>
-    <td valign="top"><img src="docs/assets/screenshots/describe.png" alt="A pod described next to the list"><br><b>Describe</b>: containers, conditions and events beside the list</td>
-    <td valign="top"><img src="docs/assets/screenshots/palette.png" alt="The command palette suggesting resources"><br><b>Command palette</b>: <kbd>:</kbd> and any resource or command</td>
+    <td valign="top"><img src="docs/assets/screenshots/logs.png" alt="Kubri v1.4.0 previous-container logs in dark mode"><br><b>Logs</b>: current and previous instances, filtering and export</td>
+    <td valign="top"><img src="docs/assets/screenshots/xray.png" alt="Kubri v1.4.0 XRay topology from deployments to pods and containers"><br><b>Topology / XRay</b>: workloads down to their pods and containers</td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshots/palette.png" alt="Kubri v1.4.0 command palette finding a deployment resource"><br><b>Command palette</b>: <kbd>:</kbd> or <kbd>Ctrl</kbd>+<kbd>K</kbd> to find resources and commands</td>
+    <td valign="top"><img src="docs/assets/screenshots/pods-dark.png" alt="Kubri v1.4.0 pod list with Link branding in dark mode"><br><b>Dark mode</b>: the same controls, status signals and keyboard shortcuts</td>
   </tr>
 </table>
+
+[Screenshot capture instructions](docs/SCREENSHOTS.md)
 
 ## Coming from k9s
 

@@ -1,6 +1,13 @@
 ## What's new
 
-<!-- Before publishing: what changed since the last release. -->
+Kubri v1.4.0 brings the Link identity and a refreshed workspace for desktop and browser.
+
+- New blue Link logo, vector wordmarks, favicon and native application icons.
+- Clearer cluster context, grouped navigation and layouts that adapt to smaller windows.
+- An overview that prioritizes warnings, plus a pod inspector with direct access to previous-container logs.
+- Shared protection for unsaved YAML, explicit cleanup targets, and context-bound object actions.
+- Stable metric columns with clearer stale, unavailable, permission and connection states.
+- Updated documentation screenshots captured from the application with synthetic demo data.
 
 ## Install
 

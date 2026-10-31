@@ -2,20 +2,20 @@
 
 A release is a version tag. Pushing it builds the desktop app and the Docker image; the installers land in a draft release that is published by hand.
 
-1. Set the new version in [`Cargo.toml`](../Cargo.toml) (`[workspace.package]`) and [`ui/package.json`](../ui/package.json), run `cargo check` so `Cargo.lock` follows, and merge that to `main`.
+1. Set the new version in [`Cargo.toml`](../Cargo.toml) (`[workspace.package]`), [`ui/package.json`](../ui/package.json), and [`ui/src-tauri/tauri.conf.json`](../ui/src-tauri/tauri.conf.json), run `cargo check` so `Cargo.lock` follows, and merge that to `main`.
 2. Tag the merge commit and push the tag:
 
    ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v1.4.0
+   git push origin v1.4.0
    ```
 
 3. Two workflows start:
    - **Release** checks that the tag matches the version, creates a draft release with the text from [`.github/release-notes.md`](../.github/release-notes.md), and attaches the desktop builds: `.dmg` for macOS on Apple silicon and Intel, `.deb`, `.rpm` and `.AppImage` for Linux on x64 and Arm, and `.msi` and `-setup.exe` for Windows.
-   - **Docker** publishes `ghcr.io/snaketech-tu/kubri` for amd64 and arm64 as `0.2.0`, `0.2` and `latest`. Every push to `main` also publishes `edge`.
+   - **Docker** publishes `ghcr.io/snaketech-tu/kubri` for amd64 and arm64 as `1.4.0`, `1.4` and `latest`. Every push to `main` also publishes `edge`.
 4. When all builds are attached, open the draft on GitHub, write what changed under "What's new", and publish it.
 
-Without a terminal, the release page on GitHub can make the tag instead: open `https://github.com/snaketech-tu/kubri/releases/new?tag=v0.2.0&target=main`, write the text (the one from `.github/release-notes.md` with "What's new" filled in) and choose **Publish release**. Saving it as a draft does not create the tag, so nothing would start. The same two workflows then run, and Release attaches the builds to this release instead of making a draft. It is public right away, and the installers show up as each build finishes, within about half an hour.
+Without a terminal, the release page on GitHub can make the tag instead: open `https://github.com/snaketech-tu/kubri/releases/new?tag=v1.4.0&target=main`, write the text (the one from `.github/release-notes.md` with "What's new" filled in) and choose **Publish release**. Saving it as a draft does not create the tag, so nothing would start. The same two workflows then run, and Release attaches the builds to this release instead of making a draft. It is public right away, and the installers show up as each build finishes, within about half an hour.
 
 To try the installers before tagging, run the Release workflow by hand (Actions → Release → Run workflow): it builds them without a release and keeps them as workflow artifacts. Pull requests that change the packaging do the same.
 

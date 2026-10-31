@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ResourceInfo } from '../api';
 	import logo from '../assets/logo.svg';
+	import { version } from '../../../package.json';
 	import { NAV_SECTIONS } from '../nav';
 	import { app, sameResource } from '../state.svelte';
 	import { xrayResources } from '../xray';
@@ -46,6 +47,7 @@
 	<div class="brand">
 		<img src={logo} alt="" width="28" height="28" />
 		<span>kubri</span>
+		<span class="version" aria-label={`Version ${version}`}>v{version}</span>
 	</div>
 	<input class="filter" bind:value={filter} aria-label="Find a resource type" placeholder="Find resources…" />
 	<div class="scroll">
@@ -127,6 +129,7 @@
 {/snippet}
 
 <style>
+	.version { margin-left: auto; font-size: 11px; font-weight: 500; letter-spacing: 0; color: var(--text-muted); }
 	nav {
 		display: flex;
 		flex-direction: column;
