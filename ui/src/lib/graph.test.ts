@@ -42,7 +42,8 @@ const graph: Graph = {
 describe('layoutGraph', () => {
 	it('puts kinds in columns from Ingress to Pod, one band per application', () => {
 		const layout = layoutGraph(graph, 'app');
-		expect(layout.bands.map((b) => b.label)).toEqual(['api', 'web']);
+		// Bands with problems come first: web has a failing pod.
+		expect(layout.bands.map((b) => b.label)).toEqual(['web', 'api']);
 		const at = (id: string) => layout.boxes.find((b) => b.node.id === id)!;
 		expect(at('Ingress/shop/shop').x).toBeLessThan(at('Service/shop/web').x);
 		expect(at('Service/shop/web').x).toBeLessThan(at('Deployment/shop/web').x);
@@ -60,7 +61,7 @@ describe('layoutGraph', () => {
 
 	it('groups by node, with each node at the end of its band', () => {
 		const layout = layoutGraph(graph, 'node');
-		expect(layout.bands.map((b) => b.label)).toEqual(['node-a', 'node-b']);
+		expect(layout.bands.map((b) => b.label)).toEqual(['node-b', 'node-a']);
 		// The Ingress has no node of its own and joins that of its Service's pods.
 		const band = (id: string) => layout.bands.find((b) => {
 			const box = layout.boxes.find((x) => x.node.id === id)!;

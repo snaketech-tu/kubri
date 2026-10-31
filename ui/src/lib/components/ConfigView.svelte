@@ -1,4 +1,5 @@
 <script lang="ts">
+
 	import { tick } from 'svelte';
 	import { runCommand, runHotkey } from '../actions';
 	import { isTauri } from '@tauri-apps/api/core';
@@ -19,6 +20,18 @@
 	let scroller = $state<HTMLDivElement>();
 
 	const config = $derived(app.k9s);
+	/** The sections of the page, in order; the k9s ones only once the files are read. */
+	const sectionList = $derived<[string, string][]>([
+		['contexts', 'Contexts'],
+		['diffs', 'Dry-run diffs'],
+		['changes', 'What changed'],
+		['appearance', 'Appearance'],
+		['updates', 'Updates'],
+		['views', 'Views'],
+		...(config
+			? ([['files', 'k9s files'], ['skins', 'Skin'], ['hotkeys', 'Hotkeys'], ['plugins', 'Plugins'], ['aliases', 'Aliases']] as [string, string][])
+			: [])
+	]);
 	const broken = $derived(config?.files.filter((f) => f.error) ?? []);
 
 	// Each skin's colors, for the swatches.
@@ -95,17 +108,23 @@
 
 <section>
 	<PageHeader
-		crumbs={['Explore', 'Settings']}
+		crumbs={['Settings']} prefix="none"
 		title="Settings"
 		subtitle="Kubri's own settings, and the aliases, hotkeys, plugins and skins from your k9s files"
 	>
 		{#snippet tools()}
 			<button class="btn" onclick={reload} disabled={reloading} title="Read the files again (Shift+R)">
-				{reloading ? 'Reading…' : 'Reload'}
+				{reloading ? 'Reading…' : 'Reload k9s files'}
 			</button>
 		{/snippet}
 	</PageHeader>
 
+	<div class="layout">
+	<nav class="sections" aria-label="Sections">
+		{#each sectionList as [id, label] (id)}
+			<button onclick={() => scroller?.querySelector(`#config-${id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>{label}</button>
+		{/each}
+	</nav>
 	<div class="scroll" bind:this={scroller}>
 		<div class="block">
 			<h2 id="config-contexts">Contexts <span class="count">{app.contexts.length}</span></h2>
@@ -312,7 +331,7 @@
 				{#if config.files.length === 0}
 					<p class="muted">
 						No k9s files yet. Put <code>aliases.yaml</code>, <code>hotkeys.yaml</code>, <code>plugins.yaml</code> or a
-						<code>skins</code> folder there, and press Reload.
+						<code>skins</code> folder there, and press Reload k9s files.
 					</p>
 				{:else}
 					<ul>
@@ -441,6 +460,7 @@
 			</div>
 		{/if}
 	</div>
+	</div>
 </section>
 
 {#snippet swatch(theme: SkinTheme | null | undefined)}
@@ -478,6 +498,42 @@
 		min-height: 0;
 		min-width: 0;
 		padding: 0 24px;
+	}
+	.layout {
+		display: grid;
+		grid-template-columns: 170px minmax(0, 1fr);
+		gap: 20px;
+		flex: 1;
+		min-height: 0;
+	}
+	.sections {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		align-self: start;
+		position: sticky;
+		top: 0;
+	}
+	.sections button {
+		padding: 6px 10px;
+		border: none;
+		border-radius: 6px;
+		background: none;
+		color: var(--text-muted);
+		font-size: 13px;
+		text-align: left;
+	}
+	.sections button:hover {
+		background: var(--surface-2);
+		color: var(--text);
+	}
+	@media (max-width: 900px) {
+		.layout {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.sections {
+			display: none;
+		}
 	}
 	.scroll {
 		flex: 1;

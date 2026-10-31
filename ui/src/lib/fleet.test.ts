@@ -27,7 +27,7 @@ const cluster = (kinds: KindPulse[], extra: Partial<FleetCluster> = {}): FleetCl
 describe('fleetState', () => {
 	it('says what is wrong, failures first', () => {
 		expect(fleetState(null)).toEqual({ health: null, summary: 'Checking…' });
-		expect(fleetState(cluster([], { version: null, error: 'timed out' }))).toEqual({ health: 'failed', summary: 'Unreachable' });
+		expect(fleetState(cluster([], { version: null, error: 'timed out' }))).toEqual({ health: 'failed', summary: 'Unreachable', unreachable: true });
 		expect(fleetState(cluster([kind('Node', 3), kind('Pod', 40), kind('Deployment', 5)]))).toEqual({ health: 'ok', summary: 'Healthy' });
 		expect(fleetState(cluster([kind('Node', 2, 0, 1), kind('Pod', 37, 2, 1)])).summary).toBe('1 node not ready · 1 pod failing');
 		expect(fleetState(cluster([kind('Node', 3), kind('Pod', 39, 1)]))).toEqual({ health: 'warning', summary: '1 pod not ready' });

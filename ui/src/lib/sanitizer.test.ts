@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Finding, SanitizerReport, SanitizerSection } from './api';
-import { filterFindings, gradeTone, initialExpanded, sanitizerRows, scoreTone, totals } from './sanitizer';
+import { filterFindings, gradeTone, initialExpanded, sanitizerRows, scoreTone, sortedSections, totals } from './sanitizer';
 
 function finding(name: string, levels: Finding['level'][]): Finding {
 	const order = { info: 0, warning: 1, error: 2 };
@@ -81,5 +81,15 @@ describe('sanitizer', () => {
 			'bad'
 		]);
 		expect([scoreTone(95), scoreTone(60), scoreTone(10)]).toEqual(['ok', 'warn', 'bad']);
+	});
+});
+
+describe('sortedSections', () => {
+	it('puts errors first, then warnings, then the lowest score', () => {
+		const a = section('A', 'a', [finding('x', ['warning'])], 50);
+		const b = section('B', 'b', [finding('y', ['error'])], 90);
+		const c = section('C', 'c', [], 100);
+		const d = section('D', 'd', [finding('z', ['warning']), finding('w', ['warning'])], 70);
+		expect(sortedSections([c, a, d, b]).map((s) => s.kind)).toEqual(['B', 'D', 'A', 'C']);
 	});
 });

@@ -45,3 +45,12 @@ The plan for 0.3 to 1.0 is in [IMPLEMENTATION-PLAN-v2.md](IMPLEMENTATION-PLAN-v2
 - ✅ 0.8 Overview: a Clusters page for every context, contexts added in the app, namespace limits, compare across clusters, search with saved searches, the topology graph with request paths, and the blast radius of a delete.
 - ✅ 0.9 Memory: What changed, a timeline of changes with diffs and the times Kubri was not watching; snapshots of a namespace or cluster opened offline; and views that give CRDs columns, health, details, actions and graph edges from YAML.
 - ✅ 1.0 Finish: speed measured against Headlamp in CI with 10,000 pods, zoom and readable skins, a notice for new releases, packages for Homebrew, winget, the AUR and Flathub, and a review pass.
+
+## Next: UX after 1.0
+
+The plan for 1.1 to 1.4 is in [IMPLEMENTATION-PLAN-UX.md](IMPLEMENTATION-PLAN-UX.md).
+
+- 1.1 Act only on what you chose: visible action targets, no warnings for vanished objects, HPA and GitOps notes on changes, drill-down that keeps the namespace.
+- 1.2 One place for each thing: fewer duplicate actions, breadcrumbs that are a path, a sidebar grouped by task, a clearer header, narrow windows.
+- 1.3 Say it plainly: plain warning texts, honest health bars, list tones for throttling, actions that fit the object, simpler logs toolbar.
+- 1.4 What was missing: pins and recents, actions in the palette, session activity with undo, related objects, rollout history, trends in lists, a first-run tour.

@@ -22,16 +22,28 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
 		]
 	},
 	{
+		title: 'Network',
+		items: [
+			{ plural: 'services', label: 'Services', icon: 'service' },
+			{ plural: 'ingresses', label: 'Ingresses', icon: 'ingress' },
+			{ plural: 'networkpolicies', label: 'Network policies', icon: 'access' }
+		]
+	},
+	{
+		title: 'Config and storage',
+		items: [
+			{ plural: 'configmaps', label: 'ConfigMaps', icon: 'config' },
+			{ plural: 'secrets', label: 'Secrets', icon: 'secret' },
+			{ plural: 'persistentvolumeclaims', label: 'Volume claims', icon: 'volume' }
+		]
+	},
+	{
 		title: 'Cluster',
 		items: [
 			{ plural: 'nodes', label: 'Nodes', icon: 'node' },
 			{ plural: 'namespaces', label: 'Namespaces', icon: 'namespace' },
-			{ plural: 'services', label: 'Services', icon: 'service' },
-			{ plural: 'ingresses', label: 'Ingresses', icon: 'ingress' },
-			{ plural: 'configmaps', label: 'ConfigMaps', icon: 'config' },
-			{ plural: 'secrets', label: 'Secrets', icon: 'secret' },
-			{ plural: 'persistentvolumeclaims', label: 'Volume claims', icon: 'volume' },
-			{ plural: 'events', label: 'Events', icon: 'event' }
+			{ plural: 'events', label: 'Events', icon: 'event' },
+			{ plural: 'customresourcedefinitions', label: 'CRDs', icon: 'resource' }
 		]
 	}
 ];

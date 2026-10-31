@@ -200,7 +200,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Explore', 'Topology']}
+		crumbs={['Topology']}
 		title="Topology"
 		count={loaded ? roots.length : null}
 		subtitle="XRay of {resource.kind.toLowerCase()}s and what they own, {namespace ? `in ${namespace}` : 'in all namespaces'}"

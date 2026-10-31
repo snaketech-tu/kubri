@@ -738,7 +738,14 @@ class AppState {
 			return;
 		}
 		const scope = { title: drill.title, scope: drill.scope, ownerUid: drill.ownerUid };
+		const before = this.namespace;
 		this.open(resource, drill.namespace ?? 'all', '', scope);
+		// What belongs to an object lives in its namespace, so the list needs it. Say so, and how to undo it.
+		if (drill.namespace && before !== drill.namespace) {
+			this.toast(
+				`Showing ${drill.namespace} only. Back returns to ${before === ALL_NAMESPACES ? 'all namespaces' : before}.`
+			);
+		}
 	}
 
 	/** Shows the list of `resource` with the cursor on one object, as k9s does for owners. */

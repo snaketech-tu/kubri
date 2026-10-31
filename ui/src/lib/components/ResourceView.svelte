@@ -9,7 +9,7 @@
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, type Subject } from '../objects';
 	import { isNodes, isPods } from '../pods';
-	import { app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
+	import { ALL_NAMESPACES, app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
 	import { filterRows, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
@@ -96,6 +96,9 @@
 		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' }
 	];
 
+	/** Empty cells, `<none>` and `None` all read as a dash. */
+	const NOTHING = /^(|<none>|None)$/;
+
 	const TIMESTAMP = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/;
 
 	type DisplayColumn = (
@@ -118,7 +121,7 @@
 			const custom = c.format === 'jsonpath' ? columnSettings.custom.find((x) => x.path === c.name) : undefined;
 			out.push({
 				kind: 'cell',
-				label: custom?.name ?? c.name,
+				label: isAge ? 'Age' : (custom?.name ?? c.name),
 				index,
 				age: isAge,
 				name: c.format === 'name',
@@ -146,6 +149,13 @@
 		faults = tab === 'attention';
 		runningOnly = tab === 'running';
 	}
+
+	/** The tab counts follow the filter, so they match what each tab would show. */
+	const counts = $derived({
+		all: filterRows(owned, filter).length,
+		attention: filterRows(faulty, filter).length,
+		running: filterRows(running, filter).length
+	});
 
 	const place = $derived(navPlace(resource));
 	/** Why the list may be wrong or empty: never shown as "no objects". */
@@ -205,18 +215,26 @@
 		if (height) untrack(() => (rowHeight = height));
 	});
 
-	$effect(() => {
-		void cursorKey;
-		// The cursor's row may not be rendered yet: scroll to where it is first.
-		untrack(() => {
-			if (!windowed || !scroller) return;
+	/** Scrolls the row under the cursor into view, so a command never acts on a row out of sight. */
+	function revealCursor() {
+		if (windowed && scroller) {
 			const head = scroller.querySelector('thead')?.getBoundingClientRect().height ?? 0;
 			const top = cursor * rowHeight;
 			if (top < scroller.scrollTop) scroller.scrollTop = top;
 			else if (top + rowHeight > scroller.scrollTop + scroller.clientHeight - head)
 				scroller.scrollTop = top + rowHeight - scroller.clientHeight + head;
-		});
-		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
+		}
+		return tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
+	}
+
+	// The cursor stays in view when it moves, and when a filter or sort moves the rows around it.
+	// Rows arriving from the cluster do not count: they must not pull the list away from where the user scrolled.
+	$effect(() => {
+		void cursorKey;
+		void filter;
+		void sort.column;
+		void sort.descending;
+		untrack(() => void revealCursor());
 	});
 
 	// Plugins and hotkeys run on the row under the cursor, with its cells as shown.
@@ -333,6 +351,7 @@
 				if (column.age) return age(row.created, app.snapshot?.taken ?? now);
 				const value = row.cells[column.index];
 				if (value === null || value === undefined) return '';
+				if (column.label === 'Cluster-IP' && value === 'None') return 'Headless';
 				// Times in custom columns, like a certificate's expiry, read as ages.
 				if (column.custom && typeof value === 'string' && TIMESTAMP.test(value)) return relative(value, now);
 				return String(value);
@@ -340,10 +359,45 @@
 		}
 	}
 
+	/** How close a pod is to its limit and request: red at 90 % of the limit, amber above the request. */
+	function pressure(row: Row, what: 'cpu' | 'memory'): { tone: Tone; hint: string } | null {
+		if (!isPods(resource)) return null;
+		const u = metrics.get(row.namespace, row.name);
+		if (!u) return null;
+		const used = u[what];
+		const limit = u.limits?.[what];
+		const request = u.requests?.[what];
+		const name = what === 'cpu' ? 'CPU' : 'memory';
+		if (limit && used >= limit * 0.9) {
+			return {
+				tone: 'bad',
+				hint:
+					what === 'cpu'
+						? `At ${Math.round((used / limit) * 100)} % of its CPU limit: it is being throttled`
+						: `At ${Math.round((used / limit) * 100)} % of its memory limit: it may be killed`
+			};
+		}
+		if (request && used > request) {
+			return { tone: 'warn', hint: `Using more ${name} than it requests (${Math.round((used / request) * 100)} %)` };
+		}
+		return null;
+	}
+
 	/** Colors status cells, and percentages by the k9s thresholds. */
 	function tone(row: Row, column: DisplayColumn, text: string): Tone {
+		// A pod that finished is not "0 of 1 ready"; that is how it ends.
+		if (column.kind === 'cell' && /^ready$/i.test(column.label) && /^(Completed|Succeeded)$/.test(cell(row, 'Status') ?? '')) {
+			return '';
+		}
 		if (column.kind === 'cell') return cellTone(column.label, text);
-		if (column.kind !== 'metric' || !column.threshold || column.label.endsWith('/ request')) return '';
+		if (column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')) {
+			return pressure(row, column.label === 'CPU' ? 'cpu' : 'memory')?.tone ?? '';
+		}
+		if (column.kind !== 'metric' || !column.threshold) return '';
+		if (column.label.endsWith('/ request')) {
+			const v = metricValue(row, column);
+			return v !== null && v !== undefined && v > 100 ? 'warn' : '';
+		}
 		const value = metricValue(row, column);
 		if (value === null || value === undefined) return '';
 		const limits = app.k9s?.thresholds[column.threshold] ?? { warn: 70, critical: 90 };
@@ -474,7 +528,14 @@
 		cursorKey = row.key;
 		const marked = chosenRows();
 		const actions = selection.has(row.key) && marked.length > 1 ? markedActions(marked) : actionsFor(row, [row]);
-		app.menu = { actions: column ? [...copyActions(row, column), ...actions] : actions, x, y, align };
+		// The cell's copy actions join the Copy group, after what people do most: view, connect, change.
+		const at = actions.findIndex((a) => a.group === 'Copy');
+		const withCell = column
+			? at === -1
+				? [...actions, ...copyActions(row, column)]
+				: [...actions.slice(0, at), ...copyActions(row, column), ...actions.slice(at)]
+			: actions;
+		app.menu = { actions: withCell, x, y, align };
 	}
 
 	/** Copying the cell right-clicked, or its whole column as the list shows it. */
@@ -633,6 +694,8 @@
 
 	function remove(chosen: Row[]) {
 		if (!chosen.length) return;
+		// Without marks the dialog is for the row under the cursor: bring it into view first.
+		if (!selection.size) void revealCursor();
 		app.dialog = { kind: 'delete', resource, targets: chosen.map(target) };
 	}
 
@@ -644,17 +707,21 @@
 <section>
 	<header>
 		<nav class="crumbs" aria-label="Breadcrumb">
-			<span>{place.section}</span>
+			<button onclick={() => app.showPulses()} title="Cluster overview">{app.contextName(app.cluster?.context ?? '')}</button>
 			<Icon name="next" size={12} />
-			<span>{place.label}</span>
+			<span>{!resource.namespaced ? 'cluster-wide' : app.namespace === ALL_NAMESPACES ? 'all namespaces' : app.namespace}</span>
+			<Icon name="next" size={12} />
 			{#if scope}
+				<button onclick={() => (app.scope = null)} title="Show all {resource.kind} objects">{place.label}</button>
 				<Icon name="next" size={12} />
-				<span>{scope.title}</span>
+				<span aria-current="page">{scope.title}</span>
+			{:else}
+				<span aria-current="page">{place.label}</span>
 			{/if}
 		</nav>
 		<div class="heading">
 			<div class="title">
-				<h1>{place.label}</h1>
+				<h1 title="{resource.kind} · {resource.group ? `${resource.group}/` : ''}{resource.version}">{place.label}</h1>
 				<span class="count">{owned.length}</span>
 				{#if app.cluster}
 					{@const pin = app.pinFor(resource)}
@@ -669,7 +736,6 @@
 						<Icon name="bookmark" size={16} />
 					</button>
 				{/if}
-				<code>{resource.group ? `${resource.group}/` : ''}{resource.version}</code>
 				{#if scope}
 					<span class="chip">
 						{scope.title}
@@ -745,14 +811,14 @@
 		</div>
 		<div class="tabs" role="tablist" aria-label="Show">
 			<button role="tab" aria-selected={!faults && !runningOnly} onclick={() => showTab('all')}>
-				All <span class="n">{owned.length}</span>
+				All <span class="n">{counts.all}</span>
 			</button>
 			<button role="tab" aria-selected={faults} onclick={() => showTab('attention')} title="Only rows that need a look (Ctrl+Z)">
-				Needs attention <span class="n" class:alert={faulty.length}>{faulty.length}</span>
+				Needs attention <span class="n" class:alert={counts.attention}>{counts.attention}</span>
 			</button>
 			{#if isPods(resource)}
 				<button role="tab" aria-selected={runningOnly} onclick={() => showTab('running')}>
-					Running <span class="n">{running.length}</span>
+					Running <span class="n">{counts.running}</span>
 				</button>
 			{/if}
 		</div>
@@ -762,7 +828,7 @@
 				{@const marked = chosenRows()}
 				<ActionBar actions={markedActions(marked)} marked>{marked.length} marked</ActionBar>
 			{:else if current}
-				<ActionBar actions={actionsFor(current, [current])}>{current.name}</ActionBar>
+				<ActionBar actions={actionsFor(current, [current])}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
 			{/if}
 		</div>
 
@@ -783,7 +849,7 @@
 								aria-sort={sort.column === column.index ? (sort.descending ? 'descending' : 'ascending') : 'none'}
 							>
 								<button class="sort" onclick={() => sortBy(column.index)}>
-									{column.label}
+									{column.label.replace(/^Memory/, 'Mem')}
 									<span class="arrow" aria-hidden="true">
 										{sort.column === column.index ? (sort.descending ? '↓' : '↑') : '↕'}
 									</span>
@@ -823,8 +889,10 @@
 								/>
 							</td>
 							{#each columns as column (column.label + column.index)}
-								{@const text = cellText(row, column)}
-								{@const color = tone(row, column, text)}
+								{@const raw = cellText(row, column)}
+								{@const text = column.kind === 'cell' && !column.name && NOTHING.test(raw) ? '—' : raw}
+								{@const color = tone(row, column, raw)}
+								{@const hint = column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem') ? pressure(row, column.label === 'CPU' ? 'cpu' : 'memory')?.hint : undefined}
 								{@const icon = statusIcon(column, color)}
 								<td
 									oncontextmenu={(e) => {
@@ -833,6 +901,7 @@
 										openMenu(row, e.clientX, e.clientY, 'left', column);
 									}}
 									class={color}
+									title={hint}
 									class:name={column.kind === 'cell' && column.name}
 									class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
 									class:numeric={column.kind === 'metric'}
@@ -916,6 +985,17 @@
 		font-size: 12px;
 		color: var(--text-muted);
 	}
+	.crumbs button {
+		padding: 0;
+		border: none;
+		background: none;
+		color: inherit;
+		font-size: inherit;
+	}
+	.crumbs button:hover {
+		color: var(--accent-strong);
+		text-decoration: underline;
+	}
 	.heading {
 		display: flex;
 		flex-wrap: wrap;
@@ -980,10 +1060,6 @@
 	}
 	.chip button:hover {
 		background: color-mix(in srgb, currentColor 15%, transparent);
-	}
-	code {
-		color: var(--text-muted);
-		font-size: 12px;
 	}
 	.tools {
 		display: flex;
@@ -1142,7 +1218,7 @@
 		position: sticky;
 		top: 0;
 		z-index: 1;
-		padding: 0 10px;
+		padding: 0 8px;
 		background: var(--surface-1);
 		border-bottom: 1px solid var(--border);
 		text-align: left;
@@ -1182,7 +1258,7 @@
 	}
 	td {
 		height: 40px;
-		padding: 4px 10px;
+		padding: 4px 8px;
 		border-bottom: 1px solid var(--border-subtle);
 		white-space: nowrap;
 		max-width: 420px;

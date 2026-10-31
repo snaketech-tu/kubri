@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { ALL_NAMESPACES, app } from '../state.svelte';
 	import Icon from './Icon.svelte';
 
 	/** A breadcrumb step; one with `onclick` leads back to that place. */
@@ -7,6 +8,7 @@
 
 	let {
 		crumbs,
+		prefix = 'namespace',
 		title,
 		count,
 		subtitle,
@@ -15,6 +17,8 @@
 		tools
 	}: {
 		crumbs: Crumb[];
+		/** Where the page sits: the context, and its namespace unless the page is not namespaced; none for pages across contexts. */
+		prefix?: 'namespace' | 'context' | 'none';
 		title: string;
 		count?: number | null;
 		subtitle?: string;
@@ -25,14 +29,22 @@
 		/** Right-hand buttons. */
 		tools?: Snippet;
 	} = $props();
+
+	/** Every page's path starts in the context, as the header shows it. */
+	const trail = $derived.by((): Crumb[] => {
+		if (prefix === 'none' || !app.cluster) return crumbs;
+		const start: Crumb[] = [{ label: app.contextName(app.cluster.context), onclick: () => app.showPulses(), title: 'Cluster overview' }];
+		if (prefix === 'namespace') start.push(app.namespace === ALL_NAMESPACES ? 'all namespaces' : app.namespace);
+		return [...start, ...crumbs];
+	});
 </script>
 
 <header>
 	<nav class="crumbs" aria-label="Breadcrumb">
-		{#each crumbs as crumb, i (i)}
+		{#each trail as crumb, i (i)}
 			{#if i}<Icon name="next" size={12} />{/if}
 			{#if typeof crumb === 'string'}
-				<span aria-current={i === crumbs.length - 1 ? 'page' : undefined}>{crumb}</span>
+				<span aria-current={i === trail.length - 1 ? 'page' : undefined}>{crumb}</span>
 			{:else}
 				<button onclick={crumb.onclick} title={crumb.title}>{crumb.label}</button>
 			{/if}

@@ -122,7 +122,11 @@
 		if (object.kind === 'Pod') {
 			if (spec.nodeName) f.push(['Node', spec.nodeName, () => showObject('Node', 'v1', null, spec.nodeName)]);
 			if (status.podIP) f.push(['Pod IP', status.podIP]);
-			if (status.phase) f.push(['Phase', status.phase]);
+			// "Running" next to a crash loop only misleads; the container state says it better.
+			const waiting = [...(status.initContainerStatuses ?? []), ...(status.containerStatuses ?? [])].some(
+				(c: any) => c.state?.waiting?.reason
+			);
+			if (status.phase && !waiting) f.push(['Phase', status.phase]);
 			if (status.qosClass) f.push(['QoS class', status.qosClass]);
 			const account = spec.serviceAccountName;
 			if (account) f.push(['Service account', account, () => showObject('ServiceAccount', 'v1', ns, account)]);
@@ -135,6 +139,10 @@
 			f.push(['Replicas', parts.join(' · ')]);
 		}
 		if (spec.strategy?.type) f.push(['Strategy', spec.strategy.type]);
+		const templated: any[] = spec.template?.spec?.containers ?? [];
+		if (object.kind !== 'Pod' && templated.length) {
+			f.push(['Containers', templated.map((c) => `${c.name}: ${c.image}`).join('\n')]);
+		}
 		if (spec.selector?.matchLabels) {
 			f.push(['Selector', Object.entries(spec.selector.matchLabels).map(([k, v]) => `${k}=${v}`).join(', ')]);
 		}
@@ -380,6 +388,7 @@
 	.facts dd {
 		margin: 0;
 		word-break: break-word;
+		white-space: pre-line;
 	}
 	.facts.small dt,
 	.facts.small dd {

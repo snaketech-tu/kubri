@@ -76,3 +76,29 @@ export function attentionItems(events: RecentEvent[]): AttentionItem[] {
 	const rank = (item: AttentionItem) => (item.severity === 'critical' ? 0 : 1);
 	return [...items.values()].sort((a, b) => rank(a) - rank(b));
 }
+
+/**
+ * A kubelet text in plain words. The original stays in the tooltip. Unknown texts are cut at
+ * the first sentence and at 140 characters.
+ */
+export function shortMessage(reason: string, message: string, count: number): string {
+	const times = count > 1 ? ` (${count}× in the last hour)` : '';
+	const back = /^Back-off restarting failed container\s+"?([^\s"]+)"?/i.exec(message);
+	if (back) return `Container ${back[1]} keeps restarting${times}`;
+	const pull = /(?:Failed to pull image|Error: ErrImagePull|ImagePullBackOff).*?"([^"]+)"/i.exec(message);
+	if (pull) return `Cannot pull image ${pull[1]}${times}`;
+	if (/^Back-off pulling image\s+"([^"]+)"/i.test(message)) {
+		return `Cannot pull image ${/"([^"]+)"/.exec(message)?.[1] ?? ''}${times}`;
+	}
+	if (/OOMKilled/i.test(message) || reason === 'OOMKilling') return `Ran out of memory and was stopped${times}`;
+	const nodes = /^(0\/\d+ nodes are available)/.exec(message);
+	if (nodes) return `Cannot be scheduled: ${nodes[1]}${times}`;
+	const first = message.split(/(?<=\.)\s/)[0].replace(/\.$/, '');
+	return first.length > 140 ? `${first.slice(0, 137)}…` : first;
+}
+
+/** Kinds with problems first (keeping their order), then the healthy ones. */
+export function splitKinds(kinds: KindPulse[]): { problems: KindPulse[]; healthy: KindPulse[] } {
+	const sick = (k: KindPulse) => Boolean(k.error) || k.failed > 0 || k.warning > 0;
+	return { problems: kinds.filter(sick), healthy: kinds.filter((k) => !sick(k)) };
+}
