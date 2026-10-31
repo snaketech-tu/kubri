@@ -21,7 +21,8 @@ import {
 	isNodes,
 	isPods,
 	isReplicaSets,
-	isSecrets
+	isSecrets,
+	isServices
 } from './pods';
 import { app, findResource, type DetailsExtra, type DetailsTab, type Dialog } from './state.svelte';
 
@@ -34,6 +35,10 @@ export interface Subject {
 	node: string | null;
 	/** Whether a CronJob is suspended. */
 	suspended: boolean;
+	/** Whether a node is cordoned; unknown when not given. */
+	cordoned?: boolean;
+	/** Whether a Service has no selector, so there are no pods to show; unknown when not given. */
+	selectorless?: boolean;
 }
 
 /** Kinds Kubri drills into on Enter, and those `jumps.yaml` names. */
@@ -181,7 +186,7 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	const k = (op: KubectlOp) => kubectlCommand(app.cluster?.context, target, op);
 
 	const drillTo = drillLabel(resource);
-	if (drillTo && options.enter) add('View', drillTo, [], options.enter, { hint: 'enter', primary: 1 });
+	if (drillTo && options.enter && !(subject.selectorless && isServices(resource))) add('View', drillTo, [], options.enter, { hint: 'enter', primary: 1 });
 	add('View', 'Describe', ['d'], show('describe'), { primary: 5, id: 'describe', needs: on('get'), kubectl: k({ op: 'describe' }) });
 	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get'), kubectl: k({ op: 'yaml' }) });
 	const logs = isPods(resource) ? on('get', 'log') : need('get', pods, ns, { subresource: 'log' });
@@ -215,8 +220,8 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 
 	if (writable) {
 		if (isNodes(resource)) {
-			add('Change', 'Cordon', ['c'], () => void cordon(target.name, true), { primary: 4, needs: on('patch'), kubectl: k({ op: 'cordon' }) });
-			add('Change', 'Uncordon', ['u'], () => void cordon(target.name, false), { primary: 4, needs: on('patch'), kubectl: k({ op: 'uncordon' }) });
+			if (subject.cordoned !== true) add('Change', 'Cordon', ['c'], () => void cordon(target.name, true), { primary: 4, needs: on('patch'), kubectl: k({ op: 'cordon' }) });
+			if (subject.cordoned !== false) add('Change', 'Uncordon', ['u'], () => void cordon(target.name, false), { primary: 4, needs: on('patch'), kubectl: k({ op: 'uncordon' }) });
 			add('Change', 'Drain…', ['r'], dialog(() => ({ kind: 'drain', resource, target })), { primary: 4, needs: on('patch'), kubectl: k({ op: 'drain', options: { ignoreDaemonsets: true } }) });
 		}
 		if (isCronJobs(resource)) {
@@ -320,7 +325,7 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 
 /** The subject of an object as the API returns it. */
 export function subjectOf(resource: ResourceInfo, target: ObjectRef, object: { metadata: { ownerReferences?: { apiVersion?: string; kind: string; name: string; controller?: boolean }[] }; spec?: unknown } | null): Subject {
-	const spec = (object?.spec ?? {}) as { nodeName?: string; suspend?: boolean };
+	const spec = (object?.spec ?? {}) as { nodeName?: string; suspend?: boolean; unschedulable?: boolean; selector?: Record<string, string> };
 	return {
 		resource,
 		target,
@@ -331,7 +336,9 @@ export function subjectOf(resource: ResourceInfo, target: ObjectRef, object: { m
 			controller: o.controller ?? false
 		})),
 		node: isPods(resource) ? (spec.nodeName ?? null) : null,
-		suspended: spec.suspend ?? false
+		suspended: spec.suspend ?? false,
+		...(object && isNodes(resource) ? { cordoned: spec.unschedulable ?? false } : {}),
+		...(object && isServices(resource) ? { selectorless: !spec.selector || !Object.keys(spec.selector).length } : {})
 	};
 }
 

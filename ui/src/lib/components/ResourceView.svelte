@@ -8,7 +8,7 @@
 	import { age, cpu, memory, relative } from '../format';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, type Subject } from '../objects';
-	import { isNodes, isPods } from '../pods';
+	import { isNodes, isPods, isServices } from '../pods';
 	import { app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
 	import { filterRows, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
@@ -37,6 +37,7 @@
 	/** Only running pods. */
 	let runningOnly = $state(false);
 	let sort = $state<SortState>({ column: -1, descending: false });
+	let sortedByUser = false;
 	let cursorKey = $state<string | null>(null);
 	/** Where Ctrl+Space marks a range from. */
 	let anchorKey = $state<string | null>(null);
@@ -146,6 +147,13 @@
 		faults = tab === 'attention';
 		runningOnly = tab === 'running';
 	}
+
+	// Events read best newest first, until the user sorts otherwise.
+	$effect(() => {
+		if (sortedByUser || resource.plural !== 'events') return;
+		const index = table.columns.findIndex((c) => c.name === 'Last Seen');
+		if (index !== -1 && sort.column !== index) sort = { column: index, descending: false };
+	});
 
 	const place = $derived(navPlace(resource));
 	/** Why the list may be wrong or empty: never shown as "no objects". */
@@ -287,6 +295,7 @@
 
 	/** Sorts by a column, or turns its order around. Counts and usage start with the largest, as in k9s. */
 	function sortBy(index: number, largestFirst = false) {
+		sortedByUser = true;
 		sort = sort.column === index ? { column: index, descending: !sort.descending } : { column: index, descending: largestFirst };
 	}
 
@@ -361,6 +370,10 @@
 	async function enter(row: Row | undefined) {
 		if (!row) return;
 		cursorKey = row.key;
+		if (isServices(resource) && cell(row, 'Selector') !== null && /^(|<none>)$/.test(cell(row, 'Selector') ?? '')) {
+			open(row);
+			return;
+		}
 		if (!(await drill(resource, target(row)))) open(row);
 	}
 
@@ -396,7 +409,9 @@
 			target: target(row),
 			owners: row.owners,
 			node: isPods(resource) ? cell(row, 'Node') : null,
-			suspended: cell(row, 'Suspend') === 'True' || cell(row, '.spec.suspend') === 'true'
+			suspended: cell(row, 'Suspend') === 'True' || cell(row, '.spec.suspend') === 'true',
+			...(isNodes(resource) && cell(row, 'Status') !== null ? { cordoned: /SchedulingDisabled/.test(cell(row, 'Status') ?? '') } : {}),
+			...(isServices(resource) && cell(row, 'Selector') !== null ? { selectorless: /^(|<none>)$/.test(cell(row, 'Selector') ?? '') } : {})
 		};
 	}
 
@@ -820,6 +835,7 @@
 										openMenu(row, e.clientX, e.clientY, 'left', column);
 									}}
 									class={color}
+									class:wrap={column.kind === 'cell' && column.label === 'Message'}
 									class:name={column.kind === 'cell' && column.name}
 									class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
 									class:numeric={column.kind === 'metric'}
@@ -835,6 +851,8 @@
 										>
 									{:else if icon}
 										<span class="status"><Icon name={icon} size={15} />{text}</span>
+									{:else if column.kind === 'cell' && column.label === 'Message'}
+										<span class="clamp" title={text}>{text}</span>
 									{:else}
 										{text}
 									{/if}
@@ -1234,6 +1252,20 @@
 	.name {
 		font-family: var(--mono);
 		font-size: 12.5px;
+	}
+	/* Event messages take two lines instead of one long line; the title has all of it. */
+	td.wrap {
+		min-width: 260px;
+		max-width: 520px;
+	}
+	td.wrap .clamp {
+		white-space: normal;
+		overflow: hidden;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		line-height: 1.3;
 	}
 	.status {
 		display: inline-flex;
