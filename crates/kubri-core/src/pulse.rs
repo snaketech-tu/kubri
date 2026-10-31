@@ -1,6 +1,7 @@
 //! The cluster overview: how healthy each kind of workload is, recent warnings, and how
 //! much CPU and memory is in use.
 
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::future::Future;
 
@@ -125,6 +126,16 @@ pub(crate) async fn gather(
         None => (None, Vec::new()),
     };
 
+    // Warnings about objects a rollout or a restart already replaced are not news.
+    let live = Live::of(&[
+        ("Pod", uids(&pods)),
+        ("ReplicaSet", uids(&replica_sets)),
+        ("Deployment", uids(&deployments)),
+        ("StatefulSet", uids(&stateful_sets)),
+        ("DaemonSet", uids(&daemon_sets)),
+        ("Job", uids(&jobs)),
+    ]);
+
     let usage = usage.ok();
     let used = |pick: fn(&Usage) -> f64| usage.as_ref().map(|u| u.iter().map(pick).sum());
     let cpu = Utilization {
@@ -156,7 +167,7 @@ pub(crate) async fn gather(
         .chain(certificate_pulse)
         .collect(),
         events: match events {
-            Ok(events) => tally_events(events, now, &resolve),
+            Ok(events) => tally_events(events, now, &resolve, &live),
             Err(error) => EventPulse {
                 error: Some(error),
                 ..Default::default()
@@ -315,12 +326,46 @@ fn last_seen(event: &Event) -> Option<Timestamp> {
         .or_else(|| event.first_timestamp.as_ref().map(|t| t.0))
 }
 
+/// The UIDs of the objects that exist now, by kind. A kind that could not be listed is left
+/// out, so its warnings stay.
+#[derive(Debug, Default)]
+struct Live(HashMap<&'static str, HashSet<String>>);
+
+impl Live {
+    fn of(kinds: &[(&'static str, Option<HashSet<String>>)]) -> Self {
+        Self(
+            kinds
+                .iter()
+                .filter_map(|(kind, uids)| Some((*kind, uids.clone()?)))
+                .collect(),
+        )
+    }
+
+    /// False for an event about an object of a listed kind that is gone. Events without a
+    /// UID, and kinds not listed, are kept.
+    fn exists(&self, kind: &str, uid: Option<&str>) -> bool {
+        match (self.0.get(kind), uid) {
+            (Some(uids), Some(uid)) => uids.contains(uid),
+            _ => true,
+        }
+    }
+}
+
+fn uids<K: kube::Resource>(listed: &Result<Vec<K>, String>) -> Option<HashSet<String>> {
+    listed
+        .as_ref()
+        .ok()
+        .map(|items| items.iter().filter_map(|i| i.meta().uid.clone()).collect())
+}
+
 /// Counts the events of the last hour and keeps the newest warnings. `resolve` finds the
-/// resource type of an `apiVersion` and kind, so a warning can link to its object.
+/// resource type of an `apiVersion` and kind, so a warning can link to its object. Warnings
+/// about objects that no longer exist are counted but not kept.
 fn tally_events(
     events: Vec<Event>,
     now: Timestamp,
     resolve: &impl Fn(&str, &str) -> Option<ResourceRef>,
+    live: &Live,
 ) -> EventPulse {
     let since = now - RECENT;
     let mut pulse = EventPulse::default();
@@ -342,6 +387,9 @@ fn tally_events(
         .filter_map(|(_, event)| {
             let involved = event.involved_object.clone();
             let kind = involved.kind.unwrap_or_default();
+            if !live.exists(&kind, involved.uid.as_deref()) {
+                return None;
+            }
             let resource = resolve(involved.api_version.as_deref().unwrap_or("v1"), &kind)?;
             Some(RecentEvent {
                 object_kind: kind,
@@ -436,7 +484,7 @@ mod tests {
                 plural: "things".into(),
             })
         };
-        let pulse = tally_events(events, now, &resolve);
+        let pulse = tally_events(events, now, &resolve, &Live::default());
         assert_eq!(pulse.warning, 20);
         assert_eq!(pulse.recent.len(), RECENT_WARNINGS);
         assert_eq!(pulse.recent[0].object.name, "o14");
@@ -465,11 +513,39 @@ mod tests {
                 plural: "pods".into(),
             })
         };
-        let pulse = tally_events(events, now, &resolve);
+        let pulse = tally_events(events, now, &resolve, &Live::default());
         assert_eq!((pulse.normal, pulse.warning), (1, 2));
         let names: Vec<&str> = pulse.recent.iter().map(|e| e.object.name.as_str()).collect();
         assert_eq!(names, ["b", "a"]);
         assert_eq!(pulse.recent[0].object.namespace.as_deref(), Some("shop"));
         assert_eq!(pulse.recent[0].event.reason, "BackOff");
+    }
+
+    #[test]
+    fn drops_warnings_about_objects_that_are_gone() {
+        let event = |name: &str, uid: &str| -> Event {
+            from(json!({
+                "metadata": { "name": name, "namespace": "shop" },
+                "involvedObject": { "apiVersion": "v1", "kind": "Pod", "name": name, "namespace": "shop", "uid": uid },
+                "type": "Warning", "reason": "BackOff", "lastTimestamp": "2026-10-28T07:50:00Z"
+            }))
+        };
+        let events = vec![event("new", "u2"), event("old", "u1")];
+        let now: Timestamp = "2026-10-28T08:00:00Z".parse().unwrap();
+        let resolve = |_: &str, _: &str| {
+            Some(ResourceRef {
+                group: String::new(),
+                version: "v1".into(),
+                plural: "pods".into(),
+            })
+        };
+        let live = Live::of(&[("Pod", Some(["u2".to_string()].into()))]);
+        let pulse = tally_events(events.clone(), now, &resolve, &live);
+        assert_eq!(pulse.warning, 2);
+        let names: Vec<&str> = pulse.recent.iter().map(|e| e.object.name.as_str()).collect();
+        assert_eq!(names, ["new"]);
+        // A kind that could not be listed keeps its warnings.
+        let unknown = Live::of(&[("Pod", None)]);
+        assert_eq!(tally_events(events, now, &resolve, &unknown).recent.len(), 2);
     }
 }
