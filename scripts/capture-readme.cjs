@@ -61,11 +61,11 @@ const tree = ['api','emails','frontend','payments','worker'].map((app,i) => ({id
   try {
     const page = await browser.newPage({viewport:{width:1600,height:1000},deviceScaleFactor:1,colorScheme:'light'});
     const errors=[];let samples=0;
-    page.on('pageerror',e=>errors.push(e.message));
+    page.on('pageerror',e=>{errors.push(e.message); console.error(e.message);});
     await page.clock.install({time:clock});
     await page.addInitScript(() => {
-      localStorage.setItem('kubri.readonly.demo-eu','true');
-      localStorage.setItem('kubri.environment.demo-eu','Demo');
+      localStorage.setItem('kubri.tour','seen');
+
     });
     await page.route('**/api/**',async route => {
       const request=route.request(),url=new URL(request.url()),p=url.pathname.slice(4);
@@ -74,16 +74,24 @@ const tree = ['api','emails','frontend','payments','worker'].map((app,i) => ({id
       if(p==='/session')data={signedIn:true,required:false};
       if(p==='/contexts'||p==='/contexts/reload')data={contexts:[{name:'demo-eu',cluster:'demo',user:null,namespace:'shop',isDefault:true}],cluster};
       if(p==='/resources')data=resources;
+      if(p==='/settings')data={error:null,settings:{contexts:{'demo-eu':{displayName:'',label:'Demo',color:'',production:false,readOnly:true,locked:false,namespace:'shop',namespaces:[],namespaceSelector:'',agentWrites:false,forwards:[],integrations:{prometheus:'',grafana:'',grafanaToken:'',loki:''}}},diff:{scale:false,restart:false,image:true,labels:true},agents:{http:false,port:7879,secrets:false},explain:{provider:'none',baseUrl:'',model:''},debug:{image:'busybox'},columns:{},searches:[],history:{record:false,keepDays:14,maxMb:200}}};
+      if(p==='/access')data=request.postDataJSON().checks.map(()=>true);
+      if(p==='/object/managed-by')data=null;
+      if(p==='/history')data={context:'demo-eu',entries:[],more:false,watched:[],recorder:{recording:false,reason:'Disabled for screenshots',skipped:[],since:null}};
+      if(p==='/guard')data={readOnly:true,reason:'Read-only context',canUnlock:false,unlockedFor:null};
+      if(p==='/views')data={views:[],errors:[]};
+      if(p==='/portforwards/favorites')data=[];
+      if(p==='/integrations')data={items:[],errors:[]};
       if(p==='/k9s')data=k9s;
       if(p==='/object')data=object(url.searchParams.get('name'));
       if(p==='/events')data=events.filter(e => `uid-${e.object.name}` === url.searchParams.get('uid'));
       if(p==='/metrics')data=podData.filter(r=>r[3]!==null).map(r=>({name:r[0],namespace:'shop',cpu:r[3],memory:r[4]*1048576,requests:{cpu:125,memory:256*1048576},limits:{cpu:1000,memory:1024*1048576}}));
       if(p==='/pulse'){
         const cpu=[2160,2040,2280,2440,2320,2560,2480,2640,2720][Math.min(samples++,8)];
-        data={cpu:{used:cpu,requested:3200,capacity:8000},memory:{used:Math.round((9.5+Math.min(samples,8)*.05)*1073741824),requested:8*1073741824,capacity:16*1073741824},kinds:pulseKinds,events:{normal:99,warning:13,recent:events,error:null}};
+        data={certificates:[],cpu:{used:cpu,requested:3200,capacity:8000},memory:{used:Math.round((9.5+Math.min(samples,8)*.05)*1073741824),requested:8*1073741824,capacity:16*1073741824},kinds:pulseKinds,events:{normal:99,warning:13,recent:events,error:null}};
       }
       if(p==='/xray')data=tree;
-      if(!['GET','HEAD'].includes(request.method()) && p!=='/contexts/reload')throw new Error(`Screenshot attempted a mutation: ${request.method()} ${p}`);
+      if(!['GET','HEAD'].includes(request.method()) && !['/contexts/reload','/portforwards/favorites','/access','/object/managed-by','/history'].includes(p))throw new Error(`Screenshot attempted a mutation: ${request.method()} ${p}`);
       await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
     });
     await page.routeWebSocket('**/api/table?**',socket => {
@@ -112,6 +120,8 @@ const tree = ['api','emails','frontend','payments','worker'].map((app,i) => ({id
     fs.mkdirSync(out,{recursive:true});
     const shot=async name => { await page.screenshot({path:path.join(out,name),animations:'disabled'}); console.log(name); };
     await page.goto(base);
+    await page.getByRole('button',{name:'Overview :pulses',exact:true}).click();
+
     await page.getByRole('heading',{name:'Cluster overview',exact:true}).waitFor();
     await page.getByLabel(`Version ${version}`,{exact:true}).waitFor();
     await page.locator('.signal').first().waitFor();
@@ -121,7 +131,7 @@ const tree = ['api','emails','frontend','payments','worker'].map((app,i) => ({id
     await page.setViewportSize({width:1600,height:1000});
     await page.getByRole('button',{name:'Pods',exact:true}).click();
     await page.locator('tbody tr').first().waitFor();
-    await page.getByRole('combobox').last().selectOption('shop');
+    await page.getByRole('combobox').last().filter({hasText:'shop'}).waitFor();
     await shot('pods-light.png');
     await page.getByRole('button',{name:'Use dark colors',exact:true}).click();
     await shot('pods-dark.png');

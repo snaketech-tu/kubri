@@ -28,6 +28,6 @@ node scripts/capture-readme.cjs /path/to/playwright /path/to/browser http://127.
 
 The existing structured-log and other feature screenshots are preserved; previous-container logs are captured separately as `logs-previous.png`.
 
-All API requests and WebSockets are intercepted inside the isolated browser context. Screenshots are captured through the real application controls. The script rejects mutation attempts and fails on browser JavaScript errors.
+All API requests and WebSockets are intercepted inside the isolated browser context. Screenshots are captured through the real application controls. The script mocks startup port-forward restoration and read-only POST queries, rejects cluster mutation attempts and fails on browser JavaScript errors.
 
 Version labels come from `ui/package.json`; regenerate the screenshots after a version or branding change. Keep both `pods-light.png` and `pods-dark.png`, as the README chooses its main image using the reader's color preference.
