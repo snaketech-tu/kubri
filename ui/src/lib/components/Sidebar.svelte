@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ResourceInfo } from '../api';
 	import logo from '../assets/logo.svg';
+	import { version } from '../../../package.json';
 	import { NAV_SECTIONS, pluralKind } from '../nav';
 	import { samePin } from '../pins';
 	import { app, sameResource } from '../state.svelte';
@@ -60,6 +61,7 @@
 	<div class="brand">
 		<img src={logo} alt="" width="28" height="28" />
 		<span>kubri</span>
+		<span class="version" aria-label={`Version ${version}`}>v{version}</span>
 	</div>
 	<input class="filter" bind:value={filter} aria-label="Find a resource type" placeholder="Find resources…" />
 	<div class="scroll">
@@ -258,6 +260,13 @@
 		font-size: 26px;
 		font-weight: 700;
 		letter-spacing: -0.045em;
+	}
+	.version {
+		margin-left: auto;
+		font-size: 11px;
+		font-weight: 500;
+		letter-spacing: 0;
+		color: var(--text-muted);
 	}
 	.filter {
 		margin: 6px 14px 8px;

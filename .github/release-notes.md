@@ -1,6 +1,8 @@
 ## What's new
 
-<!-- Before publishing: what changed since the last release. -->
+- Refined **Link** logo matching the selected design, with refreshed native icons and favicon.
+- Updated README screenshots, reproducible capture script and a visible application version.
+- More reliable benchmark testing on Windows.
 
 ## Install
 
