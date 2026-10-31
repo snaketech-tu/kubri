@@ -102,3 +102,11 @@ export function splitKinds(kinds: KindPulse[]): { problems: KindPulse[]; healthy
 	const sick = (k: KindPulse) => Boolean(k.error) || k.failed > 0 || k.warning > 0;
 	return { problems: kinds.filter(sick), healthy: kinds.filter((k) => !sick(k)) };
 }
+
+/** How many polls a list row's trend keeps. */
+export const TRAIL_LENGTH = 20;
+
+/** Adds a reading to a row's trend and keeps the latest ones. */
+export function pushTrail(trail: number[] | undefined, value: number): number[] {
+	return [...(trail ?? []), value].slice(-TRAIL_LENGTH);
+}
