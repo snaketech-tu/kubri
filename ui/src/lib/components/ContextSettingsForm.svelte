@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { ContextSettings } from '../api';
 	import { app } from '../state.svelte';
+	import { plainOptions } from '../select';
+	import Select from './Select.svelte';
 
 	let { context, namespaces = [] }: { context: string; namespaces?: string[] } = $props();
 
@@ -25,7 +27,7 @@
 	}
 
 	function text(field: 'displayName' | 'label' | 'namespace') {
-		return (e: Event & { currentTarget: HTMLInputElement | HTMLSelectElement }) => {
+		return (e: Event & { currentTarget: HTMLInputElement }) => {
 			const value = e.currentTarget.value.trim();
 			if (value !== current[field]) save({ [field]: value });
 		};
@@ -92,13 +94,14 @@
 	<label class="field">
 		<span>Namespace after connecting</span>
 		{#if namespaces.length}
-			<select value={current.namespace} onchange={text('namespace')}>
-				<option value="">All namespaces</option>
-				{#each namespaces as ns (ns)}<option value={ns}>{ns}</option>{/each}
-				{#if current.namespace && !namespaces.includes(current.namespace)}
-					<option value={current.namespace}>{current.namespace}</option>
-				{/if}
-			</select>
+			<Select
+				value={current.namespace}
+				options={[
+					{ value: '', label: 'All namespaces' },
+					...plainOptions(current.namespace && !namespaces.includes(current.namespace) ? [...namespaces, current.namespace] : namespaces)
+				]}
+				onchange={(value) => value !== current.namespace && save({ namespace: value })}
+			/>
 		{:else}
 			<input value={current.namespace} placeholder="All namespaces" onchange={text('namespace')} spellcheck="false" />
 		{/if}
@@ -181,8 +184,7 @@
 		font-size: 12px;
 		color: var(--text-muted);
 	}
-	.field input,
-	.field select {
+	.field input {
 		font-size: 13px;
 	}
 	.note {

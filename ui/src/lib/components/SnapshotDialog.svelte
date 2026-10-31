@@ -2,7 +2,9 @@
 	import { isTauri } from '@tauri-apps/api/core';
 	import { untrack } from 'svelte';
 	import { app, type Dialog } from '../state.svelte';
+	import { plainOptions } from '../select';
 	import Icon from './Icon.svelte';
+	import Select from './Select.svelte';
 
 	let { dialog }: { dialog: Extract<Dialog, { kind: 'snapshot' }> } = $props();
 
@@ -61,9 +63,7 @@
 				<label>
 					<input type="radio" bind:group={scope} value="namespace" />
 					Namespace
-					<select bind:value={namespace} disabled={scope !== 'namespace'} aria-label="Namespace">
-						{#each namespaces as ns (ns)}<option value={ns}>{ns}</option>{/each}
-					</select>
+					<Select bind:value={namespace} options={plainOptions(namespaces)} disabled={scope !== 'namespace'} aria-label="Namespace" compact style="max-width: 260px" />
 				</label>
 				<label>
 					<input type="radio" bind:group={scope} value="cluster" />
@@ -145,15 +145,6 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-	}
-	select {
-		min-width: 0;
-		max-width: 260px;
-		padding: 4px 6px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--bg);
-		color: var(--text);
 	}
 	.contents {
 		margin: 12px 0 0;

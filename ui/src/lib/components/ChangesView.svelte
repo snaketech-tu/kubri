@@ -9,6 +9,7 @@
 	import Icon from './Icon.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import SearchField from './SearchField.svelte';
+	import Select from './Select.svelte';
 
 	const REFRESH_MS = 10_000;
 
@@ -166,10 +167,17 @@
 		<div class="toolbar">
 			<label>
 				<span>Range</span>
-				<select bind:value={hours} aria-label="Range">
-					{#each RANGES as r (r.hours)}<option value={r.hours}>{r.label}</option>{/each}
-					{#if !RANGES.some((r) => r.hours === hours)}<option value={hours}>Last {hours < 1 ? `${Math.round(hours * 60)} minutes` : `${hours} hours`}</option>{/if}
-				</select>
+				<Select
+					bind:value={hours}
+					options={[
+						...RANGES.map((r) => ({ value: r.hours, label: r.label })),
+						...(RANGES.some((r) => r.hours === hours)
+							? []
+							: [{ value: hours, label: `Last ${hours < 1 ? `${Math.round(hours * 60)} minutes` : `${hours} hours`}` }])
+					]}
+					aria-label="Range"
+					compact
+				/>
 			</label>
 			<SearchField bind:value={text} label="Find in the changes" placeholder="Name, kind or what changed…" key="" />
 			<div class="groups" role="group" aria-label="Kinds of change">

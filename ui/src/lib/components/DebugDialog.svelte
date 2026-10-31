@@ -3,6 +3,8 @@
 	import { backend, type DebugRequest } from '../api';
 	import { errorMessage } from '../format';
 	import { app, findResource, type Dialog } from '../state.svelte';
+	import { plainOptions } from '../select';
+	import Select from './Select.svelte';
 
 	let { dialog }: { dialog: Extract<Dialog, { kind: 'debug' }> } = $props();
 	// Read once: the dialog closes by clearing it.
@@ -114,9 +116,7 @@
 			{#if containers.length > 1}
 				<label>
 					<span>Container</span>
-					<select bind:value={container}>
-						{#each containers as c (c)}<option value={c}>{c}</option>{/each}
-					</select>
+					<Select bind:value={container} options={plainOptions(containers)} mono />
 				</label>
 			{/if}
 			{#if way === 'ephemeral'}
@@ -169,8 +169,7 @@
 		margin-top: 12px;
 		font-size: 13px;
 	}
-	input:not([type='radio']),
-	select {
+	input:not([type='radio']) {
 		min-width: 0;
 		padding: 6px 8px;
 		border: 1px solid var(--border);

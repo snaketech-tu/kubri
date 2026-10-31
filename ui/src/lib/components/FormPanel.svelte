@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { FORMS, fieldText, fieldValue, getPath, rename, setPath, type FormField } from '../forms';
+	import { plainOptions } from '../select';
 	import Icon from './Icon.svelte';
+	import Select from './Select.svelte';
 
 	let {
 		object,
@@ -85,9 +87,7 @@
 			<label>
 				<span>{field.label}</span>
 				{#if field.kind === 'select'}
-					<select value={fieldText(object, field) || field.options?.[0]} onchange={(e) => change(field, e.currentTarget.value)}>
-						{#each field.options ?? [] as option (option)}<option value={option}>{option}</option>{/each}
-					</select>
+					<Select value={fieldText(object, field) || field.options?.[0]} options={plainOptions(field.options ?? [])} onchange={(value) => change(field, value)} mono />
 				{:else}
 					<input
 						type={field.kind === 'number' ? 'number' : 'text'}
@@ -134,8 +134,7 @@
 		color: var(--text-muted);
 		font-weight: 600;
 	}
-	input,
-	select {
+	input {
 		min-width: 0;
 		padding: 6px 8px;
 		border: 1px solid var(--border);

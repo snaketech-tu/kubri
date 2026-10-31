@@ -11,6 +11,7 @@
 	import HealthIcon from './HealthIcon.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import SearchField from './SearchField.svelte';
+	import Select from './Select.svelte';
 
 	let { resource }: { resource: ResourceInfo } = $props();
 
@@ -119,8 +120,7 @@
 		for (const id of allIds(roots)) expanded.add(id);
 	}
 
-	function switchKind(e: Event) {
-		const plural = (e.currentTarget as HTMLSelectElement).value;
+	function switchKind(plural: string) {
 		const next = kinds.find((k) => k.plural === plural);
 		if (next) app.showXray(next);
 	}
@@ -221,9 +221,7 @@
 		<div class="toolbar">
 			<label class="start">
 				<span>Start from</span>
-				<select value={resource.plural} onchange={switchKind}>
-					{#each kinds as k (k.plural)}<option value={k.plural}>{k.kind}s</option>{/each}
-				</select>
+				<Select value={resource.plural} options={kinds.map((k) => ({ value: k.plural, label: `${k.kind}s` }))} onchange={switchKind} />
 			</label>
 			<SearchField bind:value={filter} bind:input={filterInput} label="Filter the trees" placeholder="Filter by name or status" />
 		</div>
@@ -341,11 +339,6 @@
 		gap: 8px;
 		font-size: 12.5px;
 		color: var(--text-muted);
-	}
-	.start select {
-		padding: 6px 8px;
-		font-size: 13px;
-		color: var(--text);
 	}
 	.tabs {
 		display: flex;

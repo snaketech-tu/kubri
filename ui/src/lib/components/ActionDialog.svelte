@@ -22,6 +22,7 @@
 	import DiffView from './DiffView.svelte';
 	import HelmCompare from './HelmCompare.svelte';
 	import ManagedNote from './ManagedNote.svelte';
+	import Select from './Select.svelte';
 	import { errorMessage } from '../format';
 	import { inputError, inputVariables } from '../k9s';
 	import {
@@ -36,6 +37,7 @@
 	import { hasUsers } from '../pods';
 	import { summarizeUsers } from '../references';
 	import type { Reference } from '../api';
+	import { plainOptions } from '../select';
 
 	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' | 'snapshot' }> } = $props();
 
@@ -763,11 +765,14 @@
 		<label class="row"><input type="checkbox" bind:checked={force} /> Force (no grace period)</label>
 		<label class="row">
 			Dependents
-			<select bind:value={propagation}>
-				<option value="background">delete in background</option>
-				<option value="foreground">delete first (foreground)</option>
-				<option value="orphan">keep (orphan)</option>
-			</select>
+			<Select
+				bind:value={propagation}
+				options={[
+					{ value: 'background', label: 'delete in background' },
+					{ value: 'foreground', label: 'delete first (foreground)' },
+					{ value: 'orphan', label: 'keep (orphan)' }
+				]}
+			/>
 		</label>
 	{:else if dialog.kind === 'scaleMany' || dialog.kind === 'restartMany'}
 		<p>
@@ -886,9 +891,7 @@
 			{dialog.forward.podPort}, and measure how fast it answers.
 		</p>
 		<div class="request">
-			<select bind:value={method} aria-label="Method">
-				{#each ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as m (m)}<option>{m}</option>{/each}
-			</select>
+			<Select bind:value={method} options={plainOptions(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])} aria-label="Method" mono compact />
 			<span class="origin">localhost:{dialog.forward.localPort}</span>
 			<input class="path" bind:value={path} bind:this={firstField} placeholder="/" aria-label="Path" spellcheck="false" />
 		</div>
@@ -965,10 +968,10 @@
 			{:else if input.type === 'dropdown'}
 				<label class="field">
 					{label}{input.required ? ' *' : ''}
-					<select bind:value={inputs[input.name]}>
-						{#if !input.required}<option value="">(none)</option>{/if}
-						{#each input.options as option (option)}<option>{option}</option>{/each}
-					</select>
+					<Select
+						bind:value={inputs[input.name]}
+						options={[...(input.required ? [] : [{ value: '', label: '(none)' }]), ...plainOptions(input.options)]}
+					/>
 				</label>
 			{:else}
 				<label class="field">
@@ -1287,14 +1290,18 @@
 		background: var(--bg);
 		overflow: hidden;
 	}
-	.request select {
-		padding: 6px 8px;
+	/* The method sits in the request bar like a prefix. */
+	.request :global(.select) {
+		align-self: stretch;
 		border: none;
 		border-right: 1px solid var(--border);
 		border-radius: 0;
 		background: var(--surface-2);
-		font-family: var(--mono);
-		font-size: 12.5px;
+		box-shadow: none;
+	}
+	.request :global(.select:focus-visible),
+	.request :global(.select.open) {
+		background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
 	}
 	.origin {
 		padding-left: 8px;
