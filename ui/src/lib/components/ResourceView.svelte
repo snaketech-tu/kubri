@@ -482,7 +482,14 @@
 		cursorKey = row.key;
 		const marked = chosenRows();
 		const actions = selection.has(row.key) && marked.length > 1 ? markedActions(marked) : actionsFor(row, [row]);
-		app.menu = { actions: column ? [...copyActions(row, column), ...actions] : actions, x, y, align };
+		// The cell's copy actions join the Copy group, after what people do most: view, connect, change.
+		const at = actions.findIndex((a) => a.group === 'Copy');
+		const withCell = column
+			? at === -1
+				? [...actions, ...copyActions(row, column)]
+				: [...actions.slice(0, at), ...copyActions(row, column), ...actions.slice(at)]
+			: actions;
+		app.menu = { actions: withCell, x, y, align };
 	}
 
 	/** Copying the cell right-clicked, or its whole column as the list shows it. */

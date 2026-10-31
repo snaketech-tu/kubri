@@ -649,7 +649,8 @@
 			</div>
 		{/if}
 	</div>
-	<ActionBar {actions} hints={false} compact />
+	<!-- Deleting is for the list and the overview: not under a log or a shell that is open. -->
+	<ActionBar actions={['logs', 'shell'].includes(details.tab) ? actions.filter((a) => !a.danger) : actions} hints={false} compact />
 </aside>
 
 <style>

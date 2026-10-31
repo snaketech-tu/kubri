@@ -306,8 +306,17 @@
 	/** Keeps the focus where it is, so that the keys work on the list after a click. */
 	const keepFocus = (e: MouseEvent) => e.preventDefault();
 
+	// The footer shows the keys that matter most; `?` lists them all. Esc and help always stay.
+	const MAX_HINTS = 8;
+	const shownHints = $derived.by(() => {
+		if (viewHints.length <= MAX_HINTS) return viewHints;
+		const keep = (hint: [string, string]) => hint[0] === 'esc' || hint[0] === '?';
+		let room = MAX_HINTS - viewHints.filter(keep).length;
+		return viewHints.filter((hint) => keep(hint) || room-- > 0);
+	});
+
 	// Help stays last.
-	const hints = $derived([...viewHints.slice(0, -1), ...pluginHints, ...viewHints.slice(-1)]);
+	const hints = $derived([...shownHints.slice(0, -1), ...pluginHints, ...shownHints.slice(-1)]);
 
 	const dark = $derived(
 		app.scheme ? app.scheme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
