@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RecentEvent } from './api';
-import { attentionItems } from './pulse';
+import type { KindPulse, RecentEvent } from './api';
+import { attentionItems, shortMessage, splitKinds } from './pulse';
 
 const pods = { group: '', version: 'v1', plural: 'pods' };
 
@@ -43,5 +43,45 @@ describe('attention items', () => {
 	it('keeps objects of the same name in different namespaces apart', () => {
 		const other = { ...event('emails', 'BackOff', 1), object: { resource: pods, namespace: 'mail', name: 'emails' } };
 		expect(attentionItems([event('emails', 'BackOff', 2), other])).toHaveLength(2);
+	});
+});
+
+describe('shortMessage', () => {
+	it('says a crash loop plainly', () => {
+		expect(
+			shortMessage('BackOff', 'Back-off restarting failed container checkout in pod checkout-7d_shop(0f3a-uuid)', 26)
+		).toBe('Container checkout keeps restarting (26× in the last hour)');
+	});
+	it('names the image that cannot be pulled', () => {
+		expect(shortMessage('Failed', 'Failed to pull image "ghcr.io/x/y:1": rpc error: not found', 1)).toBe(
+			'Cannot pull image ghcr.io/x/y:1'
+		);
+	});
+	it('keeps the node count of a scheduling failure', () => {
+		expect(shortMessage('FailedScheduling', '0/3 nodes are available: 3 Insufficient cpu.', 1)).toBe(
+			'Cannot be scheduled: 0/3 nodes are available'
+		);
+	});
+	it('cuts unknown texts at the first sentence', () => {
+		expect(shortMessage('Other', 'Something odd happened. More detail follows here.', 1)).toBe('Something odd happened');
+		expect(shortMessage('Other', 'x'.repeat(300), 1).length).toBe(138);
+		expect(shortMessage('Failed', 'Error: ErrImagePull', 1)).toBe('Error: ErrImagePull');
+	});
+});
+
+describe('splitKinds', () => {
+	const kind = (name: string, ok: number, warning = 0, failed = 0, error: string | null = null): KindPulse => ({
+		kind: name,
+		resource: pods,
+		total: ok + warning + failed,
+		ok,
+		warning,
+		failed,
+		error
+	});
+	it('puts kinds with problems first and folds the rest', () => {
+		const { problems, healthy } = splitKinds([kind('A', 3), kind('B', 1, 0, 1), kind('C', 2), kind('D', 0, 0, 0, 'forbidden')]);
+		expect(problems.map((k) => k.kind)).toEqual(['B', 'D']);
+		expect(healthy.map((k) => k.kind)).toEqual(['A', 'C']);
 	});
 });

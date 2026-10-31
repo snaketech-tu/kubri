@@ -7,6 +7,12 @@
 	import Icon, { type IconName } from './Icon.svelte';
 
 	let filter = $state('');
+	const TOOLS_KEY = 'kubri.tools.collapsed';
+	let toolsCollapsed = $state(typeof localStorage !== 'undefined' && localStorage.getItem(TOOLS_KEY) === '1');
+	function toggleTools() {
+		toolsCollapsed = !toolsCollapsed;
+		localStorage.setItem(TOOLS_KEY, toolsCollapsed ? '1' : '0');
+	}
 
 	const visible = $derived(
 		app.resources.filter(
@@ -91,11 +97,16 @@
 			{/each}
 		{/each}
 
-		<h3>Explore</h3>
+		<h3>
+			<button class="fold" aria-expanded={!toolsCollapsed} onclick={toggleTools} title={toolsCollapsed ? 'Show the tools' : 'Hide the tools'}>
+				Tools <span class="chev" class:closed={toolsCollapsed}><Icon name="chevron" size={12} /></span>
+			</button>
+		</h3>
+		{#if !toolsCollapsed}
 		<button class:active={app.page === 'xray' || app.page === 'graph'} onclick={showXray} title=":xray deploy">
 			<Icon name="topology" />
 			<span class="label">Topology</span>
-			<span class="hint">XRay</span>
+			<span class="hint named">XRay</span>
 		</button>
 		<button class:active={app.page === 'changes'} onclick={() => app.showChanges()} title=":changes">
 			<Icon name="history" />
@@ -108,15 +119,11 @@
 		<button class:active={app.page === 'rbac'} onclick={() => app.showRbac()} title=":rbac">
 			<Icon name="access" />
 			<span class="label">Access</span>
-			<span class="hint">RBAC</span>
+			<span class="hint named">RBAC</span>
 		</button>
 		<button class:active={app.page === 'sanitizer'} onclick={() => app.showSanitizer()} title=":popeye">
 			<Icon name="sanitizer" />
 			<span class="label">Sanitizer</span>
-		</button>
-		<button class:active={app.page === 'integrations'} onclick={() => app.showIntegrations()} title=":integrations">
-			<Icon name="plug" />
-			<span class="label">Integrations</span>
 		</button>
 		<button class:active={app.page === 'rightsizing'} onclick={() => app.showRightSizing()} title=":rightsizing">
 			<Icon name="sizing" />
@@ -132,10 +139,7 @@
 			<span class="label">Benchmarks</span>
 			{#if running}<span class="badge" title="Running">{running}</span>{/if}
 		</button>
-		<button class:active={app.page === 'config'} onclick={() => app.showConfig()} title=":config">
-			<Icon name="settings" />
-			<span class="label">Settings</span>
-		</button>
+		{/if}
 		{#if others.length}
 			<h3>All resources</h3>
 			{#each others as r (r.group + '/' + r.version + '/' + r.plural)}
@@ -144,6 +148,14 @@
 		{/if}
 	</div>
 	<div class="bottom">
+		<button class:active={app.page === 'integrations'} onclick={() => app.showIntegrations()} title=":integrations">
+			<Icon name="plug" />
+			<span class="label">Integrations</span>
+		</button>
+		<button class:active={app.page === 'config'} onclick={() => app.showConfig()} title=":config">
+			<Icon name="settings" />
+			<span class="label">Settings</span>
+		</button>
 		<div class="keys">
 			<strong><Icon name="terminal" size={16} /> Your keys. Still here.</strong>
 			<span>Use <kbd>:</kbd> or <kbd>Ctrl K</kbd> to jump anywhere.</span>
@@ -235,6 +247,8 @@
 		white-space: nowrap;
 	}
 	.hint {
+		opacity: 0;
+		transition: opacity 0.12s;
 		margin-left: auto;
 		min-width: 0;
 		font-size: 10.5px;
@@ -243,6 +257,33 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.hint.named,
+	button:hover .hint,
+	button:focus-visible .hint {
+		opacity: 1;
+	}
+	h3 .fold {
+		margin: 0;
+		padding: 0;
+		width: auto;
+		gap: 4px;
+		background: none;
+		font: inherit;
+		letter-spacing: inherit;
+		text-transform: inherit;
+		color: inherit;
+	}
+	h3 .fold:hover {
+		background: none;
+		color: var(--text);
+	}
+	.chev {
+		display: inline-flex;
+		transition: transform 0.12s;
+	}
+	.chev.closed {
+		transform: rotate(-90deg);
 	}
 	.badge {
 		margin-left: auto;
@@ -291,6 +332,43 @@
 	@media (max-height: 1000px) {
 		.keys {
 			display: none;
+		}
+	}
+	/* Between a phone and a laptop only the icons stay, with the labels in the tooltips. */
+	@media (min-width: 721px) and (max-width: 1100px) {
+		.brand {
+			justify-content: center;
+			padding: 0;
+		}
+		.brand span,
+		.filter,
+		.keys,
+		h3,
+		.label,
+		.hint {
+			display: none;
+		}
+		.scroll,
+		.bottom {
+			padding-left: 6px;
+			padding-right: 6px;
+		}
+		button {
+			justify-content: center;
+			padding: 9px 0;
+		}
+		.saved {
+			padding-left: 0;
+		}
+		.badge {
+			position: absolute;
+			margin: 0;
+			transform: translate(12px, -10px);
+			font-size: 10px;
+			padding: 0 5px;
+		}
+		button {
+			position: relative;
 		}
 	}
 	@media (max-width: 720px) {

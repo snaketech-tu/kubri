@@ -45,6 +45,13 @@ export function findingId(s: SanitizerSection, f: Finding) {
 	return `${sectionId(s)}/${f.namespace ?? ''}/${f.name}`;
 }
 
+/** The kinds with the most errors first, then the most warnings, then the lowest score; the rest keep their order. */
+export function sortedSections(sections: SanitizerSection[]): SanitizerSection[] {
+	return [...sections].sort(
+		(a, b) => b.error - a.error || b.warning - a.warning || (a.score ?? 101) - (b.score ?? 101)
+	);
+}
+
 /** The rows on screen: every kind, and the findings of the expanded ones. */
 export function sanitizerRows(
 	report: SanitizerReport,
@@ -53,7 +60,7 @@ export function sanitizerRows(
 	text: string
 ): SanitizerRow[] {
 	const rows: SanitizerRow[] = [];
-	for (const section of report.sections) {
+	for (const section of sortedSections(report.sections)) {
 		const findings = filterFindings(section.findings, min, text);
 		// While searching, kinds without a match only get in the way.
 		if (text.trim() && !findings.length) continue;

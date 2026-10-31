@@ -156,7 +156,7 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Explore', 'Topology', 'Graph']}
+		crumbs={['Topology', 'Graph']}
 		title="Topology graph"
 		count={graph?.nodes.length}
 		subtitle="How the objects {namespace ? `in ${namespace}` : 'in all namespaces'} connect, from Ingresses to the nodes their pods run on"

@@ -33,8 +33,9 @@
 		suggestedLocalPort,
 		type ForwardablePort
 	} from '../pods';
-	import { app, type Dialog } from '../state.svelte';
-	import { hasUsers } from '../pods';
+	import { autoscalerFor, type Autoscaler } from '../autoscale';
+	import { app, refOf, type Dialog } from '../state.svelte';
+	import { hasUsers, isPods } from '../pods';
 	import { summarizeUsers } from '../references';
 	import type { Reference } from '../api';
 	import { plainOptions } from '../select';
@@ -103,6 +104,9 @@
 
 	// Scale
 	let replicas = $state<number | null>(null);
+	/** What a scale starts from, and the autoscaler that would undo it. */
+	let currentReplicas = $state<number | null>(null);
+	let autoscaler = $state<Autoscaler | null>(null);
 
 	// Labels and annotations, one key=value per line
 	let labelsText = $state('');
@@ -202,6 +206,15 @@
 				.then((obj) => {
 					if (dialog.kind === 'scale') {
 						replicas = typeof obj.spec?.replicas === 'number' ? obj.spec.replicas : 1;
+						currentReplicas = replicas;
+						autoscaler = null;
+						const scaled = dialog.target;
+						const hpa = app.resources.find(
+							(r) => r.group === 'autoscaling' && r.plural === 'horizontalpodautoscalers'
+						);
+						autoscalerFor(scaled, dialog.resource.kind, hpa && refOf(hpa)).then((found) => {
+							if (dialog.kind === 'scale' && dialog.target === scaled) autoscaler = found;
+						});
 					} else if (dialog.kind === 'portforward') {
 						ports = forwardablePorts(obj);
 						// The port the `k9scli.io/port-forwards` annotation names comes first, as in k9s.
@@ -762,15 +775,18 @@
 				</div>
 			{/if}
 		{/if}
-		<label class="row"><input type="checkbox" bind:checked={force} /> Force (no grace period)</label>
 		<label class="row">
-			Dependents
+			<input type="checkbox" bind:checked={force} />
+			Force: skip the grace period{#if isPods(dialog.resource)}; the container may still be running on its node{/if}
+		</label>
+		<label class="row">
+			Objects it owns
 			<Select
 				bind:value={propagation}
 				options={[
-					{ value: 'background', label: 'delete in background' },
-					{ value: 'foreground', label: 'delete first (foreground)' },
-					{ value: 'orphan', label: 'keep (orphan)' }
+					{ value: 'background', label: 'delete them too (recommended)' },
+					{ value: 'foreground', label: 'delete them first, then this one' },
+					{ value: 'orphan', label: 'keep them' }
 				]}
 			/>
 		</label>
@@ -787,7 +803,19 @@
 			<input class="replicas" type="number" min="0" aria-label="Replicas" bind:value={replicas} bind:this={firstField} />
 		{/if}
 	{:else if dialog.kind === 'scale'}
-		<p>Set the number of replicas for <strong>{name(dialog.target)}</strong>.</p>
+		<p>
+			Set the number of replicas for <strong>{name(dialog.target)}</strong>{#if currentReplicas !== null}, now {currentReplicas}{/if}.
+		</p>
+		{#if autoscaler}
+			<div class="blast" role="alert">
+				<strong>An autoscaler sets this.</strong>
+				<p>
+					HorizontalPodAutoscaler <span class="mono">{autoscaler.name}</span> keeps the replicas between
+					{autoscaler.min} and {autoscaler.max} and adjusts them as the load changes, so a number you set here may not
+					stay. To change the range, edit the autoscaler.
+				</p>
+			</div>
+		{/if}
 		<input
 			class="replicas"
 			type="number"

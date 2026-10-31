@@ -6,11 +6,12 @@
 	import PageHeader from './PageHeader.svelte';
 
 	/** What each tool adds, and the kinds to open for the operators. */
-	const ABOUT: Record<string, { text: string; kinds?: { group: string; plural: string; label: string }[] }> = {
-		prometheus: { text: 'Charts of CPU, memory, restarts, network and requests for pods, workloads and nodes (m), and an hour of history in the overview.' },
-		grafana: { text: 'Links from objects to the dashboards that show them.' },
-		loki: { text: 'Log history beyond a pod’s lifetime, in the log workspace.' },
+	const ABOUT: Record<string, { text: string; install?: string; kinds?: { group: string; plural: string; label: string }[] }> = {
+		prometheus: { install: 'https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack', text: 'Charts of CPU, memory, restarts, network and requests for pods, workloads and nodes (m), and an hour of history in the overview.' },
+		grafana: { install: 'https://grafana.com/docs/grafana/latest/setup-grafana/installation/kubernetes/', text: 'Links from objects to the dashboards that show them.' },
+		loki: { install: 'https://grafana.com/docs/loki/latest/setup/install/helm/', text: 'Log history beyond a pod’s lifetime, in the log workspace.' },
 		flux: {
+			install: 'https://fluxcd.io/flux/installation/',
 			text: 'Kustomizations, HelmReleases and their sources.',
 			kinds: [
 				{ group: 'kustomize.toolkit.fluxcd.io', plural: 'kustomizations', label: 'Kustomizations' },
@@ -19,10 +20,12 @@
 			]
 		},
 		argocd: {
+			install: 'https://argo-cd.readthedocs.io/en/stable/getting_started/',
 			text: 'Applications, their sync state and health.',
 			kinds: [{ group: 'argoproj.io', plural: 'applications', label: 'Applications' }]
 		},
 		certManager: {
+			install: 'https://cert-manager.io/docs/installation/',
 			text: 'Certificates, when they expire, and their issuers.',
 			kinds: [
 				{ group: 'cert-manager.io', plural: 'certificates', label: 'Certificates' },
@@ -95,7 +98,7 @@
 </script>
 
 <section class="page">
-	<PageHeader crumbs={['Explore', 'Integrations']} title="Integrations" subtitle="Tools the cluster runs, found without setup">
+	<PageHeader crumbs={['Integrations']} prefix="context" title="Integrations" subtitle="Tools the cluster runs, found without setup">
 		{#snippet tools()}
 			<button class="btn" onclick={check} disabled={checking}>{checking ? 'Looking…' : 'Look again'}</button>
 		{/snippet}
@@ -115,6 +118,9 @@
 							<span class="status {s.tone}">{s.text}</span>
 						</div>
 						<p class="about">{about?.text}</p>
+						{#if item.source === 'missing' && about?.install}
+							<p class="where"><a href={about.install} target="_blank" rel="noreferrer">How to install {item.name}</a></p>
+						{/if}
 						{#if where(item)}<p class="where">{where(item)}</p>{/if}
 						{#if item.error}<p class="error">{item.error}</p>{/if}
 						{#if item.id === 'grafana' && item.endpoint && !item.error}

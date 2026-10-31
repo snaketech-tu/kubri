@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ContextInfo, ResourceInfo, Row } from './api';
 import { matchResources, suggest } from './commands';
-import { age, cpu, memory } from './format';
+import { age, cpu, isNotFound, memory, workloadPrefix } from './format';
 import { cellTone } from './status';
 import { filterRows, isFaulty, sortRows, toCsv } from './table';
 
@@ -259,5 +259,23 @@ describe('table rows', () => {
 		expect(toCsv(['Name', 'Labels'], [['web', 'a=1,b=2'], ['say "hi"', '']])).toBe(
 			'Name,Labels\nweb,"a=1,b=2"\n"say ""hi""",\n'
 		);
+	});
+});
+
+describe('workloadPrefix', () => {
+	it('names the workload a generated pod name came from', () => {
+		expect(workloadPrefix('frontend-6f8dcb7dd4-c5zl6')).toBe('frontend');
+		expect(workloadPrefix('shop-api-6f8dcb7dd4-c5zl6')).toBe('shop-api');
+	});
+	it('has none for names that are not generated', () => {
+		expect(workloadPrefix('db-0')).toBeNull();
+		expect(workloadPrefix('gpu-worker')).toBeNull();
+	});
+});
+
+describe('isNotFound', () => {
+	it('recognises the API server wording', () => {
+		expect(isNotFound('pods "x" not found')).toBe(true);
+		expect(isNotFound('forbidden')).toBe(false);
 	});
 });

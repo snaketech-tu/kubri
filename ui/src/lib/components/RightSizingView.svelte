@@ -76,7 +76,7 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Explore', 'Right-sizing']}
+		crumbs={['Right-sizing']}
 		title="Right-sizing"
 		count={found?.advice.length}
 		subtitle="Containers that request much more or less than they use, or run close to their limit{namespace ? `, in ${namespace}` : ''}"

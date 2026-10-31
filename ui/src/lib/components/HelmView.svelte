@@ -457,7 +457,7 @@
 		{/if}
 	{:else if opened}
 		<PageHeader
-			crumbs={['Explore', { label: 'Helm', onclick: back, title: 'Back to releases (Esc)' }, opened.name]}
+			crumbs={[{ label: 'Helm', onclick: back, title: 'Back to releases (Esc)' }, opened.name]}
 			title={opened.name}
 			mono
 			subtitle="Release in {opened.namespace}{shown ? ` · ${chartLabel(shown)}` : ''}"
@@ -704,7 +704,7 @@
 		</div>
 	{:else}
 		<PageHeader
-			crumbs={['Explore', 'Helm']}
+			crumbs={['Helm']}
 			title="Helm releases"
 			count={releases ? visible.length : null}
 			subtitle={namespace ? `In ${namespace}` : 'All namespaces'}
