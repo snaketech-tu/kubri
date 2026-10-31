@@ -41,6 +41,7 @@ import { suggest, type Action, type ConfigSection, type PaletteConfig } from './
 import { errorMessage } from './format';
 import { applyZoom, storedZoom } from './appearance';
 import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } from './releases';
+import { loadPins, savePins, samePin, toggled as togglePinIn, type Pin } from './pins';
 import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu } from './menu';
@@ -912,6 +913,56 @@ class AppState {
 
 	/** Objects opened lately, newest first, in any context. */
 	recent = $state.raw<RecentObject[]>(recentObjects());
+
+	/** Kinds and objects kept in the sidebar, for every context; the sidebar shows the current one's. */
+	pins = $state.raw<Pin[]>(loadPins());
+
+	/** The pins of the connected context, in the order they were made. */
+	get pinsHere(): Pin[] {
+		const context = this.cluster?.context;
+		return context ? this.pins.filter((p) => p.context === context) : [];
+	}
+
+	pinFor(resource: ResourceInfo, target?: { namespace: string | null; name: string }): Pin | null {
+		const context = this.cluster?.context;
+		if (!context) return null;
+		return {
+			context,
+			kind: resource.kind,
+			...refOf(resource),
+			namespace: target?.namespace ?? null,
+			name: target?.name ?? ''
+		};
+	}
+
+	isPinned(pin: Pin | null): boolean {
+		return !!pin && this.pins.some((p) => samePin(p, pin));
+	}
+
+	togglePin(pin: Pin | null) {
+		if (!pin) return;
+		const was = this.isPinned(pin);
+		this.pins = togglePinIn(this.pins, pin);
+		savePins(this.pins);
+		this.toast(was ? `Unpinned ${pin.name || pin.kind}` : `Pinned ${pin.name || pin.kind} to the sidebar`);
+	}
+
+	/** Opens a pin or a recent object: the list of a kind, a namespace's pods, or an object in its list. */
+	openPin(pin: RecentObject) {
+		const resource = findResource(this.resources, { group: pin.group, version: pin.version, plural: pin.plural });
+		if (!resource) {
+			this.toast(`The cluster does not serve ${pin.plural}`, 'bad');
+			return;
+		}
+		if (!pin.name) {
+			this.open(resource);
+		} else if (resource.plural === 'namespaces' && resource.group === '') {
+			const pods = findResource(this.resources, { group: '', version: 'v1', plural: 'pods' });
+			if (pods) this.open(pods, pin.name, '');
+		} else {
+			this.openAt(resource, pin.namespace, pin.name);
+		}
+	}
 
 	/** Opens an object's details, connecting to its context first if it is another one. */
 	async openObject(target: ObjectRef, kind = target.resource.plural) {

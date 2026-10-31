@@ -656,6 +656,19 @@
 			<div class="title">
 				<h1>{place.label}</h1>
 				<span class="count">{owned.length}</span>
+				{#if app.cluster}
+					{@const pin = app.pinFor(resource)}
+					<button
+						class="pin"
+						class:on={app.isPinned(pin)}
+						aria-pressed={app.isPinned(pin)}
+						onclick={() => app.togglePin(pin)}
+						title={app.isPinned(pin) ? 'Unpin from the sidebar' : 'Pin this list to the sidebar'}
+						aria-label={app.isPinned(pin) ? 'Unpin from the sidebar' : 'Pin to the sidebar'}
+					>
+						<Icon name="bookmark" size={16} />
+					</button>
+				{/if}
 				<code>{resource.group ? `${resource.group}/` : ''}{resource.version}</code>
 				{#if scope}
 					<span class="chip">
@@ -947,6 +960,23 @@
 		color: inherit;
 		font-size: 14px;
 		line-height: 1;
+	}
+	.pin {
+		display: inline-flex;
+		padding: 4px;
+		border: none;
+		border-radius: 6px;
+		background: none;
+		color: var(--text-muted);
+	}
+	.pin:hover {
+		background: var(--surface-2);
+	}
+	.pin.on {
+		color: var(--accent);
+	}
+	.pin.on :global(path) {
+		fill: currentColor;
 	}
 	.chip button:hover {
 		background: color-mix(in srgb, currentColor 15%, transparent);

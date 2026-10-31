@@ -1,7 +1,8 @@
 <script lang="ts">
 	import type { ResourceInfo } from '../api';
 	import logo from '../assets/logo.svg';
-	import { NAV_SECTIONS } from '../nav';
+	import { NAV_SECTIONS, pluralKind } from '../nav';
+	import { samePin } from '../pins';
 	import { app, sameResource } from '../state.svelte';
 	import { xrayResources } from '../xray';
 	import Icon, { type IconName } from './Icon.svelte';
@@ -31,6 +32,13 @@
 		const pinned = new Set(sections.flatMap((s) => s.items.map((i) => i.resource)));
 		return visible.filter((r) => !pinned.has(r));
 	});
+
+	/** The objects opened lately in this context, without the ones already pinned. */
+	const recents = $derived(
+		app.recent
+			.filter((r) => r.context === app.cluster?.context && r.name && !app.pinsHere.some((p) => samePin(p, r)))
+			.slice(0, 4)
+	);
 
 	const running = $derived(app.benchmarks.filter((b) => b.state === 'running').length);
 
@@ -84,6 +92,28 @@
 			<span class="label">Create</span>
 			<span class="hint">:new</span>
 		</button>
+		{#if app.pinsHere.length}
+			<h3>Pinned</h3>
+			{#each app.pinsHere as pin (`${pin.group}/${pin.plural}/${pin.namespace ?? ''}/${pin.name}`)}
+				<div class="pin">
+					<button onclick={() => app.openPin(pin)} title={pin.name ? `${pin.kind} ${pin.namespace ? `${pin.namespace}/` : ''}${pin.name}` : `${pin.kind} list`}>
+						<Icon name="bookmark" size={16} />
+						<span class="label">{pin.name || pluralKind(pin.kind, pin.plural)}</span>
+					</button>
+					<button class="unpin" onclick={() => app.togglePin(pin)} title="Unpin" aria-label="Unpin {pin.name || pin.kind}">×</button>
+				</div>
+			{/each}
+		{/if}
+		{#if recents.length}
+			<h3>Recent</h3>
+			{#each recents as recent (`${recent.group}/${recent.plural}/${recent.namespace ?? ''}/${recent.name}`)}
+				<button onclick={() => app.openPin(recent)} title="{recent.kind} {recent.namespace ? `${recent.namespace}/` : ''}{recent.name}">
+					<Icon name="history" size={16} />
+					<span class="label">{recent.name}</span>
+					<span class="hint">{recent.kind}</span>
+				</button>
+			{/each}
+		{/if}
 		{#each sections as section (section.title)}
 			<h3>{section.title}</h3>
 			{#each section.items as { resource, label, icon } (resource.plural)}
@@ -169,6 +199,31 @@
 {/snippet}
 
 <style>
+	.pin {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+	.pin > button:first-child {
+		flex: 1;
+		min-width: 0;
+	}
+	.pin .unpin {
+		position: absolute;
+		right: 6px;
+		width: 22px;
+		padding: 0;
+		opacity: 0;
+		background: none;
+		color: var(--text-muted);
+	}
+	.pin:hover .unpin,
+	.pin .unpin:focus-visible {
+		opacity: 1;
+	}
+	.pin .unpin:hover {
+		color: var(--text);
+	}
 	nav {
 		display: flex;
 		flex-direction: column;
