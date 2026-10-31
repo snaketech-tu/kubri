@@ -100,14 +100,33 @@ jobs:
       - name: Install UI dependencies
         working-directory: ui
         run: pnpm install --frozen-lockfile
-      # Without a release id (no tag), this only builds.
+      # With the signing key set up (docs/RELEASING.md), the packages are signed for the app's
+      # updater and the public key goes into the app; without it, they are built as before.
+      - name: Sign updates
+        id: updater
+        shell: bash
+        env:
+          PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$PUBKEY" ] && [ -n "$KEY" ]; then
+            config=$(jq -cn --arg key "$PUBKEY" '{bundle: {createUpdaterArtifacts: true}, plugins: {updater: {pubkey: $key}}}')
+            echo "args=--config '$config'" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No updater signing key: the packages are not signed for the updater"
+          fi
+      # Without a release id (no tag), this only builds. latest.json comes from the Updater job,
+      # since the parallel builds would overwrite each other's.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: ui
           releaseId: ${{ needs.draft.outputs.id }}
-          args: --target ${{ matrix.target }}
+          uploadUpdaterJson: false
+          args: --target ${{ matrix.target }} ${{ steps.updater.outputs.args }}
       - if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
@@ -120,6 +139,40 @@ jobs:
             target/${{ matrix.target }}/release/bundle/msi/*.msi
             target/${{ matrix.target }}/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+  # The updater in the app reads latest.json from the latest release: the signed packages of
+  # this release, made from the .sig files the builds attached.
+  updater:
+    name: Updater
+    needs: [draft, desktop]
+    if: ${{ github.ref_type == 'tag' && !cancelled() && needs.draft.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE: ${{ needs.draft.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Attach latest.json
+        run: |
+          mkdir sigs
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE/assets" \
+            --jq '.[] | select(.name | endswith(".sig")) | "\(.id) \(.name)"' |
+            while read -r id name; do
+              gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "sigs/$name"
+            done
+          if ! ls sigs/*.sig > /dev/null 2>&1; then
+            echo "::notice::The release has no signed update packages, so no latest.json"
+            exit 0
+          fi
+          packaging/latest-json.sh "${GITHUB_REF_NAME#v}" sigs > latest.json
+          cat latest.json
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE/assets" --jq '.[] | select(.name == "latest.json") | .id')
+          if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
+          # By id: a draft has no tag to find it by yet.
+          gh api -X POST -H 'Content-Type: application/json' --input latest.json \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE/assets?name=latest.json" --jq .browser_download_url
 
   # Fills the Homebrew cask, winget manifests, AUR package and Flatpak manifest with the
   # release's checksums and publishes each where its secret is set; see docs/RELEASING.md.

@@ -52,6 +52,18 @@ The desktop app zooms with <kbd>Ctrl +</kbd>, <kbd>Ctrl −</kbd> and <kbd>Ctrl 
 
 When it starts, Kubri asks GitHub for its latest release (`api.github.com/repos/snaketech-tu/kubri/releases/latest`), at most every six hours, and shows **Kubri 1.0.1 is out** at the bottom when that release is newer than the one running. The notice opens the release page with its notes and downloads; **×** hides it until the next release. Nothing about you or your clusters is sent, only the request itself. **Tell me when a new release is out** under **Updates** in Settings (`:updates`) turns the check off; this choice is kept in the app (or in the browser, for the web server).
 
+The desktop app can also update itself. When the new release is newer, it asks right after starting: **Update and restart** downloads the package for this install from the release, checks its signature against the key built into Kubri, installs it and starts the new version. **Later** asks again at the next start (the notice at the bottom opens the same dialog until then), and **Skip this version** waits for the next release. Port-forwards, shells and log streams close when Kubri restarts.
+
+| Installed from | Updated by |
+| --- | --- |
+| `.AppImage` | Kubri, which replaces the AppImage file |
+| `.deb`, `.rpm` | Kubri, which installs the new package with `dpkg` or `rpm`; your system asks for your password (pkexec) |
+| `-setup.exe`, `.msi` | Kubri, which runs the new installer; it closes Kubri and opens the new version |
+| `.dmg`, Homebrew | Kubri, which replaces `Kubri.app`; macOS asks for your password when the app's folder needs it |
+| Flatpak, the AUR | Flatpak or your AUR helper; Kubri only shows the notice |
+
+Releases from before the updater (1.0 and older) only show the notice: install the next release by hand once, and it updates itself from then on. If an update fails, the dialog says why and links the download page.
+
 ## The YAML editor
 
 The editor loads the kind's schema from the API server (`/openapi/v3`), so it knows custom resources as well as built-in ones:

@@ -249,6 +249,10 @@
 			<p class="muted small">
 				Kubri asks GitHub for its latest release when it starts, at most every six hours, and shows a notice at the bottom
 				when it is newer than the one running. Nothing else is sent.
+				{#if backend.desktop}
+					When Kubri can update itself, it asks whether to: it then downloads the release, checks its signature, installs
+					it and starts again. Installs from Flatpak, the AUR or another package manager are updated there.
+				{/if}
 			</p>
 		</div>
 

@@ -4,6 +4,7 @@ mod agents;
 mod explain;
 #[cfg(unix)]
 mod shell_env;
+mod update;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -1055,6 +1056,7 @@ pub fn run() {
     }
     let agents = agents::Agents::new(kubri.clone(), read_only);
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup({
             let agents = agents.clone();
             move |_| {
@@ -1066,6 +1068,7 @@ pub fn run() {
         .manage(agents)
         .manage(Arc::new(Streams::default()))
         .manage(Arc::new(Terminals::default()))
+        .manage(update::Pending::default())
         .invoke_handler(tauri::generate_handler![
             contexts,
             reload_contexts,
@@ -1167,6 +1170,8 @@ pub fn run() {
             helm_history,
             helm_version,
             latest_release,
+            update::update_check,
+            update::update_install,
             helm_rollback,
             helm_uninstall,
             helm_change,
