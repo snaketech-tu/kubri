@@ -165,6 +165,15 @@
 		running: filterRows(running, filter).length
 	});
 
+	// The palette offers the actions of the row under the cursor.
+	$effect(() => {
+		const mine = () => (current ? { label: current.name, actions: actionsFor(current, [current]) } : null);
+		app.rowActions = mine;
+		return () => {
+			if (app.rowActions === mine) app.rowActions = null;
+		};
+	});
+
 	const place = $derived(navPlace(resource));
 	/** Why the list may be wrong or empty: never shown as "no objects". */
 	const problem = $derived(

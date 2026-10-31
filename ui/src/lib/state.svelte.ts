@@ -44,7 +44,7 @@ import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } fro
 import { loadPins, savePins, samePin, toggled as togglePinIn, type Pin } from './pins';
 import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
-import type { Menu } from './menu';
+import type { Menu, MenuAction } from './menu';
 import { applyScheme, applyTheme, resolveColor, storeSkin, storedScheme, storedSkin, type Scheme } from './skin';
 
 export const ALL_NAMESPACES = '';
@@ -891,6 +891,9 @@ class AppState {
 			case 'help':
 				this.helpOpen = true;
 				break;
+			case 'call':
+				action.run();
+				break;
 		}
 	}
 
@@ -970,6 +973,12 @@ class AppState {
 			this.openAt(resource, pin.namespace, pin.name);
 		}
 	}
+
+	/**
+	 * What the palette offers for the row under the cursor: the open list sets it when it appears
+	 * and clears it when it goes. Only a function, so nothing is worked out until the palette asks.
+	 */
+	rowActions: (() => { label: string; actions: MenuAction[] } | null) | null = null;
 
 	/** Opens an object's details, connecting to its context first if it is another one. */
 	async openObject(target: ObjectRef, kind = target.resource.plural) {
