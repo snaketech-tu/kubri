@@ -1127,6 +1127,16 @@
 			display: none;
 		}
 	}
+	/* A narrow window keeps the sidebar as a rail of icons; the labels are in the tooltips. */
+	@media (min-width: 721px) and (max-width: 1100px) {
+		.shell {
+			grid-template-columns: 56px minmax(0, 1fr);
+		}
+		.mode {
+			font-size: 0;
+			gap: 0;
+		}
+	}
 	/* The inspector takes the place of the list and the sidebar. */
 	@media (max-width: 1100px) {
 		.shell.inspecting {
@@ -1148,6 +1158,10 @@
 	@media (max-width: 900px) {
 		.history,
 		.divider {
+			display: none;
+		}
+		/* Keys beyond the first few stay in the help. */
+		.hints > :nth-child(n + 6):not(:last-child) {
 			display: none;
 		}
 	}
