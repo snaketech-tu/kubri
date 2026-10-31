@@ -3,6 +3,8 @@
 	import { backend, type SearchHit } from '../api';
 	import { suggest, type Suggestion } from '../commands';
 	import type { RecentObject } from '../search';
+	import { isTauri } from '@tauri-apps/api/core';
+	import { stepZoom } from '../appearance';
 	import { app } from '../state.svelte';
 
 	let input = $state('');
@@ -57,16 +59,62 @@
 		return () => clearTimeout(timer);
 	});
 
+	/** What can be done with the row under the cursor, found by name. */
+	const forRow = $derived.by((): Suggestion[] => {
+		const found = app.rowActions?.();
+		if (!found) return [];
+		return found.actions.map((a) => ({
+			label: a.label.replace(/…$/, ''),
+			detail: `${a.disabled ? 'Not allowed' : 'Action'} · ${found.label}`,
+			action: { type: 'call', run: a.run }
+		}));
+	});
+
+	/** Commands of the app itself. */
+	const appCommands = $derived.by((): Suggestion[] => {
+		const out: Suggestion[] = [
+			{
+				label: 'Switch to dark or light mode',
+				detail: 'Command · appearance',
+				action: { type: 'call', run: () => app.toggleScheme() }
+			},
+			{
+				label: app.readOnly ? 'Turn read-only off' : 'Turn read-only on',
+				detail: 'Command · this context',
+				action: { type: 'call', run: () => app.toggleReadOnly() }
+			},
+			{ label: 'Show the keyboard shortcuts', detail: 'Command · help', action: { type: 'help' } }
+		];
+		if (isTauri()) {
+			out.push(
+				{ label: 'Zoom in', detail: 'Command · appearance', action: { type: 'call', run: () => app.setZoom(stepZoom(app.zoom, 1)) } },
+				{ label: 'Zoom out', detail: 'Command · appearance', action: { type: 'call', run: () => app.setZoom(stepZoom(app.zoom, -1)) } },
+				{ label: 'Reset the zoom', detail: 'Command · appearance', action: { type: 'call', run: () => app.setZoom(1) } }
+			);
+		}
+		return out;
+	});
+
+	/** Actions and commands whose name has the words typed, once there is something to match. */
+	const doings = $derived.by((): Suggestion[] => {
+		const words = term.toLowerCase().split(/\s+/).filter(Boolean);
+		if (!words.length) return [];
+		const matches = (s: Suggestion) => words.every((w) => s.label.toLowerCase().includes(w));
+		return [...forRow, ...appCommands].filter(matches).slice(0, 6);
+	});
+
 	const suggestions = $derived(
 		input.trim()
 			? [
 					...suggest(input, app.resources, app.contexts, app.namespaces, app.paletteConfig),
+					...doings,
 					...(lookup ? objects : []),
 					...(/^(search|find|grep)\b/i.test(term)
 						? []
 						: [{ label: `search ${term}`, detail: 'Search objects by name, label and field', action: { type: 'search', query: term } } as Suggestion])
 				]
 			: [
+					...forRow.slice(0, 6),
 					...app.recent.slice(0, 5).map(recentSuggestion),
 					...suggest('ctx', app.resources, app.contexts, app.namespaces).slice(0, 3),
 					...suggest('po', app.resources, app.contexts, app.namespaces).slice(0, 1),
