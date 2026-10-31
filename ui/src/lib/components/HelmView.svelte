@@ -711,7 +711,7 @@
 		>
 			{#snippet tools()}
 				<button class="btn" onclick={() => reloads++} title="Read the releases again">Reload</button>
-				<button class="btn" onclick={() => (changing = 'install')} disabled={!helm} title={helm ? 'Install a chart (i)' : 'Needs the helm command'}>
+				<button class="btn" onclick={() => (changing = 'install')} disabled={!helm} title={helm ? 'Install a chart (i)' : 'Needs the helm command, see the note below'}>
 					Install chart
 				</button>
 			{/snippet}
@@ -719,6 +719,12 @@
 
 		{#if error}
 			<div class="notice" role="alert">{error}</div>
+		{/if}
+		{#if helm === null}
+			<div class="notice warn">
+				Installing, upgrading and rolling back need the <code>helm</code> command, and Kubri did not find it on its PATH.
+				Install Helm (<a href="https://helm.sh/docs/intro/install/" target="_blank" rel="noreferrer">helm.sh/docs/intro/install</a>) where Kubri runs, then reload.
+			</div>
 		{/if}
 
 		<div class="card">

@@ -14,6 +14,7 @@ export function cellTone(column: string, value: unknown): Tone {
 		if (value.startsWith('Failed')) return 'bad';
 		return value.startsWith('Warning') ? 'warn' : '';
 	}
+	if (name === 'type' && value === 'Warning') return 'warn';
 	if (name === 'ready' && /^\d+\/\d+$/.test(value)) {
 		const [ready, total] = value.split('/').map(Number);
 		return ready === total ? 'ok' : 'warn';

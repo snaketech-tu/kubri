@@ -155,6 +155,8 @@ describe('status colors', () => {
 		expect(cellTone('Ready', '1/2')).toBe('warn');
 		expect(cellTone('Ready', '2/2')).toBe('ok');
 		expect(cellTone('Name', 'Running')).toBe('');
+		expect(cellTone('Type', 'Warning')).toBe('warn');
+		expect(cellTone('Type', 'Normal')).toBe('');
 	});
 
 	it('colors the health of views by its state, not its message', () => {
