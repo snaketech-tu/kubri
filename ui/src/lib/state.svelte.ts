@@ -8,7 +8,7 @@ import {
 	backend,
 	type AccessCheck,
 	type ClusterInfo,
-	type LatestRelease,
+	type UpdateCheck,
 	type ColumnSettings,
 	type FavoriteForward,
 	type FavoriteStart,
@@ -299,6 +299,8 @@ class AppState {
 		return !!this.#details && (this.maximized || ((tab === 'logs' || tab === 'shell') && !this.#toolsBeside));
 	}
 	dialog = $state<Dialog | null>(null);
+	/** The dialog that offers to install the new `release`. */
+	updateOpen = $state(false);
 	forwards = $state<PortForwardInfo[]>([]);
 	benchmarks = $state<BenchInfo[]>([]);
 	/** The benchmark the benchmarks page shows. */
@@ -359,6 +361,7 @@ class AppState {
 			this.contextMenuOpen ||
 			this.menu !== null ||
 			this.dialog !== null ||
+			this.updateOpen ||
 			this.pluginTerminal !== null ||
 			this.explaining !== null ||
 			drafts.pending !== null
@@ -575,7 +578,7 @@ class AppState {
 	/** Whether Kubri asks GitHub for new releases when it starts. */
 	releaseChecks = $state(releaseChecks());
 	/** A release newer than this one, until the user waves it away. */
-	release = $state<LatestRelease | null>(null);
+	release = $state<UpdateCheck | null>(null);
 
 	setReleaseChecks(on: boolean) {
 		this.releaseChecks = on;
@@ -584,11 +587,13 @@ class AppState {
 		else this.release = null;
 	}
 
-	async checkRelease() {
+	/** With `offer`, as when Kubri starts, opens the update dialog if Kubri can install the release. */
+	async checkRelease(offer = false) {
 		if (!this.releaseChecks) return;
 		try {
-			const latest = await backend.latestRelease();
+			const latest = await backend.checkUpdate();
 			this.release = latest.newer && latest.version !== dismissedRelease() ? latest : null;
+			if (offer && this.release?.installable) this.updateOpen = true;
 		} catch {
 			// Offline or rate-limited: no notice, and the next start asks again.
 		}
@@ -597,6 +602,7 @@ class AppState {
 	dismissRelease() {
 		if (this.release) dismissRelease(this.release.version);
 		this.release = null;
+		this.updateOpen = false;
 	}
 
 	/** Where Kubri is, for the history. */
@@ -609,7 +615,7 @@ class AppState {
 	});
 
 	async load() {
-		this.checkRelease();
+		this.checkRelease(true);
 		try {
 			await this.loadSettings();
 			const { contexts, cluster } = await backend.contexts();

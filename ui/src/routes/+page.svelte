@@ -23,6 +23,7 @@
 	import DebugDialog from '#lib/components/DebugDialog.svelte';
 	import CompareDialog from '#lib/components/CompareDialog.svelte';
 	import ForbiddenDialog from '#lib/components/ForbiddenDialog.svelte';
+	import UpdateDialog from '#lib/components/UpdateDialog.svelte';
 	import AgentRequests from '#lib/components/AgentRequests.svelte';
 	import HelmView from '#lib/components/HelmView.svelte';
 	import KubectlDialog from '#lib/components/KubectlDialog.svelte';
@@ -608,9 +609,18 @@
 			{#if app.release}
 				{@const release = app.release}
 				<span class="release">
-					<button onclick={() => backend.openUrl(release.url)} title="Open the release notes and downloads">
-						Kubri {release.version} is out
-					</button>
+					{#if release.installable}
+						<button onclick={() => (app.updateOpen = true)} title="Update Kubri to {release.version}">
+							Kubri {release.version} is out · Update
+						</button>
+					{:else}
+						<button
+							onclick={() => backend.openUrl(release.url)}
+							title={release.manual ? `${release.manual} Opens the release notes and downloads.` : 'Open the release notes and downloads'}
+						>
+							Kubri {release.version} is out
+						</button>
+					{/if}
 					<button class="close" onclick={() => app.dismissRelease()} aria-label="Hide until the next release">×</button>
 				</span>
 			{/if}
@@ -644,6 +654,7 @@
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}
+{#if app.updateOpen && app.release}<UpdateDialog release={app.release} />{/if}
 {#if app.explaining}<ExplainPanel subject={app.explaining} />{/if}
 {#if app.pluginTerminal}
 	<PluginTerminal plugin={app.pluginTerminal.plugin} run={app.pluginTerminal.run} />

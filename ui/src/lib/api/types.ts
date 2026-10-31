@@ -1138,6 +1138,17 @@ export interface LatestRelease {
 	newer: boolean;
 }
 
+/** The latest release, and whether the desktop app can install it itself. */
+export interface UpdateCheck extends LatestRelease {
+	/** Kubri downloads, checks and installs it, then starts again. Only in the desktop app. */
+	installable?: boolean;
+	/** Why it cannot, when the release is newer: the download page is the way then. */
+	manual?: string | null;
+}
+
+/** How far installing an update has come. */
+export type UpdateProgress = { type: 'download'; done: number; total: number | null } | { type: 'install' };
+
 export interface HelmRelease {
 	name: string;
 	namespace: string;
@@ -1521,6 +1532,10 @@ export interface Backend {
 	helmVersion(): Promise<string | null>;
 	/** Asks GitHub for the latest release of Kubri, at most every few hours. */
 	latestRelease(): Promise<LatestRelease>;
+	/** The latest release, and in the desktop app whether it can install it. */
+	checkUpdate(): Promise<UpdateCheck>;
+	/** Installs the update `checkUpdate` found and starts Kubri again. Only in the desktop app. */
+	installUpdate(onProgress: (progress: UpdateProgress) => void): Promise<void>;
 	helmRollback(namespace: string, name: string, revision: number): Promise<string>;
 	helmUninstall(namespace: string, name: string): Promise<string>;
 	/** Installs or upgrades a release with helm; with `dryRun`, renders it against the cluster only. */

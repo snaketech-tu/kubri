@@ -1,6 +1,6 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { writeQueue } from './queue';
-import type { Backend, LogEvent, TableEvent, TerminalEvent, TerminalSession } from './types';
+import type { Backend, LogEvent, TableEvent, TerminalEvent, TerminalSession, UpdateProgress } from './types';
 
 /** Opens a terminal with `command`; all terminals share the write, resize and close commands. */
 function terminalChannel(
@@ -165,6 +165,12 @@ export const tauriBackend: Backend = {
 	helmHistory: (namespace, name) => invoke('helm_history', { namespace, name }),
 	helmVersion: () => invoke('helm_version'),
 	latestRelease: () => invoke('latest_release'),
+	checkUpdate: () => invoke('update_check'),
+	installUpdate(onProgress) {
+		const channel = new Channel<UpdateProgress>();
+		channel.onmessage = onProgress;
+		return invoke('update_install', { onProgress: channel });
+	},
 	helmRollback: (namespace, name, revision) => invoke('helm_rollback', { namespace, name, revision }),
 	helmUninstall: (namespace, name) => invoke('helm_uninstall', { namespace, name }),
 	helmChange: (change) => invoke('helm_change', { change }),

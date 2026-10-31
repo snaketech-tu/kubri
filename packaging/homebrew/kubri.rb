@@ -17,6 +17,8 @@ cask "kubri" do
     strategy :github_latest
   end
 
+  # Kubri updates itself (docs/SETTINGS.md#updates), so `brew upgrade` leaves it alone.
+  auto_updates true
   depends_on macos: ">= :catalina"
 
   app "Kubri.app"

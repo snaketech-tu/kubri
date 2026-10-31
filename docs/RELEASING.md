@@ -11,7 +11,7 @@ A release is a version tag. Pushing it builds the desktop app and the Docker ima
    ```
 
 3. Two workflows start:
-   - **Release** checks that the tag matches the version, creates a draft release with the text from [`.github/release-notes.md`](../.github/release-notes.md), and attaches the desktop builds: `.dmg` for macOS on Apple silicon and Intel, `.deb`, `.rpm` and `.AppImage` for Linux on x64 and Arm, and `.msi` and `-setup.exe` for Windows.
+   - **Release** checks that the tag matches the version, creates a draft release with the text from [`.github/release-notes.md`](../.github/release-notes.md), and attaches the desktop builds: `.dmg` for macOS on Apple silicon and Intel, `.deb`, `.rpm` and `.AppImage` for Linux on x64 and Arm, and `.msi` and `-setup.exe` for Windows. With the updater key set up, it also attaches their signatures and `latest.json` (see [Updates in the app](#updates-in-the-app)).
    - **Docker** publishes `ghcr.io/snaketech-tu/kubri` for amd64 and arm64 as `0.2.0`, `0.2` and `latest`. Every push to `main` also publishes `edge`.
 4. When all builds are attached, open the draft on GitHub, write what changed under "What's new", and publish it.
 
@@ -39,9 +39,28 @@ Each needs a one-time setup first:
 - **Flathub**: submit the app once by hand, as [Flathub's guide](https://docs.flathub.org/docs/for-app-authors/submission) describes, with the manifest and metainfo from the `packages` artifact. Once it is accepted, Flathub creates the repository and the job keeps it up to date. The Flatpak cannot run commands installed on the computer, so kubeconfigs that sign in through one, k9s plugins and Helm changes do not work in it; its description says so.
 - **winget**: submit the first version by hand, with `wingetcreate submit` and the manifests from the `packages` artifact, or as a pull request to `microsoft/winget-pkgs`. Later versions go through the job.
 
-## Signing
+## Updates in the app
 
-The builds are not signed yet. macOS asks before opening Kubri the first time (the app is signed ad hoc, so it is not reported as damaged), and Windows SmartScreen warns about an unknown app; the release text says how to get past both.
+The desktop app updates itself from the latest release ([SETTINGS.md](SETTINGS.md#updates)). It only installs packages signed with the updater key, whose public half is built into the app. Set the key up once:
+
+1. Make a key pair, with a password, somewhere outside the repository:
+
+   ```sh
+   cd ui
+   pnpm tauri signer generate -w "$HOME/.tauri/kubri-updater.key"
+   ```
+
+   This writes `kubri-updater.key` (the private key) and `kubri-updater.key.pub` (the public key). Keep the private key and its password safe, in a password manager for instance: an app built with this public key only accepts updates signed with this private key, so losing it means users have to install the next release by hand.
+2. Under **Settings → Secrets and variables → Actions** in the repository, add:
+   - the secret `TAURI_SIGNING_PRIVATE_KEY` with the contents of `kubri-updater.key`,
+   - the secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` with its password,
+   - the variable (on the **Variables** tab) `TAURI_UPDATER_PUBKEY` with the contents of `kubri-updater.key.pub`.
+
+From then on, each release's builds put the public key into the app and attach a signature (`.sig`) next to each package, and the **Updater** job attaches `latest.json`, which lists the package and signature for each platform and format. The app reads `latest.json` from the latest published release, so a draft reaches nobody until it is published. Without the key, the builds work as before: no signatures, no `latest.json`, and the app only shows the notice for new releases.
+
+## Code signing
+
+The builds are not code-signed yet. macOS asks before opening Kubri the first time (the app is signed ad hoc, so it is not reported as damaged), and Windows SmartScreen warns about an unknown app; the release text says how to get past both.
 
 To sign them, add the certificates as repository secrets and pass them to the `tauri-apps/tauri-action` step in [`release.yml`](../.github/workflows/release.yml) as environment variables, as described in Tauri's guides for [macOS](https://v2.tauri.app/distribute/sign/macos/) (`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, and `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID` for notarizing) and [Windows](https://v2.tauri.app/distribute/sign/windows/).
 
