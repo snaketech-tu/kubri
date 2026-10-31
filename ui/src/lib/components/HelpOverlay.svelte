@@ -199,24 +199,41 @@
 	});
 
 	let box = $state<HTMLDivElement>();
+	let search = $state<HTMLInputElement>();
+	let filter = $state('');
+
+	/** The groups with only the keys that match the filter, in the key or in what it does. */
+	const shown = $derived.by(() => {
+		const t = filter.trim().toLowerCase();
+		if (!t) return groups;
+		return groups
+			.map(([title, keys]): [string, [string, string][]] => [
+				title,
+				keys.filter(([key, what]) => key.toLowerCase().includes(t) || what.toLowerCase().includes(t) || title.toLowerCase().includes(t))
+			])
+			.filter(([, keys]) => keys.length > 0);
+	});
 
 	// The overlay takes the focus while open and gives it back when it closes.
 	$effect(() => {
 		const previous = document.activeElement as HTMLElement | null;
-		box?.focus();
+		(search ?? box)?.focus();
 		return () => {
 			if (previous?.isConnected) previous.focus();
 		};
 	});
 
 	function onkeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape' || e.key === '?') {
+		if (e.key === 'Escape' && filter) {
+			e.preventDefault();
+			filter = '';
+		} else if (e.key === 'Escape' || (e.key === '?' && e.target !== search)) {
 			e.preventDefault();
 			app.helpOpen = false;
 		} else if (e.key === 'Tab') {
-			// Nothing inside takes the focus, so it stays on the overlay instead of the page behind.
+			// Only the filter takes the focus, so it stays there instead of going to the page behind.
 			e.preventDefault();
-			box?.focus();
+			search?.focus();
 		}
 	}
 </script>
@@ -226,8 +243,16 @@
 <div class="backdrop" onclick={() => (app.helpOpen = false)} role="presentation"></div>
 <div class="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabindex="-1" bind:this={box}>
 	<h2>Keyboard shortcuts</h2>
+	<input
+		class="filter"
+		bind:this={search}
+		bind:value={filter}
+		placeholder="Type to find a key or a command…"
+		aria-label="Filter the shortcuts"
+		spellcheck="false"
+	/>
 	<div class="groups">
-		{#each groups as [title, keys] (title)}
+		{#each shown as [title, keys] (title)}
 			<section>
 				<h3>{title}</h3>
 				<dl>
@@ -237,11 +262,23 @@
 					{/each}
 				</dl>
 			</section>
+		{:else}
+			<p class="none">Nothing matches "{filter}".</p>
 		{/each}
 	</div>
 </div>
 
 <style>
+	.filter {
+		width: 100%;
+		margin-bottom: 4px;
+		padding: 7px 10px;
+		font-size: 13px;
+	}
+	.none {
+		color: var(--text-muted);
+		font-size: 13px;
+	}
 	.backdrop {
 		position: fixed;
 		inset: 0;

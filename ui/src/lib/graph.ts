@@ -114,7 +114,12 @@ export function layoutGraph(graph: Graph, by: GroupBy): Layout {
 		const key = group.get(n.id) ?? fallback;
 		groups.set(key, [...(groups.get(key) ?? []), n]);
 	}
-	const order = [...groups.keys()].sort((a, b) => Number(a === fallback) - Number(b === fallback) || a.localeCompare(b));
+	// Bands with problems first, so they are on screen without scrolling; then by name.
+	const issuesIn = (label: string) => (groups.get(label) ?? []).filter((n) => n.health !== 'ok' && n.kind !== 'Node').length;
+	const order = [...groups.keys()].sort(
+		(a, b) =>
+			Number(a === fallback) - Number(b === fallback) || Number(issuesIn(b) > 0) - Number(issuesIn(a) > 0) || a.localeCompare(b)
+	);
 
 	const boxes: Box[] = [];
 	const bands: Band[] = [];

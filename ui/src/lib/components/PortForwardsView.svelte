@@ -57,6 +57,13 @@
 		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
 	});
 
+	/** A forward starts from an object: take the person to the pods. */
+	function choose() {
+		const pods = app.resources.find((r) => r.group === '' && r.plural === 'pods');
+		if (pods) app.open(pods);
+		app.toast('Select a pod and press Shift+F, or use its Port-forward action');
+	}
+
 	function url(f: PortForwardInfo) {
 		// Listening on every address: in the browser, the server's own name reaches it.
 		const everywhere = f.address === '0.0.0.0' || f.address === '::';
@@ -186,6 +193,7 @@
 				<div class="empty" role="status">
 					<p>No port-forwards running.</p>
 					<p class="muted">Select a pod, deployment or service and press <kbd>Shift+F</kbd> to start one.</p>
+					<button class="btn" onclick={choose}>Start a port-forward…</button>
 				</div>
 			{/if}
 			{#if stopped.length}

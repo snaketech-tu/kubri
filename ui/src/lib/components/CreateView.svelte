@@ -50,6 +50,16 @@
 
 	const key = (r: ResourceInfo) => `${r.group}/${r.version}/${r.plural}`;
 
+	// Choosing a kind adds its template at once.
+	$effect(() => {
+		if (kind) untrack(insert);
+	});
+
+	/** The namespaces to pick from, with the one in use even if the cluster does not list it. */
+	const namespaceOptions = $derived(
+		[...new Set([...app.namespaces, ...(namespace ? [namespace] : [])])].sort().map((n) => ({ value: n, label: n }))
+	);
+
 	/** Adds the kind's template, as a new document when there is YAML already. */
 	async function insert() {
 		const resource = creatable.find((r) => key(r) === kind);
@@ -248,7 +258,6 @@
 						style="max-width: 260px"
 					/>
 				</label>
-				<button onclick={insert} disabled={!kind} title="Add the kind's template, as another document if there is YAML already">Add</button>
 				<span class="divider"></span>
 				<button onclick={() => file?.click()}><Icon name="config" size={15} /> Open files…</button>
 				<input bind:this={file} type="file" accept=".yaml,.yml,.json" multiple hidden onchange={openFile} />
@@ -260,8 +269,8 @@
 						>Form</button
 					>
 				{/if}
-				<label class="field">
-					<span>Context</span>
+				<label class="field" class:elsewhere>
+					<span>{elsewhere ? 'Context (not the current one)' : 'Context'}</span>
 					<Select
 						bind:value={into}
 						options={app.contexts.map((c) => ({ value: c.name, label: app.contextName(c.name) }))}
@@ -273,17 +282,14 @@
 				</label>
 				<label class="field">
 					<span>Namespace</span>
-					<input
-						class="namespace"
+					<Select
 						bind:value={namespace}
-						list="create-namespaces"
-						spellcheck="false"
+						options={namespaceOptions}
 						title="For objects that name no namespace"
 						aria-label="Namespace for objects that name none"
+						compact
+						style="max-width: 220px"
 					/>
-					<datalist id="create-namespaces">
-						{#each app.namespaces as n (n)}<option value={n}></option>{/each}
-					</datalist>
 				</label>
 			</div>
 			{#if creating.source}
@@ -368,6 +374,10 @@
 </section>
 
 <style>
+	.field.elsewhere > span {
+		color: var(--warn);
+		font-weight: 600;
+	}
 	section {
 		display: flex;
 		flex-direction: column;
@@ -424,13 +434,6 @@
 	}
 	.muted {
 		color: var(--text-muted);
-	}
-	.field .namespace {
-		width: 160px;
-		padding: 5px 8px;
-		font-family: var(--mono);
-		font-size: 12.5px;
-		color: var(--text);
 	}
 	.source {
 		display: flex;
