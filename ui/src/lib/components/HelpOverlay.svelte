@@ -242,7 +242,16 @@
 
 <div class="backdrop" onclick={() => (app.helpOpen = false)} role="presentation"></div>
 <div class="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabindex="-1" bind:this={box}>
-	<h2>Keyboard shortcuts</h2>
+	<h2>
+		Keyboard shortcuts
+		<button
+			class="tour-link"
+			onclick={() => {
+				app.helpOpen = false;
+				app.tourOpen = true;
+			}}>Show the quick tour</button
+		>
+	</h2>
 	<input
 		class="filter"
 		bind:this={search}
@@ -269,6 +278,18 @@
 </div>
 
 <style>
+	h2 {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+	}
+	.tour-link {
+		border: none;
+		background: none;
+		color: var(--accent);
+		font-size: 12.5px;
+		font-weight: 400;
+	}
 	.filter {
 		width: 100%;
 		margin-bottom: 4px;

@@ -30,6 +30,7 @@
 	import SnapshotDialog from '#lib/components/SnapshotDialog.svelte';
 	import ActivityPanel from '#lib/components/ActivityPanel.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
+	import Tour from '#lib/components/Tour.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
 	import PluginTerminal from '#lib/components/PluginTerminal.svelte';
 	import PortForwardsView from '#lib/components/PortForwardsView.svelte';
@@ -86,6 +87,11 @@
 
 	// k9s plugin and hotkey keys.
 	$effect(() => listenForBindings());
+
+	// The quick tour, once, the first time there is a cluster to look at.
+	$effect(() => {
+		if (app.cluster) untrack(() => app.maybeStartTour());
+	});
 
 	$effect(() => {
 		if (!app.cluster) return;
@@ -645,6 +651,7 @@
 
 {#if app.paletteOpen}<CommandPalette />{/if}
 {#if app.helpOpen}<HelpOverlay />{/if}
+{#if app.tourOpen}<Tour />{/if}
 {#if app.activityOpen}<ActivityPanel />{/if}
 {#if app.menu}<ActionMenu menu={app.menu} />{/if}
 <AgentRequests />

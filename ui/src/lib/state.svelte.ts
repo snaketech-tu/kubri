@@ -323,6 +323,27 @@ class AppState {
 	paletteOpen = $state(false);
 	helpOpen = $state(false);
 
+	/** The first-run tour; shown once, and again from the help. */
+	tourOpen = $state(false);
+
+	markTourSeen() {
+		try {
+			localStorage.setItem('kubri.tour', 'seen');
+		} catch {
+			// The tour then shows again next time; no harm.
+		}
+	}
+
+	/** Shows the tour the first time Kubri has a cluster to show. */
+	maybeStartTour() {
+		try {
+			if (localStorage.getItem('kubri.tour') === 'seen') return;
+		} catch {
+			return;
+		}
+		this.tourOpen = true;
+	}
+
 	/** Every change made from here in this session, newest first. */
 	activity = $state.raw<Activity[]>([]);
 	activityOpen = $state(false);
@@ -397,6 +418,7 @@ class AppState {
 	overlayOpen = $derived(
 		this.paletteOpen ||
 			this.helpOpen ||
+			this.tourOpen ||
 			this.activityOpen ||
 			this.contextMenuOpen ||
 			this.menu !== null ||
