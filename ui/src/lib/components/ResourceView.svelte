@@ -96,6 +96,9 @@
 		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' }
 	];
 
+	/** Empty cells, `<none>` and `None` all read as a dash. */
+	const NOTHING = /^(|<none>|None)$/;
+
 	const TIMESTAMP = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/;
 
 	type DisplayColumn = (
@@ -118,7 +121,7 @@
 			const custom = c.format === 'jsonpath' ? columnSettings.custom.find((x) => x.path === c.name) : undefined;
 			out.push({
 				kind: 'cell',
-				label: custom?.name ?? c.name,
+				label: isAge ? 'Age' : (custom?.name ?? c.name),
 				index,
 				age: isAge,
 				name: c.format === 'name',
@@ -146,6 +149,13 @@
 		faults = tab === 'attention';
 		runningOnly = tab === 'running';
 	}
+
+	/** The tab counts follow the filter, so they match what each tab would show. */
+	const counts = $derived({
+		all: filterRows(owned, filter).length,
+		attention: filterRows(faulty, filter).length,
+		running: filterRows(running, filter).length
+	});
 
 	const place = $derived(navPlace(resource));
 	/** Why the list may be wrong or empty: never shown as "no objects". */
@@ -341,6 +351,7 @@
 				if (column.age) return age(row.created, app.snapshot?.taken ?? now);
 				const value = row.cells[column.index];
 				if (value === null || value === undefined) return '';
+				if (column.label === 'Cluster-IP' && value === 'None') return 'Headless';
 				// Times in custom columns, like a certificate's expiry, read as ages.
 				if (column.custom && typeof value === 'string' && TIMESTAMP.test(value)) return relative(value, now);
 				return String(value);
@@ -348,10 +359,45 @@
 		}
 	}
 
+	/** How close a pod is to its limit and request: red at 90 % of the limit, amber above the request. */
+	function pressure(row: Row, what: 'cpu' | 'memory'): { tone: Tone; hint: string } | null {
+		if (!isPods(resource)) return null;
+		const u = metrics.get(row.namespace, row.name);
+		if (!u) return null;
+		const used = u[what];
+		const limit = u.limits?.[what];
+		const request = u.requests?.[what];
+		const name = what === 'cpu' ? 'CPU' : 'memory';
+		if (limit && used >= limit * 0.9) {
+			return {
+				tone: 'bad',
+				hint:
+					what === 'cpu'
+						? `At ${Math.round((used / limit) * 100)} % of its CPU limit: it is being throttled`
+						: `At ${Math.round((used / limit) * 100)} % of its memory limit: it may be killed`
+			};
+		}
+		if (request && used > request) {
+			return { tone: 'warn', hint: `Using more ${name} than it requests (${Math.round((used / request) * 100)} %)` };
+		}
+		return null;
+	}
+
 	/** Colors status cells, and percentages by the k9s thresholds. */
 	function tone(row: Row, column: DisplayColumn, text: string): Tone {
+		// A pod that finished is not "0 of 1 ready"; that is how it ends.
+		if (column.kind === 'cell' && /^ready$/i.test(column.label) && /^(Completed|Succeeded)$/.test(cell(row, 'Status') ?? '')) {
+			return '';
+		}
 		if (column.kind === 'cell') return cellTone(column.label, text);
-		if (column.kind !== 'metric' || !column.threshold || column.label.endsWith('/ request')) return '';
+		if (column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')) {
+			return pressure(row, column.label === 'CPU' ? 'cpu' : 'memory')?.tone ?? '';
+		}
+		if (column.kind !== 'metric' || !column.threshold) return '';
+		if (column.label.endsWith('/ request')) {
+			const v = metricValue(row, column);
+			return v !== null && v !== undefined && v > 100 ? 'warn' : '';
+		}
 		const value = metricValue(row, column);
 		if (value === null || value === undefined) return '';
 		const limits = app.k9s?.thresholds[column.threshold] ?? { warn: 70, critical: 90 };
@@ -675,9 +721,8 @@
 		</nav>
 		<div class="heading">
 			<div class="title">
-				<h1>{place.label}</h1>
+				<h1 title="{resource.kind} · {resource.group ? `${resource.group}/` : ''}{resource.version}">{place.label}</h1>
 				<span class="count">{owned.length}</span>
-				<code>{resource.group ? `${resource.group}/` : ''}{resource.version}</code>
 				{#if scope}
 					<span class="chip">
 						{scope.title}
@@ -753,14 +798,14 @@
 		</div>
 		<div class="tabs" role="tablist" aria-label="Show">
 			<button role="tab" aria-selected={!faults && !runningOnly} onclick={() => showTab('all')}>
-				All <span class="n">{owned.length}</span>
+				All <span class="n">{counts.all}</span>
 			</button>
 			<button role="tab" aria-selected={faults} onclick={() => showTab('attention')} title="Only rows that need a look (Ctrl+Z)">
-				Needs attention <span class="n" class:alert={faulty.length}>{faulty.length}</span>
+				Needs attention <span class="n" class:alert={counts.attention}>{counts.attention}</span>
 			</button>
 			{#if isPods(resource)}
 				<button role="tab" aria-selected={runningOnly} onclick={() => showTab('running')}>
-					Running <span class="n">{running.length}</span>
+					Running <span class="n">{counts.running}</span>
 				</button>
 			{/if}
 		</div>
@@ -791,7 +836,7 @@
 								aria-sort={sort.column === column.index ? (sort.descending ? 'descending' : 'ascending') : 'none'}
 							>
 								<button class="sort" onclick={() => sortBy(column.index)}>
-									{column.label}
+									{column.label.replace(/^Memory/, 'Mem')}
 									<span class="arrow" aria-hidden="true">
 										{sort.column === column.index ? (sort.descending ? '↓' : '↑') : '↕'}
 									</span>
@@ -831,8 +876,10 @@
 								/>
 							</td>
 							{#each columns as column (column.label + column.index)}
-								{@const text = cellText(row, column)}
-								{@const color = tone(row, column, text)}
+								{@const raw = cellText(row, column)}
+								{@const text = column.kind === 'cell' && !column.name && NOTHING.test(raw) ? '—' : raw}
+								{@const color = tone(row, column, raw)}
+								{@const hint = column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem') ? pressure(row, column.label === 'CPU' ? 'cpu' : 'memory')?.hint : undefined}
 								{@const icon = statusIcon(column, color)}
 								<td
 									oncontextmenu={(e) => {
@@ -841,6 +888,7 @@
 										openMenu(row, e.clientX, e.clientY, 'left', column);
 									}}
 									class={color}
+									title={hint}
 									class:name={column.kind === 'cell' && column.name}
 									class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
 									class:numeric={column.kind === 'metric'}
@@ -982,10 +1030,6 @@
 	}
 	.chip button:hover {
 		background: color-mix(in srgb, currentColor 15%, transparent);
-	}
-	code {
-		color: var(--text-muted);
-		font-size: 12px;
 	}
 	.tools {
 		display: flex;
@@ -1144,7 +1188,7 @@
 		position: sticky;
 		top: 0;
 		z-index: 1;
-		padding: 0 10px;
+		padding: 0 8px;
 		background: var(--surface-1);
 		border-bottom: 1px solid var(--border);
 		text-align: left;
@@ -1184,7 +1228,7 @@
 	}
 	td {
 		height: 40px;
-		padding: 4px 10px;
+		padding: 4px 8px;
 		border-bottom: 1px solid var(--border-subtle);
 		white-space: nowrap;
 		max-width: 420px;
