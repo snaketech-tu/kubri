@@ -6,6 +6,8 @@ export interface FleetState {
 	health: Health | null;
 	/** `Unreachable`, `2 pods failing`, `Healthy`. */
 	summary: string;
+	/** The API server did not answer: a different problem from failing workloads. */
+	unreachable?: boolean;
 }
 
 const WORKLOADS = ['Deployment', 'StatefulSet', 'DaemonSet'];
@@ -31,7 +33,7 @@ export function workloads(kinds: KindPulse[]): KindPulse | null {
 /** Failing nodes count most, then failing workloads and pods; warnings only make it a warning. */
 export function fleetState(cluster: FleetCluster | null): FleetState {
 	if (!cluster) return { health: null, summary: 'Checking…' };
-	if (!cluster.version) return { health: 'failed', summary: 'Unreachable' };
+	if (!cluster.version) return { health: 'failed', summary: 'Unreachable', unreachable: true };
 	const nodes = cluster.kinds.find((k) => k.kind === 'Node');
 	const pods = cluster.kinds.find((k) => k.kind === 'Pod');
 	const work = workloads(cluster.kinds);

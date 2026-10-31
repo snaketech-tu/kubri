@@ -10,7 +10,7 @@
 	import { tick } from 'svelte';
 	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization } from '../api';
 	import { age, errorMessage, memory, relative } from '../format';
-	import { attentionItems, fill, kindLabel, meterTone, record } from '../pulse';
+	import { attentionItems, fill, kindLabel, meterTone, record, shortMessage, splitKinds } from '../pulse';
 	import { app, findResource } from '../state.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 	import Sparkline from './Sparkline.svelte';
@@ -109,13 +109,17 @@
 		namespace ? { group: '', version: 'v1', plural: 'pods' } : { group: '', version: 'v1', plural: 'nodes' }
 	);
 
+	const kindGroups = $derived(splitKinds(pulse?.kinds ?? []));
+	let showHealthy = $state(false);
+	const shownKinds = $derived(showHealthy ? [...kindGroups.problems, ...kindGroups.healthy] : kindGroups.problems);
+
 	/** What arrow keys move between and Enter opens: the cards on top, then the kinds. */
 	const tiles = $derived<(() => void)[]>([
 		() => openList({ group: '', version: 'v1', plural: 'pods' }),
 		() => openList({ group: '', version: 'v1', plural: 'nodes' }),
 		() => openList(usageList),
 		() => openList(usageList),
-		...(pulse?.kinds ?? []).map((k) => () => openList(k.resource))
+		...shownKinds.map((k) => () => openList(k.resource))
 	]);
 	const KIND_TILES = 4;
 
@@ -271,7 +275,9 @@
 												{item.severity === 'critical' ? 'Critical' : 'Warning'}
 											</span>
 										</span>
-										<span class="message">{item.event.message}</span>
+										<span class="message" title={item.event.message}
+											>{shortMessage(item.event.reason, item.event.message, item.count)}</span
+										>
 										<span class="where">
 											<code
 												>{item.event.objectKind}
@@ -321,9 +327,21 @@
 							<h2 id="health-title">Resource health</h2>
 						</div>
 						<ul class="kinds">
-							{#each pulse.kinds as kind, i (kind.kind)}
+							{#each shownKinds as kind, i (kind.kind)}
 								{@render kindRow(kind, i + KIND_TILES)}
 							{/each}
+							{#if kindGroups.healthy.length}
+								<li>
+									<button class="fold" aria-expanded={showHealthy} onclick={() => (showHealthy = !showHealthy)}>
+										<span class="kind-name">
+											<Icon name="ok" />
+											{kindGroups.healthy.length}
+											{kindGroups.healthy.length === 1 ? 'kind is' : 'kinds are'} healthy
+										</span>
+										<span class="muted">{showHealthy ? 'Hide' : 'Show'}</span>
+									</button>
+								</li>
+							{/if}
 						</ul>
 					</section>
 
@@ -393,11 +411,10 @@
 						? `${scope} · all healthy`
 						: `${scope} · none`}
 			</span>
-			<span class="meter" aria-hidden="true">
-				<span
-					class="fill {kind.failed ? 'bad' : kind.warning ? 'warn' : ''}"
-					style:width={percent(kind.total ? kind.ok / kind.total : 0)}
-				></span>
+			<span class="bar" aria-hidden="true">
+				{#each [['ok', kind.ok], ['warning', kind.warning], ['failed', kind.failed]] as [health, count] (health)}
+					{#if Number(count) > 0}<span class="segment {health}" style:flex-grow={count}></span>{/if}
+				{/each}
 			</span>
 		{/if}
 	</button>
@@ -862,10 +879,21 @@
 	}
 	.kind-counts {
 		display: flex;
-		gap: 10px;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 2px 10px;
+		min-width: 0;
 		font-size: 12px;
 		color: var(--text-muted);
+	}
+	.kind-counts > span {
 		white-space: nowrap;
+	}
+	.kind-name {
+		overflow-wrap: anywhere;
+	}
+	.kinds .fold {
+		color: var(--text-muted);
 	}
 	.kind-counts strong {
 		color: var(--text);
