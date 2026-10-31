@@ -445,7 +445,15 @@
 	}
 </script>
 
-<svelte:window onkeydowncapture={onkeydown} />
+<svelte:window
+	onkeydowncapture={onkeydown}
+	onclick={(e) => {
+		// A menu closes when the click is elsewhere.
+		for (const d of document.querySelectorAll<HTMLDetailsElement>('details.columns[open]')) {
+			if (!d.contains(e.target as Node)) d.open = false;
+		}
+	}}
+/>
 
 {#snippet textLine(line: ViewLine, extra = '')}
 	{#if timestamps}<span class="time" title={line.time}>{shortTime(line.time) || ' '.repeat(12)}</span>{/if}{#if showSource && line.source !== null}<span
@@ -515,9 +523,32 @@
 				>
 			{/if}
 		</label>
-		<label title="Hide the lines that do not match, or keep them and highlight the matches"
-			><input type="checkbox" bind:checked={onlyMatches} /> Only matches</label
-		>
+		{#if filter}
+			<label title="Hide the lines that do not match, or keep them and highlight the matches"
+				><input type="checkbox" bind:checked={onlyMatches} /> Only matches</label
+			>
+		{/if}
+		{#if !loki}
+			<button class="toggle" class:on={follow} aria-pressed={follow} onclick={() => (follow = !follow)} title="Keep reading new lines as they are written">
+				Follow
+			</button>
+		{/if}
+		<details class="columns view">
+			<summary>View</summary>
+			<div class="menu">
+				<label title="t"><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
+				<label title="w"><input type="checkbox" bind:checked={wrap} /> Wrap lines</label>
+				<label title="Count repeated lines and fold stack traces under their first line"
+					><input type="checkbox" bind:checked={fold} /> Fold repeats</label
+				>
+				{#if names.length}
+					<label title="Show JSON and logfmt lines as a table of their fields"
+						><input type="checkbox" bind:checked={table} /> Table of fields</label
+					>
+				{/if}
+				<label title="Keep the latest line in view (s)"><input type="checkbox" checked={stick} onchange={toggleAutoscroll} /> Autoscroll</label>
+			</div>
+		</details>
 		<button class="export" onclick={save} title="Save the shown lines (Ctrl+S)"><Icon name="download" size={15} /> Export</button>
 	</div>
 	{#if loki}
@@ -562,18 +593,6 @@
 			<Icon name={streamState.tone === 'ok' ? 'event' : 'pending'} size={15} />
 			{streamState.text}{stick ? '' : ' Autoscroll is paused.'}
 		</span>
-		{#if !loki}<label><input type="checkbox" bind:checked={follow} /> Follow</label>{/if}
-		<label title="t"><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
-		<label title="w"><input type="checkbox" bind:checked={wrap} /> Wrap</label>
-		<label title="Count repeated lines and fold stack traces under their first line"
-			><input type="checkbox" bind:checked={fold} /> Fold</label
-		>
-		{#if names.length}
-			<label title="Show JSON and logfmt lines as a table of their fields"
-				><input type="checkbox" bind:checked={table} /> Table</label
-			>
-		{/if}
-		<label title="Keep the latest line in view (s)"><input type="checkbox" checked={stick} onchange={toggleAutoscroll} /> Autoscroll</label>
 		<span class="buttons">
 			{#if table && names.length}
 				<details class="columns">
@@ -1044,6 +1063,12 @@
 	}
 	.columns {
 		position: relative;
+	}
+	.toggle.on {
+		border-color: var(--accent);
+		background: color-mix(in srgb, var(--accent) 12%, var(--surface-1));
+		color: var(--accent);
+		font-weight: 600;
 	}
 	.columns summary {
 		padding: 4px 10px;
