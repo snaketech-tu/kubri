@@ -190,6 +190,11 @@
 			<strong><Icon name="terminal" size={16} /> Your keys. Still here.</strong>
 			<span>Use <kbd>:</kbd> or <kbd>Ctrl K</kbd> to jump anywhere.</span>
 		</div>
+		<button onclick={() => (app.activityOpen = true)} title="Changes made in this session, with undo">
+			<Icon name="history" />
+			<span class="label">Activity</span>
+			{#if app.activity.length}<span class="badge">{app.activity.length}</span>{/if}
+		</button>
 		<button class="help" onclick={() => (app.helpOpen = true)} title="Keys and commands (?)">
 			<Icon name="book" />
 			<span class="label">Shortcuts & help</span>

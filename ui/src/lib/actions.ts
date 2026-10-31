@@ -38,13 +38,15 @@ function label(target: ObjectRef) {
 	return target.namespace ? `${target.namespace}/${target.name}` : target.name;
 }
 
-async function runAction(success: string, action: () => Promise<unknown>): Promise<boolean> {
+async function runAction(success: string, action: () => Promise<unknown>, undo?: () => Promise<unknown>): Promise<boolean> {
 	try {
 		await action();
 		app.toast(success);
+		app.record({ text: success, ok: true, undo });
 		return true;
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');
+		app.record({ text: `Failed: ${success}`, ok: false });
 		return false;
 	}
 }
@@ -58,11 +60,21 @@ export async function deleteObjects(resource: ResourceInfo, targets: ObjectRef[]
 		const what = targets.length === 1 ? label(targets[0]) : `${targets.length} ${resource.kind} objects`;
 		app.toast(`Deleted ${what}`);
 	}
+	app.record({ text: failed.length ? `${failed.length} of ${targets.length} deletes failed` : `Deleted ${targets.length === 1 ? label(targets[0]) : `${targets.length} ${resource.kind} objects`}`, ok: failed.length === 0 });
 	return failed.length === 0;
 }
 
-export function scale(target: ObjectRef, replicas: number) {
-	return runAction(`Scaled ${label(target)} to ${replicas}`, () => backend.scale(target, replicas));
+export async function scale(target: ObjectRef, replicas: number) {
+	// What it was, for the undo.
+	const before = await backend
+		.getObject(target)
+		.then((o) => (o.spec as { replicas?: number } | undefined)?.replicas)
+		.catch(() => undefined);
+	return runAction(
+		`Scaled ${label(target)} to ${replicas}`,
+		() => backend.scale(target, replicas),
+		typeof before === 'number' ? () => backend.scale(target, before) : undefined
+	);
 }
 
 export function restart(target: ObjectRef) {
@@ -85,7 +97,11 @@ export function patchMetadata(
 }
 
 export function cordon(node: string, cordoned: boolean) {
-	return runAction(cordoned ? `Cordoned ${node}` : `Uncordoned ${node}`, () => backend.cordon(node, cordoned));
+	return runAction(
+		cordoned ? `Cordoned ${node}` : `Uncordoned ${node}`,
+		() => backend.cordon(node, cordoned),
+		() => backend.cordon(node, !cordoned)
+	);
 }
 
 /** Runs a CronJob now, like k9s `t`. */
@@ -101,8 +117,10 @@ export async function triggerCronJob(target: ObjectRef) {
 }
 
 export function suspendCronJob(target: ObjectRef, suspend: boolean) {
-	return runAction(suspend ? `Suspended ${label(target)}` : `Resumed ${label(target)}`, () =>
-		backend.suspendCronJob(target, suspend)
+	return runAction(
+		suspend ? `Suspended ${label(target)}` : `Resumed ${label(target)}`,
+		() => backend.suspendCronJob(target, suspend),
+		() => backend.suspendCronJob(target, !suspend)
 	);
 }
 
