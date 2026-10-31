@@ -218,12 +218,12 @@
 	}
 
 	// The cursor stays in view when it moves, and when a filter or sort moves the rows around it.
+	// Rows arriving from the cluster do not count: they must not pull the list away from where the user scrolled.
 	$effect(() => {
 		void cursorKey;
 		void filter;
 		void sort.column;
 		void sort.descending;
-		void rows.length;
 		untrack(() => void revealCursor());
 	});
 
