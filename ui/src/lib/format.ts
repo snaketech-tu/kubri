@@ -53,5 +53,5 @@ export function workloadPrefix(podName: string): string | null {
 
 /** Whether an API error says the object is not there (any more). */
 export function isNotFound(message: string): boolean {
-	return /not found/i.test(message);
+	return /"[^"]*" not found/i.test(message);
 }
