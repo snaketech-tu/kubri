@@ -31,7 +31,8 @@
 		return {
 			ok: all.filter((s) => s.health === 'ok').length,
 			warning: all.filter((s) => s.health === 'warning').length,
-			failed: all.filter((s) => s.health === 'failed').length
+			failed: all.filter((s) => s.health === 'failed' && !s.unreachable).length,
+			unreachable: all.filter((s) => s.unreachable).length
 		};
 	});
 
@@ -108,7 +109,8 @@
 		<p class="tally" role="status">
 			{#if tally.ok}<span><HealthIcon health="ok" /> {tally.ok} healthy</span>{/if}
 			{#if tally.warning}<span><HealthIcon health="warning" /> {tally.warning} need a look</span>{/if}
-			{#if tally.failed}<span><HealthIcon health="failed" /> {tally.failed} failing or unreachable</span>{/if}
+			{#if tally.failed}<span><HealthIcon health="failed" /> {tally.failed} with failing workloads</span>{/if}
+			{#if tally.unreachable}<span><HealthIcon health="failed" /> {tally.unreachable} unreachable</span>{/if}
 		</p>
 		<div class="grid">
 			{#each contexts as name (name)}
@@ -154,15 +156,15 @@
 						</span>
 						{#if c.cpu && c.memory}
 							{@const usage = [
-								['CPU', c.cpu, (v: number) => cpu(v)],
-								['Memory', c.memory, (v: number) => memory(v)]
+								['CPU requested', c.cpu, (v: number) => cpu(v)],
+								['Memory requested', c.memory, (v: number) => memory(v)]
 							] as const}
 							<span class="meters">
 								{#each usage as [label, [requested, capacity], format] (label)}
 									{@const share = percent(requested, capacity)}
 									<span class="meter-row" title="{format(requested)} requested of {format(capacity)}">
 										<small>{label}</small>
-										<span class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(share * 100)} aria-label="{label} requested">
+										<span class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(share * 100)} aria-label={label}>
 											<span class="fill {meterTone(share)}" style:width="{Math.min(share, 1) * 100}%"></span>
 										</span>
 										<span class="mono">{Math.round(share * 100)}%</span>
@@ -367,7 +369,7 @@
 	}
 	.meter-row {
 		display: grid;
-		grid-template-columns: 52px 1fr 38px;
+		grid-template-columns: 112px 1fr 38px;
 		align-items: center;
 		gap: 8px;
 		font-size: 12px;
