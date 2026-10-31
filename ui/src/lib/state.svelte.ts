@@ -308,6 +308,27 @@ class AppState {
 	benchmarkId = $state<number | null>(null);
 	paletteOpen = $state(false);
 	helpOpen = $state(false);
+
+	/** The first-run tour; shown once, and again from the help. */
+	tourOpen = $state(false);
+
+	markTourSeen() {
+		try {
+			localStorage.setItem('kubri.tour', 'seen');
+		} catch {
+			// The tour then shows again next time; no harm.
+		}
+	}
+
+	/** Shows the tour the first time Kubri has a cluster to show. */
+	maybeStartTour() {
+		try {
+			if (localStorage.getItem('kubri.tour') === 'seen') return;
+		} catch {
+			return;
+		}
+		this.tourOpen = true;
+	}
 	contextMenuOpen = $state(false);
 	/** The actions menu that is open, from a right click or a ⋯ or More button. */
 	menu = $state<Menu | null>(null);
@@ -359,6 +380,7 @@ class AppState {
 	overlayOpen = $derived(
 		this.paletteOpen ||
 			this.helpOpen ||
+			this.tourOpen ||
 			this.contextMenuOpen ||
 			this.menu !== null ||
 			this.dialog !== null ||
