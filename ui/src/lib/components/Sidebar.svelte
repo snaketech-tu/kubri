@@ -293,6 +293,43 @@
 			display: none;
 		}
 	}
+	/* Between a phone and a laptop only the icons stay, with the labels in the tooltips. */
+	@media (min-width: 721px) and (max-width: 1100px) {
+		.brand {
+			justify-content: center;
+			padding: 0;
+		}
+		.brand span,
+		.filter,
+		.keys,
+		h3,
+		.label,
+		.hint {
+			display: none;
+		}
+		.scroll,
+		.bottom {
+			padding-left: 6px;
+			padding-right: 6px;
+		}
+		button {
+			justify-content: center;
+			padding: 9px 0;
+		}
+		.saved {
+			padding-left: 0;
+		}
+		.badge {
+			position: absolute;
+			margin: 0;
+			transform: translate(12px, -10px);
+			font-size: 10px;
+			padding: 0 5px;
+		}
+		button {
+			position: relative;
+		}
+	}
 	@media (max-width: 720px) {
 		nav {
 			max-height: 150px;
