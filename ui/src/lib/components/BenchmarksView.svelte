@@ -114,7 +114,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Explore', 'Benchmarks']}
+		crumbs={['Benchmarks']}
 		title="Benchmarks"
 		count={runs.length}
 		subtitle="HTTP load tests against port-forwards. Start one from a port-forward with b."

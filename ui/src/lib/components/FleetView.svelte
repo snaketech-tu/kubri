@@ -90,7 +90,7 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Clusters']}
+		crumbs={['Clusters']} prefix="none"
 		title="Clusters"
 		count={contexts.length}
 		subtitle="Every context in your kubeconfig, checked side by side without connecting to it"

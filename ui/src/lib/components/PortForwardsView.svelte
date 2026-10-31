@@ -126,7 +126,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Explore', 'Port-forwards']}
+		crumbs={['Port-forwards']}
 		title="Port-forwards"
 		count={forwards.length}
 		subtitle="Local ports tunneled to pods. They keep running while you work elsewhere in Kubri, and move to another pod when theirs goes away."

@@ -128,7 +128,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Explore', 'Access']}
+		crumbs={['Access']}
 		title="Access"
 		count={rbac ? rbac.subjects.length : null}
 		subtitle="RBAC: who may do what, from the role bindings {namespace ? `in ${namespace}` : 'in all namespaces'}"

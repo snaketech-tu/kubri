@@ -9,7 +9,7 @@
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, type Subject } from '../objects';
 	import { isNodes, isPods } from '../pods';
-	import { app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
+	import { ALL_NAMESPACES, app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
 	import { filterRows, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
@@ -644,12 +644,16 @@
 <section>
 	<header>
 		<nav class="crumbs" aria-label="Breadcrumb">
-			<span>{place.section}</span>
+			<button onclick={() => app.showPulses()} title="Cluster overview">{app.contextName(app.cluster?.context ?? '')}</button>
 			<Icon name="next" size={12} />
-			<span>{place.label}</span>
+			<span>{!resource.namespaced ? 'cluster-wide' : app.namespace === ALL_NAMESPACES ? 'all namespaces' : app.namespace}</span>
+			<Icon name="next" size={12} />
 			{#if scope}
+				<button onclick={() => (app.scope = null)} title="Show all {resource.kind} objects">{place.label}</button>
 				<Icon name="next" size={12} />
-				<span>{scope.title}</span>
+				<span aria-current="page">{scope.title}</span>
+			{:else}
+				<span aria-current="page">{place.label}</span>
 			{/if}
 		</nav>
 		<div class="heading">
@@ -902,6 +906,17 @@
 		margin-bottom: 6px;
 		font-size: 12px;
 		color: var(--text-muted);
+	}
+	.crumbs button {
+		padding: 0;
+		border: none;
+		background: none;
+		color: inherit;
+		font-size: inherit;
+	}
+	.crumbs button:hover {
+		color: var(--accent-strong);
+		text-decoration: underline;
 	}
 	.heading {
 		display: flex;

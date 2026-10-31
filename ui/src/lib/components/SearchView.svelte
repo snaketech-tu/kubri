@@ -91,7 +91,7 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Search']}
+		crumbs={['Search']} prefix="none"
 		title={saved?.name ?? 'Search'}
 		count={found?.hits.length}
 		subtitle="Objects by name, label and field, in this cluster or in several"
