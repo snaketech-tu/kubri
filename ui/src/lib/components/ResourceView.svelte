@@ -1,4 +1,5 @@
 <script lang="ts">
+	import RowSpark from './RowSpark.svelte';
 	import { completedPods } from '../cleanup';
 	import { forControl } from '../keys';
 	import { tick, untrack } from 'svelte';
@@ -163,6 +164,15 @@
 		all: filterRows(owned, filter).length,
 		attention: filterRows(faulty, filter).length,
 		running: filterRows(running, filter).length
+	});
+
+	// The palette offers the actions of the row under the cursor.
+	$effect(() => {
+		const mine = () => (current ? { label: current.name, actions: actionsFor(current, [current]) } : null);
+		app.rowActions = mine;
+		return () => {
+			if (app.rowActions === mine) app.rowActions = null;
+		};
 	});
 
 	const place = $derived(navPlace(resource));
@@ -935,6 +945,12 @@
 										<span class="status"><Icon name={icon} size={15} />{text}</span>
 									{:else if column.kind === 'cell' && column.label === 'Message'}
 										<span class="clamp" title={text}>{text}</span>
+									{:else if column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')}
+										{@const trail = metrics.trail(row.namespace, row.name)}
+										{#if trail}<RowSpark
+												values={column.label === 'CPU' ? trail.cpu : trail.memory}
+												label="{column.label} of {row.name}"
+											/>{/if}<span class="reading">{text}</span>
 									{:else}
 										{text}
 									{/if}
@@ -1126,6 +1142,11 @@
 		background: var(--surface-1);
 		color: var(--text);
 		font-weight: 600;
+	}
+	.reading {
+		display: inline-block;
+		min-width: 4.5ch;
+		text-align: right;
 	}
 	.metrics-note {
 		margin-bottom: 12px;

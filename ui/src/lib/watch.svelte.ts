@@ -1,6 +1,7 @@
 import { untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { errorMessage } from './format';
+import { pushTrail } from './pulse';
 import { backend, type Column, type MetricsKind, type ResourceRef, type Row, type TableScope, type Usage } from './api';
 
 /** A live table of objects. Call `start` from an `$effect` and return its result to clean up. */
@@ -82,9 +83,12 @@ export class LiveMetrics {
 	available = $state(false);
 	error = $state<string | null>(null);
 	updated = $state(0);
+	/** The last readings of each row, for the small trend next to CPU and memory. */
+	trails = $state.raw(new Map<string, { cpu: number[]; memory: number[] }>());
 
 	start(kind: MetricsKind, namespace: string | null) {
 		this.usage = new Map();
+		this.trails = new Map();
 		this.available = false;
 		this.error = null;
 		this.updated = 0;
@@ -98,6 +102,14 @@ export class LiveMetrics {
 				const list = await backend.metrics(kind, namespace);
 				if (stopped) return;
 				this.usage = new Map(list.map((u) => [`${u.namespace ?? ''}/${u.name}`, u]));
+				// Rows that are gone drop their trend.
+				this.trails = new Map(
+					list.map((u) => {
+						const key = `${u.namespace ?? ''}/${u.name}`;
+						const old = this.trails.get(key);
+						return [key, { cpu: pushTrail(old?.cpu, u.cpu), memory: pushTrail(old?.memory, u.memory) }];
+					})
+				);
 				this.available = true;
 				this.error = null;
 				this.updated = Date.now();
@@ -114,6 +126,10 @@ export class LiveMetrics {
 			stopped = true;
 			clearInterval(timer);
 		};
+	}
+
+	trail(namespace: string | null, name: string) {
+		return this.trails.get(`${namespace ?? ''}/${name}`);
 	}
 
 	get(namespace: string | null, name: string): Usage | undefined {

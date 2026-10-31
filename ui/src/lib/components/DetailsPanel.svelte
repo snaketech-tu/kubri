@@ -39,6 +39,7 @@
 	import MetricsPanel from './MetricsPanel.svelte';
 	import PodSummary from './PodSummary.svelte';
 	import ServiceSummary from './ServiceSummary.svelte';
+	import RolloutHistory from './RolloutHistory.svelte';
 	import ViewSummary from './ViewSummary.svelte';
 	import TerminalView from './TerminalView.svelte';
 	import YamlEditor from './YamlEditor.svelte';
@@ -600,6 +601,7 @@
 					{shell}
 					usedBy={hasUsers(details.resource) ? usedBy : undefined}
 				/>
+				{#if details.resource.group === 'apps' && details.resource.plural === 'deployments'}<RolloutHistory target={details.target} {now} />{/if}
 			</div>
 		{:else if details.tab === 'events'}
 			<div class="scroll events">

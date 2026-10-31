@@ -37,7 +37,9 @@ export type Action =
 	| { type: 'object'; target: ObjectRef; kind?: string }
 	| { type: 'config'; section?: ConfigSection }
 	| { type: 'skin'; name: string | null }
-	| { type: 'help' };
+	| { type: 'help' }
+	/** Runs something of the app itself, from the palette. */
+	| { type: 'call'; run: () => void };
 
 export interface Suggestion {
 	label: string;

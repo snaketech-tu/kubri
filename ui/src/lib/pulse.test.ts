@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { KindPulse, RecentEvent } from './api';
-import { attentionItems, shortMessage, splitKinds } from './pulse';
+import { attentionItems, pushTrail, shortMessage, splitKinds, TRAIL_LENGTH } from './pulse';
 
 const pods = { group: '', version: 'v1', plural: 'pods' };
 
@@ -83,5 +83,14 @@ describe('splitKinds', () => {
 		const { problems, healthy } = splitKinds([kind('A', 3), kind('B', 1, 0, 1), kind('C', 2), kind('D', 0, 0, 0, 'forbidden')]);
 		expect(problems.map((k) => k.kind)).toEqual(['B', 'D']);
 		expect(healthy.map((k) => k.kind)).toEqual(['A', 'C']);
+	});
+});
+
+describe('pushTrail', () => {
+	it('keeps the latest readings', () => {
+		let trail: number[] | undefined;
+		for (let i = 0; i < 30; i++) trail = pushTrail(trail, i);
+		expect(trail).toHaveLength(TRAIL_LENGTH);
+		expect(trail?.[trail.length - 1]).toBe(29);
 	});
 });

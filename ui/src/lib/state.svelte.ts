@@ -44,7 +44,7 @@ import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } fro
 import { loadPins, savePins, samePin, toggled as togglePinIn, type Pin } from './pins';
 import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
-import type { Menu } from './menu';
+import type { Menu, MenuAction } from './menu';
 import { applyScheme, applyTheme, resolveColor, storeSkin, storedScheme, storedSkin, type Scheme } from './skin';
 
 export const ALL_NAMESPACES = '';
@@ -230,6 +230,20 @@ export type Dialog =
 	/** Saves a namespace or the cluster to a snapshot file, or opens one; `namespace` null is the cluster. */
 	| { kind: 'snapshot'; namespace: string | null };
 
+let activityId = 0;
+
+/** One change made in this session. */
+export interface Activity {
+	id: number;
+	at: number;
+	context: string;
+	text: string;
+	ok: boolean;
+	/** Sets things back, where Kubernetes allows it. */
+	undo?: () => Promise<unknown>;
+	undone: boolean;
+}
+
 export interface Toast {
 	id: number;
 	tone: 'ok' | 'bad';
@@ -329,6 +343,30 @@ class AppState {
 		}
 		this.tourOpen = true;
 	}
+
+	/** Every change made from here in this session, newest first. */
+	activity = $state.raw<Activity[]>([]);
+	activityOpen = $state(false);
+
+	/** Adds a change to the session activity; an entry with `undo` can be taken back. */
+	record(entry: Omit<Activity, 'id' | 'at' | 'context' | 'undone'>): number {
+		const id = ++activityId;
+		this.activity = [{ ...entry, id, at: Date.now(), context: this.cluster?.context ?? '', undone: false }, ...this.activity].slice(0, 200);
+		return id;
+	}
+
+	/** Takes back an entry that can be, and records that it was. */
+	async undoActivity(id: number) {
+		const entry = this.activity.find((a) => a.id === id);
+		if (!entry?.undo || entry.undone) return;
+		try {
+			await entry.undo();
+			this.activity = this.activity.map((a) => (a.id === id ? { ...a, undone: true } : a));
+			this.toast(`Undone: ${entry.text}`);
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+		}
+	}
 	contextMenuOpen = $state(false);
 	/** The actions menu that is open, from a right click or a ⋯ or More button. */
 	menu = $state<Menu | null>(null);
@@ -381,6 +419,7 @@ class AppState {
 		this.paletteOpen ||
 			this.helpOpen ||
 			this.tourOpen ||
+			this.activityOpen ||
 			this.contextMenuOpen ||
 			this.menu !== null ||
 			this.dialog !== null ||
@@ -913,6 +952,9 @@ class AppState {
 			case 'help':
 				this.helpOpen = true;
 				break;
+			case 'call':
+				action.run();
+				break;
 		}
 	}
 
@@ -992,6 +1034,12 @@ class AppState {
 			this.openAt(resource, pin.namespace, pin.name);
 		}
 	}
+
+	/**
+	 * What the palette offers for the row under the cursor: the open list sets it when it appears
+	 * and clears it when it goes. Only a function, so nothing is worked out until the palette asks.
+	 */
+	rowActions: (() => { label: string; actions: MenuAction[] } | null) | null = null;
 
 	/** Opens an object's details, connecting to its context first if it is another one. */
 	async openObject(target: ObjectRef, kind = target.resource.plural) {
