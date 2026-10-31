@@ -327,15 +327,6 @@
 		return () => clearInterval(timer);
 	});
 	const unlockLeft = $derived(app.unlockedUntil === null ? null : Math.max(0, Math.ceil((app.unlockedUntil - now) / 1000)));
-	const lockLabel = $derived(
-		unlockLeft !== null
-			? `Unlocked ${Math.floor(unlockLeft / 60)}:${String(unlockLeft % 60).padStart(2, '0')}`
-			: app.readOnly
-				? app.guard.canUnlock && !app.contextSettings.readOnly
-					? 'Locked'
-					: 'Read-only'
-				: 'Editable'
-	);
 	const lockTitle = $derived(
 		app.k9s?.readOnly
 			? 'k9s readOnly is set: Kubri does not change this cluster'
@@ -412,9 +403,11 @@
 					<summary
 						class:set={app.environment}
 						class:production={app.production}
-						title="Name, color and guard rails of this context"
+						title="Settings for this context: name, color and guard rails"
+						aria-label="Context settings{app.environment ? `, ${app.environment}` : ''}"
 					>
-						{app.environment || 'Context settings'}
+						<Icon name="sliders" size={16} />
+						{#if app.environment}{app.environment}{/if}
 					</summary>
 					<div class="popover">
 						<p class="popover-title">Settings for <strong>{app.cluster.context}</strong></p>
@@ -443,13 +436,16 @@
 				class="mode"
 				class:locked={app.readOnly}
 				class:unlocked={app.unlockedUntil !== null}
-				aria-pressed={app.readOnly}
+				role="switch"
+				aria-checked={app.readOnly}
+				aria-label="Read-only"
 				disabled={!app.cluster || app.k9s?.readOnly || (app.guard.readOnly && !app.guard.canUnlock && !app.contextSettings.readOnly)}
 				onclick={() => app.toggleReadOnly()}
 				title={lockTitle}
 			>
 				<Icon name={app.readOnly ? 'lock' : 'unlock'} size={15} />
-				{lockLabel}
+				Read-only{unlockLeft !== null ? ` · ${Math.floor(unlockLeft / 60)}:${String(unlockLeft % 60).padStart(2, '0')}` : ''}
+				<span class="track" aria-hidden="true"><span class="knob"></span></span>
 			</button>
 			<button class="square help" onclick={() => (app.helpOpen = true)} title="Keys and commands (?)" aria-label="Help">
 				?
@@ -734,9 +730,12 @@
 		flex: none;
 	}
 	.environment summary {
-		padding: 3px 7px;
-		border: 1px dashed var(--border);
-		border-radius: 5px;
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		padding: 6px 8px;
+		border: 1px solid transparent;
+		border-radius: 7px;
 		font-size: 10.5px;
 		font-weight: 700;
 		letter-spacing: 0.06em;
@@ -748,8 +747,11 @@
 	.environment summary::-webkit-details-marker {
 		display: none;
 	}
+	.environment summary:hover {
+		border-color: var(--border);
+		color: var(--text);
+	}
 	.environment summary.set {
-		border: 1px solid transparent;
 		background: color-mix(in srgb, var(--warn) 16%, var(--surface-1));
 		color: var(--warn);
 	}
@@ -837,7 +839,7 @@
 		align-items: center;
 		gap: 10px;
 		margin-left: auto;
-		width: 260px;
+		width: 300px;
 		min-width: 0;
 		padding: 7px 8px 7px 12px;
 		border: 1px solid var(--border);
@@ -872,6 +874,30 @@
 		font-weight: 600;
 		color: var(--text-muted);
 		white-space: nowrap;
+	}
+	.track {
+		position: relative;
+		width: 26px;
+		height: 14px;
+		border-radius: 999px;
+		background: var(--border);
+		transition: background 0.12s;
+	}
+	.knob {
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: var(--surface-1);
+		transition: transform 0.12s;
+	}
+	.mode.locked .track {
+		background: var(--ok);
+	}
+	.mode.locked .knob {
+		transform: translateX(12px);
 	}
 	.mode.locked {
 		border-color: transparent;
