@@ -125,7 +125,7 @@ jobs:
         with:
           projectPath: ui
           releaseId: ${{ needs.draft.outputs.id }}
-          uploadUpdaterJson: false
+          includeUpdaterJson: false
           args: --target ${{ matrix.target }} ${{ steps.updater.outputs.args }}
       - if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
