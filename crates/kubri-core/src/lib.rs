@@ -114,8 +114,8 @@ pub use rightsizing::{RightSizing, SizeAdvice, SizeReason};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
 pub use search::{FieldTest, SearchHit, SearchProblem, SearchRequest, SearchResult};
 pub use settings::{
-    AgentSettings, ColumnSettings, ContextSettings, CustomColumn, DiffSettings, FavoriteForward, SavedSearch,
-    Settings,
+    AgentSettings, ColumnSettings, ConnectionSettings, ContextSettings, CustomColumn, DiffSettings,
+    FavoriteForward, SavedSearch, Settings,
 };
 pub use snapshot::SnapshotInfo;
 pub use update::{LatestRelease, latest_release};
@@ -134,6 +134,10 @@ pub use xray::XrayNode;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long a connection to another context is kept for reading.
 const OTHER_SESSION_FOR: Duration = Duration::from_secs(5 * 60);
+/// How long a context left behind stays connected when it is not used again.
+const WARM_FOR: Duration = Duration::from_secs(30 * 60);
+/// How long a kept connection may take to answer before Kubri connects afresh.
+const WARM_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The cluster Kubri is currently connected to.
 #[derive(Debug, Clone, Serialize)]
@@ -147,6 +151,10 @@ pub struct ClusterInfo {
     /// Set when this is a snapshot opened from a file, not a live cluster.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<SnapshotInfo>,
+    /// Set when a switch took a connection kept from earlier instead of connecting afresh.
+    /// Its resource types may be out of date; [`Kubri::refresh_resources`] checks them.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub resumed: bool,
 }
 
 /// The context switcher's data: every context, and the one Kubri is connected to.
@@ -155,6 +163,8 @@ pub struct ClusterInfo {
 pub struct ContextList {
     pub contexts: Vec<ContextInfo>,
     pub cluster: Option<ClusterInfo>,
+    /// Contexts kept connected in the background, most recent first.
+    pub warm: Vec<String>,
 }
 
 struct Session {
@@ -188,6 +198,9 @@ pub struct Kubri {
     unlocks: std::sync::Mutex<HashMap<String, std::time::Instant>>,
     /// Connections to other contexts, for reading objects there, and when they were made.
     others: tokio::sync::Mutex<HashMap<String, (std::time::Instant, Arc<Session>)>>,
+    /// Contexts switched away from, most recent first, and when each was left, so switching
+    /// back is instant. At most `connections.keep_recent` of them.
+    warm: tokio::sync::Mutex<Vec<(std::time::Instant, Arc<Session>)>>,
     /// Records what changes in the connected context, where this process records.
     recording: AtomicBool,
     recorder: std::sync::Mutex<Option<recorder::Recorder>>,
@@ -291,6 +304,7 @@ impl Kubri {
             }),
             unlocks: Default::default(),
             others: Default::default(),
+            warm: Default::default(),
             recording: AtomicBool::new(false),
             recorder: Default::default(),
             history: Default::default(),
@@ -377,6 +391,22 @@ impl Kubri {
             s.diff = value;
             Ok(())
         })
+    }
+
+    /// Sets how many recent contexts stay connected; extra ones are dropped at once.
+    pub async fn set_connection_settings(&self, value: ConnectionSettings) -> Result<Settings> {
+        if value.keep_recent > settings::MAX_KEEP_RECENT {
+            return Err(Error::Unsupported(format!(
+                "at most {} contexts can stay connected",
+                settings::MAX_KEEP_RECENT
+            )));
+        }
+        let settings = self.update_settings(|s| {
+            s.connections = value;
+            Ok(())
+        })?;
+        self.prune_warm(&mut *self.warm.lock().await);
+        Ok(settings)
     }
 
     /// Sets what the change history keeps; recording starts or stops at once.
@@ -623,6 +653,7 @@ impl Kubri {
     pub async fn reload(&self) -> Result<ContextList> {
         *self.kubeconfig.write().await = kubeconfig::read();
         self.others.lock().await.clear();
+        self.warm.lock().await.clear();
         self.contexts().await
     }
 
@@ -634,6 +665,7 @@ impl Kubri {
         Ok(ContextList {
             contexts,
             cluster: self.cluster().await,
+            warm: self.warm_contexts().await,
         })
     }
 
@@ -668,6 +700,7 @@ impl Kubri {
                 "{name} is in your kubeconfig, which Kubri does not change"
             )));
         }
+        // `reload` forgets every kept connection, this one included.
         self.reload().await
     }
 
@@ -684,14 +717,115 @@ impl Kubri {
 
     /// Connects to `context` and discovers the resource types it serves.
     /// The previous connection stays active if this fails.
+    ///
+    /// A context used a moment ago is taken from the connections kept warm, after a quick
+    /// check that it still answers; switching to the current context always connects afresh.
     pub async fn switch_context(&self, context: &str) -> Result<ClusterInfo> {
-        let session = self.connect(context).await?;
-        let info = session.info.clone();
-        let session = Arc::new(session);
+        let current = self.session.read().await.clone();
+        let again = current.as_ref().is_some_and(|s| s.info.context == context);
+        let kept = if again {
+            None
+        } else {
+            self.take_kept(context).await
+        };
+        let (session, resumed) = match kept {
+            Some(session) => (session, true),
+            None => (Arc::new(self.connect(context).await?), false),
+        };
         *self.session.write().await = Some(session.clone());
-        tracing::info!(context, version = %info.version, "connected");
+        if let Some(left) = current.filter(|_| !again) {
+            self.keep_warm(left).await;
+        }
+        let mut info = session.info.clone();
+        info.resumed = resumed;
+        if resumed {
+            tracing::info!(context, version = %info.version, "resumed a kept connection");
+        } else {
+            tracing::info!(context, version = %info.version, "connected");
+        }
         self.restart_recorder(&session).await;
         Ok(info)
+    }
+
+    /// Runs discovery again for the connected context and returns its resource types. A
+    /// switch to a kept connection uses the types found when it was made; this catches what
+    /// changed since, such as a newly installed CRD.
+    pub async fn refresh_resources(&self) -> Result<Vec<ResourceInfo>> {
+        let session = self.session().await?;
+        if session.info.snapshot.is_some() {
+            return Ok(session.resources.clone());
+        }
+        let resources = discovery::discover(&session.client).await?;
+        if resources == session.resources {
+            return Ok(resources);
+        }
+        let mut fresh = Session::new(session.info.clone(), session.client.clone(), resources.clone());
+        fresh.proxy_client = session.proxy_client.clone();
+        let mut current = self.session.write().await;
+        // Only if no other switch happened meanwhile.
+        if current.as_ref().is_some_and(|c| Arc::ptr_eq(c, &session)) {
+            *current = Some(Arc::new(fresh));
+            tracing::info!(context = session.info.context, "resource types changed");
+        }
+        Ok(resources)
+    }
+
+    /// The contexts kept connected in the background, most recent first.
+    pub async fn warm_contexts(&self) -> Vec<String> {
+        let mut warm = self.warm.lock().await;
+        self.prune_warm(&mut warm);
+        warm.iter().map(|(_, s)| s.info.context.clone()).collect()
+    }
+
+    /// Keeps the session just left, unless keeping is off or it is a snapshot.
+    async fn keep_warm(&self, session: Arc<Session>) {
+        if session.info.snapshot.is_some() {
+            return;
+        }
+        let mut warm = self.warm.lock().await;
+        warm.retain(|(_, s)| s.info.context != session.info.context);
+        warm.insert(0, (std::time::Instant::now(), session));
+        self.prune_warm(&mut warm);
+    }
+
+    /// Drops kept sessions past the setting's count or unused for [`WARM_FOR`].
+    fn prune_warm(&self, warm: &mut Vec<(std::time::Instant, Arc<Session>)>) {
+        let keep = self
+            .settings()
+            .connections
+            .keep_recent
+            .min(settings::MAX_KEEP_RECENT) as usize;
+        warm.retain(|(left, _)| left.elapsed() < WARM_FOR);
+        warm.truncate(keep);
+    }
+
+    /// A kept session for `context` that still answers, taken out of the pool. A session that
+    /// does not answer quickly, or whose credentials stopped working, is dropped so the caller
+    /// connects afresh and reports the real error.
+    async fn take_kept(&self, context: &str) -> Option<Arc<Session>> {
+        let session = {
+            let mut warm = self.warm.lock().await;
+            self.prune_warm(&mut warm);
+            match warm.iter().position(|(_, s)| s.info.context == context) {
+                Some(at) => Some(warm.remove(at).1),
+                None => {
+                    let mut others = self.others.lock().await;
+                    others.retain(|_, (made, _)| made.elapsed() < OTHER_SESSION_FOR);
+                    others.get(context).map(|(_, s)| s.clone())
+                }
+            }
+        }?;
+        match tokio::time::timeout(WARM_CHECK_TIMEOUT, session.client.apiserver_version()).await {
+            Ok(Ok(_)) => Some(session),
+            Ok(Err(err)) => {
+                tracing::info!(context, "a kept connection failed, connecting afresh: {err}");
+                None
+            }
+            Err(_) => {
+                tracing::info!(context, "a kept connection did not answer, connecting afresh");
+                None
+            }
+        }
     }
 
     /// Saves `namespace`, or the whole cluster, to a snapshot file: its name and gzipped bytes.
@@ -727,6 +861,7 @@ impl Kubri {
             version: saved.kubernetes.clone(),
             default_namespace: namespace.clone(),
             snapshot: Some(saved),
+            resumed: false,
         };
         let resources = snapshot.served_resources();
         let client = snapshot::client(snapshot, &namespace);
@@ -770,6 +905,7 @@ impl Kubri {
                     version,
                     default_namespace: namespace,
                     snapshot: None,
+                    resumed: false,
                 },
                 client,
                 resources,
@@ -1864,6 +2000,15 @@ impl Kubri {
         let Some(context) = context.filter(|c| *c != session.info.context) else {
             return Ok(session);
         };
+        if let Some((_, kept)) = self
+            .warm
+            .lock()
+            .await
+            .iter()
+            .find(|(_, s)| s.info.context == context)
+        {
+            return Ok(kept.clone());
+        }
         let mut others = self.others.lock().await;
         others.retain(|_, (made, _)| made.elapsed() < OTHER_SESSION_FOR);
         if let Some((_, other)) = others.get(context) {
@@ -2184,9 +2329,123 @@ mod tests {
             version: "v1.36.0".into(),
             default_namespace: "default".into(),
             snapshot: None,
+            resumed: false,
         };
         *kubri.session.write().await = Some(Arc::new(Session::new(info, client, resources)));
         kubri
+    }
+
+    /// A session for `context` on a fake API server that answers `/version` with `status`.
+    fn fake_session(
+        context: &str,
+        status: u16,
+    ) -> (Arc<Session>, Arc<std::sync::Mutex<Vec<testing::Recorded>>>) {
+        let (client, requests) = testing::client(move |r| {
+            assert_eq!(r.uri, "/version", "a kept connection is only checked");
+            let body = serde_json::json!({
+                "major": "1", "minor": "36", "gitVersion": "v1.36.0", "gitCommit": "", "gitTreeState": "",
+                "buildDate": "", "goVersion": "", "compiler": "", "platform": ""
+            });
+            match status {
+                200 => (200, body.to_string()),
+                code => (code, testing::status(code, "Unauthorized")),
+            }
+        });
+        let info = ClusterInfo {
+            context: context.into(),
+            server: format!("https://{context}"),
+            version: "v1.36.0".into(),
+            default_namespace: "default".into(),
+            snapshot: None,
+            resumed: false,
+        };
+        let session = Session::new(info, client, vec![resource("", "v1", "pods", "Pod", true)]);
+        (Arc::new(session), requests)
+    }
+
+    async fn current_context(kubri: &Kubri) -> String {
+        kubri.cluster().await.unwrap().context
+    }
+
+    #[tokio::test]
+    async fn switching_back_resumes_a_kept_connection() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let (a, _) = fake_session("a", 200);
+        let (b, b_requests) = fake_session("b", 200);
+        *kubri.session.write().await = Some(a);
+        kubri.keep_warm(b).await;
+
+        // `b` is not in the kubeconfig, so only the kept connection can make this work.
+        let info = kubri.switch_context("b").await.unwrap();
+        assert!(info.resumed);
+        assert_eq!(current_context(&kubri).await, "b");
+        assert_eq!(b_requests.lock().unwrap().len(), 1, "one version check");
+        assert_eq!(kubri.warm_contexts().await, ["a"]);
+
+        let info = kubri.switch_context("a").await.unwrap();
+        assert!(info.resumed);
+        assert_eq!(kubri.warm_contexts().await, ["b"]);
+        // The current context is not kept twice, and a reconnect is never resumed.
+        assert!(matches!(
+            kubri.switch_context("a").await,
+            Err(Error::UnknownContext(_))
+        ));
+        assert_eq!(current_context(&kubri).await, "a");
+    }
+
+    #[tokio::test]
+    async fn a_kept_connection_that_fails_is_dropped() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let (a, _) = fake_session("a", 200);
+        let (b, _) = fake_session("b", 401);
+        *kubri.session.write().await = Some(a);
+        kubri.keep_warm(b).await;
+
+        // Kubri connects afresh, which fails here; the current connection stays.
+        assert!(matches!(
+            kubri.switch_context("b").await,
+            Err(Error::UnknownContext(_))
+        ));
+        assert_eq!(current_context(&kubri).await, "a");
+        assert!(kubri.warm_contexts().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn keeps_only_as_many_contexts_as_the_setting_says() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        for name in ["a", "b", "c", "d", "e"] {
+            kubri.keep_warm(fake_session(name, 200).0).await;
+        }
+        assert_eq!(kubri.warm_contexts().await, ["e", "d", "c"]);
+        // Keeping one again moves it to the front instead of adding it twice.
+        kubri.keep_warm(fake_session("c", 200).0).await;
+        assert_eq!(kubri.warm_contexts().await, ["c", "e", "d"]);
+
+        kubri
+            .set_connection_settings(ConnectionSettings { keep_recent: 1 })
+            .await
+            .unwrap();
+        assert_eq!(kubri.warm_contexts().await, ["c"]);
+        assert!(
+            kubri
+                .set_connection_settings(ConnectionSettings { keep_recent: 6 })
+                .await
+                .is_err()
+        );
+        kubri
+            .set_connection_settings(ConnectionSettings { keep_recent: 0 })
+            .await
+            .unwrap();
+        kubri.keep_warm(fake_session("f", 200).0).await;
+        assert!(kubri.warm_contexts().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn reloading_the_kubeconfig_forgets_kept_connections() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        kubri.keep_warm(fake_session("a", 200).0).await;
+        let _ = kubri.reload().await;
+        assert!(kubri.warm_contexts().await.is_empty());
     }
 
     fn list(kind: &str, items: Value) -> String {

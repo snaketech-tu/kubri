@@ -31,6 +31,8 @@ export interface ClusterInfo {
 	defaultNamespace: string;
 	/** Set when this is a snapshot opened from a file, not a live cluster. */
 	snapshot?: SnapshotInfo;
+	/** Set when the switch took a connection kept from earlier; its resource types may be out of date. */
+	resumed?: boolean;
 }
 
 /** What a snapshot file holds. */
@@ -251,6 +253,13 @@ export interface Settings {
 	/** Searches kept in the sidebar. */
 	searches: SavedSearch[];
 	history: HistorySettings;
+	connections: ConnectionSettings;
+}
+
+/** How Kubri keeps connections to contexts. */
+export interface ConnectionSettings {
+	/** Recent contexts kept connected in the background, 0 to 5. */
+	keepRecent: number;
 }
 
 /** What the change history records and keeps. */
@@ -577,6 +586,8 @@ export interface Guard {
 export interface ContextList {
 	contexts: ContextInfo[];
 	cluster: ClusterInfo | null;
+	/** Contexts kept connected in the background, most recent first. */
+	warm: string[];
 }
 
 export interface ResourceRef {
@@ -1384,6 +1395,8 @@ export interface Backend {
 	/** Opens a snapshot file in place of a cluster, read-only. */
 	openSnapshot(file: File): Promise<ClusterInfo>;
 	resources(): Promise<ResourceInfo[]>;
+	/** Runs discovery again, after a switch to a kept connection. */
+	refreshResources(): Promise<ResourceInfo[]>;
 	/** Whether each check is allowed; null where the API server cannot say. */
 	access(checks: AccessCheck[], fresh?: boolean): Promise<(boolean | null)[]>;
 	whoAmI(): Promise<Identity | null>;
@@ -1393,6 +1406,7 @@ export interface Backend {
 	setContextSettings(name: string, settings: ContextSettings): Promise<Settings>;
 	setDiffSettings(settings: DiffSettings): Promise<Settings>;
 	setHistorySettings(settings: HistorySettings): Promise<Settings>;
+	setConnectionSettings(settings: ConnectionSettings): Promise<Settings>;
 	/** What changed, newest first, with the times Kubri was watching. */
 	history(query: HistoryQuery): Promise<HistoryPage>;
 	/** One change with the object before and after it. */

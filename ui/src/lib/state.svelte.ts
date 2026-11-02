@@ -135,7 +135,8 @@ const DEFAULT_SETTINGS: Settings = {
 	debug: { image: 'busybox' },
 	columns: {},
 	searches: [],
-	history: { record: true, keepDays: 14, maxMb: 200 }
+	history: { record: true, keepDays: 14, maxMb: 200 },
+	connections: { keepRecent: 3 }
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
@@ -1287,6 +1288,25 @@ class AppState {
 		this.integrations = null;
 		this.loadIntegrations(false);
 		this.loadViews();
+		if (cluster.resumed) this.refreshResources(cluster.context);
+	}
+
+	/**
+	 * A switch to a kept connection uses the resource types found when it was made; this asks
+	 * the cluster again and updates the sidebar when they changed, such as after a CRD install.
+	 */
+	private async refreshResources(context: string) {
+		try {
+			const fresh = await backend.refreshResources();
+			if (this.cluster?.context !== context) return;
+			const same = fresh.length === this.resources.length && fresh.every((r, i) => sameResource(r, this.resources[i]) && r.kind === this.resources[i].kind);
+			if (same) return;
+			this.resources = fresh;
+			const selected = this.selected;
+			this.selected = fresh.find((r) => selected && sameResource(r, selected)) ?? fresh.find((r) => r.group === '' && r.plural === 'pods') ?? null;
+		} catch {
+			// The kept list stays; the next switch or reload asks again.
+		}
 	}
 
 	/** Reads the view files again, so an edited one shows on the next connect or reload. */
