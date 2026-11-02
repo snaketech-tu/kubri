@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.1 — 2026-11-02
+
+- Logs of several containers or pods show in time order, also for the AI agent. Asking for the previous log of a container that never restarted says so.
+- `:dp`, `:sec`, `:jo`, `:cr`, `:crb`, `:ro`, `:rb` and `:np` open their resources, as in k9s, also without your own `aliases.yaml`. A bare `:ctx` opens Clusters.
+- A list filter written as `/regex/` works as a regular expression.
+- The cursor stays on its row after Esc and while the list updates.
+- The AI agent sees the real size of Secret values in bytes.
+- A context whose cluster is missing in the kubeconfig names the missing cluster.
+- Long kind names wrap in Resource health, and the drain dialog's grace field fits its text.
+
 ## 1.5.0 — 2026-11-02
 
 - Switching back to a context you just left is instant: up to three recent contexts (Settings, 0 to 5) stay connected for 30 minutes, and Kubri returns to the view, filter, cursor and namespace you left there. `:ctx -` and the top entry of the context switcher go to the previous context; a green dot marks contexts that are still connected. See [Several clusters](docs/CLUSTERS.md#switching-back-is-instant).
