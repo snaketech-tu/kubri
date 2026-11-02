@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { drafts } from '#lib/navigation.svelte.js';
 	import { applyScheme } from '#lib/skin.js';
+	import { dropdown } from '#lib/dismiss.js';
 	import { stepZoom, zoomKey } from '#lib/appearance.js';
 	import Icon from '#lib/components/Icon.svelte';
 	import { isTauri } from '@tauri-apps/api/core';
@@ -346,8 +347,6 @@
 		if (!drafts.block(() => session.signOut())) session.signOut();
 	}
 
-	let environmentEditor = $state<HTMLDetailsElement>();
-
 	// A clock for the unlock countdown.
 	let now = $state(Date.now());
 	$effect(() => {
@@ -428,7 +427,7 @@
 			</div>
 			<ContextSwitcher />
 			{#if app.cluster && !app.snapshot}
-				<details class="environment" bind:this={environmentEditor}>
+				<details class="environment" {@attach dropdown}>
 					<summary
 						class:set={app.environment}
 						class:production={app.production}

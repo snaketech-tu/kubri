@@ -28,3 +28,30 @@ export function lightDismiss(dialog: HTMLDialogElement) {
 		dialog.removeEventListener('click', click);
 	};
 }
+
+/**
+ * Closes a `<details>` used as a drop-down menu when the pointer is pressed anywhere outside it,
+ * or when Esc is pressed inside it, which then hands focus back to its summary. A list opened
+ * from a select box inside it counts as inside, and Esc closes that list first.
+ * Use it as `{@attach dropdown}` on the details element.
+ */
+export function dropdown(details: HTMLDetailsElement) {
+	const away = (e: PointerEvent) => {
+		if (details.open && !details.contains(e.target as Node)) details.open = false;
+	};
+	const keydown = (e: KeyboardEvent) => {
+		if (e.key !== 'Escape' || !details.open) return;
+		// An open list inside handles this Esc itself.
+		if ((e.target as Element).closest?.('[aria-expanded="true"]')) return;
+		e.preventDefault();
+		e.stopPropagation();
+		details.open = false;
+		details.querySelector('summary')?.focus();
+	};
+	document.addEventListener('pointerdown', away, true);
+	details.addEventListener('keydown', keydown);
+	return () => {
+		document.removeEventListener('pointerdown', away, true);
+		details.removeEventListener('keydown', keydown);
+	};
+}
