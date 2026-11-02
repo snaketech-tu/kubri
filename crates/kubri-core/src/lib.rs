@@ -232,6 +232,17 @@ pub struct Guard {
     pub unlocked_for: Option<u64>,
 }
 
+/// What decides how Kubri connects to `context`: its context, cluster and user entries.
+fn context_entry(kubeconfig: &Kubeconfig, context: &str) -> Option<Value> {
+    let named = kubeconfig.contexts.iter().find(|c| c.name == context)?;
+    let inner = named.context.as_ref();
+    let cluster = inner.and_then(|c| kubeconfig.clusters.iter().find(|n| n.name == c.cluster));
+    let user = inner
+        .and_then(|c| c.user.as_ref())
+        .and_then(|u| kubeconfig.auth_infos.iter().find(|n| &n.name == u));
+    serde_json::to_value((named, cluster, user)).ok()
+}
+
 /// The client configuration for `context`, read the way kubectl reads it.
 pub(crate) async fn client_config(kubeconfig: &Kubeconfig, context: &str) -> Result<Config> {
     let mut kubeconfig = kubeconfig.clone();
@@ -651,9 +662,18 @@ impl Kubri {
 
     /// Re-reads the kubeconfig from disk, keeping the current connection.
     pub async fn reload(&self) -> Result<ContextList> {
-        *self.kubeconfig.write().await = kubeconfig::read();
-        self.others.lock().await.clear();
-        self.warm.lock().await.clear();
+        let fresh = kubeconfig::read();
+        let old = std::mem::replace(&mut *self.kubeconfig.write().await, fresh.clone());
+        // Kept connections stay only for contexts whose entries did not change.
+        let same = |context: &str| match (&old, &fresh) {
+            (Ok(old), Ok(fresh)) => {
+                let entry = context_entry(old, context);
+                entry.is_some() && entry == context_entry(fresh, context)
+            }
+            _ => false,
+        };
+        self.others.lock().await.retain(|context, _| same(context));
+        self.warm.lock().await.retain(|(_, s)| same(&s.info.context));
         self.contexts().await
     }
 
@@ -2440,12 +2460,31 @@ mod tests {
         assert!(kubri.warm_contexts().await.is_empty());
     }
 
-    #[tokio::test]
-    async fn reloading_the_kubeconfig_forgets_kept_connections() {
-        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
-        kubri.keep_warm(fake_session("a", 200).0).await;
-        let _ = kubri.reload().await;
-        assert!(kubri.warm_contexts().await.is_empty());
+    #[test]
+    fn a_context_entry_covers_its_cluster_and_user() {
+        let read = |token: &str, server: &str| -> Kubeconfig {
+            Kubeconfig::from_yaml(&format!(
+                "contexts: [{{name: a, context: {{cluster: c, user: u}}}}, {{name: b, context: {{cluster: c, user: v}}}}]\n\
+                 clusters: [{{name: c, cluster: {{server: '{server}'}}}}]\n\
+                 users: [{{name: u, user: {{token: '{token}'}}}}, {{name: v, user: {{token: x}}}}]"
+            ))
+            .unwrap()
+        };
+        let before = read("one", "https://a");
+        assert!(context_entry(&before, "a").is_some());
+        assert!(context_entry(&before, "gone").is_none());
+        assert_eq!(
+            context_entry(&before, "b"),
+            context_entry(&read("two", "https://a"), "b")
+        );
+        assert_ne!(
+            context_entry(&before, "a"),
+            context_entry(&read("two", "https://a"), "a")
+        );
+        assert_ne!(
+            context_entry(&before, "b"),
+            context_entry(&read("one", "https://b"), "b")
+        );
     }
 
     fn list(kind: &str, items: Value) -> String {

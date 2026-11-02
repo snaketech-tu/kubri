@@ -6,7 +6,7 @@ Kubri connects to one context at a time, the one in the top bar. The pages here 
 
 When you switch to another context, Kubri keeps the one you left connected in the background, with the resource types and permissions it already found. Switching back then takes a quick check that the cluster still answers instead of a new connection. If the check fails, for example because a token expired, Kubri connects afresh and shows the error that gives. The resource types are looked up again right after a switch back, so a CRD installed meanwhile appears in the sidebar.
 
-Kubri keeps the 3 most recent contexts this way, each for up to 30 minutes after you left it. Set the number, from 0 (off) to 5, with `connections.keepRecent` in the [settings](SETTINGS.md). Nothing runs for a kept context: no lists, no recording of changes. Reloading the kubeconfig drops them all.
+Kubri keeps the 3 most recent contexts this way, each for up to 30 minutes after you left it. Set the number, from 0 (off) to 5, with `connections.keepRecent` in the [settings](SETTINGS.md). Nothing runs for a kept context: no lists, no recording of changes. When the kubeconfig is read again, a kept context whose context, cluster or user entry changed is dropped.
 
 ## Clusters
 
