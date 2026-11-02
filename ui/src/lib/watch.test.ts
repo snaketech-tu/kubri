@@ -28,6 +28,35 @@ describe('live resource state', () => {
 		expect(table.rows).toHaveLength(0);
 		expect(table.hasLoaded).toBe(false);
 	});
+	it('shows the rows of a list left in a context until its watch answers again', () => {
+		let emit!: (e: TableEvent) => void;
+		mock.watchTable.mockImplementation((_r, _n, _s, cb) => {
+			emit = cb;
+			return vi.fn();
+		});
+		const table = new LiveTable();
+		let stop = table.start(resource, 'shop', null, false, 'a');
+		emit({ type: 'reset', columns: [], rows: [{ key: 'one', name: 'one' } as Row] });
+		stop();
+		// Another context's list starts empty.
+		stop = table.start(resource, 'shop', null, false, 'b');
+		expect(table.rows).toHaveLength(0);
+		expect(table.loading).toBe(true);
+		stop();
+		// Back in the first one, the old rows show at once, marked stale.
+		stop = table.start(resource, 'shop', null, false, 'a');
+		expect(table.rows.map((r) => r.name)).toEqual(['one']);
+		expect([table.stale, table.loading, table.hasLoaded]).toEqual([true, false, false]);
+		emit({ type: 'reset', columns: [], rows: [{ key: 'two', name: 'two' } as Row] });
+		expect(table.rows.map((r) => r.name)).toEqual(['two']);
+		expect(table.stale).toBe(false);
+		stop();
+		// A failure instead of a list drops the old rows rather than showing them as current.
+		table.start(resource, 'shop', null, false, 'a');
+		expect(table.stale).toBe(true);
+		emit({ type: 'error', message: 'Unauthorized' });
+		expect([table.stale, table.rows.length]).toEqual([false, 0]);
+	});
 	it('keeps a successful empty list distinct from an initial error', () => {
 		let emit!: (e: TableEvent) => void;
 		mock.watchTable.mockImplementation((_r, _n, _s, cb) => {

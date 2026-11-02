@@ -6,6 +6,12 @@ Kubri connects to one context at a time, the one in the top bar. The pages here 
 
 When you switch to another context, Kubri keeps the one you left connected in the background, with the resource types and permissions it already found. Switching back then takes a quick check that the cluster still answers instead of a new connection. If the check fails, for example because a token expired, Kubri connects afresh and shows the error that gives. The resource types are looked up again right after a switch back, so a CRD installed meanwhile appears in the sidebar.
 
+You also land where you left: the same page, kind, namespace, filter, row under the cursor and back and forward history. While a list reloads, it shows the rows it had when you left, dimmed and marked "updating…", and offers no actions on them until the cluster's own list arrives.
+
+The context switcher (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>) lists the previous context first, so <kbd>Enter</kbd> goes back to it, and marks kept contexts with a green dot. `:ctx -` in the command palette does the same, like `cd -`.
+
+Logs and shells in the workspace keep running when you switch. A tab from another context shows that context's name, in red for production, so a shell in production is not mistaken for one in staging. Tabs close only when their context is removed from the kubeconfig, or when you leave a snapshot.
+
 Kubri keeps the 3 most recent contexts this way, each for up to 30 minutes after you left it. Set the number, from 0 (off) to 5, with `connections.keepRecent` in the [settings](SETTINGS.md). Nothing runs for a kept context: no lists, no recording of changes. When the kubeconfig is read again, a kept context whose context, cluster or user entry changed is dropped.
 
 ## Clusters

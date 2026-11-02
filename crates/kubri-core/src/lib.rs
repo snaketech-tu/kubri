@@ -1778,7 +1778,8 @@ impl Kubri {
         target: &ObjectRef,
         options: LogOptions,
     ) -> Result<impl Stream<Item = LogEvent> + Send + 'static> {
-        let session = self.object_session(target).await?;
+        // Reading only: a log tab kept open from another context reads from that context.
+        let session = self.read_session(target.context.as_deref()).await?;
         let (pods, selector) = session.pods_and_selector(target).await?;
         let mut sources = logs::sources(&pods, options.container.as_deref());
         if sources.is_empty() {

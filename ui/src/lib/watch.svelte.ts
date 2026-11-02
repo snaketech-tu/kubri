@@ -4,6 +4,10 @@ import { errorMessage } from './format';
 import { pushTrail } from './pulse';
 import { backend, type Column, type MetricsKind, type ResourceRef, type Row, type TableScope, type Usage } from './api';
 
+/** The last rows of lists left, by context and list, to show at once when coming back. */
+const lastRows = new Map<string, { rows: Row[]; columns: Column[] }>();
+const LAST_ROWS = 30;
+
 /** A live table of objects. Call `start` from an `$effect` and return its result to clean up. */
 export class LiveTable {
 	#rows = new SvelteMap<string, Row>();
@@ -18,6 +22,8 @@ export class LiveTable {
 	updated = $state(0);
 	/** A list arrived since the watch began, so an empty list is truly empty. */
 	hasLoaded = $state(false);
+	/** The rows are the ones shown when this list was left, until the watch's first list. */
+	stale = $state(false);
 	/** What the rows shown belong to. */
 	#key = '';
 
@@ -25,17 +31,30 @@ export class LiveTable {
 	 * `scope` narrows the list with selectors, as after Enter on a Deployment. `preserve` keeps the
 	 * rows of the same list while the watch starts again, as after Retry; another list never shows them.
 	 */
-	start(resource: ResourceRef, namespace: string | null, scope: TableScope | null = null, preserve = false) {
+	start(
+		resource: ResourceRef,
+		namespace: string | null,
+		scope: TableScope | null = null,
+		preserve = false,
+		context: string | null = null
+	) {
 		return untrack(() => {
-			const key = JSON.stringify([resource, namespace, scope]);
+			const key = JSON.stringify([context, resource, namespace, scope]);
+			this.stale = false;
 			if (!preserve || this.#key !== key) {
 				this.#rows.clear();
 				this.columns = [];
 				this.updated = 0;
 				this.hasLoaded = false;
+				const last = context === null ? undefined : lastRows.get(key);
+				if (last) {
+					for (const row of last.rows) this.#rows.set(row.key, row);
+					this.columns = last.columns;
+					this.stale = true;
+				}
 			}
 			this.#key = key;
-			this.loading = !this.hasLoaded;
+			this.loading = !this.hasLoaded && !this.stale;
 			this.error = null;
 			this.notice = null;
 			// Events of a stopped watch must not reach the next one's rows.
@@ -44,6 +63,7 @@ export class LiveTable {
 				if (stopped) return;
 				switch (event.type) {
 					case 'reset':
+						this.stale = false;
 						this.#rows.clear();
 						for (const row of event.rows) this.#rows.set(row.key, row);
 						this.columns = event.columns;
@@ -59,6 +79,8 @@ export class LiveTable {
 					case 'error':
 						this.error = event.message;
 						this.loading = false;
+						this.stale = false;
+						if (!this.hasLoaded) this.#rows.clear();
 						return;
 					case 'notice':
 						this.notice = event.message;
@@ -70,6 +92,11 @@ export class LiveTable {
 			return () => {
 				stopped = true;
 				stop();
+				if (context !== null && this.hasLoaded && !this.error) {
+					lastRows.delete(key);
+					lastRows.set(key, { rows: [...this.#rows.values()], columns: this.columns });
+					if (lastRows.size > LAST_ROWS) lastRows.delete(lastRows.keys().next().value!);
+				}
 			};
 		});
 	}

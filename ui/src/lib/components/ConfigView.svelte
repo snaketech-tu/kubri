@@ -226,6 +226,31 @@
 		</div>
 
 		<div class="block">
+			<h2 id="config-recent">Recent contexts</h2>
+			<p class="muted">
+				Contexts you switch away from stay connected for up to 30 minutes, so switching back is instant and lands where you
+				left. They are marked with a green dot in the context switcher.
+			</p>
+			<div class="diff-settings">
+				<label>
+					Keep
+					<input
+						class="number"
+						type="number"
+						min="0"
+						max="5"
+						value={app.settings.connections?.keepRecent ?? 3}
+						onchange={(e) => {
+							const count = Math.round(Number(e.currentTarget.value));
+							if (count >= 0) app.setConnectionSettings({ keepRecent: Math.min(count, 5) });
+						}}
+					/>
+					contexts connected (0 turns it off)
+				</label>
+			</div>
+		</div>
+
+		<div class="block">
 			<h2 id="config-appearance">Appearance</h2>
 			<p class="muted">Kubri's own colors. A k9s skin, picked per context below, takes their place while it is on.</p>
 			<div class="skins themes" role="radiogroup" aria-label="Colors">

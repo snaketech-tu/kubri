@@ -57,7 +57,13 @@
 	let chooserOpen = $state(false);
 
 	$effect(() =>
-		table.start(resource, ns, paths ? { ...(scope?.scope ?? {}), paths } : (scope?.scope ?? null), retry > 0)
+		table.start(
+			resource,
+			ns,
+			paths ? { ...(scope?.scope ?? {}), paths } : (scope?.scope ?? null),
+			retry > 0,
+			app.cluster && !app.cluster.snapshot ? app.cluster.context : null
+		)
 	);
 	$effect(() => {
 		if (metricsKind) return metrics.start(metricsKind, ns);
@@ -484,7 +490,8 @@
 	 * `chosen` are the rows that copying and deleting work on: the marked ones, or the row itself.
 	 */
 	function actionsFor(row: Row | undefined, chosen: Row[]): MenuAction[] {
-		if (!row) return [];
+		// Rows from when the list was left may be gone; act only on the cluster's own list.
+		if (!row || table.stale) return [];
 		const cleanUp: MenuAction[] =
 			isPods(resource) && canDelete(resource)
 				? [{ group: 'Delete', label: 'Delete finished pods…', keys: ['z'], danger: true, run: sanitize }]
@@ -501,6 +508,7 @@
 
 	/** What there is to do on the marked rows together. */
 	function markedActions(chosen: Row[]): MenuAction[] {
+		if (table.stale) return [];
 		const out: MenuAction[] = [
 			{ group: 'Marked', label: 'Copy names', keys: ['c'], primary: 0, run: () => copyLines(chosen.map((r) => r.name), ['name', 'names']) }
 		];
@@ -863,7 +871,7 @@
 			bind:clientHeight={viewHeight}
 			onscroll={() => (scrollTop = scroller?.scrollTop ?? 0)}
 		>
-			<table aria-rowcount={windowed ? rows.length + 1 : undefined}>
+			<table class:stale={table.stale} aria-rowcount={windowed ? rows.length + 1 : undefined}>
 				<thead>
 					<tr>
 						<th class="check"></th>
@@ -995,12 +1003,19 @@
 		</div>
 		<div class="foot">
 			<span>{rows.length} of {owned.length} {place.label.toLowerCase()}</span>
+			{#if table.stale}<span class="updating">— updating…</span>{/if}
 			{#if metricsKind}<span>— not measured</span>{/if}
 		</div>
 	</div>
 </section>
 
 <style>
+	table.stale tbody {
+		opacity: 0.55;
+	}
+	.updating {
+		color: var(--text-muted);
+	}
 	section {
 		display: flex;
 		flex-direction: column;

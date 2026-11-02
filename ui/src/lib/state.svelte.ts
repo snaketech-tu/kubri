@@ -1,3 +1,4 @@
+import { tick } from 'svelte';
 import { drafts } from './navigation.svelte';
 import { access } from './access.svelte';
 import { creating } from './create.svelte';
@@ -42,6 +43,7 @@ import { errorMessage } from './format';
 import { applyZoom, storedZoom } from './appearance';
 import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } from './releases';
 import { loadPins, savePins, samePin, toggled as togglePinIn, type Pin } from './pins';
+import { Places, type Place } from './places';
 import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu, MenuAction } from './menu';
@@ -254,6 +256,12 @@ export interface Toast {
 /** Global app state: kubeconfig contexts, the connected cluster and what is being browsed. */
 class AppState {
 	contexts = $state<ContextInfo[]>([]);
+	/** Contexts kept connected in the background, most recent first. */
+	warm = $state<string[]>([]);
+	/** The context Kubri was on before this one, for `:ctx -`. */
+	previousContext = $state<string | null>(null);
+	/** Where each context was left, to return there. */
+	#places = new Places<View>();
 	cluster = $state<ClusterInfo | null>(null);
 	resources = $state<ResourceInfo[]>([]);
 	namespaces = $state<string[]>([]);
@@ -541,6 +549,15 @@ class AppState {
 		}
 	}
 
+	async setConnectionSettings(connections: Settings['connections']) {
+		try {
+			this.settings = await backend.setConnectionSettings(connections);
+			this.refreshWarm();
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+		}
+	}
+
 	async setHistorySettings(history: Settings['history']) {
 		try {
 			this.settings = await backend.setHistorySettings(history);
@@ -681,8 +698,9 @@ class AppState {
 		this.checkRelease(true);
 		try {
 			await this.loadSettings();
-			const { contexts, cluster } = await backend.contexts();
+			const { contexts, cluster, warm } = await backend.contexts();
 			this.contexts = contexts;
+			this.warm = warm ?? [];
 			if (cluster) {
 				await this.connected(cluster);
 			} else {
@@ -697,7 +715,12 @@ class AppState {
 	/** Reads the kubeconfig again. `quiet` keeps the old list on errors, for refreshes nobody asked for. */
 	async reloadContexts(quiet = false) {
 		try {
-			this.contexts = (await backend.reloadContexts()).contexts;
+			const list = await backend.reloadContexts();
+			this.contexts = list.contexts;
+			this.warm = list.warm ?? [];
+			this.#places.keepOnly(list.contexts.map((c) => c.name));
+			const current = this.cluster?.context;
+			dock.keepContexts([...list.contexts.map((c) => c.name), ...(current ? [current] : [])]);
 		} catch (err) {
 			if (!quiet) this.error = errorMessage(err);
 		}
@@ -770,10 +793,13 @@ class AppState {
 			this.toast('Finish the current action before switching contexts', 'bad');
 			return;
 		}
+		// While connecting, the list is replaced by a notice and forgets its filter and cursor.
+		this.savePlace();
 		this.connecting = name;
 		this.error = null;
 		try {
 			await this.connected(await backend.switchContext(name));
+			this.refreshWarm();
 		} catch (err) {
 			this.error = `Could not connect to ${name}: ${errorMessage(err)}`;
 		} finally {
@@ -862,6 +888,34 @@ class AppState {
 		return true;
 	}
 
+	/**
+	 * Shows a context's remembered place again. A kind the cluster no longer serves leaves the
+	 * defaults chosen on connecting.
+	 */
+	private returnTo({ view, history, historyAt, filter, cursor }: Place<View>, shown: View) {
+		const resource = view.resource && findResource(this.resources, view.resource);
+		if (view.resource && !resource) return;
+		const xray = view.xray && findResource(this.resources, view.xray);
+		if (view.page === 'xray' && !xray) return;
+		this.page = view.page;
+		if (resource) this.selected = resource;
+		if (xray) this.xrayResource = xray;
+		this.namespace = view.namespace;
+		this.scope = view.scope;
+		this.#history = history;
+		this.#historyAt = historyAt;
+		// The history already holds this view; the effect that records views must skip it.
+		this.#restoring = !sameView(view, shown);
+		// For the list of this context, which mounts after this update; the one leaving must
+		// not take them.
+		const context = this.cluster?.context;
+		void tick().then(() => {
+			if (this.cluster?.context !== context) return;
+			if (filter) this.filterRequest = filter;
+			if (cursor) this.cursorRequest = cursor;
+		});
+	}
+
 	private restore(view: View) {
 		const resource = view.resource && findResource(this.resources, view.resource);
 		const xray = view.xray && findResource(this.resources, view.xray);
@@ -890,9 +944,12 @@ class AppState {
 				this.open(resource, action.namespace, action.filter);
 				break;
 			}
-			case 'context':
-				if (action.name !== this.cluster?.context) await this.switchContext(action.name);
+			case 'context': {
+				const name = action.name === '-' ? this.previousContext : action.name;
+				if (!name) this.toast('There is no previous context yet', 'bad');
+				else if (name !== this.cluster?.context) await this.switchContext(name);
 				break;
+			}
 			case 'namespace':
 				this.namespace = action.name;
 				break;
@@ -1252,7 +1309,34 @@ class AppState {
 		setTimeout(() => (this.toasts = this.toasts.filter((t) => t.id !== id)), tone === 'bad' ? 8000 : 4000);
 	}
 
+	/** Remembers where the current context is, to return there after switching away. */
+	private savePlace() {
+		const cluster = this.cluster;
+		if (!cluster || cluster.snapshot) return;
+		const focus = this.focus?.();
+		const target = focus?.target;
+		this.#places.save(cluster.context, {
+			view: this.view,
+			history: this.#history,
+			historyAt: this.#historyAt,
+			filter: focus?.filter ?? '',
+			cursor: target ? { namespace: target.namespace ?? null, name: target.name } : null
+		});
+	}
+
+	/** Asks which contexts the core keeps connected, after a switch changed them. */
+	private async refreshWarm() {
+		try {
+			this.warm = (await backend.contexts()).warm ?? [];
+		} catch {
+			// The switcher only shows fewer marks.
+		}
+	}
+
 	private async connected(cluster: ClusterInfo) {
+		const left = this.cluster;
+		const before = this.view;
+		if (left && !left.snapshot && left.context !== cluster.context) this.previousContext = left.context;
 		this.details = null;
 		this.resources = [];
 		this.cluster = null;
@@ -1265,8 +1349,8 @@ class AppState {
 		this.applyGuard({ readOnly: true, reason: 'Kubri is still checking whether it may change this cluster', canUnlock: false, unlockedFor: null });
 		this.refreshGuard();
 		this.resources = resources;
-		const closed = dock.keepContext(cluster.context);
-		if (closed) this.toast(`Closed ${closed} workspace ${closed === 1 ? 'tab' : 'tabs'} of the last context`);
+		const closed = dock.keepContexts([...this.contexts.map((c) => c.name), cluster.context]);
+		if (closed) this.toast(`Closed ${closed} workspace ${closed === 1 ? 'tab' : 'tabs'} of a context that is gone`);
 		this.namespace = cluster.snapshot
 			? (cluster.snapshot.namespace ?? ALL_NAMESPACES)
 			: this.contextSettingsOf(cluster.context).namespace || ALL_NAMESPACES;
@@ -1282,6 +1366,8 @@ class AppState {
 		const xray = this.xrayResource;
 		this.xrayResource = resources.find((r) => xray && sameResource(r, xray)) ?? null;
 		if (this.page === 'xray' && !this.xrayResource) this.page = 'resources';
+		const place = cluster.snapshot ? undefined : this.#places.take(cluster.context);
+		if (place) this.returnTo(place, before);
 		// Hotkeys, plugins and skins can differ per context.
 		this.loadK9s();
 		this.startFavoriteForwards();
