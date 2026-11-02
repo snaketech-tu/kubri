@@ -63,6 +63,9 @@ pub struct LocalTerminalOptions {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalTerminalInfo {
+    /// Whether local terminals are on at all: always in the desktop app, in the web server
+    /// only when started with `KUBRI_LOCAL_TERMINAL=true`.
+    pub enabled: bool,
     /// Whether a terminal can be opened now.
     pub allowed: bool,
     /// Why not, when it cannot.

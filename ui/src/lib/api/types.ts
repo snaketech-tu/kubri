@@ -268,6 +268,43 @@ export interface Settings {
 	searches: SavedSearch[];
 	history: HistorySettings;
 	connections: ConnectionSettings;
+	terminal: TerminalSettings;
+}
+
+/** The local terminal's shell, folder and font. */
+export interface TerminalSettings {
+	/** Empty for the login shell, or PowerShell on Windows. */
+	shell: string;
+	args: string[];
+	/** Empty for the home folder. */
+	startDir: string;
+	/** In pixels, 8 to 32. */
+	fontSize: number;
+}
+
+/** Whether a local terminal can be opened now, and what it would run with. */
+export interface LocalTerminalInfo {
+	/** Local terminals are on here: always in the desktop app, in the web app when the server allows them. */
+	enabled: boolean;
+	allowed: boolean;
+	/** Why not, when it cannot. */
+	reason: string | null;
+	context: string | null;
+	shell: string;
+	/** kubectl's client version, or null when it is not on the PATH. */
+	kubectl: string | null;
+	helm: string | null;
+	/** The API server's version. */
+	server: string | null;
+	/** Set when kubectl is too far from the server's version. */
+	skew: string | null;
+}
+
+/** What a local terminal opens with: the namespace shown, null for all namespaces. */
+export interface LocalTerminalOptions {
+	namespace: string | null;
+	cols: number;
+	rows: number;
 }
 
 /** How Kubri keeps connections to contexts. */
@@ -1429,6 +1466,7 @@ export interface Backend {
 	setDiffSettings(settings: DiffSettings): Promise<Settings>;
 	setHistorySettings(settings: HistorySettings): Promise<Settings>;
 	setConnectionSettings(settings: ConnectionSettings): Promise<Settings>;
+	setTerminalSettings(settings: TerminalSettings): Promise<Settings>;
 	/** What changed, newest first, with the times Kubri was watching. */
 	history(query: HistoryQuery): Promise<HistoryPage>;
 	/** One change with the object before and after it. */
@@ -1587,6 +1625,10 @@ export interface Backend {
 	runPlugin(run: PluginRun): Promise<void>;
 	/** Runs a plugin in a terminal. */
 	openPlugin(run: PluginRun, onEvent: (event: TerminalEvent) => void): TerminalSession;
+	/** Whether a local terminal can be opened for the connected context. */
+	localTerminalInfo(): Promise<LocalTerminalInfo>;
+	/** Opens a shell on this computer, or on the server in the web app. */
+	openLocalTerminal(options: LocalTerminalOptions, onEvent: (event: TerminalEvent) => void): TerminalSession;
 	/** The desktop app, where port-forwards and plugins run on this computer. */
 	desktop: boolean;
 	/** Opens a web address in a new tab, or in the default browser from the desktop app. */

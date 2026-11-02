@@ -66,6 +66,7 @@ export const tauriBackend: Backend = {
 	setDiffSettings: (settings) => invoke('set_diff_settings', { settings }),
 	setHistorySettings: (settings) => invoke('set_history_settings', { settings }),
 	setConnectionSettings: (settings) => invoke('set_connection_settings', { settings }),
+	setTerminalSettings: (settings) => invoke('set_terminal_settings', { settings }),
 	history: (query) => invoke('history', { query }),
 	historyDetail: (id) => invoke('history_detail', { id }),
 	setColumnSettings: (kind, columns) => invoke('set_column_settings', { kind, columns }),
@@ -186,6 +187,8 @@ export const tauriBackend: Backend = {
 	k9sSkin: (name) => invoke('k9s_skin', { name }),
 	runPlugin: (run) => invoke('plugin_run', { run }),
 	openPlugin: (run, onEvent) => terminalChannel('plugin_open', { run }, onEvent),
+	localTerminalInfo: () => invoke('local_terminal_info'),
+	openLocalTerminal: (options, onEvent) => terminalChannel('local_terminal_open', { options }, onEvent),
 	desktop: true,
 	openUrl: (url) => invoke('open_url', { url }),
 	saveText: (name, text) => invoke('save_text', { name, text })

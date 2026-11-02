@@ -131,6 +131,7 @@ export const httpBackend: Backend = {
 	setDiffSettings: (settings) => request('PUT', '/settings/diff', settings),
 	setHistorySettings: (settings) => request('PUT', '/settings/history', settings),
 	setConnectionSettings: (settings) => request('PUT', '/settings/connections', settings),
+	setTerminalSettings: (settings) => request('PUT', '/settings/terminal', settings),
 	history: (query) => request('POST', '/history', query),
 	historyDetail: (id) => request('GET', `/history/${id}`),
 	setColumnSettings: (kind, columns) => request('PUT', '/settings/columns', { kind, columns }),
@@ -269,6 +270,8 @@ export const httpBackend: Backend = {
 	k9sSkin: (name) => request('GET', `/k9s/skins/${encodeURIComponent(name)}`),
 	runPlugin: (run) => request('POST', '/plugins/run', run),
 	openPlugin: (run, onEvent) => terminalSocket('/plugins/terminal', run, onEvent),
+	localTerminalInfo: () => request('GET', '/terminal/local'),
+	openLocalTerminal: (options, onEvent) => terminalSocket('/terminal/local/open', options, onEvent),
 	desktop: false,
 	async openUrl(url) {
 		window.open(url, '_blank', 'noreferrer');

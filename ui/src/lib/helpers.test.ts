@@ -126,6 +126,15 @@ describe('command palette', () => {
 		expect(suggest('be', resources, contexts, [])[0].action).toEqual({ type: 'benchmarks' });
 	});
 
+	it('opens a local terminal where it is allowed', () => {
+		expect(suggest(':term', resources, contexts, [])[0].action).toEqual({ type: 'terminal' });
+		expect(suggest('terminal new', resources, contexts, []).map((s) => s.action)).toEqual([{ type: 'terminal', another: true }]);
+		expect(suggest('termi', resources, contexts, []).map((s) => s.action)).toContainEqual({ type: 'terminal' });
+		const off = { aliases: [], skins: [], terminal: false };
+		expect(suggest('term', resources, contexts, [], off).some((s) => s.action.type === 'terminal')).toBe(false);
+		expect(suggest('termi', resources, contexts, [], off).some((s) => s.action.type === 'terminal')).toBe(false);
+	});
+
 	it('passes a namespace argument to resource commands', () => {
 		const s = suggest('po kube-system', resources, contexts, []);
 		expect(s[0].action).toMatchObject({ type: 'resource', namespace: 'kube-system' });

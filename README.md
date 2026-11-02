@@ -212,6 +212,7 @@ Kubri reads your k9s configuration and uses the same keys, so you can start righ
 | <kbd>d</kbd> <kbd>y</kbd> <kbd>e</kbd> | Describe, YAML, edit |
 | <kbd>l</kbd> <kbd>s</kbd> | Logs, shell |
 | <kbd>Shift</kbd>+<kbd>F</kbd> | Port-forward |
+| <kbd>Ctrl</kbd>+<kbd>`</kbd> | A [terminal](docs/TERMINAL.md) with `kubectl` and `helm` set to this context |
 | <kbd>Ctrl</kbd>+<kbd>D</kbd> | Delete |
 | <kbd>?</kbd> | All keys |
 

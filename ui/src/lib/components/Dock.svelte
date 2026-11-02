@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { dock, type DockSession } from '../dock.svelte';
+	import { contextOf, dock, type DockSession } from '../dock.svelte';
 	import { app } from '../state.svelte';
 	import DockPane from './DockPane.svelte';
 	import Icon from './Icon.svelte';
@@ -11,12 +11,25 @@
 	const shown = (id: number) => !dock.minimized && (id === dock.active || id === dock.beside);
 
 	function label(s: DockSession) {
+		if (s.kind === 'local') return s.namespace ? `Terminal · ${s.namespace}` : 'Terminal';
 		return s.container ? `${s.target.name} · ${s.container}` : s.target.name;
 	}
 
-	/** The context of a tab opened in another one than Kubri shows now. */
-	function otherContext(s: DockSession): string | null {
-		const context = s.target.context;
+	function title(s: DockSession, other: string | null) {
+		if (s.kind === 'local') {
+			return `Terminal on this computer: kubectl and helm use ${app.contextName(s.context)}, ${s.namespace ? `namespace ${s.namespace}` : "the context's own namespace"}`;
+		}
+		const what = `${s.kind === 'logs' ? 'Logs' : 'Shell'} of ${s.resource.kind} ${s.target.namespace ? `${s.target.namespace}/` : ''}${label(s)}`;
+		return `${what}${s.previous ? ' (previous instance)' : ''}${other ? ` in ${app.contextName(other)}` : ''}`;
+	}
+
+	/**
+	 * The context to name on a tab: one opened in another context than Kubri shows now, and a
+	 * local terminal's always, as it is what the commands there talk to.
+	 */
+	function chipContext(s: DockSession): string | null {
+		if (s.kind === 'local') return s.context;
+		const context = contextOf(s);
 		return context && context !== app.cluster?.context ? context : null;
 	}
 
@@ -102,18 +115,16 @@
 		></div>
 	{/if}
 	<div class="bar">
-		<div class="tabs" role="tablist" aria-label="Logs and shells">
+		<div class="tabs" role="tablist" aria-label="Logs, shells and terminals">
 			{#each dock.sessions as s (s.id)}
 				{@const on = shown(s.id)}
-				{@const other = otherContext(s)}
+				{@const other = chipContext(s)}
 				{@const settings = other ? app.contextSettingsOf(other) : null}
 				<div class="tab" class:on class:focused={on && dock.beside !== null && dock.last === s.id}>
 					<button
 						role="tab"
 						aria-selected={on}
-						title="{s.kind === 'logs' ? 'Logs' : 'Shell'} of {s.resource.kind} {s.target.namespace ? `${s.target.namespace}/` : ''}{label(
-							s
-						)}{s.previous ? ' (previous instance)' : ''}{other ? ` in ${app.contextName(other)}` : ''}"
+						title={title(s, other)}
 						onclick={() => dock.show(s.id)}
 						onauxclick={(e) => onauxclick(e, s.id)}
 					>
@@ -124,7 +135,7 @@
 							>
 						{/if}
 						<span>{label(s)}</span>
-						{#if s.previous}<em>previous</em>{/if}
+						{#if s.kind !== 'local' && s.previous}<em>previous</em>{/if}
 					</button>
 					<button class="close" onclick={() => dock.close(s.id)} title="Close" aria-label="Close {label(s)}">
 						<Icon name="close" size={13} />
