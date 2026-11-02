@@ -370,6 +370,10 @@ class AppState {
 	contextMenuOpen = $state(false);
 	/** The dialog listing the kubeconfig files Kubri reads, where more can be loaded. */
 	kubeconfigFilesOpen = $state(false);
+	/** Why Kubri has no contexts to connect to, such as a missing kubeconfig; null when it has some. */
+	kubeconfigProblem = $state<string | null>(null);
+	/** The last failed connection, for the start page to say what to try. */
+	connectFailure = $state<{ context: string; error: string } | null>(null);
 	/** The actions menu that is open, from a right click or a ⋯ or More button. */
 	menu = $state<Menu | null>(null);
 	toasts = $state<Toast[]>([]);
@@ -683,8 +687,17 @@ class AppState {
 		this.checkRelease(true);
 		try {
 			await this.loadSettings();
-			const { contexts, cluster } = await backend.contexts();
+			let list: Awaited<ReturnType<typeof backend.contexts>>;
+			try {
+				list = await backend.contexts();
+			} catch (err) {
+				this.contexts = [];
+				this.kubeconfigProblem = errorMessage(err);
+				return;
+			}
+			const { contexts, cluster } = list;
 			this.contexts = contexts;
+			this.kubeconfigProblem = contexts.length ? null : 'Your kubeconfig has no contexts.';
 			if (cluster) {
 				await this.connected(cluster);
 			} else {
@@ -700,6 +713,7 @@ class AppState {
 	async reloadContexts(quiet = false) {
 		try {
 			this.contexts = (await backend.reloadContexts()).contexts;
+			if (this.contexts.length) this.kubeconfigProblem = null;
 		} catch (err) {
 			if (!quiet) this.error = errorMessage(err);
 		}
@@ -774,10 +788,12 @@ class AppState {
 		}
 		this.connecting = name;
 		this.error = null;
+		this.connectFailure = null;
 		try {
 			await this.connected(await backend.switchContext(name));
 		} catch (err) {
 			this.error = `Could not connect to ${name}: ${errorMessage(err)}`;
+			this.connectFailure = { context: name, error: errorMessage(err) };
 		} finally {
 			this.connecting = null;
 		}

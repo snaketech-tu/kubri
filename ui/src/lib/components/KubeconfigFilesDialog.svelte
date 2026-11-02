@@ -47,6 +47,8 @@
 		error = null;
 		try {
 			const before = new Set(app.contexts.map((c) => c.name));
+			// From the start page: close, so the connection to the new contexts shows.
+			const first = !before.size;
 			const list = await backend.addKubeconfigFiles(paths);
 			const added = list.contexts.filter((c) => !before.has(c.name)).length;
 			path = '';
@@ -54,6 +56,7 @@
 			app.toast(
 				`Loaded ${paths.length === 1 ? 'the file' : `${paths.length} files`}: ${added === 1 ? '1 new context' : `${added} new contexts`}`
 			);
+			if (first && list.contexts.length) app.kubeconfigFilesOpen = false;
 		} catch (err) {
 			error = errorMessage(err);
 		} finally {
