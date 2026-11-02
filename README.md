@@ -9,7 +9,7 @@
   <a href="https://github.com/snaketech-tu/kubri/releases/latest"><img src="https://img.shields.io/github/v/release/snaketech-tu/kubri?label=release&color=4b64f4" alt="Latest release"></a>
   <a href="https://github.com/snaketech-tu/kubri/releases"><img src="https://img.shields.io/github/downloads/snaketech-tu/kubri/total?color=4b64f4" alt="Downloads"></a>
   <a href="https://github.com/snaketech-tu/kubri/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/snaketech-tu/kubri/ci.yml?branch=main&label=CI" alt="CI"></a>
-  <a href="https://github.com/snaketech-tu/kubri/pkgs/container/kubri"><img src="https://img.shields.io/badge/docker-ghcr.io%2Fsnaketech-tu%2Fkubri-4b64f4?logo=docker&logoColor=white" alt="Docker image"></a>
+  <a href="https://github.com/snaketech-tu/kubri/pkgs/container/kubri"><img src="https://img.shields.io/badge/docker-ghcr.io-4b64f4?logo=docker&logoColor=white" alt="Docker image"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/snaketech-tu/kubri?color=4b64f4" alt="License: Apache-2.0"></a>
 </p>
 
@@ -39,15 +39,15 @@
 <table>
   <tr>
     <td width="33%" valign="top">
-      <h3>Everything k9s does</h3>
+      <b>Everything k9s does</b><br>
       Every resource and CRD, live. Drill-downs, logs, shells, port-forwards, Pulses, XRay, RBAC, Helm, the sanitizer and benchmarks. Your k9s aliases, hotkeys, plugins and skins keep working.
     </td>
     <td width="33%" valign="top">
-      <h3>Keyboard or mouse</h3>
+      <b>Keyboard or mouse</b><br>
       The keys you know from k9s: <kbd>:</kbd> opens the command palette and <kbd>?</kbd> lists every key. Or just click: each action is a button, and a right click on a row shows them all.
     </td>
     <td width="33%" valign="top">
-      <h3>Desktop or browser</h3>
+      <b>Desktop or browser</b><br>
       A small native app built with Rust and Tauri. Or a container for your team with a password sign-in, or a pod in the cluster with its own service account.
     </td>
   </tr>
@@ -101,7 +101,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>🔎 Browse</h3>
+      <b>🔎 Browse</b>
       <ul>
         <li>Every resource type and CRD, live, with the columns of <code>kubectl get</code></li>
         <li>k9s filters: regular expressions, <code>!</code> to invert, <code>-f</code> fuzzy, <code>-l app=web</code></li>
@@ -111,7 +111,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
       </ul>
     </td>
     <td width="50%" valign="top">
-      <h3>✏️ Change</h3>
+      <b>✏️ Change</b>
       <ul>
         <li>Create from templates, forms, files or the clipboard (<kbd>:new</kbd>)</li>
         <li>Delete, scale, restart, set images and roll back, one object or many</li>
@@ -123,7 +123,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
   </tr>
   <tr>
     <td valign="top">
-      <h3>🐞 Debug</h3>
+      <b>🐞 Debug</b>
       <ul>
         <li>Live logs of a pod or a whole workload, with JSON fields as columns and filters like <code>status>=500</code></li>
         <li>Shells, debug containers and node shells in a real terminal</li>
@@ -133,7 +133,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
       </ul>
     </td>
     <td valign="top">
-      <h3>🧭 Understand the cluster</h3>
+      <b>🧭 Understand the cluster</b>
       <ul>
         <li>Pulses, XRay, a topology graph and an RBAC matrix</li>
         <li>Helm: install, upgrade with a diff, compare revisions, roll back</li>
@@ -146,7 +146,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
   </tr>
   <tr>
     <td valign="top">
-      <h3>🛡️ Work safely</h3>
+      <b>🛡️ Work safely</b>
       <ul>
         <li>A name and color per context, and a banner on production</li>
         <li>Read-only and locked contexts</li>
@@ -156,7 +156,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
       </ul>
     </td>
     <td valign="top">
-      <h3>🧩 Fits your setup</h3>
+      <b>🧩 Fits your setup</b>
       <ul>
         <li>Your k9s configuration, per context</li>
         <li>Views in YAML that give your CRDs columns, health and actions</li>
@@ -267,7 +267,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h3>Using Kubri</h3>
+      <b>Using Kubri</b>
       <ul>
         <li><a href="docs/CREATE.md">Creating and changing</a>: Create, forms, cloning, Helm, columns, bulk changes and port-forwards</li>
         <li><a href="docs/DEBUGGING.md">Logs and debugging</a>: log search, the workspace, debug containers and suggested fixes</li>
@@ -278,7 +278,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
       </ul>
     </td>
     <td width="50%" valign="top">
-      <h3>Setting it up</h3>
+      <b>Setting it up</b>
       <ul>
         <li><a href="docs/SETTINGS.md">Settings and guard rails</a>: context colors, production and read-only contexts, permissions</li>
         <li><a href="docs/INTEGRATIONS.md">Integrations</a>: Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager and right-sizing</li>
