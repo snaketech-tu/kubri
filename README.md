@@ -43,7 +43,7 @@
 
 ### Desktop app
 
-Download Kubri for Windows, macOS or Linux from the [releases](https://github.com/snaketech-tu/kubri/releases). It uses the kubeconfig on your computer, just like kubectl, and tells you when a new version is out.
+Download Kubri for Windows, macOS or Linux from the [releases](https://github.com/snaketech-tu/kubri/releases). It uses the kubeconfig on your computer, just like kubectl, and updates itself when a new version is out.
 
 ### In the browser
 
