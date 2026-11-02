@@ -3,6 +3,7 @@
 	import { backend, type LogEvent, type LogLevel, type LogOptions, type LogSource, type ObjectRef } from '../api';
 	import { copyLines, saveFile } from '../actions';
 	import { errorMessage } from '../format';
+	import { dropdown } from '../dismiss';
 	import { selectedText } from '../explain';
 	import { forControl } from '../keys';
 	import {
@@ -533,7 +534,7 @@
 				Follow
 			</button>
 		{/if}
-		<details class="columns view">
+		<details class="columns view" {@attach dropdown}>
 			<summary>View</summary>
 			<div class="menu">
 				<label title="t"><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
@@ -595,7 +596,7 @@
 		</span>
 		<span class="buttons">
 			{#if table && names.length}
-				<details class="columns">
+				<details class="columns" {@attach dropdown}>
 					<summary>Columns</summary>
 					<div class="menu">
 						{#each names.slice(0, 40) as name (name)}
