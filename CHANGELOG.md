@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 — 2026-11-02
+
+- Switching back to a context you just left is instant: up to three recent contexts (Settings, 0 to 5) stay connected for 30 minutes, and Kubri returns to the view, filter, cursor and namespace you left there. `:ctx -` and the top entry of the context switcher go to the previous context; a green dot marks contexts that are still connected. See [Several clusters](docs/CLUSTERS.md#switching-back-is-instant).
+- Logs and shells of other contexts keep running in the workspace, with the context named on their tab.
+- A local terminal with `kubectl` and `helm` set to the context and namespace Kubri shows: <kbd>Ctrl</kbd>+<kbd>`</kbd>, `:term` or the terminal button. No credentials are written; read-only and locked contexts get none; production contexts get a warning line. In the web app it is off unless the server is started with `KUBRI_LOCAL_TERMINAL=true`. See [Local terminal](docs/TERMINAL.md).
+
 ## 1.4.1 — 2026-10-31
 
 - Refine the Link logo to match the selected design, including its slanted stem and curved cutout.
