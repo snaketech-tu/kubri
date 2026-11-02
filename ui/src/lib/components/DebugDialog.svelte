@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { untrack } from 'svelte';
 	import { backend, type DebugRequest } from '../api';
 	import { errorMessage } from '../format';
@@ -73,6 +74,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="dialog"
 	aria-label={d.on === 'node' ? 'Node shell' : 'Debug'}
 	bind:this={box}

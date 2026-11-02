@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { backend, type NewContext } from '../api';
 	import { errorMessage } from '../format';
 	import { app } from '../state.svelte';
@@ -63,6 +64,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="dialog"
 	aria-label="Add clusters"
 	bind:this={box}

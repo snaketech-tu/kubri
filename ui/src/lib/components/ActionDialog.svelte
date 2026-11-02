@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { tick, untrack } from 'svelte';
 	import {
 		copyLines,
@@ -719,6 +720,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="dialog"
 	class:wide={reviewing}
 	aria-label={title}

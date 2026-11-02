@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { access, describeCheck } from '../access.svelte';
 	import { copyLines } from '../actions';
 	import { backend, type Identity } from '../api';
@@ -55,6 +56,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="dialog"
 	aria-label="Not allowed"
 	bind:this={box}

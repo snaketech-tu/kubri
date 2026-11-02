@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { backend, type UpdateCheck, type UpdateProgress } from '../api';
 	import { errorMessage } from '../format';
 	import { app } from '../state.svelte';
@@ -47,6 +48,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="dialog"
 	aria-label="Update Kubri"
 	bind:this={box}
