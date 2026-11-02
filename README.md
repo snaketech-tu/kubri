@@ -219,7 +219,7 @@ Kubri reads your k9s configuration and uses the same keys, so you can start righ
 
 ## Your kubeconfig
 
-Kubri reads the files in `KUBECONFIG`, or `~/.kube/config`, the way kubectl does: a context that works with kubectl works in Kubri, and one that fails shows kubectl's error. It starts with your `current-context`, and you switch contexts in the top bar or with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. Started from a desktop launcher, the app takes the environment of your login shell, so `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin` and k9s plugins are found as in a terminal.
+Kubri reads the files in `KUBECONFIG`, or `~/.kube/config`, the way kubectl does: a context that works with kubectl works in Kubri, and one that fails shows kubectl's error. In the desktop app you can load more kubeconfig files under **Kubeconfig files…** in the context switcher, and Kubri remembers them. It starts with your `current-context`, and you switch contexts in the top bar or with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. Started from a desktop launcher, the app takes the environment of your login shell, so `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin` and k9s plugins are found as in a terminal.
 
 ## Documentation
 
@@ -227,7 +227,7 @@ Kubri reads the files in `KUBECONFIG`, or `~/.kube/config`, the way kubectl does
 
 - [Creating and changing](docs/CREATE.md): Create, forms, cloning, Helm, columns, bulk changes and port-forwards
 - [Logs and debugging](docs/DEBUGGING.md): log search, the workspace, debug containers and suggested fixes
-- [Several clusters](docs/CLUSTERS.md): the Clusters page, added contexts, search and compare
+- [Several clusters](docs/CLUSTERS.md): the Clusters page, loading kubeconfig files, added contexts, search and compare
 - [What depends on what](docs/TOPOLOGY.md): the topology graph, request paths and delete warnings
 - [What changed](docs/CHANGES.md) and [Snapshots](docs/SNAPSHOTS.md)
 - [Settings and guard rails](docs/SETTINGS.md): context colors, production and read-only contexts, permissions

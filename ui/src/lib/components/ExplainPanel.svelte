@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { untrack } from 'svelte';
 	import { backend, type ExplainAnswer, type ExplainPrompt, type ExplainSubject } from '../api';
 	import { errorMessage } from '../format';
@@ -78,15 +79,13 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="panel"
 	aria-label="Explain"
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
 		close();
-	}}
-	onclick={(e) => {
-		if (e.target === box) close();
 	}}
 >
 	<header>
