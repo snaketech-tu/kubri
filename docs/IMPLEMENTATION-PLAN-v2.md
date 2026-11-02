@@ -1,11 +1,10 @@
-# Kubri implementation plan v2: beyond Headlamp
+# Kubri implementation plan v2
 
 Date: 29 October 2026. Starting point: Kubri 0.2.2, with the full-size log and shell workspace
 (PR #22) already merged. Status: agreed with the project owner, nothing implemented yet.
 
-This plan turns [Where Headlamp does better than Kubri](HEADLAMP-COMPARISON.md) (items **H1** to
-**H20**) and [Ideas: going beyond Headlamp](IDEAS.md) (ideas **I1** to **I19**) into phases with
-one release each, ending at 1.0. The older [redesign plan](design-review/IMPLEMENTATION-PLAN.md)
+This plan turns a list of gaps (items **H1** to **H20**) and ideas (**I1** to **I19**) into
+phases with one release each, ending at 1.0. The older [redesign plan](design-review/IMPLEMENTATION-PLAN.md)
 is done and stays as the record of that work.
 
 ## Decisions
@@ -306,7 +305,7 @@ Goal: see every cluster at once and find anything in it.
 - The k9s filter grammar (`/regex`, `-l app=web`, `-f fuzzy`) plus field queries such as
   `status.phase!=Running`, over chosen kinds.
 - Saved searches become entries in the sidebar. With a label selector across namespaces, a saved
-  search also covers Headlamp's "projects" (H14): one application's resources in one view.
+  search also covers projects (H14): one application's resources in one view.
 
 ### XRay graph and blast radius (H13, I7)
 
@@ -355,8 +354,8 @@ machine without cluster access; a view file adds columns and a health state to a
 
 ### Proof of speed (I19)
 
-- A benchmark job in CI: startup time, memory and time to list 10,000 pods on k3s, for Kubri and
-  Headlamp, with results in the docs and a threshold that fails CI on regressions.
+- A benchmark job in CI: startup time, memory and time to list 10,000 pods on k3s, for Kubri,
+  with results in the docs and a threshold that fails CI on regressions.
 
 ### Accessibility and themes (H18)
 

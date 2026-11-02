@@ -2,7 +2,7 @@
 
 A release is a version tag. Pushing it builds the desktop app and the Docker image; the installers land in a draft release that is published by hand.
 
-1. Set the new version in [`Cargo.toml`](../Cargo.toml) (`[workspace.package]`) and [`ui/package.json`](../ui/package.json), run `cargo check` so `Cargo.lock` follows, and merge that to `main`.
+1. Set the new version in [`Cargo.toml`](../Cargo.toml) (`[workspace.package]`), [`ui/package.json`](../ui/package.json) and [`ui/src-tauri/tauri.conf.json`](../ui/src-tauri/tauri.conf.json), run `cargo check` so `Cargo.lock` follows, and merge that to `main`.
 2. Tag the merge commit and push the tag:
 
    ```sh
