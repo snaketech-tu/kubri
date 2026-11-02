@@ -1,0 +1,25 @@
+name: macOS check
+on:
+  push:
+    branches: [fix/macos-theme-check]
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Kubri 1.5.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.5.0 -p 'Kubri_1.5.0_aarch64.dmg' -D /tmp
+          hdiutil attach /tmp/Kubri_1.5.0_aarch64.dmg -mountpoint /tmp/kubri-dmg -nobrowse
+          cp -R /tmp/kubri-dmg/Kubri.app /Applications/
+          brew install cliclick
+          sw_vers
+      - name: Drive the app
+        run: bash .github/macos-drive.sh
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shots
+          path: shots
