@@ -119,6 +119,14 @@
 				>
 					<Icon name="camera" size={15} /> Snapshots…
 				</button>
+				<button
+					onclick={() => {
+						app.contextMenuOpen = false;
+						app.kubeconfigFilesOpen = true;
+					}}
+				>
+					<Icon name="config" size={15} /> Kubeconfig files…
+				</button>
 			</div>
 		</div>
 	{/if}

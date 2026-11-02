@@ -8,6 +8,7 @@ mod added;
 mod apply;
 mod bench;
 mod certmanager;
+mod chosen;
 mod context;
 mod debug;
 pub mod diagnose;
@@ -127,6 +128,7 @@ pub use views::{RenderedView, View, ViewSet};
 pub fn config_dir() -> Option<std::path::PathBuf> {
     settings::dir()
 }
+pub use chosen::KubeconfigFile;
 pub use graph::{EdgeKind, Graph, GraphEdge, GraphNode, PathStep, RequestPath};
 pub use table::{Column, Owner, Row, TableEvent, TableScope};
 pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
@@ -831,6 +833,40 @@ impl Kubri {
             )));
         }
         // `reload` forgets every kept connection, this one included.
+        self.reload().await
+    }
+
+    /// Every kubeconfig file Kubri reads: the user's own, then the ones chosen in Kubri.
+    pub fn kubeconfig_files(&self) -> Vec<KubeconfigFile> {
+        chosen::describe(&kubeconfig::own_paths(), &chosen::files())
+    }
+
+    /// Reads the kubeconfig files at `paths` from now on, where they are, after the user's
+    /// own. Each must be a kubeconfig Kubri can read, or none is added.
+    pub async fn add_kubeconfig_files(&self, paths: &[String]) -> Result<ContextList> {
+        chosen::add(&kubeconfig::own_paths(), paths)?;
+        self.reload().await
+    }
+
+    /// Stops reading a file chosen in Kubri. The user's own files stay.
+    pub async fn remove_kubeconfig_file(&self, path: &str) -> Result<ContextList> {
+        let file = self.kubeconfig_files().into_iter().find(|f| f.path == path);
+        if let (Some(file), Some(cluster)) = (&file, self.cluster().await)
+            && file.chosen
+            && file.contexts.contains(&cluster.context)
+            && !file.shadowed.contains(&cluster.context)
+        {
+            return Err(Error::Unsupported(format!(
+                "Kubri is connected to {}, which comes from this file; switch to another context first",
+                cluster.context
+            )));
+        }
+        if !chosen::remove(path)? {
+            return Err(Error::Unsupported(match file {
+                Some(_) => format!("{path} is one of your own kubeconfig files, which Kubri does not change"),
+                None => format!("Kubri does not read {path}"),
+            }));
+        }
         self.reload().await
     }
 

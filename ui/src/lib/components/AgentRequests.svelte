@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { backend, type AgentRequest } from '../api';
 	import { app } from '../state.svelte';
 
@@ -58,6 +59,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="dialog"
 	aria-label="An AI agent asks to make a change"
 	bind:this={box}

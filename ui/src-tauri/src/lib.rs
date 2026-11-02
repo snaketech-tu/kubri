@@ -90,6 +90,51 @@ async fn reload_contexts(kubri: State<'_, Arc<Kubri>>) -> CommandResult<ContextL
     kubri.reload().await.map_err(|e| e.to_string())
 }
 
+// Async, so reading the files does not hold up the window.
+#[tauri::command]
+async fn kubeconfig_files(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<kubri_core::KubeconfigFile>> {
+    Ok(kubri.kubeconfig_files())
+}
+
+#[tauri::command]
+async fn add_kubeconfig_files(
+    kubri: State<'_, Arc<Kubri>>,
+    paths: Vec<String>,
+) -> CommandResult<ContextList> {
+    kubri
+        .add_kubeconfig_files(&paths)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn remove_kubeconfig_file(kubri: State<'_, Arc<Kubri>>, path: String) -> CommandResult<ContextList> {
+    kubri
+        .remove_kubeconfig_file(&path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Asks for kubeconfig files in the system's file dialog; empty when the user cancels.
+#[tauri::command]
+async fn choose_kubeconfig_files(app: tauri::AppHandle) -> Vec<String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut dialog = app.dialog().file().set_title("Load kubeconfig files");
+    if let Some(kube) = dirs::home_dir().map(|h| h.join(".kube")).filter(|d| d.is_dir()) {
+        dialog = dialog.set_directory(kube);
+    }
+    dialog.pick_files(move |files| {
+        let _ = tx.send(files.unwrap_or_default());
+    });
+    rx.await
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|f| f.into_path().ok())
+        .map(|p| p.display().to_string())
+        .collect()
+}
+
 #[tauri::command]
 async fn inspect_kubeconfig(
     kubri: State<'_, Arc<Kubri>>,
@@ -1103,6 +1148,7 @@ pub fn run() {
     let agents = agents::Agents::new(kubri.clone(), read_only);
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup({
             let agents = agents.clone();
             move |_| {
@@ -1206,6 +1252,10 @@ pub fn run() {
             fleet_cluster,
             set_saved_searches,
             search,
+            kubeconfig_files,
+            add_kubeconfig_files,
+            remove_kubeconfig_file,
+            choose_kubeconfig_files,
             inspect_kubeconfig,
             add_contexts,
             remove_context,
