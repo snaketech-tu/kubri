@@ -1,18 +1,16 @@
 // Measures how fast Kubri's web server starts, how much memory it and the page use, and how long
-// the pod list takes to show its first pods and every pod, and does the same for Headlamp when it is
-// there. Headlamp loads 1,000 pods at a time, so the script presses its "Load more" button.
+// the pod list takes to show its first pods and every pod.
 //
 //   node bench/speed/run.cjs
 //
 // It reads the cluster from KUBECONFIG, which bench/speed/seed.sh fills with pods first.
 //   KUBRI_BIN       kubri-server to run (target/release/kubri-server)
 //   KUBRI_UI_DIR    the built UI (ui/build)
-//   HEADLAMP_DIR    a folder with headlamp-server, frontend/ and plugins/; Headlamp is skipped without it
 //   BENCH_PODS      pods the list must reach (10000)
 //   BENCH_RUNS      runs per app; the median counts (3)
 //   BENCH_OUT       where to write the results as JSON (speed.json)
 // Kubri's medians are checked against bench/speed/limits.json, and the script fails when one is over.
-const { spawn, execFileSync } = require('node:child_process');
+const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -23,7 +21,6 @@ const pods = Number(process.env.BENCH_PODS || 10000);
 const runs = Number(process.env.BENCH_RUNS || 3);
 const out = process.env.BENCH_OUT || 'speed.json';
 const limits = JSON.parse(fs.readFileSync(path.join(__dirname, 'limits.json'), 'utf8'));
-const context = execFileSync('kubectl', ['config', 'current-context'], { encoding: 'utf8' }).trim();
 const kubeconfig = (process.env.KUBECONFIG || path.join(os.homedir(), '.kube/config')).split(path.delimiter)[0];
 
 const apps = [
@@ -33,8 +30,8 @@ const apps = [
 		port: 7979,
 		url: (port) => `http://127.0.0.1:${port}/`,
 		start(port) {
-			// Its own settings, so nothing from the machine's Kubri or k9s changes the page. Like k9s,
-			// it opens the pod list first, as Headlamp's address does.
+			// Its own settings, so nothing from the machine's Kubri or k9s changes the page. It opens
+			// the pod list first.
 			const home = fs.mkdtempSync(path.join(os.tmpdir(), 'kubri-bench-'));
 			fs.mkdirSync(path.join(home, 'k9s'));
 			fs.writeFileSync(path.join(home, 'k9s', 'config.yaml'), 'k9s:\n  defaultView: pods\n');
@@ -49,22 +46,8 @@ const apps = [
 				stdio: 'ignore'
 			});
 		}
-	},
-	process.env.HEADLAMP_DIR && {
-		name: 'Headlamp',
-		key: 'headlamp',
-		port: 4466,
-		url: (port) => `http://127.0.0.1:${port}/c/${encodeURIComponent(context)}/pods`,
-		// Headlamp lists pods 1,000 at a time and asks for the rest with a button.
-		more: (page) => page.getByRole('button', { name: 'Load more' }),
-		start(port) {
-			const dir = process.env.HEADLAMP_DIR;
-			const args = ['-html-static-dir', path.join(dir, 'frontend'), '-plugins-dir', path.join(dir, 'plugins')];
-			args.push('-kubeconfig', kubeconfig, '-port', String(port));
-			return spawn(path.join(dir, 'headlamp-server'), args, { stdio: 'ignore' });
-		}
 	}
-].filter(Boolean);
+];
 
 const now = () => performance.now();
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -95,7 +78,7 @@ function shown() {
 	return /-\d{5}\b/.test(document.body.innerText);
 }
 
-/** True once the page says it shows `of N` items with N at least `pods`, like "10012 of 10012 pods" or "1-15 of 10012". */
+/** True once the page says it shows `of N` items with N at least `pods`, like "10012 of 10012 pods". */
 function listed(pods) {
 	for (const [, n] of document.body.innerText.matchAll(/\bof ([\d,.]+)/g)) {
 		if (Number(n.replace(/[,.]/g, '')) >= pods) return true;
@@ -116,16 +99,12 @@ async function measure(app, browser) {
 		const deadline = opened + 180_000;
 		await page.waitForFunction(shown, null, { timeout: 180_000, polling: 50 });
 		const first = now() - opened;
-		// Pressing a "Load more" button whenever it can be pressed, as fast as a person never would.
 		while (!(await page.evaluate(listed, pods))) {
 			if (now() > deadline) {
 				await page.screenshot({ path: `speed-${app.key}.png` });
 				const text = await page.evaluate(() => document.body.innerText).catch(() => '');
 				throw new Error(`not all pods listed after 180 s; the page shows:\n${text.slice(0, 1500)}`);
 			}
-			const more = app.more?.(page);
-			// Only a button that is there now: Playwright waits for a missing one, and a timeout of 0 waits forever.
-			if (more && (await more.count()) === 1 && (await more.isEnabled().catch(() => false))) await more.click({ timeout: 1000 }).catch(() => {});
 			await pause(50);
 		}
 		const list = now() - opened;
