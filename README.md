@@ -1,27 +1,32 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kubri-logo-dark.svg">
-    <img src="docs/assets/kubri-logo.svg" alt="Kubri" width="300">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+    <img src="docs/assets/banner-light.svg" alt="Kubri: Kubernetes, by keyboard or mouse. Everything k9s does, as an app for your desktop or your browser." width="100%">
   </picture>
 </p>
 
 <p align="center">
-  <b>A fast Kubernetes GUI that does everything k9s does, by keyboard or by mouse.</b><br>
-  A desktop app for Windows, macOS and Linux, or a web app for your whole team.
-</p>
-
-<p align="center">
+  <a href="https://github.com/snaketech-tu/kubri/releases/latest"><img src="https://img.shields.io/github/v/release/snaketech-tu/kubri?label=release&color=4b64f4" alt="Latest release"></a>
+  <a href="https://github.com/snaketech-tu/kubri/releases"><img src="https://img.shields.io/github/downloads/snaketech-tu/kubri/total?color=4b64f4" alt="Downloads"></a>
   <a href="https://github.com/snaketech-tu/kubri/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/snaketech-tu/kubri/ci.yml?branch=main&label=CI" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/snaketech-tu/kubri?color=0969da" alt="License: Apache-2.0"></a>
-  <img src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux%20%C2%B7%20browser-0969da" alt="Runs on Windows, macOS, Linux and in the browser">
+  <a href="https://github.com/snaketech-tu/kubri/pkgs/container/kubri"><img src="https://img.shields.io/badge/docker-ghcr.io%2Fsnaketech-tu%2Fkubri-4b64f4?logo=docker&logoColor=white" alt="Docker image"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/snaketech-tu/kubri?color=4b64f4" alt="License: Apache-2.0"></a>
 </p>
 
 <p align="center">
-  <a href="#install">Install</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#screenshots">Screenshots</a> ·
-  <a href="#coming-from-k9s">Coming from k9s</a> ·
-  <a href="#documentation">Docs</a>
+  <img src="https://img.shields.io/badge/Windows-0078D4?logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white" alt="macOS">
+  <img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black" alt="Linux">
+  <img src="https://img.shields.io/badge/Browser-4b64f4?logo=googlechrome&logoColor=white" alt="Browser">
+  <img src="https://img.shields.io/badge/built%20with-Rust%20%C2%B7%20Tauri%20%C2%B7%20Svelte-20283d?logo=rust&logoColor=white" alt="Built with Rust, Tauri and Svelte">
+</p>
+
+<p align="center">
+  <a href="#install"><b>Install</b></a> ·
+  <a href="#features"><b>Features</b></a> ·
+  <a href="#screenshots"><b>Screenshots</b></a> ·
+  <a href="#coming-from-k9s"><b>Coming from k9s</b></a> ·
+  <a href="#documentation"><b>Docs</b></a>
 </p>
 
 <picture>
@@ -29,23 +34,42 @@
   <img src="docs/assets/screenshots/pods-light.png" alt="Kubri listing the pods of a namespace, with CPU and memory against their requests">
 </picture>
 
-## Why Kubri
+## ✨ Why Kubri
 
 <table>
   <tr>
-    <td width="33%" valign="top"><b>Everything k9s does</b><br>Every resource and CRD, live: drill-downs, logs, shells, port-forwards, Pulses, XRay, RBAC, Helm, the sanitizer and benchmarks. Your k9s aliases, hotkeys, plugins and skins keep working.</td>
-    <td width="33%" valign="top"><b>Keyboard or mouse</b><br>The keys you know from k9s: <kbd>:</kbd> opens the command palette and <kbd>?</kbd> lists every key. Or click: each action is a button, and a right click on a row shows all of them with their keys.</td>
-    <td width="33%" valign="top"><b>Desktop or browser</b><br>A small native app built with Rust and Tauri, a container for your team with a password sign-in, or a pod in the cluster with its own service account.</td>
+    <td width="33%" valign="top">
+      <h3>Everything k9s does</h3>
+      Every resource and CRD, live. Drill-downs, logs, shells, port-forwards, Pulses, XRay, RBAC, Helm, the sanitizer and benchmarks. Your k9s aliases, hotkeys, plugins and skins keep working.
+    </td>
+    <td width="33%" valign="top">
+      <h3>Keyboard or mouse</h3>
+      The keys you know from k9s: <kbd>:</kbd> opens the command palette and <kbd>?</kbd> lists every key. Or just click: each action is a button, and a right click on a row shows them all.
+    </td>
+    <td width="33%" valign="top">
+      <h3>Desktop or browser</h3>
+      A small native app built with Rust and Tauri. Or a container for your team with a password sign-in, or a pod in the cluster with its own service account.
+    </td>
   </tr>
 </table>
 
-## Install
+<a id="install"></a>
+
+## 🚀 Install
 
 ### Desktop app
 
-Download Kubri for Windows, macOS or Linux from the [releases](https://github.com/snaketech-tu/kubri/releases). It uses the kubeconfig on your computer, just like kubectl, and updates itself when a new version is out.
+Download Kubri from the [latest release](https://github.com/snaketech-tu/kubri/releases/latest):
 
-### In the browser
+| System | File |
+| --- | --- |
+| Windows | `.msi` or `-setup.exe` |
+| macOS | `.dmg` |
+| Linux | `.deb`, `.rpm` or `.AppImage` |
+
+Kubri uses the kubeconfig on your computer, just like kubectl. It updates itself when a new version is out.
+
+### In the browser, with Docker
 
 ```sh
 docker run --rm -p 127.0.0.1:7878:7878 \
@@ -55,7 +79,10 @@ docker run --rm -p 127.0.0.1:7878:7878 \
   ghcr.io/snaketech-tu/kubri
 ```
 
-Then open <http://127.0.0.1:7878> and sign in with the password. If your `KUBECONFIG` lists several files, or you use Windows, see [With Docker](docs/WEB.md#with-docker).
+Open <http://127.0.0.1:7878> and sign in with the password.
+
+> [!TIP]
+> If your `KUBECONFIG` lists several files, or you use Windows, see [With Docker](docs/WEB.md#with-docker).
 
 ### In a cluster
 
@@ -67,12 +94,14 @@ kubectl -n kubri port-forward svc/kubri 7878:80
 
 Kubri then sees what its service account may see. [Running Kubri in the browser](docs/WEB.md#in-a-kubernetes-cluster) explains how to give it more rights and put it behind a proxy.
 
-## Features
+<a id="features"></a>
+
+## 🧰 Features
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <b>Browse</b>
+      <h3>🔎 Browse</h3>
       <ul>
         <li>Every resource type and CRD, live, with the columns of <code>kubectl get</code></li>
         <li>k9s filters: regular expressions, <code>!</code> to invert, <code>-f</code> fuzzy, <code>-l app=web</code></li>
@@ -82,7 +111,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
       </ul>
     </td>
     <td width="50%" valign="top">
-      <b>Change</b>
+      <h3>✏️ Change</h3>
       <ul>
         <li>Create from templates, forms, files or the clipboard (<kbd>:new</kbd>)</li>
         <li>Delete, scale, restart, set images and roll back, one object or many</li>
@@ -94,7 +123,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
   </tr>
   <tr>
     <td valign="top">
-      <b>Debug</b>
+      <h3>🐞 Debug</h3>
       <ul>
         <li>Live logs of a pod or a whole workload, with JSON fields as columns and filters like <code>status>=500</code></li>
         <li>Shells, debug containers and node shells in a real terminal</li>
@@ -104,7 +133,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
       </ul>
     </td>
     <td valign="top">
-      <b>Understand the cluster</b>
+      <h3>🧭 Understand the cluster</h3>
       <ul>
         <li>Pulses, XRay, a topology graph and an RBAC matrix</li>
         <li>Helm: install, upgrade with a diff, compare revisions, roll back</li>
@@ -117,7 +146,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
   </tr>
   <tr>
     <td valign="top">
-      <b>Work safely</b>
+      <h3>🛡️ Work safely</h3>
       <ul>
         <li>A name and color per context, and a banner on production</li>
         <li>Read-only and locked contexts</li>
@@ -127,7 +156,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
       </ul>
     </td>
     <td valign="top">
-      <b>Fits your setup</b>
+      <h3>🧩 Fits your setup</h3>
       <ul>
         <li>Your k9s configuration, per context</li>
         <li>Views in YAML that give your CRDs columns, health and actions</li>
@@ -139,7 +168,9 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
   </tr>
 </table>
 
-## Screenshots
+<a id="screenshots"></a>
+
+## 📸 Screenshots
 
 <table>
   <tr>
@@ -200,7 +231,9 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
 
 </details>
 
-## Coming from k9s
+<a id="coming-from-k9s"></a>
+
+## ⌨️ Coming from k9s
 
 Kubri reads your k9s configuration and uses the same keys, so you can start right away. The ones you will use most:
 
@@ -218,31 +251,47 @@ Kubri reads your k9s configuration and uses the same keys, so you can start righ
 
 [Using your k9s configuration](docs/K9S.md) lists what Kubri covers and what it does not.
 
-## Your kubeconfig
+## 🔑 Your kubeconfig
 
-Kubri reads the files in `KUBECONFIG`, or `~/.kube/config`, the way kubectl does: a context that works with kubectl works in Kubri, and one that fails shows kubectl's error. In the desktop app you can load more kubeconfig files under **Kubeconfig files…** in the context switcher, and Kubri remembers them. If your kubeconfigs are spread over `~/.kube`, [this example](docs/CLUSTERS.md#example-many-kubeconfig-files-spread-over-kube) puts them all in `KUBECONFIG`. It starts with your `current-context`, and you switch contexts in the top bar or with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. Started from a desktop launcher, the app takes the environment of your login shell, so `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin` and k9s plugins are found as in a terminal.
+Kubri reads your kubeconfig the way kubectl does: a context that works with kubectl works in Kubri, and one that fails shows kubectl's error.
 
-## Documentation
+- **Where it looks:** the files in `KUBECONFIG`, or `~/.kube/config`. Kubri starts with your `current-context`.
+- **More files:** in the desktop app, load them under **Kubeconfig files…** in the context switcher. Kubri remembers them. If your files are spread over `~/.kube`, [this example](docs/CLUSTERS.md#example-many-kubeconfig-files-spread-over-kube) puts them all in `KUBECONFIG`.
+- **Switching:** pick a context in the top bar, or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>.
+- **Tools and plugins:** started from a desktop launcher, the app takes the environment of your login shell. So `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin`, and k9s plugins are found as in a terminal.
 
-**Using Kubri**
+<a id="documentation"></a>
 
-- [Creating and changing](docs/CREATE.md): Create, forms, cloning, Helm, columns, bulk changes and port-forwards
-- [Logs and debugging](docs/DEBUGGING.md): log search, the workspace, debug containers and suggested fixes
-- [Local terminal](docs/TERMINAL.md): a shell with `kubectl` and `helm` set to the context and namespace Kubri shows
-- [Several clusters](docs/CLUSTERS.md): the Clusters page, loading kubeconfig files, added contexts, search and compare
-- [What depends on what](docs/TOPOLOGY.md): the topology graph, request paths and delete warnings
-- [What changed](docs/CHANGES.md) and [Snapshots](docs/SNAPSHOTS.md)
-- [Settings and guard rails](docs/SETTINGS.md): context colors, production and read-only contexts, permissions
-- [Integrations](docs/INTEGRATIONS.md): Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager and right-sizing
-- [Views for custom resources](docs/VIEWS.md) and [your k9s configuration](docs/K9S.md)
-- [AI agents (MCP)](docs/AGENTS.md) and [Explain](docs/EXPLAIN.md)
+## 📚 Documentation
 
-**Running Kubri**
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Using Kubri</h3>
+      <ul>
+        <li><a href="docs/CREATE.md">Creating and changing</a>: Create, forms, cloning, Helm, columns, bulk changes and port-forwards</li>
+        <li><a href="docs/DEBUGGING.md">Logs and debugging</a>: log search, the workspace, debug containers and suggested fixes</li>
+        <li><a href="docs/TERMINAL.md">Local terminal</a>: a shell with <code>kubectl</code> and <code>helm</code> set to the context and namespace Kubri shows</li>
+        <li><a href="docs/CLUSTERS.md">Several clusters</a>: the Clusters page, loading kubeconfig files, added contexts, search and compare</li>
+        <li><a href="docs/TOPOLOGY.md">What depends on what</a>: the topology graph, request paths and delete warnings</li>
+        <li><a href="docs/CHANGES.md">What changed</a> and <a href="docs/SNAPSHOTS.md">Snapshots</a></li>
+      </ul>
+    </td>
+    <td width="50%" valign="top">
+      <h3>Setting it up</h3>
+      <ul>
+        <li><a href="docs/SETTINGS.md">Settings and guard rails</a>: context colors, production and read-only contexts, permissions</li>
+        <li><a href="docs/INTEGRATIONS.md">Integrations</a>: Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager and right-sizing</li>
+        <li><a href="docs/VIEWS.md">Views for custom resources</a> and <a href="docs/K9S.md">your k9s configuration</a></li>
+        <li><a href="docs/AGENTS.md">AI agents (MCP)</a> and <a href="docs/EXPLAIN.md">Explain</a></li>
+        <li><a href="docs/WEB.md">In the browser</a>: settings, sign-in, Docker, Kubernetes and reverse proxies</li>
+        <li><a href="docs/SPEED.md">Speed</a>: how fast Kubri is with 10,000 pods, and how to measure it yourself</li>
+      </ul>
+    </td>
+  </tr>
+</table>
 
-- [In the browser](docs/WEB.md): settings, sign-in, Docker, Kubernetes and reverse proxies
-- [Speed](docs/SPEED.md): how fast Kubri is with 10,000 pods, and how to measure it yourself
-
-## Development
+## 🛠️ Development
 
 <details>
 <summary>Build, run and test Kubri from source</summary>
@@ -274,12 +323,12 @@ To serve a production build in the browser, run `pnpm build` in `ui/`, then `car
 Checks that CI runs:
 
 ```sh
-cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
 cd ui && pnpm check && pnpm test
 ```
 
 </details>
 
-## License
+## 📄 License
 
 Kubri is licensed under the [Apache License 2.0](LICENSE).
