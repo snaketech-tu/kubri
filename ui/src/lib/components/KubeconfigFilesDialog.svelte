@@ -38,7 +38,7 @@
 	}
 
 	/** Takes the new context list, and connects when Kubri had nothing to connect to yet. */
-	async function done(list: ContextList) {
+	async function done(list: Pick<ContextList, 'contexts'>) {
 		app.contexts = list.contexts;
 		await refresh();
 		if (!app.cluster && !app.connecting && list.contexts.length) app.load();
@@ -181,7 +181,7 @@
 		onclose={(names) => {
 			copying = false;
 			if (direct) app.kubeconfigFilesOpen = false;
-			if (names.length) done({ contexts: app.contexts, cluster: app.cluster });
+			if (names.length) done({ contexts: app.contexts });
 		}}
 	/>
 {/if}
