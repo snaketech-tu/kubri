@@ -79,6 +79,14 @@
 	});
 
 	$effect(() => untrack(() => applyScheme(app.scheme)));
+	// The system's light or dark, followed when it changes, such as at sunset.
+	$effect(() => {
+		const media = matchMedia('(prefers-color-scheme: dark)');
+		const update = () => (app.systemDark = media.matches);
+		update();
+		media.addEventListener('change', update);
+		return () => media.removeEventListener('change', update);
+	});
 	const desktop = isTauri();
 	// The level kept from the last start; the window opens at 100%.
 	$effect(() =>
@@ -334,10 +342,6 @@
 	// Help stays last.
 	const hints = $derived([...shownHints.slice(0, -1), ...pluginHints, ...shownHints.slice(-1)]);
 
-	const dark = $derived(
-		app.scheme ? app.scheme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
-	);
-
 	function signOut() {
 		if (!drafts.block(() => session.signOut())) session.signOut();
 	}
@@ -462,10 +466,10 @@
 				class="square"
 				onclick={() => app.toggleScheme()}
 				disabled={!!app.skin}
-				title={app.skin ? `The skin ${app.skin} sets the colors` : dark ? 'Use light colors' : 'Use dark colors'}
-				aria-label={dark ? 'Use light colors' : 'Use dark colors'}
+				title={app.skin ? `The skin ${app.skin} sets the colors` : app.dark ? 'Use light colors' : 'Use dark colors'}
+				aria-label={app.dark ? 'Use light colors' : 'Use dark colors'}
 			>
-				<Icon name={dark ? 'sun' : 'moon'} />
+				<Icon name={app.dark ? 'sun' : 'moon'} />
 			</button>
 			<button
 				class="mode"

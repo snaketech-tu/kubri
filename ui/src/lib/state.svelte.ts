@@ -481,6 +481,10 @@ class AppState {
 	readOnly = $derived((this.k9s?.readOnly ?? false) || this.guard.readOnly);
 	/** Light or dark picked in Kubri; null follows the system. Skins pick their own. */
 	scheme = $state<Scheme>(storedScheme());
+	/** Whether the system is set to dark; the page follows its changes. */
+	systemDark = $state(typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches);
+	/** Whether Kubri's own colors are dark now. */
+	dark = $derived(this.scheme ? this.scheme === 'dark' : this.systemDark);
 
 	contextSettingsOf(context: string | undefined | null): ContextSettings {
 		return (context && this.settings.contexts[context]) || NO_CONTEXT_SETTINGS;
@@ -657,8 +661,7 @@ class AppState {
 	}
 
 	toggleScheme() {
-		const dark = this.scheme ? this.scheme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-		this.setScheme(dark ? 'light' : 'dark');
+		this.setScheme(this.dark ? 'light' : 'dark');
 	}
 
 	/** Light, dark, or null to follow the system. */

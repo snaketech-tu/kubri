@@ -95,13 +95,13 @@
 		vars: { '--bg': '#101522', '--text': '#e5eaf5', '--accent': '#a6b3ff', '--ok': '#3ccf7e', '--warn': '#e5a73b', '--bad': '#f06b6b' },
 		scheme: 'dark'
 	};
-	const kubriTheme = matchMedia('(prefers-color-scheme: dark)').matches ? darkTheme : lightTheme;
+	const kubriTheme = $derived(app.systemDark ? darkTheme : lightTheme);
 	const desktop = isTauri();
-	const schemes: { value: Scheme; label: string; theme: SkinTheme }[] = [
+	const schemes: { value: Scheme; label: string; theme: SkinTheme }[] = $derived([
 		{ value: null, label: 'As the system', theme: kubriTheme },
 		{ value: 'light', label: 'Light', theme: lightTheme },
 		{ value: 'dark', label: 'Dark', theme: darkTheme }
-	];
+	]);
 </script>
 
 <svelte:window {onkeydown} />
