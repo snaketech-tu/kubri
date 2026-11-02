@@ -144,6 +144,13 @@
 			return;
 		}
 		if (app.overlayOpen) return;
+		// Ctrl+` (the key left of 1) opens the local terminal, or shows the one open; with Shift
+		// another one.
+		if ((e.ctrlKey || e.metaKey) && e.code === 'Backquote') {
+			e.preventDefault();
+			app.openLocalTerminal(e.shiftKey);
+			return;
+		}
 		const typing = forControl(e);
 		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
 			e.preventDefault();
@@ -439,6 +446,16 @@
 				<span>Search or run a command</span>
 				<kbd>Ctrl K</kbd>
 			</button>
+			{#if app.localTerminal && app.cluster && !app.snapshot}
+				<button
+					class="square"
+					onclick={(e) => app.openLocalTerminal(e.shiftKey)}
+					title="Terminal with kubectl and helm set to this context and namespace (Ctrl+`, with Shift another one)"
+					aria-label="Terminal"
+				>
+					<Icon name="terminal" size={17} />
+				</button>
+			{/if}
 			<button
 				class="square"
 				onclick={() => app.toggleScheme()}

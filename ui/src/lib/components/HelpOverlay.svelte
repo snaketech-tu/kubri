@@ -18,6 +18,7 @@
 			[
 				[':  or  Ctrl+K', 'Command palette (pods, deploy, ctx, ns …)'],
 				['Ctrl+Shift+C', 'Switch context'],
+				['Ctrl+`  or  :term', 'Terminal with kubectl and helm set to this context (Shift: another one)'],
 				['j / k  or  ↑ / ↓', 'Move'],
 				['g / G', 'First / last row'],
 				['Ctrl+F / B  or  PgDn / PgUp', 'A page down / up'],

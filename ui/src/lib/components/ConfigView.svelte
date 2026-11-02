@@ -250,6 +250,70 @@
 			</div>
 		</div>
 
+		{#if app.localTerminal}
+			{@const terminal = app.settings.terminal ?? { shell: '', args: [], startDir: '', fontSize: 13 }}
+			<div class="block">
+				<h2 id="config-terminal">Terminal</h2>
+				<p class="muted">
+					<code>:term</code> or <kbd>Ctrl</kbd>+<kbd>`</kbd> opens a shell {backend.desktop ? 'on this computer' : 'on the server'} in which
+					kubectl and helm use the context and namespace Kubri shows. Leave the shell empty for {backend.desktop
+						? 'your login shell, or PowerShell on Windows'
+						: "the server's login shell"}.
+				</p>
+				<div class="diff-settings">
+					<label>
+						Shell
+						<input
+							class="path"
+							type="text"
+							placeholder="Login shell"
+							spellcheck="false"
+							value={terminal.shell}
+							onchange={(e) => app.setTerminalSettings({ ...terminal, shell: e.currentTarget.value.trim() })}
+						/>
+					</label>
+					<label>
+						Arguments
+						<input
+							class="path"
+							type="text"
+							placeholder="None"
+							spellcheck="false"
+							title="Separated by spaces"
+							value={terminal.args.join(' ')}
+							onchange={(e) => app.setTerminalSettings({ ...terminal, args: e.currentTarget.value.split(/\s+/).filter(Boolean) })}
+						/>
+					</label>
+					<label>
+						Start in
+						<input
+							class="path"
+							type="text"
+							placeholder="Home folder"
+							spellcheck="false"
+							value={terminal.startDir}
+							onchange={(e) => app.setTerminalSettings({ ...terminal, startDir: e.currentTarget.value.trim() })}
+						/>
+					</label>
+					<label>
+						Font size
+						<input
+							class="number"
+							type="number"
+							min="8"
+							max="32"
+							value={terminal.fontSize}
+							onchange={(e) => {
+								const size = Math.round(Number(e.currentTarget.value));
+								if (size >= 8 && size <= 32) app.setTerminalSettings({ ...terminal, fontSize: size });
+							}}
+						/>
+						px, for terminals opened next
+					</label>
+				</div>
+			</div>
+		{/if}
+
 		<div class="block">
 			<h2 id="config-appearance">Appearance</h2>
 			<p class="muted">Kubri's own colors. A k9s skin, picked per context below, takes their place while it is on.</p>
@@ -751,6 +815,10 @@
 	}
 	.number {
 		width: 72px;
+	}
+	.path {
+		width: 24ch;
+		font-family: var(--mono);
 	}
 	.contexts {
 		display: grid;

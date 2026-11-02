@@ -138,7 +138,8 @@ const DEFAULT_SETTINGS: Settings = {
 	columns: {},
 	searches: [],
 	history: { record: true, keepDays: 14, maxMb: 200 },
-	connections: { keepRecent: 3 }
+	connections: { keepRecent: 3 },
+	terminal: { shell: '', args: [], startDir: '', fontSize: 13 }
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
@@ -447,7 +448,10 @@ class AppState {
 				: { kind: 'other' }
 	);
 
-	paletteConfig = $derived<PaletteConfig>({ aliases: this.k9s?.aliases ?? [], skins: this.k9s?.skins ?? [] });
+	/** Whether local terminals are on: always in the desktop app; the web app asks the server. */
+	localTerminal = $state(backend.desktop);
+	#localTerminalAsked = false;
+	paletteConfig = $derived<PaletteConfig>({ aliases: this.k9s?.aliases ?? [], skins: this.k9s?.skins ?? [], terminal: this.localTerminal });
 
 	/** Kubri's settings file: names, colors and guard rails per context, and preferences. */
 	settings = $state<Settings>(DEFAULT_SETTINGS);
@@ -553,6 +557,14 @@ class AppState {
 		try {
 			this.settings = await backend.setConnectionSettings(connections);
 			this.refreshWarm();
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+		}
+	}
+
+	async setTerminalSettings(terminal: Settings['terminal']) {
+		try {
+			this.settings = await backend.setTerminalSettings(terminal);
 		} catch (err) {
 			this.toast(errorMessage(err), 'bad');
 		}
@@ -983,6 +995,9 @@ class AppState {
 			case 'fleet':
 				this.showFleet();
 				break;
+			case 'terminal':
+				this.openLocalTerminal(action.another);
+				break;
 			case 'search':
 				this.showSearch(action.query);
 				break;
@@ -1333,6 +1348,33 @@ class AppState {
 		}
 	}
 
+	/** Asks the web server once whether it allows local terminals. */
+	private askLocalTerminal() {
+		if (this.#localTerminalAsked || backend.desktop) return;
+		this.#localTerminalAsked = true;
+		backend.localTerminalInfo().then(
+			(info) => (this.localTerminal = info.enabled),
+			() => (this.#localTerminalAsked = false)
+		);
+	}
+
+	/**
+	 * Shows the local terminal of this context, or opens one with kubectl and helm set to it and
+	 * the namespace shown; `another` opens a new one also when one is open.
+	 */
+	openLocalTerminal(another = false) {
+		const cluster = this.cluster;
+		if (!cluster || cluster.snapshot) {
+			this.toast(cluster ? 'A snapshot has no cluster for kubectl to talk to' : 'Connect to a context to open a terminal', 'bad');
+			return;
+		}
+		if (!this.localTerminal) {
+			this.toast('The local terminal is off here, as it would run on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it.', 'bad');
+			return;
+		}
+		dock.local(cluster.context, this.namespace === ALL_NAMESPACES ? null : this.namespace, another);
+	}
+
 	private async connected(cluster: ClusterInfo) {
 		const left = this.cluster;
 		const before = this.view;
@@ -1348,6 +1390,7 @@ class AppState {
 		this.#guardRequest++;
 		this.applyGuard({ readOnly: true, reason: 'Kubri is still checking whether it may change this cluster', canUnlock: false, unlockedFor: null });
 		this.refreshGuard();
+		this.askLocalTerminal();
 		this.resources = resources;
 		const closed = dock.keepContexts([...this.contexts.map((c) => c.name), cluster.context]);
 		if (closed) this.toast(`Closed ${closed} workspace ${closed === 1 ? 'tab' : 'tabs'} of a context that is gone`);

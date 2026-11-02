@@ -465,10 +465,17 @@ impl Kubri {
                 read_only: true,
                 reason,
                 ..
-            } => Some(format!(
-                "{} A local terminal would get around that, so it stays closed.",
-                reason.unwrap_or_else(|| "Changes are off for this context.".into())
-            )),
+            } => {
+                let reason = reason.unwrap_or_else(|| "changes are off for this context".into());
+                let reason = reason.trim_end_matches('.');
+                let mut chars = reason.chars();
+                let first = chars.next().map(|c| c.to_uppercase().collect::<String>());
+                Some(format!(
+                    "{}{}. A local terminal would get around that, so it stays closed.",
+                    first.unwrap_or_default(),
+                    chars.as_str()
+                ))
+            }
             _ => None,
         }
     }
@@ -491,6 +498,7 @@ impl Kubri {
             .zip(server.as_deref())
             .and_then(|(k, s)| local_terminal::skew(k, s));
         LocalTerminalInfo {
+            enabled: self.local_terminal.load(Ordering::Relaxed),
             allowed: reason.is_none(),
             reason,
             context: cluster.map(|c| c.context),

@@ -2,11 +2,18 @@
 
 Kubri can open a shell on your own computer in which `kubectl` and `helm` already point at the context and namespace Kubri shows. You do not run `kubectl config use-context` or pass `-n`: what you see in Kubri is what the commands in this terminal talk to.
 
+## Opening it
+
+- <kbd>Ctrl</kbd>+<kbd>`</kbd> (the key left of <kbd>1</kbd>; <kbd>Cmd</kbd> on macOS), `:term` in the command palette, or the terminal button at the top. It opens as a tab in the workspace below the list, beside logs and shells, and keeps running while you browse.
+- Pressing it again shows the terminal already open for this context. With <kbd>Shift</kbd>, or `:term new`, it opens another one.
+- The tab names the context, in red for a production context. The header shows the context and namespace the commands talk to, and the versions of `kubectl` and `helm`.
+- **Restart** opens a fresh shell. A terminal of another context keeps running when you switch, but can only be opened again after switching back to its context.
+
 ## What it sets up
 
 - **The shell.** The **Shell** setting when you set one; otherwise your login shell (`$SHELL -l`) on Linux and macOS, and PowerShell 7 (`pwsh`), or Windows PowerShell when that is missing, on Windows. To use WSL, set the shell to `wsl.exe`.
 - **The folder.** The **Start folder** setting, or your home folder.
-- **`KUBECONFIG`.** A small file of its own first, then the files kubectl would read anyway (`KUBECONFIG`, or `~/.kube/config`), then the contexts you added in Kubri. The small file holds only `current-context` and a copy of the context entry with the namespace Kubri shows. kubectl and helm merge the list with the first file winning, so the cluster and user entries, and with them every credential, still come from your own files. Nothing secret is written to disk.
+- **`KUBECONFIG`.** A small file of its own first, then the files kubectl would read anyway (`KUBECONFIG`, or `~/.kube/config`), then the contexts you added in Kubri. The small file holds only `current-context` and a copy of the context entry with the namespace Kubri shows (or the context's own namespace while Kubri shows all namespaces). kubectl and helm merge the list with the first file winning, so the cluster and user entries, and with them every credential, still come from your own files. Nothing secret is written to disk.
 - **`KUBRI_CONTEXT` and `KUBRI_NAMESPACE`**, for your prompt, and `TERM=xterm-256color`.
 
 The file lives in Kubri's settings folder under `terminals/`, can only be read by you (mode `0600`), and is removed when the terminal closes. Files left behind by a Kubri that did not exit cleanly are removed after a day, the next time Kubri starts.
@@ -21,14 +28,14 @@ Before the shell opens, Kubri looks for `kubectl` and `helm` on the `PATH` and a
 
 A shell can do anything, so Kubri only opens one where it would let you change the cluster itself:
 
-- **Read-only** (`--read-only` or `KUBRI_READ_ONLY=true`) and **locked contexts** get no local terminal, and Kubri says why. Unlocking a locked context allows a terminal while the unlock lasts.
+- **Read-only** (`--read-only` or `KUBRI_READ_ONLY=true`, the read-only switch, or k9s `readOnly`) and **locked contexts** get no local terminal, and Kubri says why. A locked context offers **Unlock for 15 minutes** right there. When the unlock ends, the shell keeps running and its tab says that changes are off again.
 - **Production contexts** open with a red first line: "Production: commands here run against *context* without Kubri's checks."
 - **AI agents** using Kubri over MCP cannot open a local terminal.
 - **Snapshots** have no cluster to talk to, so they get no terminal.
 
 ## In the web app
 
-In the web app, a "local" terminal runs on the server, as the user the server runs as. It is therefore off unless the server is started with `--local-terminal` or `KUBRI_LOCAL_TERMINAL=true`, and the server logs a warning when it is on. Turn it on only when everyone who can sign in may run commands on that machine, for example when you run the server on your own computer.
+In the web app, a "local" terminal runs on the server, as the user the server runs as. It is therefore off, and the terminal button and `:term` are hidden, unless the server is started with `--local-terminal` or `KUBRI_LOCAL_TERMINAL=true`, and the server logs a warning when it is on. Turn it on only when everyone who can sign in may run commands on that machine, for example when you run the server on your own computer.
 
 ## Settings
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { dock } from './dock.svelte';
+import { contextOf, dock } from './dock.svelte';
 
 const pods = { group: '', version: 'v1', plural: 'pods', kind: 'Pod', namespaced: true, verbs: [] } as never;
 const at = (name: string, context = 'a') => ({ resource: pods, target: { ...ref(name), context } });
@@ -19,6 +19,24 @@ describe('workspace', () => {
 		dock.add({ kind: 'shell', ...at('api') });
 		expect(dock.sessions.map((s) => s.kind)).toEqual(['logs', 'logs', 'shell', 'shell']);
 		expect(dock.active).toBe(dock.sessions[3].id);
+	});
+
+	it("shows a context's open local terminal again, and opens another when asked", () => {
+		expect(dock.local('a', 'shop')).toBe(true);
+		dock.add({ kind: 'logs', ...at('api') });
+		expect(dock.local('a', 'web')).toBe(false);
+		expect(dock.active).toBe(dock.sessions[0].id);
+		expect(dock.focused).toBe(dock.sessions[0].id);
+		expect(dock.local('b', null)).toBe(true);
+		expect(dock.local('a', 'web', true)).toBe(true);
+		expect(dock.sessions.filter((s) => s.kind === 'local').map((s) => [contextOf(s), s.kind === 'local' && s.namespace])).toEqual([
+			['a', 'shop'],
+			['b', null],
+			['a', 'web']
+		]);
+		expect(dock.local('a', null)).toBe(false);
+		expect(dock.active).toBe(dock.sessions[3].id);
+		expect(dock.keepContexts(['b'])).toBe(3);
 	});
 
 	it('splits, picks tabs into the pane last used, and closes into the neighbour', () => {
@@ -46,6 +64,6 @@ describe('workspace', () => {
 		expect(dock.open).toBe(true);
 		expect(dock.keepContexts(['a', 'b'])).toBe(0);
 		expect(dock.keepContexts(['b', 'c'])).toBe(1);
-		expect(dock.sessions.map((s) => s.target.context)).toEqual(['b']);
+		expect(dock.sessions.map(contextOf)).toEqual(['b']);
 	});
 });

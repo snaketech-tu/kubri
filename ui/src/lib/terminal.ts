@@ -17,10 +17,14 @@ const THEME = {
  * Shows a terminal in `element` that follows its size, connects it with `connect`, and returns
  * a function that closes both.
  */
-export function mountTerminal(element: HTMLElement, connect: (term: Terminal) => TerminalSession): () => void {
+export function mountTerminal(
+	element: HTMLElement,
+	connect: (term: Terminal) => TerminalSession,
+	{ fontSize = 13 }: { fontSize?: number } = {}
+): () => void {
 	const term = new Terminal({
 		fontFamily: getComputedStyle(element).getPropertyValue('--mono') || 'monospace',
-		fontSize: 13,
+		fontSize,
 		cursorBlink: true,
 		scrollback: 5000,
 		theme: THEME

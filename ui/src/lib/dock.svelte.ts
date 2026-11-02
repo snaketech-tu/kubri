@@ -1,7 +1,10 @@
 import type { ObjectRef, ResourceInfo, TerminalMode } from './api';
 
-/** A log or shell kept open in the workspace while you browse. */
-export interface DockSession {
+/** A tab kept open in the workspace while you browse. */
+export type DockSession = ObjectSession | LocalSession;
+
+/** Logs or a shell of an object in the cluster. */
+export interface ObjectSession {
 	id: number;
 	kind: 'logs' | 'shell';
 	resource: ResourceInfo;
@@ -12,6 +15,22 @@ export interface DockSession {
 	/** Logs of the instance that ended. */
 	previous?: boolean;
 	mode?: TerminalMode;
+}
+
+/** A shell on this computer with kubectl and helm set to a context and namespace. */
+export interface LocalSession {
+	id: number;
+	kind: 'local';
+	context: string;
+	/** The namespace shown when it opened; null for all namespaces. */
+	namespace: string | null;
+}
+
+type NewSession = Omit<ObjectSession, 'id'> | Omit<LocalSession, 'id'>;
+
+/** The context a tab belongs to. */
+export function contextOf(s: DockSession): string | undefined {
+	return s.kind === 'local' ? s.context : s.target.context;
 }
 
 export type DockSide = 'bottom' | 'right';
@@ -36,10 +55,10 @@ function store(key: string, value: string) {
 }
 
 /** Same object and kind, so opening it again shows the open tab instead. */
-function same(a: Omit<DockSession, 'id'>, b: Omit<DockSession, 'id'>) {
+function same(a: NewSession, b: NewSession) {
 	return (
-		a.kind === b.kind &&
 		a.kind === 'logs' &&
+		b.kind === 'logs' &&
 		a.target.context === b.target.context &&
 		a.target.namespace === b.target.namespace &&
 		a.target.name === b.target.name &&
@@ -92,7 +111,7 @@ class Dock {
 	}
 
 	/** Opens a tab, or shows the one already open for the same logs. */
-	add(session: Omit<DockSession, 'id'>) {
+	add(session: NewSession) {
 		const existing = this.sessions.find((s) => same(s, session));
 		const id = existing?.id ?? ++this.#next;
 		if (!existing) this.sessions.push({ ...session, id });
@@ -123,6 +142,21 @@ class Dock {
 		if (this.last === id) this.last = this.active;
 	}
 
+	/**
+	 * Shows the local terminal of `context`, or opens one when there is none or `another` is
+	 * set. Returns whether it opened a new one.
+	 */
+	local(context: string, namespace: string | null, another = false): boolean {
+		const open = [...this.sessions].reverse().find((s) => s.kind === 'local' && s.context === context);
+		if (open && !another) {
+			this.show(open.id);
+			this.focused = open.id;
+			return false;
+		}
+		this.add({ kind: 'local', context, namespace });
+		return true;
+	}
+
 	/** Shows two tabs side by side, or one again. */
 	toggleSplit() {
 		if (this.beside !== null) {
@@ -133,13 +167,15 @@ class Dock {
 		if (other) this.beside = other.id;
 	}
 
-	/** Closes the tabs of other contexts, whose streams no longer work. */
 	/**
 	 * Closes the tabs of contexts that are gone, such as a snapshot left or a context removed
 	 * from the kubeconfig. Tabs of other contexts that still exist keep running.
 	 */
 	keepContexts(contexts: string[]): number {
-		const gone = this.sessions.filter((s) => s.target.context && !contexts.includes(s.target.context));
+		const gone = this.sessions.filter((s) => {
+			const context = contextOf(s);
+			return context && !contexts.includes(context);
+		});
 		for (const s of gone) this.close(s.id);
 		return gone.length;
 	}

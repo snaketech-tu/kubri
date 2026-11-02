@@ -28,6 +28,7 @@ export type Action =
 	| { type: 'integrations' }
 	| { type: 'rightsizing' }
 	| { type: 'fleet' }
+	| { type: 'terminal'; another?: boolean }
 	| { type: 'search'; query?: string }
 	| { type: 'graph'; namespace?: string }
 	| { type: 'changes'; filter?: ChangesFilter }
@@ -60,6 +61,7 @@ const BENCH_COMMANDS = ['be', 'bench', 'benchmark', 'benchmarks'];
 const INTEGRATION_COMMANDS = ['integrations', 'integration', 'prometheus', 'grafana', 'loki'];
 const SIZING_COMMANDS = ['rightsizing', 'rightsize', 'sizing'];
 const FLEET_COMMANDS = ['fleet', 'home'];
+const TERMINAL_COMMANDS = ['term', 'terminal'];
 const SEARCH_COMMANDS = ['search', 'find', 'grep'];
 const GRAPH_COMMANDS = ['graph', 'topology'];
 const CHANGES_COMMANDS = ['changes', 'changed', 'history', 'timeline'];
@@ -93,6 +95,8 @@ const SKIN_COMMANDS = ['skin'];
 export interface PaletteConfig {
 	aliases: Alias[];
 	skins: string[];
+	/** Whether a local terminal can be opened here; the web app needs the server's leave. */
+	terminal?: boolean;
 }
 
 /** Groups that win when several resources share a name, e.g. core `events` over events.k8s.io. */
@@ -303,6 +307,13 @@ function builtins(
 	};
 	if (FLEET_COMMANDS.includes(cmd)) return [fleet];
 
+	const terminal = config.terminal !== false;
+	const terminals: Suggestion[] = [
+		{ label: 'term', detail: 'A terminal here with kubectl and helm set to this context and namespace', action: { type: 'terminal' } },
+		{ label: 'term new', detail: 'Another terminal, also when one is open', action: { type: 'terminal', another: true } }
+	];
+	if (terminal && TERMINAL_COMMANDS.includes(cmd)) return arg === 'new' ? [terminals[1]] : terminals;
+
 	// `search web kind:deploy ctx:*`: everything after the command is the query.
 	const query = input.trim().replace(/^:/, '').slice(command.length).trim();
 	const search: Suggestion = {
@@ -433,6 +444,7 @@ function builtins(
 	if (cmd.length > 1 && INTEGRATION_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(integrations);
 	if (cmd.length > 2 && SIZING_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sizing);
 	if (cmd.length > 1 && FLEET_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(fleet);
+	if (terminal && cmd.length > 1 && TERMINAL_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(terminals[0]);
 	if (cmd.length > 1 && SEARCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push({ ...search, label: 'search' });
 	if (cmd.length > 1 && GRAPH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(graph());
 	if (cmd.length > 1 && CHANGES_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(changes(), changes({ hours: 1 }));
