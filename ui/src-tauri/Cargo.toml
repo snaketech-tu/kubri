@@ -31,6 +31,7 @@ tracing-subscriber.workspace = true
 dirs.workspace = true
 open = "5"
 tauri-plugin-updater = "2"
+tauri-plugin-dialog = "2"
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 keyring = { version = "3", features = ["apple-native", "windows-native"] }

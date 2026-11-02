@@ -368,6 +368,13 @@ class AppState {
 		}
 	}
 	contextMenuOpen = $state(false);
+	/** The dialog listing the kubeconfig files Kubri reads, where more can be loaded; 'copy' opens
+	 * straight to adding contexts from a file, as the browser's start page does. */
+	kubeconfigFilesOpen = $state<boolean | 'copy'>(false);
+	/** Why Kubri has no contexts to connect to, such as a missing kubeconfig; null when it has some. */
+	kubeconfigProblem = $state<string | null>(null);
+	/** The last failed connection, for the start page to say what to try. */
+	connectFailure = $state<{ context: string; error: string } | null>(null);
 	/** The actions menu that is open, from a right click or a ⋯ or More button. */
 	menu = $state<Menu | null>(null);
 	toasts = $state<Toast[]>([]);
@@ -421,6 +428,7 @@ class AppState {
 			this.tourOpen ||
 			this.activityOpen ||
 			this.contextMenuOpen ||
+			this.kubeconfigFilesOpen ||
 			this.menu !== null ||
 			this.dialog !== null ||
 			this.updateOpen ||
@@ -680,8 +688,21 @@ class AppState {
 		this.checkRelease(true);
 		try {
 			await this.loadSettings();
-			const { contexts, cluster } = await backend.contexts();
+			let list: Awaited<ReturnType<typeof backend.contexts>>;
+			try {
+				list = await backend.contexts();
+			} catch (err) {
+				const message = errorMessage(err);
+				const prefix = 'no kubeconfig loaded: ';
+				if (!message.startsWith(prefix)) throw err;
+				this.contexts = [];
+				const problem = message.slice(prefix.length);
+				this.kubeconfigProblem = problem.charAt(0).toUpperCase() + problem.slice(1);
+				return;
+			}
+			const { contexts, cluster } = list;
 			this.contexts = contexts;
+			this.kubeconfigProblem = contexts.length ? null : 'Your kubeconfig has no contexts.';
 			if (cluster) {
 				await this.connected(cluster);
 			} else {
@@ -697,6 +718,7 @@ class AppState {
 	async reloadContexts(quiet = false) {
 		try {
 			this.contexts = (await backend.reloadContexts()).contexts;
+			if (this.contexts.length) this.kubeconfigProblem = null;
 		} catch (err) {
 			if (!quiet) this.error = errorMessage(err);
 		}
@@ -771,10 +793,12 @@ class AppState {
 		}
 		this.connecting = name;
 		this.error = null;
+		this.connectFailure = null;
 		try {
 			await this.connected(await backend.switchContext(name));
 		} catch (err) {
 			this.error = `Could not connect to ${name}: ${errorMessage(err)}`;
+			this.connectFailure = { context: name, error: errorMessage(err) };
 		} finally {
 			this.connecting = null;
 		}
@@ -936,6 +960,9 @@ class AppState {
 				break;
 			case 'snapshot':
 				this.showSnapshot(action.namespace);
+				break;
+			case 'kubeconfig':
+				this.kubeconfigFilesOpen = true;
 				break;
 			case 'object':
 				await this.openObject(action.target, action.kind);

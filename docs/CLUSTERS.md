@@ -26,6 +26,18 @@ Clicking a cluster connects Kubri to it and opens its overview. When Kubri canno
 
 Added contexts have **Remove** on their card. Contexts from your own kubeconfig cannot be removed in Kubri.
 
+## Loading kubeconfig files
+
+**Kubeconfig files…** at the bottom of the context switcher (or `:kubeconfig`) lists every file Kubri reads, with its contexts and whatever keeps a file from being read. In the desktop app, **Choose files…** opens the system's file dialog, or type a path such as `~/.kube/lab.yaml` and press **Load**:
+
+- Kubri reads a loaded file where it is, every time it reads the kubeconfig. Changes to the file show up when you reload the context list, and certificate or token files it names by a relative path work.
+- Loaded files stay loaded when Kubri starts again. They are kept as a list of paths in `kubeconfig-files.json` in Kubri's config folder; the files themselves are never copied or changed.
+- They come after the files in `KUBECONFIG`. A context that an earlier file already has keeps the earlier one, as kubectl does, and the dialog says which ones that are.
+- helm and k9s plugins get them in `KUBECONFIG` too.
+- **Remove** stops reading a loaded file. Your own files, from `KUBECONFIG` or `~/.kube/config`, are listed but stay.
+
+With no kubeconfig at all, or one without contexts, the start page says so and offers **Load kubeconfig file…**. When connecting to a context fails, it says what to try for the usual causes, such as a server that does not answer or credentials the cluster turned down. In the browser, Kubri cannot open files on the server for you; use **Add contexts from a file…** in the same dialog, which copies the contexts as described above.
+
 ## Limiting namespaces
 
 In a context's settings (`:config`), **Only these namespaces** takes a list such as `shop, payments`, and **Or namespaces labeled** a label selector such as `team=shop`. The namespace picker then offers only those, and lists across all namespaces show only them, with one watch per namespace. That also suits users who may list only some namespaces. A namespace you pick or type yourself still opens.
