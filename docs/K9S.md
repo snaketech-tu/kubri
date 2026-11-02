@@ -116,7 +116,7 @@ Shortcuts are a letter, a digit or F1 to F12, with `Ctrl-`, `Shift-` or `Alt-` i
 
 Kubri takes the main colors of a skin: the background and text (`body`), the accent (`body.logoColor`), the status colors (`frame.status`) and the YAML colors (`views.yaml`). Colors set to `default` keep Kubri's own, and a skin without a background uses Kubri's dark colors, as terminal skins expect a dark terminal.
 
-The skin comes from `K9S_SKIN`, the context's `config.yaml` or the global one, as in k9s. You can override it per context on the `:config` page or with `:skin <name>`; `:skin kubri` brings back Kubri's light and dark colors. That choice is kept in the app, not written to your k9s files.
+The skin comes from `K9S_SKIN`, the context's `config.yaml` or the global one, as in k9s. You can override it per context on the `:config` page or with `:skin <name>`; `:skin kubri`, or the moon and sun button at the top, brings back Kubri's light and dark colors. That choice is kept in the app, not written to your k9s files.
 
 A skin whose text has less than the 4.5:1 contrast WCAG asks for on its background, or whose status colors are hard to see, is marked **Hard to read** in the list, with the reason. Kubri still shows it as it is.
 

@@ -401,6 +401,8 @@ class AppState {
 	/** The skin on screen, and why the wanted one is not. */
 	skin = $state<string | null>(null);
 	skinError = $state<string | null>(null);
+	/** Whether the skin on screen is dark. */
+	skinDark = $state(false);
 	#skinRequest = 0;
 	/** The section the config page scrolls to. */
 	configSection = $state<ConfigSection | undefined>(undefined);
@@ -483,8 +485,8 @@ class AppState {
 	scheme = $state<Scheme>(storedScheme());
 	/** Whether the system is set to dark; the page follows its changes. */
 	systemDark = $state(typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches);
-	/** Whether Kubri's own colors are dark now. */
-	dark = $derived(this.scheme ? this.scheme === 'dark' : this.systemDark);
+	/** Whether the colors on screen are dark now, a skin's or Kubri's own. */
+	dark = $derived(this.skin ? this.skinDark : this.scheme ? this.scheme === 'dark' : this.systemDark);
 
 	contextSettingsOf(context: string | undefined | null): ContextSettings {
 		return (context && this.settings.contexts[context]) || NO_CONTEXT_SETTINGS;
@@ -660,8 +662,10 @@ class AppState {
 		}
 	}
 
+	/** Switches to Kubri's other colors; with a skin on screen, takes it off for this context. */
 	toggleScheme() {
 		this.setScheme(this.dark ? 'light' : 'dark');
+		if (this.skin) void this.setSkin(null);
 	}
 
 	/** Light, dark, or null to follow the system. */
@@ -1330,6 +1334,7 @@ class AppState {
 		if (request !== this.#skinRequest) return;
 		applyTheme(theme);
 		this.skin = theme ? name : null;
+		this.skinDark = theme?.scheme === 'dark';
 		this.skinError = error;
 	}
 
