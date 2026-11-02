@@ -55,6 +55,7 @@ export const tauriBackend: Backend = {
 	openSnapshot: async (file) =>
 		invoke('open_snapshot', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-name': encodeURIComponent(file.name) } }),
 	resources: () => invoke('resources'),
+	refreshResources: () => invoke('refresh_resources'),
 	preview: (target, change) => invoke('preview', { target, change }),
 	schema: (resource) => invoke('schema', { resource }),
 	access: (checks, fresh = false) => invoke('access', { checks, fresh }),
@@ -64,6 +65,7 @@ export const tauriBackend: Backend = {
 	setContextSettings: (name, settings) => invoke('set_context_settings', { name, settings }),
 	setDiffSettings: (settings) => invoke('set_diff_settings', { settings }),
 	setHistorySettings: (settings) => invoke('set_history_settings', { settings }),
+	setConnectionSettings: (settings) => invoke('set_connection_settings', { settings }),
 	history: (query) => invoke('history', { query }),
 	historyDetail: (id) => invoke('history_detail', { id }),
 	setColumnSettings: (kind, columns) => invoke('set_column_settings', { kind, columns }),

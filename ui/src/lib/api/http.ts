@@ -119,6 +119,7 @@ export const httpBackend: Backend = {
 		return response.json();
 	},
 	resources: () => request('GET', '/resources'),
+	refreshResources: () => request('POST', '/resources/refresh'),
 	preview: (target, change) => request('POST', '/object/preview', { target, change }),
 	schema: (resource) =>
 		request('GET', `/schema?${new URLSearchParams({ group: resource.group, version: resource.version, plural: resource.plural })}`),
@@ -129,6 +130,7 @@ export const httpBackend: Backend = {
 	setContextSettings: (name, settings) => request('PUT', '/settings/context', { name, settings }),
 	setDiffSettings: (settings) => request('PUT', '/settings/diff', settings),
 	setHistorySettings: (settings) => request('PUT', '/settings/history', settings),
+	setConnectionSettings: (settings) => request('PUT', '/settings/connections', settings),
 	history: (query) => request('POST', '/history', query),
 	historyDetail: (id) => request('GET', `/history/${id}`),
 	setColumnSettings: (kind, columns) => request('PUT', '/settings/columns', { kind, columns }),
