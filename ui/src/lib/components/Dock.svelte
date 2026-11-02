@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { dock, type DockSession } from '../dock.svelte';
+	import { app } from '../state.svelte';
 	import DockPane from './DockPane.svelte';
 	import Icon from './Icon.svelte';
 
@@ -11,6 +12,12 @@
 
 	function label(s: DockSession) {
 		return s.container ? `${s.target.name} · ${s.container}` : s.target.name;
+	}
+
+	/** The context of a tab opened in another one than Kubri shows now. */
+	function otherContext(s: DockSession): string | null {
+		const context = s.target.context;
+		return context && context !== app.cluster?.context ? context : null;
 	}
 
 	/** Keeps the list at least 240px and the workspace at least 160px. */
@@ -98,17 +105,24 @@
 		<div class="tabs" role="tablist" aria-label="Logs and shells">
 			{#each dock.sessions as s (s.id)}
 				{@const on = shown(s.id)}
+				{@const other = otherContext(s)}
+				{@const settings = other ? app.contextSettingsOf(other) : null}
 				<div class="tab" class:on class:focused={on && dock.beside !== null && dock.last === s.id}>
 					<button
 						role="tab"
 						aria-selected={on}
 						title="{s.kind === 'logs' ? 'Logs' : 'Shell'} of {s.resource.kind} {s.target.namespace ? `${s.target.namespace}/` : ''}{label(
 							s
-						)}{s.previous ? ' (previous instance)' : ''}"
+						)}{s.previous ? ' (previous instance)' : ''}{other ? ` in ${app.contextName(other)}` : ''}"
 						onclick={() => dock.show(s.id)}
 						onauxclick={(e) => onauxclick(e, s.id)}
 					>
 						<Icon name={s.kind === 'logs' ? 'logs' : 'terminal'} size={14} />
+						{#if other}
+							<span class="context" class:production={settings?.production} style:--context={settings?.color || null}
+								>{app.contextName(other)}</span
+							>
+						{/if}
 						<span>{label(s)}</span>
 						{#if s.previous}<em>previous</em>{/if}
 					</button>
@@ -165,6 +179,21 @@
 </section>
 
 <style>
+	.tab [role='tab'] .context {
+		flex: none;
+		max-width: 14ch;
+		font-family: var(--sans, inherit);
+		padding: 0 5px;
+		border-radius: 4px;
+		border: 1px solid var(--context, var(--border));
+		color: var(--text-muted);
+		font-size: 11px;
+		white-space: nowrap;
+	}
+	.tab [role='tab'] .context.production {
+		border-color: var(--bad);
+		color: var(--bad);
+	}
 	.dock {
 		position: relative;
 		display: flex;

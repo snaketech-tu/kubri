@@ -390,6 +390,7 @@ function builtins(
 	}
 
 	if (CONTEXT_COMMANDS.includes(cmd)) {
+		if (arg === '-') return [{ label: 'ctx -', detail: 'The previous context', action: { type: 'context', name: '-' } }];
 		return contexts
 			.filter((c) => c.name.toLowerCase().includes(arg))
 			.map((c) => ({

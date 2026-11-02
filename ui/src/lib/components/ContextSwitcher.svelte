@@ -1,15 +1,21 @@
 <script lang="ts">
 	import { app } from '../state.svelte';
 	import Icon from './Icon.svelte';
+	import { switcherOrder } from '../places';
 
 	let query = $state('');
 	let input = $state<HTMLInputElement>();
 
 	const filtered = $derived(
-		app.contexts.filter((c) =>
-			[c.name, app.contextName(c.name), app.contextSettingsOf(c.name).label].some((text) =>
-				text.toLowerCase().includes(query.toLowerCase())
-			)
+		switcherOrder(
+			app.contexts.filter((c) =>
+				[c.name, app.contextName(c.name), app.contextSettingsOf(c.name).label].some((text) =>
+					text.toLowerCase().includes(query.toLowerCase())
+				)
+			),
+			app.previousContext,
+			app.cluster?.context ?? null,
+			query
 		)
 	);
 
@@ -91,6 +97,8 @@
 								{app.contextName(ctx.name)}
 								{#if settings.production}<span class="badge production">production</span>
 								{:else if settings.label}<span class="badge">{settings.label}</span>{/if}
+								{#if ctx.name === app.previousContext && ctx.name !== app.cluster?.context}<span class="badge">previous</span>{/if}
+								{#if app.warm.includes(ctx.name)}<span class="warm" title="Still connected: switching back is instant"></span>{/if}
 							</span>
 							<span class="meta">
 								{settings.displayName ? `${ctx.name} · ` : ''}{ctx.cluster ?? ''}{ctx.namespace ? ` · ns ${ctx.namespace}` : ''}
@@ -125,6 +133,14 @@
 </div>
 
 <style>
+	.warm {
+		width: 7px;
+		height: 7px;
+		margin-left: 2px;
+		border-radius: 50%;
+		background: var(--ok, #2da44e);
+		flex: none;
+	}
 	.footer {
 		padding: 6px;
 		border-top: 1px solid var(--border);

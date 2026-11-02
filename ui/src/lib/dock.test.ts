@@ -37,14 +37,15 @@ describe('workspace', () => {
 		expect(dock.active).toBe(two);
 	});
 
-	it('opens from the task bar and closes the tabs of another context', () => {
+	it('opens from the task bar and closes the tabs of contexts that are gone', () => {
 		dock.add({ kind: 'logs', ...at('api', 'a') });
 		dock.add({ kind: 'shell', ...at('api', 'b') });
 		dock.minimized = true;
 		expect(dock.open).toBe(false);
 		dock.show(dock.sessions[0].id);
 		expect(dock.open).toBe(true);
-		expect(dock.keepContext('b')).toBe(1);
+		expect(dock.keepContexts(['a', 'b'])).toBe(0);
+		expect(dock.keepContexts(['b', 'c'])).toBe(1);
 		expect(dock.sessions.map((s) => s.target.context)).toEqual(['b']);
 	});
 });

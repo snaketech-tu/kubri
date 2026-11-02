@@ -134,8 +134,12 @@ class Dock {
 	}
 
 	/** Closes the tabs of other contexts, whose streams no longer work. */
-	keepContext(context: string): number {
-		const gone = this.sessions.filter((s) => s.target.context && s.target.context !== context);
+	/**
+	 * Closes the tabs of contexts that are gone, such as a snapshot left or a context removed
+	 * from the kubeconfig. Tabs of other contexts that still exist keep running.
+	 */
+	keepContexts(contexts: string[]): number {
+		const gone = this.sessions.filter((s) => s.target.context && !contexts.includes(s.target.context));
 		for (const s of gone) this.close(s.id);
 		return gone.length;
 	}
