@@ -24,6 +24,20 @@ export interface NewContext {
 	problem: string | null;
 }
 
+/** A kubeconfig file Kubri reads, and what it found in it. */
+export interface KubeconfigFile {
+	path: string;
+	/** Chosen in Kubri, so it can be removed there; otherwise from KUBECONFIG or the default. */
+	chosen: boolean;
+	contexts: string[];
+	/** Contexts an earlier file already has, so this file's are not used. */
+	shadowed: string[];
+	/** It does not exist, so it is skipped, as kubectl skips it. */
+	missing: boolean;
+	/** Why Kubri cannot read it. */
+	problem: string | null;
+}
+
 export interface ClusterInfo {
 	context: string;
 	server: string;
@@ -1425,6 +1439,14 @@ export interface Backend {
 	addContexts(text: string, names: string[]): Promise<ContextList>;
 	/** Removes a context added in Kubri. */
 	removeContext(name: string): Promise<ContextList>;
+	/** Every kubeconfig file Kubri reads: your own, then the ones chosen in Kubri. */
+	kubeconfigFiles(): Promise<KubeconfigFile[]>;
+	/** Asks for kubeconfig files in the system's file dialog; null where there is none (the browser). */
+	chooseKubeconfigFiles(): Promise<string[] | null>;
+	/** Reads these kubeconfig files where they are from now on. Desktop only. */
+	addKubeconfigFiles(paths: string[]): Promise<ContextList>;
+	/** Stops reading a file chosen in Kubri. Desktop only. */
+	removeKubeconfigFile(path: string): Promise<ContextList>;
 	switchContext(name: string): Promise<ClusterInfo>;
 	/** Saves a namespace, or the whole cluster for null, to a snapshot file. Returns where the
 	 * desktop app saved it; the browser downloads it and returns null. */

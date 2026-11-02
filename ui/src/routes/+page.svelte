@@ -28,6 +28,8 @@
 	import HelmView from '#lib/components/HelmView.svelte';
 	import KubectlDialog from '#lib/components/KubectlDialog.svelte';
 	import SnapshotDialog from '#lib/components/SnapshotDialog.svelte';
+	import KubeconfigFilesDialog from '#lib/components/KubeconfigFilesDialog.svelte';
+	import { connectHint } from '#lib/connect.js';
 	import ActivityPanel from '#lib/components/ActivityPanel.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import Tour from '#lib/components/Tour.svelte';
@@ -590,32 +592,61 @@
 						<div class="placeholder">Choose a resource or press <kbd>:</kbd>.</div>
 					{/if}
 				{:else}
-					<section class="connect">
-						<img src={logo} alt="" width="56" height="56" />
-						<span class="eyebrow">Your cluster, in focus</span>
-						<h1>{app.connectingText ?? 'Connect to a cluster.'}</h1>
-						<p>
-							{isTauri()
-								? 'Choose a context from your kubeconfig. Reload it after you update your credentials.'
-								: 'Choose a context configured on kubri-server. The server holds the credentials.'}
-						</p>
-						{#if !app.connecting}
+					{#if app.kubeconfigProblem !== null && !app.contexts.length && !app.connecting}
+						<section class="connect">
+							<img src={logo} alt="" width="56" height="56" />
+							<span class="eyebrow">Getting started</span>
+							<h1>No clusters yet.</h1>
+							<p>
+								{isTauri()
+									? 'Kubri reads your clusters from a kubeconfig, as kubectl does, and found none it can use. Load the kubeconfig file you got for your cluster.'
+									: 'kubri-server found no kubeconfig it can use. Add contexts from a kubeconfig file, or start the server with one.'}
+							</p>
+							<p class="problem">{app.kubeconfigProblem}</p>
 							<div class="connect-actions">
-								<button
-									class="primary"
-									onclick={() => {
-										app.contextMenuOpen = true;
-										app.reloadContexts(true);
-									}}
-								>
-									Choose context <Icon name="arrow" size={16} />
+								<button class="primary" onclick={() => (app.kubeconfigFilesOpen = isTauri() ? true : 'copy')}>
+									{isTauri() ? 'Load kubeconfig file…' : 'Add contexts from a file…'}
+									<Icon name="arrow" size={16} />
 								</button>
 								<button onclick={() => app.load()}>Try again</button>
-								{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>See all clusters</button>{/if}
 							</div>
-						{/if}
-						<p class="small">Your k9s aliases, hotkeys, plugins and skins keep working.</p>
-					</section>
+							<p class="small">
+								Kubri looks in the files listed in <code>KUBECONFIG</code>, or in <code>~/.kube/config</code>.
+							</p>
+						</section>
+					{:else}
+						<section class="connect">
+							<img src={logo} alt="" width="56" height="56" />
+							<span class="eyebrow">Your cluster, in focus</span>
+							<h1>{app.connectingText ?? 'Connect to a cluster.'}</h1>
+							<p>
+								{isTauri()
+									? 'Choose a context from your kubeconfig. Reload it after you update your credentials.'
+									: 'Choose a context configured on kubri-server. The server holds the credentials.'}
+							</p>
+							{#if !app.connecting && app.connectFailure}
+								{@const hint = connectHint(app.connectFailure.error)}
+								{#if hint}<p class="hint">{hint}</p>{/if}
+							{/if}
+							{#if !app.connecting}
+								<div class="connect-actions">
+									<button
+										class="primary"
+										onclick={() => {
+											app.contextMenuOpen = true;
+											app.reloadContexts(true);
+										}}
+									>
+										{app.connectFailure ? 'Choose another context' : 'Choose context'} <Icon name="arrow" size={16} />
+									</button>
+									<button onclick={() => app.load()}>Try again</button>
+									<button onclick={() => (app.kubeconfigFilesOpen = true)}>Kubeconfig files…</button>
+									{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>See all clusters</button>{/if}
+								</div>
+							{/if}
+							<p class="small">Your k9s aliases, hotkeys, plugins and skins keep working.</p>
+						</section>
+					{/if}
 				{/if}
 				{#if app.details}
 					<DetailsPanel details={app.details} />
@@ -685,6 +716,7 @@
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}
+{#if app.kubeconfigFilesOpen}<KubeconfigFilesDialog />{/if}
 {#if app.updateOpen && app.release}<UpdateDialog release={app.release} />{/if}
 {#if app.explaining}<ExplainPanel subject={app.explaining} />{/if}
 {#if app.pluginTerminal}
@@ -1032,12 +1064,30 @@
 		color: var(--text-muted);
 		line-height: 1.6;
 	}
+	.connect .problem {
+		max-width: 560px;
+		padding: 8px 12px;
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--bad) 8%, transparent);
+		color: var(--bad);
+		font-size: 13px;
+		overflow-wrap: anywhere;
+	}
+	.connect .hint {
+		padding: 8px 12px;
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--warn) 10%, transparent);
+		color: var(--text);
+		font-size: 13px;
+	}
 	.connect .small {
 		margin-top: 18px;
 		font-size: 12px;
 	}
 	.connect-actions {
 		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
 		gap: 8px;
 		margin-top: 14px;
 	}

@@ -34,6 +34,7 @@
 				[':graph [ns]', 'XRay graph: how objects connect, and Ingress request paths'],
 				[':changes [ns] [1h]', 'What changed: rollouts, scaling, config edits and warnings Kubri recorded'],
 				[':snapshot [ns|all]', 'Save a namespace or the cluster to a file to open offline, or open one'],
+				[':kubeconfig', 'The kubeconfig files Kubri reads, and load more'],
 				[':rbac', 'Who may do what'],
 				[':helm', 'Helm releases'],
 				[':new [kind name --image …]', 'Create from a template or YAML, like kubectl create'],

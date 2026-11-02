@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { untrack } from 'svelte';
 	import { backend, type ObjectRef } from '../api';
 	import { comparable, imageChanges } from '../compare';
@@ -60,6 +61,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="dialog"
 	aria-label="Compare"
 	bind:this={box}

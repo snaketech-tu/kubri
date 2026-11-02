@@ -19,45 +19,50 @@ const EXEC_V1BETA1: &str = "client.authentication.k8s.io/v1beta1";
 const EXEC_V1ALPHA1: &str = "client.authentication.k8s.io/v1alpha1";
 
 /// Loads the files listed in `KUBECONFIG`, merged with the first one winning, or
-/// `~/.kube/config`. Listed files that do not exist are skipped, as in kubectl.
+/// `~/.kube/config`, then the files chosen in Kubri and the contexts added there. Listed
+/// files that do not exist are skipped, as in kubectl.
 pub(crate) fn read() -> Result<Kubeconfig, String> {
-    let base = read_own();
-    let added = crate::added::files();
-    if added.is_empty() {
-        return base;
+    let own = own_paths();
+    let mut result = read_own();
+    for path in crate::chosen::files() {
+        if !own.contains(&path) {
+            result = merge_extra(
+                result,
+                read_files(std::slice::from_ref(&path)),
+                "a file chosen in Kubri",
+            );
+        }
     }
-    let added = read_files(&added);
-    match (base, added) {
-        (Ok(base), Ok(added)) => base.merge(added).map_err(|e| e.to_string()),
+    let added = crate::added::files();
+    if !added.is_empty() {
+        result = merge_extra(result, read_files(&added), "the contexts added in Kubri");
+    }
+    result
+}
+
+/// `base` with `extra` merged after it. Without a kubeconfig of their own, the extra contexts
+/// are all there is; a broken extra file only leaves itself out.
+fn merge_extra(
+    base: Result<Kubeconfig, String>,
+    extra: Result<Kubeconfig, String>,
+    what: &str,
+) -> Result<Kubeconfig, String> {
+    match (base, extra) {
+        (Ok(base), Ok(extra)) => base.merge(extra).map_err(|e| e.to_string()),
         (Ok(base), Err(err)) => {
-            tracing::warn!("contexts added in Kubri are left out: {err}");
+            tracing::warn!("left out {what}: {err}");
             Ok(base)
         }
-        // Without a kubeconfig of their own, the contexts added in Kubri are all there is.
-        (Err(err), Ok(added)) => {
+        (Err(err), Ok(extra)) => {
             tracing::warn!("{err}");
-            Ok(added)
+            Ok(extra)
         }
         (Err(err), Err(_)) => Err(err),
     }
 }
 
-/// The value of `KUBECONFIG` for helm and k9s plugins: the user's files, then the contexts
-/// added in Kubri.
-pub(crate) fn env_value() -> std::ffi::OsString {
-    let mut paths: Vec<PathBuf> = match std::env::var_os("KUBECONFIG").filter(|v| !v.is_empty()) {
-        Some(value) => std::env::split_paths(&value).collect(),
-        None => dirs::home_dir()
-            .map(|h| h.join(".kube").join("config"))
-            .into_iter()
-            .collect(),
-    };
-    paths.extend(crate::added::files());
-    std::env::join_paths(paths).unwrap_or_default()
-}
-
-/// The user's own kubeconfig: the files in `KUBECONFIG`, or `~/.kube/config`.
-fn read_own() -> Result<Kubeconfig, String> {
+/// The files in `KUBECONFIG`, or `~/.kube/config` when it is not set.
+pub(crate) fn own_paths() -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = Vec::new();
     if let Some(value) = std::env::var_os("KUBECONFIG") {
         for path in std::env::split_paths(&value) {
@@ -67,14 +72,49 @@ fn read_own() -> Result<Kubeconfig, String> {
         }
     }
     if paths.is_empty() {
+        paths.extend(dirs::home_dir().map(|h| h.join(".kube").join("config")));
+    }
+    paths
+}
+
+/// The value of `KUBECONFIG` for helm and k9s plugins: the user's files, the files chosen in
+/// Kubri, then the contexts added there.
+pub(crate) fn env_value() -> std::ffi::OsString {
+    let mut paths = own_paths();
+    for path in crate::chosen::files() {
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    paths.extend(crate::added::files());
+    std::env::join_paths(paths).unwrap_or_default()
+}
+
+/// The user's own kubeconfig: the files in `KUBECONFIG`, or `~/.kube/config`.
+fn read_own() -> Result<Kubeconfig, String> {
+    if std::env::var_os("KUBECONFIG")
+        .is_none_or(|v| std::env::split_paths(&v).all(|p| p.as_os_str().is_empty()))
+    {
+        if let Some(default) = own_paths().first().filter(|p| !p.exists()) {
+            return Err(format!("there is no kubeconfig at {}", default.display()));
+        }
         return Kubeconfig::read().map_err(|e| e.to_string());
     }
-    read_files(&paths)
+    read_files(&own_paths())
 }
 
 fn read_files(paths: &[PathBuf]) -> Result<Kubeconfig, String> {
     let mut merged: Option<Kubeconfig> = None;
     for path in paths {
+        // kubectl fails on a folder too, but only says "is a directory". The usual cause is
+        // `docker run -v` with a file that does not exist: Docker mounts an empty folder.
+        if path.is_dir() {
+            return Err(format!(
+                "error loading config file \"{}\": it is a folder, but KUBECONFIG lists kubeconfig files. \
+                 With docker run -v, check that the kubeconfig file exists: Docker mounts an empty folder in place of a missing file",
+                path.display()
+            ));
+        }
         let next = match Kubeconfig::read_from(path) {
             Ok(next) => next,
             Err(KubeconfigError::ReadConfig(err, _)) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -764,6 +804,17 @@ users:
 
         let err = read_files(std::slice::from_ref(&missing)).unwrap_err();
         assert!(err.starts_with("none of the files in KUBECONFIG exist:"), "{err}");
+
+        let folder = dir.join("folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        let err = read_files(&[first.clone(), folder.clone()]).unwrap_err();
+        assert!(
+            err.starts_with(&format!(
+                "error loading config file \"{}\": it is a folder",
+                folder.display()
+            )),
+            "{err}"
+        );
 
         let broken = dir.join("broken.yaml");
         std::fs::write(&broken, "users: [ {").unwrap();

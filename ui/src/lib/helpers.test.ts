@@ -97,6 +97,7 @@ describe('command palette', () => {
 			expect.objectContaining({ label: 'snapshot shop', action: { type: 'snapshot', namespace: 'shop' } })
 		]);
 		expect(suggest('snaps', resources, contexts, []).map((s) => s.label)).toContain('snapshot');
+		expect(suggest(':kubeconfig', resources, contexts, []).map((s) => s.action)).toEqual([{ type: 'kubeconfig' }]);
 	});
 
 	it('searches with everything after the command', () => {
