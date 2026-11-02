@@ -33,6 +33,8 @@ export type Action =
 	| { type: 'changes'; filter?: ChangesFilter }
 	/** The snapshot dialog; `namespace` null for the whole cluster, unset for the current namespace. */
 	| { type: 'snapshot'; namespace?: string | null }
+	/** The kubeconfig files Kubri reads, where more can be loaded. */
+	| { type: 'kubeconfig' }
 	/** One object, in whichever context it is. */
 	| { type: 'object'; target: ObjectRef; kind?: string }
 	| { type: 'config'; section?: ConfigSection }
@@ -64,6 +66,7 @@ const SEARCH_COMMANDS = ['search', 'find', 'grep'];
 const GRAPH_COMMANDS = ['graph', 'topology'];
 const CHANGES_COMMANDS = ['changes', 'changed', 'history', 'timeline'];
 const SNAPSHOT_COMMANDS = ['snapshot', 'snap', 'snapshots'];
+const KUBECONFIG_COMMANDS = ['kubeconfig', 'kubeconfigs'];
 const CONFIG_COMMANDS: Record<string, ConfigSection | undefined> = {
 	config: undefined,
 	settings: undefined,
@@ -343,6 +346,9 @@ function builtins(
 		action: { type: 'snapshot', namespace: arg === 'all' ? null : arg }
 	});
 	if (SNAPSHOT_COMMANDS.includes(cmd)) return [snapshot(rest[0]), ...(rest[0] ? [] : [snapshot('all')])];
+	if (KUBECONFIG_COMMANDS.includes(cmd)) {
+		return [{ label: 'kubeconfig', detail: 'The kubeconfig files Kubri reads, and load more', action: { type: 'kubeconfig' } }];
+	}
 
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
 	const xray = (kind: string, namespace?: string) => {

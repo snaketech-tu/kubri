@@ -34,6 +34,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/contexts/reload", post(reload))
         .route("/contexts/inspect", post(inspect_kubeconfig))
         .route("/contexts/added", post(add_contexts).delete(remove_context))
+        .route("/kubeconfig-files", get(kubeconfig_files))
         .route("/context", put(switch_context))
         .route(
             "/snapshot",
@@ -183,6 +184,12 @@ async fn contexts(State(kubri): State<Arc<Kubri>>) -> ApiResult<ContextList> {
 
 async fn reload(State(kubri): State<Arc<Kubri>>) -> ApiResult<ContextList> {
     Ok(Json(kubri.reload().await?))
+}
+
+/// The kubeconfig files the server reads. Choosing more is left to the desktop app: in the
+/// browser it would let anyone signed in read files on the server.
+async fn kubeconfig_files(State(kubri): State<Arc<Kubri>>) -> Json<Vec<kubri_core::KubeconfigFile>> {
+    Json(kubri.kubeconfig_files())
 }
 
 #[derive(Deserialize)]

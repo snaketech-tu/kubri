@@ -83,6 +83,10 @@ export const httpBackend: Backend = {
 	inspectKubeconfig: (text) => request('POST', '/contexts/inspect', { text }),
 	addContexts: (text, names) => request('POST', '/contexts/added', { text, names }),
 	removeContext: (name) => request('DELETE', `/contexts/added?${new URLSearchParams({ name })}`),
+	kubeconfigFiles: () => request('GET', '/kubeconfig-files'),
+	chooseKubeconfigFiles: async () => null,
+	addKubeconfigFiles: () => Promise.reject(new Error('In the browser, add contexts from a file instead')),
+	removeKubeconfigFile: () => Promise.reject(new Error('Only the desktop app chooses kubeconfig files')),
 	switchContext: (name) => request('PUT', '/context', { name }),
 	async takeSnapshot(namespace) {
 		const query = namespace ? `?${new URLSearchParams({ namespace })}` : '';

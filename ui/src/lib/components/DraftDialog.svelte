@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { drafts } from '../navigation.svelte';
 	let box = $state<HTMLDialogElement>();
 	$effect(() => {
@@ -8,6 +9,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
