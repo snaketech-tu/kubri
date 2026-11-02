@@ -8,7 +8,7 @@ When you switch to another context, Kubri keeps the one you left connected in th
 
 You also land where you left: the same page, kind, namespace, filter, row under the cursor and back and forward history. While a list reloads, it shows the rows it had when you left, dimmed and marked "updating…", and offers no actions on them until the cluster's own list arrives.
 
-The context switcher (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>) lists the previous context first, so <kbd>Enter</kbd> goes back to it, and marks kept contexts with a green dot. `:ctx -` in the command palette does the same, like `cd -`.
+The context switcher (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>) lists the previous context first, so <kbd>Enter</kbd> goes back to it, and marks kept contexts with a green dot. `:ctx -` in the command palette does the same, like `cd -`. `:ctx prod` switches to `prod`; `:ctx` alone opens Clusters, where you pick one.
 
 Logs and shells in the workspace keep running when you switch. A tab from another context shows that context's name, in red for production, so a shell in production is not mistaken for one in staging. Tabs close only when their context is removed from the kubeconfig, or when you leave a snapshot.
 

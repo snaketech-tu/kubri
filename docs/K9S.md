@@ -68,6 +68,8 @@ aliases:
 
 `:pp` then opens pods, and `:fred` the pods in `kube-system` with the label `app=dns`. An alias can stand for any command, including another alias, `xray deploy` or `ctx prod`. Words after an alias are passed on, so `:pp shop` opens pods in `shop`.
 
+Without an `aliases.yaml`, Kubri uses the aliases k9s writes into a new one: `dp` (deployments), `sec` (secrets), `jo` (jobs), `cr` and `crb` (cluster roles and their bindings), `ro` and `rb` (roles and role bindings) and `np` (network policies).
+
 Every resource command takes the same extras, aliased or not: a namespace, labels as `key=value` (or `-l key=value`) and `@context` to switch contexts first, like `:deploy shop app=web @prod`.
 
 ## Hotkeys

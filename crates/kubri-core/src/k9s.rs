@@ -479,6 +479,18 @@ impl Env {
     }
 }
 
+/// The aliases k9s puts in the `aliases.yaml` it creates.
+const DEFAULT_ALIASES: [(&str, &str); 8] = [
+    ("dp", "deployments"),
+    ("sec", "v1/secrets"),
+    ("jo", "jobs"),
+    ("cr", "clusterroles"),
+    ("crb", "clusterrolebindings"),
+    ("ro", "roles"),
+    ("rb", "rolebindings"),
+    ("np", "networkpolicies"),
+];
+
 /// Reads the k9s configuration for `context`. Missing files are fine; broken ones are listed
 /// with their error in [`K9sConfig::files`].
 pub(crate) fn load(dirs: &Dirs, context: Option<&ContextKey>, env: &Env) -> K9sConfig {
@@ -490,6 +502,14 @@ pub(crate) fn load(dirs: &Dirs, context: Option<&ContextKey>, env: &Env) -> K9sC
     places.extend(context_dir.clone());
 
     let mut aliases = BTreeMap::new();
+    // Without an aliases file, k9s writes one with these, so they work in k9s from the start.
+    if !roots.iter().any(|r| r.join("aliases.yaml").exists()) {
+        aliases.extend(
+            DEFAULT_ALIASES
+                .iter()
+                .map(|(a, c)| (a.to_string(), c.to_string())),
+        );
+    }
     let mut hotkeys = BTreeMap::new();
     let mut plugins = BTreeMap::new();
     for (i, place) in places.iter().enumerate() {
@@ -643,6 +663,31 @@ pub(crate) mod tests {
     pub(crate) fn write(path: &Path, text: &str) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn uses_the_aliases_k9s_writes_without_an_aliases_file() {
+        let root = scratch("default-aliases");
+        let dirs = Dirs {
+            config: root.join("config"),
+            data: root.join("data"),
+        };
+        let command = |config: &K9sConfig, name: &str| {
+            config
+                .aliases
+                .iter()
+                .find(|a| a.name == name)
+                .map(|a| a.command.clone())
+        };
+        let config = load(&dirs, None, &Env::default());
+        assert_eq!(command(&config, "dp").as_deref(), Some("deployments"));
+        assert_eq!(command(&config, "rb").as_deref(), Some("rolebindings"));
+
+        // An aliases file of its own replaces them, as k9s then never writes its own.
+        write(&dirs.config.join("aliases.yaml"), "aliases:\n  pp: v1/pods\n");
+        let config = load(&dirs, None, &Env::default());
+        assert_eq!(command(&config, "dp"), None);
+        assert_eq!(command(&config, "pp").as_deref(), Some("v1/pods"));
     }
 
     #[test]

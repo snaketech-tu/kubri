@@ -219,6 +219,13 @@
 	});
 	const current = $derived<Row | undefined>(rows[cursor]);
 
+	// The cursor holds on to the row it shows, so clearing a filter or sorting keeps it on that row
+	// instead of on whatever comes first now.
+	$effect(() => {
+		const key = current?.key;
+		if (key && key !== untrack(() => cursorKey)) cursorKey = key;
+	});
+
 	// Long lists render only the rows in view and a few around them, so 10,000 pods stay quick.
 	const WINDOWED_FROM = 300;
 	const OVERSCAN = 20;

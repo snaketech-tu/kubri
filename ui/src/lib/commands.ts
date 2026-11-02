@@ -120,6 +120,8 @@ function score(resource: ResourceInfo, term: string): number | null {
 	const qualified = resource.group ? `${resource.plural}.${resource.group}` : resource.plural;
 	if (all.includes(term) || qualified === term) return 0;
 	if (all.some((n) => n.startsWith(term))) return 1;
+	// Two letters inside a word are chance, like `dp` in endpoints or `rb` in rbac.authorization.k8s.io.
+	if (term.length < 3) return null;
 	if (all.some((n) => n.includes(term)) || resource.group.includes(term)) return 2;
 	return null;
 }
@@ -402,13 +404,16 @@ function builtins(
 
 	if (CONTEXT_COMMANDS.includes(cmd)) {
 		if (arg === '-') return [{ label: 'ctx -', detail: 'The previous context', action: { type: 'context', name: '-' } }];
-		return contexts
+		const matches = contexts
 			.filter((c) => c.name.toLowerCase().includes(arg))
-			.map((c) => ({
+			.map((c): Suggestion => ({
 				label: `ctx ${c.name}`,
 				detail: [c.cluster, c.namespace && `ns ${c.namespace}`].filter(Boolean).join(' · '),
 				action: { type: 'context', name: c.name }
 			}));
+		// Like k9s, a bare `:ctx` lists the contexts rather than switching to the first one.
+		if (!arg && !input.endsWith(' ')) return [{ ...fleet, label: cmd, detail: 'Every context in your kubeconfig, to pick one' }, ...matches];
+		return matches;
 	}
 
 	if (NAMESPACE_COMMANDS.includes(cmd) && (rest.length > 0 || input.endsWith(' '))) {

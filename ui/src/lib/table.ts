@@ -119,8 +119,13 @@ export function filterRows(rows: Row[], filter: string): Row[] {
 	});
 }
 
-/** A case-insensitive regular expression, or the text itself while it is not a valid one. */
+/**
+ * A case-insensitive regular expression, or the text itself while it is not a valid one. As the
+ * filter's placeholder shows it, the expression may stand between slashes: `/^db-\d$/`.
+ */
 function textMatcher(text: string): (value: string) => boolean {
+	const slashed = /^\/(.+)\/$/.exec(text);
+	if (slashed) text = slashed[1];
 	try {
 		const re = new RegExp(text, 'i');
 		return (value) => re.test(value);

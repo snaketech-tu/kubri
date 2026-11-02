@@ -24,7 +24,8 @@ const resources = [
 	resource('Deployment', 'deployments', 'apps', ['deploy']),
 	resource('Event', 'events', 'events.k8s.io'),
 	resource('Event', 'events', '', ['ev']),
-	resource('PodDisruptionBudget', 'poddisruptionbudgets', 'policy', ['pdb'])
+	resource('PodDisruptionBudget', 'poddisruptionbudgets', 'policy', ['pdb']),
+	resource('Endpoints', 'endpoints')
 ];
 
 const contexts: ContextInfo[] = [
@@ -43,6 +44,11 @@ describe('command palette', () => {
 		expect(matchResources('deploy', resources)[0].kind).toBe('Deployment');
 	});
 
+	it('does not take two letters inside a name for a match', () => {
+		expect(matchResources('dp', resources).map((r) => r.plural)).not.toContain('endpoints');
+		expect(matchResources('ploy', resources)[0].kind).toBe('Deployment');
+	});
+
 	it('prefers the core group for ambiguous names', () => {
 		expect(matchResources('events', resources)[0].group).toBe('');
 	});
@@ -52,12 +58,21 @@ describe('command palette', () => {
 	});
 
 	it('lists contexts for ctx', () => {
-		const s = suggest(':ctx', resources, contexts, []);
+		const s = suggest(':ctx ', resources, contexts, []);
 		expect(s.map((x) => x.action)).toEqual([
 			{ type: 'context', name: 'prod' },
 			{ type: 'context', name: 'staging' }
 		]);
 		expect(suggest('ctx sta', resources, contexts, [])[0].action).toEqual({ type: 'context', name: 'staging' });
+	});
+
+	it('opens the context list for a bare ctx instead of switching to the first context', () => {
+		const s = suggest(':ctx', resources, contexts, []);
+		expect(s[0].action).toEqual({ type: 'fleet' });
+		expect(s.slice(1).map((x) => x.action)).toEqual([
+			{ type: 'context', name: 'prod' },
+			{ type: 'context', name: 'staging' }
+		]);
 	});
 
 	it('switches namespaces with ns', () => {
@@ -238,6 +253,9 @@ describe('table rows', () => {
 	it('filters like k9s: regular expressions, inverse and fuzzy', () => {
 		const names = (filter: string, list = rows) => filterRows(list, filter).map((r) => r.name);
 		expect(names('^[ab]$')).toEqual(['b', 'a']);
+		// Between slashes, as the placeholder shows, and as `!/…/`.
+		expect(names('/^[ab]$/')).toEqual(['b', 'a']);
+		expect(names('!/^[ab]$/')).toEqual(['c']);
 		expect(names('2D')).toEqual(['a']);
 		expect(names('!x')).toEqual(['a']);
 		expect(names('! ^c$')).toEqual(['b', 'a']);
