@@ -265,6 +265,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 - [Releasing](docs/RELEASING.md): how a version is published.
 - [Roadmap](docs/ROADMAP.md): the steps toward k9s parity and what each one covered.
 - [Kubri and Headlamp](docs/HEADLAMP-COMPARISON.md): where Headlamp does better today, and what to adopt.
+- [Kubri and Freelens](docs/FREELENS-COMPARISON.md): how Kubri differs from the Open Lens fork, and what to adopt.
 - [Ideas](docs/IDEAS.md): how Kubri could go beyond Headlamp, and what neither tool has yet.
 
 ## Development
