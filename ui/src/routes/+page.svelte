@@ -587,7 +587,7 @@
 							</p>
 							<p class="problem">{app.kubeconfigProblem}</p>
 							<div class="connect-actions">
-								<button class="primary" onclick={() => (app.kubeconfigFilesOpen = true)}>
+								<button class="primary" onclick={() => (app.kubeconfigFilesOpen = isTauri() ? true : 'copy')}>
 									{isTauri() ? 'Load kubeconfig file…' : 'Add contexts from a file…'}
 									<Icon name="arrow" size={16} />
 								</button>
@@ -1069,6 +1069,8 @@
 	}
 	.connect-actions {
 		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
 		gap: 8px;
 		margin-top: 14px;
 	}

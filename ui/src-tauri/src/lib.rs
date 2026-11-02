@@ -90,9 +90,10 @@ async fn reload_contexts(kubri: State<'_, Arc<Kubri>>) -> CommandResult<ContextL
     kubri.reload().await.map_err(|e| e.to_string())
 }
 
+// Async, so reading the files does not hold up the window.
 #[tauri::command]
-fn kubeconfig_files(kubri: State<'_, Arc<Kubri>>) -> Vec<kubri_core::KubeconfigFile> {
-    kubri.kubeconfig_files()
+async fn kubeconfig_files(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<kubri_core::KubeconfigFile>> {
+    Ok(kubri.kubeconfig_files())
 }
 
 #[tauri::command]

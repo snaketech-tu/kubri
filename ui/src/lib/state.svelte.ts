@@ -368,8 +368,9 @@ class AppState {
 		}
 	}
 	contextMenuOpen = $state(false);
-	/** The dialog listing the kubeconfig files Kubri reads, where more can be loaded. */
-	kubeconfigFilesOpen = $state(false);
+	/** The dialog listing the kubeconfig files Kubri reads, where more can be loaded; 'copy' opens
+	 * straight to adding contexts from a file, as the browser's start page does. */
+	kubeconfigFilesOpen = $state<boolean | 'copy'>(false);
 	/** Why Kubri has no contexts to connect to, such as a missing kubeconfig; null when it has some. */
 	kubeconfigProblem = $state<string | null>(null);
 	/** The last failed connection, for the start page to say what to try. */
@@ -691,8 +692,12 @@ class AppState {
 			try {
 				list = await backend.contexts();
 			} catch (err) {
+				const message = errorMessage(err);
+				const prefix = 'no kubeconfig loaded: ';
+				if (!message.startsWith(prefix)) throw err;
 				this.contexts = [];
-				this.kubeconfigProblem = errorMessage(err);
+				const problem = message.slice(prefix.length);
+				this.kubeconfigProblem = problem.charAt(0).toUpperCase() + problem.slice(1);
 				return;
 			}
 			const { contexts, cluster } = list;

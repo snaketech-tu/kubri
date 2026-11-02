@@ -95,6 +95,9 @@ fn read_own() -> Result<Kubeconfig, String> {
     if std::env::var_os("KUBECONFIG")
         .is_none_or(|v| std::env::split_paths(&v).all(|p| p.as_os_str().is_empty()))
     {
+        if let Some(default) = own_paths().first().filter(|p| !p.exists()) {
+            return Err(format!("there is no kubeconfig at {}", default.display()));
+        }
         return Kubeconfig::read().map_err(|e| e.to_string());
     }
     read_files(&own_paths())

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { lightDismiss } from '../dismiss';
 	import { isTauri } from '@tauri-apps/api/core';
+	import { untrack } from 'svelte';
 	import { backend, type ContextList, type KubeconfigFile } from '../api';
 	import { errorMessage } from '../format';
 	import { app } from '../state.svelte';
@@ -13,7 +14,9 @@
 	let path = $state('');
 	let busy = $state(false);
 	let error = $state<string | null>(null);
-	let copying = $state(false);
+	// Read once: the start page in the browser opens straight to copying contexts.
+	const direct = untrack(() => app.kubeconfigFilesOpen === 'copy');
+	let copying = $state(direct);
 
 	$effect(() => {
 		const previous = document.activeElement as HTMLElement | null;
@@ -94,85 +97,90 @@
 	}
 </script>
 
-<dialog
-	{@attach lightDismiss}
-	class="dialog"
-	aria-label="Kubeconfig files"
-	bind:this={box}
-	oncancel={(e) => {
-		e.preventDefault();
-		close();
-	}}
->
-	<h2>Kubeconfig files</h2>
-	<p class="lead">
-		{#if desktop}
-			Kubri reads your kubeconfig as kubectl does. Load more files here: Kubri reads them where they are, so changes to them show up
-			after a reload, and they stay loaded the next time Kubri starts. helm and k9s plugins see them too. Kubri never changes them.
-		{:else}
-			These are the files kubri-server reads. To use another cluster in the browser, add its contexts from a kubeconfig file.
-		{/if}
-	</p>
-
-	{#if files === null && !error}
-		<p class="muted">Reading…</p>
-	{:else if files}
-		<ul class="files">
-			{#each files as file (file.path)}
-				<li class:off={!!file.problem}>
-					<div class="row">
-						<span class="path mono" title={file.path}>{file.path}</span>
-						<span class="badge">{file.chosen ? 'Loaded in Kubri' : 'Your kubeconfig'}</span>
-						{#if file.chosen && desktop}
-							<button type="button" class="remove" onclick={() => remove(file)} disabled={busy} aria-label={`Stop reading ${file.path}`}>
-								Remove
-							</button>
-						{/if}
-					</div>
-					{#if file.problem}
-						<small class="problem">{file.problem}</small>
-					{:else}
-						<small>{contextsText(file)}</small>
-						{#if file.shadowed.length}
-							<small class="warn">
-								{file.shadowed.join(', ')}
-								{file.shadowed.length === 1 ? 'is' : 'are'} also in an earlier file, which wins.
-							</small>
-						{/if}
-					{/if}
-				</li>
+{#if !direct}
+	<dialog
+		{@attach lightDismiss}
+		class="dialog"
+		aria-label="Kubeconfig files"
+		bind:this={box}
+		oncancel={(e) => {
+			e.preventDefault();
+			close();
+		}}
+	>
+		<h2>Kubeconfig files</h2>
+		<p class="lead">
+			{#if desktop}
+				Kubri reads your kubeconfig as kubectl does. Load more files here: Kubri reads them where they are, so changes to them show up
+				after a reload, and they stay loaded the next time Kubri starts. helm and k9s plugins see them too. Kubri never changes them.
 			{:else}
-				<li class="muted">No kubeconfig files yet.</li>
-			{/each}
-		</ul>
-	{/if}
+				These are the files kubri-server reads. To use another cluster in the browser, add its contexts from a kubeconfig file.
+			{/if}
+		</p>
 
-	{#if desktop}
-		<form
-			class="load"
-			onsubmit={(e) => {
-				e.preventDefault();
-				load([path]);
-			}}
-		>
-			<input bind:value={path} placeholder="~/.kube/lab.yaml" aria-label="Path of a kubeconfig file" spellcheck="false" disabled={busy} />
-			<button type="submit" class="secondary" disabled={busy || !path.trim()}>Load</button>
-			<button type="button" class="primary" onclick={choose} disabled={busy}>Choose files…</button>
-		</form>
-	{/if}
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
-	<div class="buttons">
-		{#if !desktop}
-			<button type="button" class="primary" onclick={() => (copying = true)}>Add contexts from a file…</button>
+		{#if files === null && !error}
+			<p class="muted">Reading…</p>
+		{:else if files}
+			<ul class="files">
+				{#each files as file (file.path)}
+					<li class:off={!!file.problem || file.missing}>
+						<div class="row">
+							<span class="path mono" title={file.path}>{file.path}</span>
+							<span class="badge">{file.chosen ? 'Loaded in Kubri' : 'Your kubeconfig'}</span>
+							{#if file.chosen && desktop}
+								<button type="button" class="remove" onclick={() => remove(file)} disabled={busy} aria-label={`Stop reading ${file.path}`}>
+									Remove
+								</button>
+							{/if}
+						</div>
+						{#if file.problem}
+							<small class="problem">{file.problem}</small>
+						{:else if file.missing}
+							<small>Does not exist, so it is skipped</small>
+						{:else}
+							<small>{contextsText(file)}</small>
+							{#if file.shadowed.length}
+								<small class="warn">
+									{file.shadowed.join(', ')}
+									{file.shadowed.length === 1 ? 'is' : 'are'} also in an earlier file, which wins.
+								</small>
+							{/if}
+						{/if}
+					</li>
+				{:else}
+					<li class="muted">No kubeconfig files yet.</li>
+				{/each}
+			</ul>
 		{/if}
-		<button type="button" class="secondary" onclick={close} disabled={busy}>Close</button>
-	</div>
-</dialog>
+
+		{#if desktop}
+			<form
+				class="load"
+				onsubmit={(e) => {
+					e.preventDefault();
+					load([path]);
+				}}
+			>
+				<input bind:value={path} placeholder="~/.kube/lab.yaml" aria-label="Path of a kubeconfig file" spellcheck="false" disabled={busy} />
+				<button type="submit" class="secondary" disabled={busy || !path.trim()}>Load</button>
+				<button type="button" class="primary" onclick={choose} disabled={busy}>Choose files…</button>
+			</form>
+		{/if}
+		{#if error}<p class="error" role="alert">{error}</p>{/if}
+		<div class="buttons">
+			{#if !desktop}
+				<button type="button" class="primary" onclick={() => (copying = true)}>Add contexts from a file…</button>
+			{/if}
+			<button type="button" class="secondary" onclick={close} disabled={busy}>Close</button>
+		</div>
+	</dialog>
+{/if}
 
 {#if copying}
 	<AddContextsDialog
 		onclose={(names) => {
 			copying = false;
+			if (direct) app.kubeconfigFilesOpen = false;
 			if (names.length) done({ contexts: app.contexts, cluster: app.cluster });
 		}}
 	/>

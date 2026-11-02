@@ -36,7 +36,7 @@ Added contexts have **Remove** on their card. Contexts from your own kubeconfig 
 - helm and k9s plugins get them in `KUBECONFIG` too.
 - **Remove** stops reading a loaded file. Your own files, from `KUBECONFIG` or `~/.kube/config`, are listed but stay.
 
-With no kubeconfig at all, the start page offers **Load kubeconfig file…** as well. In the browser, Kubri cannot open files on the server for you; use **Add contexts from a file…** in the same dialog, which copies the contexts as described above.
+With no kubeconfig at all, or one without contexts, the start page says so and offers **Load kubeconfig file…**. When connecting to a context fails, it says what to try for the usual causes, such as a server that does not answer or credentials the cluster turned down. In the browser, Kubri cannot open files on the server for you; use **Add contexts from a file…** in the same dialog, which copies the contexts as described above.
 
 ## Limiting namespaces
 

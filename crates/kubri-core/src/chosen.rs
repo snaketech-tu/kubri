@@ -23,6 +23,8 @@ pub struct KubeconfigFile {
     pub contexts: Vec<String>,
     /// Contexts an earlier file already has, so this file's are not used.
     pub shadowed: Vec<String>,
+    /// It does not exist, so it is skipped, as kubectl skips it.
+    pub missing: bool,
     /// Why Kubri cannot read it.
     pub problem: Option<String>,
 }
@@ -137,6 +139,7 @@ pub(crate) fn describe(own: &[PathBuf], chosen: &[PathBuf]) -> Vec<KubeconfigFil
         .map(|p| (p, false))
         .chain(chosen.iter().filter(|p| !own.contains(p)).map(|p| (p, true)))
         .map(|(path, chosen)| {
+            let mut missing = false;
             let (contexts, problem) = if path.is_dir() {
                 (Vec::new(), Some("It is a folder, not a file".to_owned()))
             } else {
@@ -145,10 +148,8 @@ pub(crate) fn describe(own: &[PathBuf], chosen: &[PathBuf]) -> Vec<KubeconfigFil
                     Err(kube::config::KubeconfigError::ReadConfig(err, _))
                         if err.kind() == std::io::ErrorKind::NotFound =>
                     {
-                        (
-                            Vec::new(),
-                            Some("The file does not exist, so it is skipped".to_owned()),
-                        )
+                        missing = true;
+                        (Vec::new(), None)
                     }
                     Err(err) => (Vec::new(), Some(err.to_string())),
                 }
@@ -163,6 +164,7 @@ pub(crate) fn describe(own: &[PathBuf], chosen: &[PathBuf]) -> Vec<KubeconfigFil
                 chosen,
                 contexts,
                 shadowed,
+                missing,
                 problem,
             }
         })
@@ -240,7 +242,7 @@ mod tests {
         let files = describe(&[own.clone(), missing], &[extra, own]);
         assert_eq!(files.len(), 3);
         assert!(!files[0].chosen && files[0].contexts == ["a", "b"] && files[0].problem.is_none());
-        assert!(files[1].problem.as_deref().unwrap().contains("does not exist"));
+        assert!(files[1].missing && files[1].problem.is_none());
         assert!(files[2].chosen);
         assert_eq!(files[2].shadowed, ["b"]);
         std::fs::remove_dir_all(&dir).unwrap();

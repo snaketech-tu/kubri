@@ -32,6 +32,8 @@ export interface KubeconfigFile {
 	contexts: string[];
 	/** Contexts an earlier file already has, so this file's are not used. */
 	shadowed: string[];
+	/** It does not exist, so it is skipped, as kubectl skips it. */
+	missing: boolean;
 	/** Why Kubri cannot read it. */
 	problem: string | null;
 }
