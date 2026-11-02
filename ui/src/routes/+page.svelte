@@ -465,8 +465,11 @@
 			<button
 				class="square"
 				onclick={() => app.toggleScheme()}
-				disabled={!!app.skin}
-				title={app.skin ? `The skin ${app.skin} sets the colors` : app.dark ? 'Use light colors' : 'Use dark colors'}
+				title={app.skin
+					? `The skin ${app.skin} sets the colors; use Kubri's ${app.dark ? 'light' : 'dark'} colors instead`
+					: app.dark
+						? 'Use light colors'
+						: 'Use dark colors'}
 				aria-label={app.dark ? 'Use light colors' : 'Use dark colors'}
 			>
 				<Icon name={app.dark ? 'sun' : 'moon'} />
