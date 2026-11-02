@@ -219,7 +219,7 @@ Kubri reads your k9s configuration and uses the same keys, so you can start righ
 
 ## Your kubeconfig
 
-Kubri reads the files in `KUBECONFIG`, or `~/.kube/config`, the way kubectl does: a context that works with kubectl works in Kubri, and one that fails shows kubectl's error. In the desktop app you can load more kubeconfig files under **Kubeconfig files…** in the context switcher, and Kubri remembers them. It starts with your `current-context`, and you switch contexts in the top bar or with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. Started from a desktop launcher, the app takes the environment of your login shell, so `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin` and k9s plugins are found as in a terminal.
+Kubri reads the files in `KUBECONFIG`, or `~/.kube/config`, the way kubectl does: a context that works with kubectl works in Kubri, and one that fails shows kubectl's error. In the desktop app you can load more kubeconfig files under **Kubeconfig files…** in the context switcher, and Kubri remembers them. If your kubeconfigs are spread over `~/.kube`, [this example](docs/CLUSTERS.md#example-many-kubeconfig-files-spread-over-kube) puts them all in `KUBECONFIG`. It starts with your `current-context`, and you switch contexts in the top bar or with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. Started from a desktop launcher, the app takes the environment of your login shell, so `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin` and k9s plugins are found as in a terminal.
 
 ## Documentation
 

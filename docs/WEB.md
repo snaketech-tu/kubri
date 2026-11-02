@@ -63,6 +63,21 @@ docker run --rm -p 127.0.0.1:7878:7878 \
 - Your k9s aliases, hotkeys, plugins and skins work when you mount them: `-v "$HOME/.config/k9s:/home/kubri/.config/k9s:ro"` (on macOS the folder is `~/Library/Application Support/k9s`).
 - Port-forwards open their port inside the container. To reach one, listen on `0.0.0.0` and publish the port with `-p`, or use `--network host`.
 
+### Many kubeconfig files in Docker
+
+When your kubeconfigs are spread over `~/.kube`, as in [this example](CLUSTERS.md#example-many-kubeconfig-files-spread-over-kube), mount the whole folder where the container's home folder has it, and list the files with the `kubeconfigs` function from that example, with the container's paths:
+
+```sh
+docker run --rm -p 127.0.0.1:7878:7878 \
+  --user "$(id -u)" \
+  --mount "type=bind,src=$HOME/.kube,dst=/home/kubri/.kube,readonly" \
+  -e KUBECONFIG="$(kubeconfigs /home/kubri/.kube)" \
+  -e KUBRI_PASSWORD='a long password' \
+  ghcr.io/snaketech-tu/kubri
+```
+
+The files keep their places relative to each other, so certificate files they name by a relative path are found. One that names a file by its full path in your home folder, such as `/home/you/.kube/certs/ca.crt`, is not found in the container. For those, use the `--flatten` file from the list above.
+
 To build the image yourself: `docker build -t kubri .`
 
 ## In a Kubernetes cluster

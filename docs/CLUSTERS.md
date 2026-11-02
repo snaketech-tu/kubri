@@ -38,6 +38,45 @@ Added contexts have **Remove** on their card. Contexts from your own kubeconfig 
 
 With no kubeconfig at all, or one without contexts, the start page says so and offers **Load kubeconfig file…**. When connecting to a context fails, it says what to try for the usual causes, such as a server that does not answer or credentials the cluster turned down. In the browser, Kubri cannot open files on the server for you; use **Add contexts from a file…** in the same dialog, which copies the contexts as described above.
 
+### Example: many kubeconfig files spread over `~/.kube`
+
+Say every team or tool leaves its own file somewhere under `~/.kube`:
+
+```text
+~/.kube/
+├── config                      # your own contexts
+├── clusters/prod/eks.yaml      # names ca.crt next to it
+├── clusters/prod/ca.crt
+├── kind/kind-config
+├── teams/shop/dev.yml
+├── cache/ …                    # kubectl's caches, not kubeconfigs
+└── kubectx                     # some other tool's file
+```
+
+To have all of them in Kubri, and in kubectl, helm and k9s too, put them in `KUBECONFIG`. On Linux and macOS, this shell function lists every file under a folder that is a kubeconfig, with `config` first, so its contexts and its current context win:
+
+```sh
+# Every kubeconfig under ~/.kube, as a KUBECONFIG list. The paths start with $1.
+kubeconfigs() (
+  cd ~/.kube &&
+  { echo config; grep -rl --exclude-dir=cache --exclude-dir=http-cache '^kind: Config' . | sed 's|^\./||' | sort; } |
+    awk '!seen[$0]++' | sed "s|^|$1/|" | paste -sd: -
+)
+export KUBECONFIG="$(kubeconfigs "$HOME/.kube")"
+```
+
+For the example above that gives `~/.kube/config:~/.kube/clusters/prod/eks.yaml:~/.kube/kind/kind-config:~/.kube/teams/shop/dev.yml`, with your home folder spelled out.
+
+- Put both in `~/.bashrc` or `~/.zshrc`. The desktop app reads the environment of your login shell when it starts, so it gets the list even when started from the menu or dock, and a new file shows up the next time Kubri starts.
+- A file counts when it has a line `kind: Config`, as every file kubectl writes does. The caches and other tools' files are left out. Load a file without that line with **Choose files…**.
+- When two files have a context of the same name, the earlier one wins, as in kubectl. **Kubeconfig files…** says which contexts that hides.
+- A file that is not valid YAML stops kubectl and Kubri from reading the whole list. **Kubeconfig files…** says which file it is.
+- Paths in a file relative to it, such as `certificate-authority: ca.crt`, keep working, since every file is read where it is.
+
+Without the shell, the same works with **Choose files…** in **Kubeconfig files…**: select several files of a folder at once, then do the same for the next folder. Kubri remembers them, but a new file has to be loaded too.
+
+In the browser, [kubri-server in Docker](WEB.md#many-kubeconfig-files-in-docker) can mount the whole folder and use the same function.
+
 ## Limiting namespaces
 
 In a context's settings (`:config`), **Only these namespaces** takes a list such as `shop, payments`, and **Or namespaces labeled** a label selector such as `team=shop`. The namespace picker then offers only those, and lists across all namespaces show only them, with one watch per namespace. That also suits users who may list only some namespaces. A namespace you pick or type yourself still opens.
