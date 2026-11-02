@@ -324,14 +324,17 @@
 						class:active={app.scheme === option.value}
 						role="radio"
 						aria-checked={app.scheme === option.value}
-						onclick={() => app.setScheme(option.value)}
+						onclick={() => {
+							app.setScheme(option.value);
+							if (app.skin) app.setSkin(null);
+						}}
 					>
 						{@render swatch(option.theme)}
 						<span class="name">{option.label}</span>
 					</button>
 				{/each}
 			</div>
-			{#if app.skin}<p class="muted small">The skin {app.skin} is on screen, so these show once it is taken off.</p>{/if}
+			{#if app.skin}<p class="muted small">The skin {app.skin} is on screen. Picking one of these takes it off for this context.</p>{/if}
 			<div class="zoom">
 				<span>Zoom</span>
 				{#if desktop}
