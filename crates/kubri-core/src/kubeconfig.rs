@@ -75,6 +75,15 @@ fn read_own() -> Result<Kubeconfig, String> {
 fn read_files(paths: &[PathBuf]) -> Result<Kubeconfig, String> {
     let mut merged: Option<Kubeconfig> = None;
     for path in paths {
+        // kubectl fails on a folder too, but only says "is a directory". The usual cause is
+        // `docker run -v` with a file that does not exist: Docker mounts an empty folder.
+        if path.is_dir() {
+            return Err(format!(
+                "error loading config file \"{}\": it is a folder, but KUBECONFIG lists kubeconfig files. \
+                 With docker run -v, check that the kubeconfig file exists: Docker mounts an empty folder in place of a missing file",
+                path.display()
+            ));
+        }
         let next = match Kubeconfig::read_from(path) {
             Ok(next) => next,
             Err(KubeconfigError::ReadConfig(err, _)) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -764,6 +773,17 @@ users:
 
         let err = read_files(std::slice::from_ref(&missing)).unwrap_err();
         assert!(err.starts_with("none of the files in KUBECONFIG exist:"), "{err}");
+
+        let folder = dir.join("folder");
+        std::fs::create_dir_all(&folder).unwrap();
+        let err = read_files(&[first.clone(), folder.clone()]).unwrap_err();
+        assert!(
+            err.starts_with(&format!(
+                "error loading config file \"{}\": it is a folder",
+                folder.display()
+            )),
+            "{err}"
+        );
 
         let broken = dir.join("broken.yaml");
         std::fs::write(&broken, "users: [ {").unwrap();

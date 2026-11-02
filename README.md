@@ -50,12 +50,12 @@ Download it for Windows, macOS or Linux from the [releases](https://github.com/s
 ```sh
 docker run --rm -p 127.0.0.1:7878:7878 \
   --user "$(id -u)" \
-  -v "$HOME/.kube/config:/kubeconfig:ro" -e KUBECONFIG=/kubeconfig \
+  --mount "type=bind,src=$HOME/.kube/config,dst=/kubeconfig,readonly" -e KUBECONFIG=/kubeconfig \
   -e KUBRI_PASSWORD='a long password' \
   ghcr.io/snaketech-tu/kubri
 ```
 
-Then open <http://127.0.0.1:7878>. To run it in a cluster for your team, with [`deploy/kubernetes.yaml`](deploy/kubernetes.yaml), see [Running Kubri in the browser](docs/WEB.md).
+Then open <http://127.0.0.1:7878>. If `KUBECONFIG` lists several files, or yours is somewhere else, see [With Docker](docs/WEB.md#with-docker). To run it in a cluster for your team, with [`deploy/kubernetes.yaml`](deploy/kubernetes.yaml), see [Running Kubri in the browser](docs/WEB.md).
 
 ### From source
 
