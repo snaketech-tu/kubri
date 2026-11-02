@@ -136,17 +136,24 @@ fn read_files(paths: &[PathBuf]) -> Result<Kubeconfig, String> {
 
 /// Checks the cluster and user of `context` the way kubectl does before it connects, and
 /// rewrites the user's credentials so that kube-rs uses what kubectl would use.
-pub(crate) fn prepare(kubeconfig: &mut Kubeconfig, context: &str) -> Result<()> {
+pub(crate) fn prepare(kubeconfig: &mut Kubeconfig, name: &str) -> Result<()> {
     let Some(context) = kubeconfig
         .contexts
         .iter()
-        .find(|c| c.name == context)
+        .find(|c| c.name == name)
         .and_then(|c| c.context.clone())
     else {
         // kube-rs reports a missing context.
         return Ok(());
     };
     let mut errors = Vec::new();
+    // kubectl falls back to localhost:8080 here; client-go's validation names the problem.
+    if !kubeconfig.clusters.iter().any(|c| c.name == context.cluster) {
+        errors.push(format!(
+            "cluster {:?} was not found for context {name:?}",
+            context.cluster
+        ));
+    }
     let user = context.user.as_deref().and_then(|name| {
         kubeconfig
             .auth_infos
@@ -778,6 +785,18 @@ users:
                 .unwrap()
                 .certificate_authority_data
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn names_a_missing_cluster_like_client_go() {
+        let mut kubeconfig = Kubeconfig::from_yaml(
+            "contexts:\n- {name: x, context: {cluster: nowhere, user: u}}\nusers:\n- {name: u, user: {token: t}}",
+        )
+        .unwrap();
+        assert_eq!(
+            prepare(&mut kubeconfig, "x").unwrap_err().to_string(),
+            r#"invalid kubeconfig: cluster "nowhere" was not found for context "x""#
         );
     }
 

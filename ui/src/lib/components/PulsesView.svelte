@@ -857,7 +857,8 @@
 	}
 	.kinds button {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
+		/* The name keeps whole words; the counts wrap first. */
+		grid-template-columns: minmax(min-content, 1fr) auto;
 		align-items: center;
 		gap: 8px 12px;
 		width: 100%;
@@ -890,7 +891,7 @@
 		white-space: nowrap;
 	}
 	.kind-name {
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
 	}
 	.kinds .fold {
 		color: var(--text-muted);

@@ -4,6 +4,7 @@
 
 use std::sync::LazyLock;
 
+use base64::Engine;
 use regex::{Captures, Regex};
 use serde_json::Value;
 
@@ -18,8 +19,16 @@ pub fn secret(object: &mut Value) {
     for field in ["data", "stringData"] {
         if let Some(Value::Object(values)) = object.get_mut(field) {
             for value in values.values_mut() {
-                let size = value.as_str().map(str::len).unwrap_or_default();
-                *value = Value::String(format!("<hidden, {size} characters>"));
+                let text = value.as_str().unwrap_or_default();
+                // `data` holds base64; its size is that of the value, as kubectl describe shows it.
+                let size = match field {
+                    "data" => base64::engine::general_purpose::STANDARD
+                        .decode(text)
+                        .map_or(text.len(), |bytes| bytes.len()),
+                    _ => text.len(),
+                };
+                let unit = if size == 1 { "byte" } else { "bytes" };
+                *value = Value::String(format!("<hidden, {size} {unit}>"));
             }
         }
     }
@@ -159,8 +168,8 @@ mod tests {
             "stringData": { "token": "abc" }
         });
         secret(&mut secret_object);
-        assert_eq!(secret_object["data"]["password"], "<hidden, 12 characters>");
-        assert_eq!(secret_object["stringData"]["token"], "<hidden, 3 characters>");
+        assert_eq!(secret_object["data"]["password"], "<hidden, 7 bytes>");
+        assert_eq!(secret_object["stringData"]["token"], "<hidden, 3 bytes>");
         assert_eq!(secret_object["metadata"]["annotations"][LAST_APPLIED], "<hidden>");
         assert_eq!(secret_object["metadata"]["annotations"]["team"], "shop");
 
