@@ -131,13 +131,14 @@ impl Kubri {
                 match event {
                     LogEvent::Sources { sources: s } => sources = s,
                     LogEvent::Lines { lines: batch } => lines.extend(batch),
-                    LogEvent::Error { message, .. } => errors.push(message),
+                    LogEvent::Error { source, message } => errors.push((source, message)),
                     LogEvent::Marker { .. } => {}
                     LogEvent::End => break,
                 }
             }
         })
         .await;
+        crate::logs::sort_by_time(&mut lines);
         let several = sources.len() > 1;
         let mut out: Vec<String> = lines
             .iter()
@@ -156,8 +157,11 @@ impl Kubri {
         if out.is_empty() {
             out.push("(no log lines)".into());
         }
-        for error in errors {
-            out.push(format!("Note: {error}"));
+        for (source, error) in errors {
+            match source.and_then(|i| sources.get(i)) {
+                Some(s) if several => out.push(format!("Note: [{}/{}] {error}", s.pod, s.container)),
+                _ => out.push(format!("Note: {error}")),
+            }
         }
         if read.is_err() {
             out.push("Note: stopped reading after 20 seconds.".into());

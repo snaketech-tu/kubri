@@ -52,6 +52,50 @@ export function foldRows(lines: ViewLine[], fold: boolean): Row[] {
 	return rows;
 }
 
+function lineTime(line: ViewLine): number {
+	return line.kind === 'line' && line.time ? Date.parse(line.time) : NaN;
+}
+
+/**
+ * Adds `incoming` to `lines` in time order. Each container's log comes in order, but the lines a
+ * stream starts with (the last 100 of each container, say) arrive one container after the other.
+ * A line older than those before it moves back past them, never past a marker, an error or a line
+ * without a time, and lines of the same time keep the order they came in.
+ */
+export function appendInOrder(lines: ViewLine[], incoming: ViewLine[]): ViewLine[] {
+	const out = lines.concat();
+	const times: number[] = [];
+	// The lines from `from` on all have a time, in order; `times` holds them.
+	let from = out.length;
+	while (from > 0 && !Number.isNaN(lineTime(out[from - 1]))) from--;
+	for (let i = from; i < out.length; i++) times.push(lineTime(out[i]));
+	for (const line of incoming) {
+		const time = lineTime(line);
+		if (Number.isNaN(time)) {
+			out.push(line);
+			from = out.length;
+			times.length = 0;
+			continue;
+		}
+		// The first of the timed lines that is later than this one.
+		let lo = 0;
+		let hi = times.length;
+		while (lo < hi) {
+			const mid = (lo + hi) >> 1;
+			if (times[mid] <= time) lo = mid + 1;
+			else hi = mid;
+		}
+		if (lo === times.length) {
+			out.push(line);
+			times.push(time);
+		} else {
+			out.splice(from + lo, 0, line);
+			times.splice(lo, 0, time);
+		}
+	}
+	return out;
+}
+
 type Op = '=' | '!=' | '>=' | '<=' | '>' | '<' | '~';
 
 export interface FieldTerm {
