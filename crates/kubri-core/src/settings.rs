@@ -196,6 +196,26 @@ pub struct Settings {
     pub searches: Vec<SavedSearch>,
     /// What the change history records and keeps.
     pub history: crate::HistorySettings,
+    /// How Kubri keeps connections to contexts.
+    pub connections: ConnectionSettings,
+}
+
+/// The most recent contexts kept connected when they are not the current one.
+pub const MAX_KEEP_RECENT: u32 = 5;
+
+/// How Kubri keeps connections to contexts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ConnectionSettings {
+    /// How many recently used contexts stay connected in the background, so switching back to
+    /// one is instant. 0 turns it off; at most [`MAX_KEEP_RECENT`].
+    pub keep_recent: u32,
+}
+
+impl Default for ConnectionSettings {
+    fn default() -> Self {
+        Self { keep_recent: 3 }
+    }
 }
 
 /// A search kept in the sidebar.

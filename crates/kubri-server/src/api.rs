@@ -47,6 +47,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings/diff", put(set_diff_settings))
         .route("/settings/searches", put(set_saved_searches))
         .route("/settings/history", put(set_history_settings))
+        .route("/settings/connections", put(set_connection_settings))
         .route("/settings/columns", put(set_column_settings))
         .route("/settings/agents", put(set_agent_settings))
         .route("/settings/explain", put(set_explain_settings))
@@ -61,6 +62,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/whoami", get(who_am_i))
         .route("/namespaces/readable", get(readable_namespaces))
         .route("/resources", get(resources))
+        .route("/resources/refresh", post(refresh_resources))
         .route("/table", any(table))
         .route(
             "/object",
@@ -312,6 +314,13 @@ async fn set_saved_searches(
     Ok(Json(kubri.set_saved_searches(req)?))
 }
 
+async fn set_connection_settings(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<kubri_core::ConnectionSettings>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_connection_settings(req).await?))
+}
+
 async fn set_history_settings(
     State(kubri): State<Arc<Kubri>>,
     Json(req): Json<kubri_core::HistorySettings>,
@@ -445,6 +454,10 @@ async fn readable_namespaces(State(kubri): State<Arc<Kubri>>) -> ApiResult<Vec<S
 
 async fn resources(State(kubri): State<Arc<Kubri>>) -> ApiResult<Vec<ResourceInfo>> {
     Ok(Json(kubri.resources().await?))
+}
+
+async fn refresh_resources(State(kubri): State<Arc<Kubri>>) -> ApiResult<Vec<ResourceInfo>> {
+    Ok(Json(kubri.refresh_resources().await?))
 }
 
 #[derive(Deserialize)]

@@ -247,6 +247,17 @@ fn set_context_settings(
 }
 
 #[tauri::command]
+async fn set_connection_settings(
+    kubri: State<'_, Arc<Kubri>>,
+    settings: kubri_core::ConnectionSettings,
+) -> CommandResult<Settings> {
+    kubri
+        .set_connection_settings(settings)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn set_history_settings(
     kubri: State<'_, Arc<Kubri>>,
     settings: kubri_core::HistorySettings,
@@ -342,6 +353,11 @@ async fn readable_namespaces(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<
 #[tauri::command]
 async fn resources(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<ResourceInfo>> {
     kubri.resources().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn refresh_resources(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<ResourceInfo>> {
+    kubri.refresh_resources().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1122,6 +1138,7 @@ pub fn run() {
             take_snapshot,
             open_snapshot,
             resources,
+            refresh_resources,
             preview,
             schema,
             access,
@@ -1131,6 +1148,7 @@ pub fn run() {
             set_context_settings,
             set_diff_settings,
             set_history_settings,
+            set_connection_settings,
             history,
             history_detail,
             set_column_settings,
