@@ -27,6 +27,7 @@ mod integrations;
 mod jsonpath;
 mod k9s;
 mod kubeconfig;
+mod local_terminal;
 mod logs;
 mod loki;
 mod metrics;
@@ -98,6 +99,7 @@ pub use integrations::{Endpoint, Integration, IntegrationSettings, Integrations}
 pub use k9s::{
     Alias, ConfigFile, Hotkey, Jump, K9sConfig, Logger, Plugin, PluginInput, Threshold, Thresholds,
 };
+pub use local_terminal::{LocalTerminalInfo, LocalTerminalOptions, TerminalSettings};
 pub use logs::{LogEvent, LogLine, LogOptions, LogSource};
 pub use loki::{LokiLogs, LokiRequest};
 pub use metrics::{Limits, MetricsKind, Usage, parse_quantity};
@@ -205,6 +207,8 @@ pub struct Kubri {
     warm: tokio::sync::Mutex<Vec<(std::time::Instant, Arc<Session>)>>,
     /// Records what changes in the connected context, where this process records.
     recording: AtomicBool,
+    /// Local terminals may be opened: in the desktop app, or a server started to allow them.
+    local_terminal: AtomicBool,
     recorder: std::sync::Mutex<Option<recorder::Recorder>>,
     history: std::sync::OnceLock<std::result::Result<Arc<history::Store>, String>>,
 }
@@ -319,6 +323,7 @@ impl Kubri {
             others: Default::default(),
             warm: Default::default(),
             recording: AtomicBool::new(false),
+            local_terminal: AtomicBool::new(false),
             recorder: Default::default(),
             history: Default::default(),
         }
@@ -420,6 +425,111 @@ impl Kubri {
         })?;
         self.prune_warm(&mut *self.warm.lock().await);
         Ok(settings)
+    }
+
+    /// Sets the local terminal's shell, folder and font size.
+    pub fn set_terminal_settings(&self, value: TerminalSettings) -> Result<Settings> {
+        if !(8..=32).contains(&value.font_size) {
+            return Err(Error::Unsupported("the font size must be from 8 to 32".into()));
+        }
+        self.update_settings(|s| {
+            s.terminal = value;
+            Ok(())
+        })
+    }
+
+    /// Lets local terminals be opened: the desktop app calls this, the web server only when
+    /// started with `KUBRI_LOCAL_TERMINAL=true`, as a shell there runs on the server.
+    pub fn allow_local_terminal(&self) {
+        self.local_terminal.store(true, Ordering::Relaxed);
+        local_terminal::remove_stale_overlays();
+    }
+
+    /// Why a local terminal cannot be opened for the connected context now, if it cannot.
+    async fn local_terminal_refusal(&self) -> Option<String> {
+        if !self.local_terminal.load(Ordering::Relaxed) {
+            return Some(
+                "The local terminal is off here: it would be a shell on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it."
+                    .into(),
+            );
+        }
+        if self.agent.load(Ordering::Relaxed) {
+            return Some("AI agents cannot open a local terminal.".into());
+        }
+        let Some(cluster) = self.cluster().await else {
+            return Some("Kubri is not connected to a context.".into());
+        };
+        if cluster.snapshot.is_some() {
+            return Some("A snapshot has no cluster for kubectl to talk to.".into());
+        }
+        match self.guard().await {
+            Guard {
+                read_only: true,
+                reason,
+                ..
+            } => Some(format!(
+                "{} A local terminal would get around that, so it stays closed.",
+                reason.unwrap_or_else(|| "Changes are off for this context.".into())
+            )),
+            _ => None,
+        }
+    }
+
+    /// What a local terminal would run with, and whether one can be opened now.
+    pub async fn local_terminal_info(&self) -> LocalTerminalInfo {
+        let reason = self.local_terminal_refusal().await;
+        let cluster = self.cluster().await.filter(|c| c.snapshot.is_none());
+        let settings = self.settings().terminal;
+        let (kubectl, helm) = if reason.is_none() {
+            tokio::task::spawn_blocking(local_terminal::tools)
+                .await
+                .unwrap_or_default()
+        } else {
+            (None, None)
+        };
+        let server = cluster.as_ref().map(|c| c.version.clone());
+        let skew = kubectl
+            .as_deref()
+            .zip(server.as_deref())
+            .and_then(|(k, s)| local_terminal::skew(k, s));
+        LocalTerminalInfo {
+            allowed: reason.is_none(),
+            reason,
+            context: cluster.map(|c| c.context),
+            shell: local_terminal::shell(&settings).0,
+            kubectl,
+            helm,
+            server,
+            skew,
+        }
+    }
+
+    /// Opens a shell on this computer with `kubectl` and `helm` pointing at the connected
+    /// context and `options.namespace`.
+    pub async fn open_local_terminal(&self, options: &LocalTerminalOptions) -> Result<Terminal> {
+        if let Some(reason) = self.local_terminal_refusal().await {
+            return Err(Error::Unsupported(reason));
+        }
+        let cluster = self.cluster().await.ok_or(Error::NotConnected)?;
+        let kubeconfig = match &*self.kubeconfig.read().await {
+            Ok(kubeconfig) => kubeconfig.clone(),
+            Err(err) => return Err(Error::NoKubeconfig(err.clone())),
+        };
+        let settings = self.settings();
+        let warning = settings.context(&cluster.context).production.then(|| {
+            format!(
+                "Production: commands here run against {} without Kubri's checks.",
+                cluster.context
+            )
+        });
+        tracing::info!(context = cluster.context, "opening a local terminal");
+        local_terminal::open(
+            &settings.terminal,
+            &kubeconfig,
+            &cluster.context,
+            options,
+            warning,
+        )
     }
 
     /// Sets what the change history keeps; recording starts or stops at once.
@@ -2495,6 +2605,62 @@ mod tests {
             .unwrap();
         kubri.keep_warm(fake_session("f", 200).0).await;
         assert!(kubri.warm_contexts().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn local_terminals_open_only_where_changes_are_allowed() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        assert!(
+            kubri
+                .local_terminal_info()
+                .await
+                .reason
+                .unwrap()
+                .contains("KUBRI_LOCAL_TERMINAL")
+        );
+        kubri.local_terminal.store(true, Ordering::Relaxed);
+        assert!(
+            kubri
+                .local_terminal_info()
+                .await
+                .reason
+                .unwrap()
+                .contains("not connected")
+        );
+
+        let (session, _) = fake_session("prod", 200);
+        *kubri.session.write().await = Some(session);
+        kubri
+            .set_context_settings(
+                "prod",
+                ContextSettings {
+                    locked: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(
+            kubri
+                .local_terminal_info()
+                .await
+                .reason
+                .unwrap()
+                .contains("would get around that")
+        );
+        assert!(matches!(
+            kubri.open_local_terminal(&LocalTerminalOptions::default()).await,
+            Err(Error::Unsupported(_))
+        ));
+
+        kubri.set_agent();
+        assert!(
+            kubri
+                .local_terminal_info()
+                .await
+                .reason
+                .unwrap()
+                .contains("AI agents")
+        );
     }
 
     #[test]

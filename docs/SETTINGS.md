@@ -42,6 +42,10 @@ Every action can also be copied as the `kubectl` command that does the same: in 
 
 `connections.keepRecent` (3 by default, 0 to 5) is how many contexts you switched away from stay connected in the background, so switching back is instant. See [Several clusters](CLUSTERS.md#switching-back-is-instant).
 
+## Terminal
+
+`terminal` sets up the [local terminal](TERMINAL.md): `shell` and `args` (empty for your login shell, or PowerShell on Windows; `wsl.exe` for WSL), `startDir` (empty for your home folder) and `fontSize` (13, from 8 to 32).
+
 ## What changed
 
 **What changed** under Settings turns recording changes off or on, and sets how many days they are kept (14) and how large `history.db` may grow (200 MB). See [CHANGES.md](CHANGES.md).

@@ -198,6 +198,8 @@ pub struct Settings {
     pub history: crate::HistorySettings,
     /// How Kubri keeps connections to contexts.
     pub connections: ConnectionSettings,
+    /// The local terminal's shell, folder and font.
+    pub terminal: crate::TerminalSettings,
 }
 
 /// The most recent contexts kept connected when they are not the current one.

@@ -227,6 +227,7 @@ Kubri reads the files in `KUBECONFIG`, or `~/.kube/config`, the way kubectl does
 
 - [Creating and changing](docs/CREATE.md): Create, forms, cloning, Helm, columns, bulk changes and port-forwards
 - [Logs and debugging](docs/DEBUGGING.md): log search, the workspace, debug containers and suggested fixes
+- [Local terminal](docs/TERMINAL.md): a shell with `kubectl` and `helm` set to the context and namespace Kubri shows
 - [Several clusters](docs/CLUSTERS.md): the Clusters page, loading kubeconfig files, added contexts, search and compare
 - [What depends on what](docs/TOPOLOGY.md): the topology graph, request paths and delete warnings
 - [What changed](docs/CHANGES.md) and [Snapshots](docs/SNAPSHOTS.md)
