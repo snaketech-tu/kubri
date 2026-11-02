@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { untrack } from 'svelte';
 	import { app, type Dialog } from '../state.svelte';
@@ -40,6 +41,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="dialog"
 	aria-label="Snapshots"
 	bind:this={box}
