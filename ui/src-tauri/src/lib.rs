@@ -90,6 +90,51 @@ async fn reload_contexts(kubri: State<'_, Arc<Kubri>>) -> CommandResult<ContextL
     kubri.reload().await.map_err(|e| e.to_string())
 }
 
+// Async, so reading the files does not hold up the window.
+#[tauri::command]
+async fn kubeconfig_files(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<kubri_core::KubeconfigFile>> {
+    Ok(kubri.kubeconfig_files())
+}
+
+#[tauri::command]
+async fn add_kubeconfig_files(
+    kubri: State<'_, Arc<Kubri>>,
+    paths: Vec<String>,
+) -> CommandResult<ContextList> {
+    kubri
+        .add_kubeconfig_files(&paths)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn remove_kubeconfig_file(kubri: State<'_, Arc<Kubri>>, path: String) -> CommandResult<ContextList> {
+    kubri
+        .remove_kubeconfig_file(&path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Asks for kubeconfig files in the system's file dialog; empty when the user cancels.
+#[tauri::command]
+async fn choose_kubeconfig_files(app: tauri::AppHandle) -> Vec<String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut dialog = app.dialog().file().set_title("Load kubeconfig files");
+    if let Some(kube) = dirs::home_dir().map(|h| h.join(".kube")).filter(|d| d.is_dir()) {
+        dialog = dialog.set_directory(kube);
+    }
+    dialog.pick_files(move |files| {
+        let _ = tx.send(files.unwrap_or_default());
+    });
+    rx.await
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|f| f.into_path().ok())
+        .map(|p| p.display().to_string())
+        .collect()
+}
+
 #[tauri::command]
 async fn inspect_kubeconfig(
     kubri: State<'_, Arc<Kubri>>,
@@ -202,6 +247,17 @@ fn set_context_settings(
 }
 
 #[tauri::command]
+async fn set_connection_settings(
+    kubri: State<'_, Arc<Kubri>>,
+    settings: kubri_core::ConnectionSettings,
+) -> CommandResult<Settings> {
+    kubri
+        .set_connection_settings(settings)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn set_history_settings(
     kubri: State<'_, Arc<Kubri>>,
     settings: kubri_core::HistorySettings,
@@ -297,6 +353,11 @@ async fn readable_namespaces(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<
 #[tauri::command]
 async fn resources(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<ResourceInfo>> {
     kubri.resources().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn refresh_resources(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<ResourceInfo>> {
+    kubri.refresh_resources().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1057,6 +1118,7 @@ pub fn run() {
     let agents = agents::Agents::new(kubri.clone(), read_only);
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup({
             let agents = agents.clone();
             move |_| {
@@ -1076,6 +1138,7 @@ pub fn run() {
             take_snapshot,
             open_snapshot,
             resources,
+            refresh_resources,
             preview,
             schema,
             access,
@@ -1085,6 +1148,7 @@ pub fn run() {
             set_context_settings,
             set_diff_settings,
             set_history_settings,
+            set_connection_settings,
             history,
             history_detail,
             set_column_settings,
@@ -1155,6 +1219,10 @@ pub fn run() {
             fleet_cluster,
             set_saved_searches,
             search,
+            kubeconfig_files,
+            add_kubeconfig_files,
+            remove_kubeconfig_file,
+            choose_kubeconfig_files,
             inspect_kubeconfig,
             add_contexts,
             remove_context,

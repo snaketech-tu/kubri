@@ -38,6 +38,10 @@ Before a change, Kubri asks the API server to run it as a dry run (`dryRun=All`)
 
 Every action can also be copied as the `kubectl` command that does the same: in its dialog under **Same as kubectl**, or with **Copy as kubectl…** in the row menu.
 
+## Recent contexts
+
+`connections.keepRecent` (3 by default, 0 to 5) is how many contexts you switched away from stay connected in the background, so switching back is instant. See [Several clusters](CLUSTERS.md#switching-back-is-instant).
+
 ## What changed
 
 **What changed** under Settings turns recording changes off or on, and sets how many days they are kept (14) and how large `history.db` may grow (200 MB). See [CHANGES.md](CHANGES.md).

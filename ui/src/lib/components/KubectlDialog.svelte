@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { lightDismiss } from '../dismiss';
 	import { untrack } from 'svelte';
 	import { copyLines } from '../actions';
 	import { app, type Dialog } from '../state.svelte';
@@ -21,6 +22,7 @@
 </script>
 
 <dialog
+	{@attach lightDismiss}
 	class="dialog"
 	aria-label="Copy as kubectl"
 	bind:this={box}

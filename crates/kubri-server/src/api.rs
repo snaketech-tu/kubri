@@ -34,6 +34,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/contexts/reload", post(reload))
         .route("/contexts/inspect", post(inspect_kubeconfig))
         .route("/contexts/added", post(add_contexts).delete(remove_context))
+        .route("/kubeconfig-files", get(kubeconfig_files))
         .route("/context", put(switch_context))
         .route(
             "/snapshot",
@@ -46,6 +47,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings/diff", put(set_diff_settings))
         .route("/settings/searches", put(set_saved_searches))
         .route("/settings/history", put(set_history_settings))
+        .route("/settings/connections", put(set_connection_settings))
         .route("/settings/columns", put(set_column_settings))
         .route("/settings/agents", put(set_agent_settings))
         .route("/settings/explain", put(set_explain_settings))
@@ -60,6 +62,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/whoami", get(who_am_i))
         .route("/namespaces/readable", get(readable_namespaces))
         .route("/resources", get(resources))
+        .route("/resources/refresh", post(refresh_resources))
         .route("/table", any(table))
         .route(
             "/object",
@@ -183,6 +186,12 @@ async fn reload(State(kubri): State<Arc<Kubri>>) -> ApiResult<ContextList> {
     Ok(Json(kubri.reload().await?))
 }
 
+/// The kubeconfig files the server reads. Choosing more is left to the desktop app: in the
+/// browser it would let anyone signed in read files on the server.
+async fn kubeconfig_files(State(kubri): State<Arc<Kubri>>) -> Json<Vec<kubri_core::KubeconfigFile>> {
+    Json(kubri.kubeconfig_files())
+}
+
 #[derive(Deserialize)]
 struct KubeconfigText {
     text: String,
@@ -303,6 +312,13 @@ async fn set_saved_searches(
     Json(req): Json<Vec<kubri_core::SavedSearch>>,
 ) -> ApiResult<Settings> {
     Ok(Json(kubri.set_saved_searches(req)?))
+}
+
+async fn set_connection_settings(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<kubri_core::ConnectionSettings>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_connection_settings(req).await?))
 }
 
 async fn set_history_settings(
@@ -438,6 +454,10 @@ async fn readable_namespaces(State(kubri): State<Arc<Kubri>>) -> ApiResult<Vec<S
 
 async fn resources(State(kubri): State<Arc<Kubri>>) -> ApiResult<Vec<ResourceInfo>> {
     Ok(Json(kubri.resources().await?))
+}
+
+async fn refresh_resources(State(kubri): State<Arc<Kubri>>) -> ApiResult<Vec<ResourceInfo>> {
+    Ok(Json(kubri.refresh_resources().await?))
 }
 
 #[derive(Deserialize)]
