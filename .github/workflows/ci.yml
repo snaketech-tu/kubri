@@ -63,13 +63,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
-  # Kubri and Headlamp against a k3s cluster with 10,000 pods; see docs/SPEED.md.
+  # Kubri against a k3s cluster with 10,000 pods; see docs/SPEED.md.
   speed:
     name: Speed
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      HEADLAMP_IMAGE: ghcr.io/headlamp-k8s/headlamp:v0.46.0
     steps:
       - uses: actions/checkout@v4
       - name: Start k3s
@@ -92,10 +90,6 @@ jobs:
         with:
           key: speed
       - run: cargo build --release -p kubri-server
-      - name: Get Headlamp
-        run: |
-          docker create --name headlamp "$HEADLAMP_IMAGE"
-          docker cp headlamp:/headlamp "$RUNNER_TEMP/headlamp"
       - name: Fill the cluster
         run: |
           kubectl wait --for=condition=Ready node --all --timeout=120s
@@ -105,7 +99,6 @@ jobs:
       - name: Measure
         env:
           PLAYWRIGHT_MODULE: ${{ runner.temp }}/pw/node_modules/playwright
-          HEADLAMP_DIR: ${{ runner.temp }}/headlamp
           BENCH_OUT: speed.json
         run: node bench/speed/run.cjs
       - uses: actions/upload-artifact@v4
