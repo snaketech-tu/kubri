@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	appendInOrder,
 	atLevel,
 	defaultColumns,
 	fieldNames,
@@ -25,6 +26,42 @@ const sources = [
 	{ pod: 'web-1', container: 'app' },
 	{ pod: 'web-2', container: 'app' }
 ];
+
+describe('appendInOrder', () => {
+	const at = (text: string, time: string, source = 0) => line(text, { time, source });
+	const texts = (lines: ViewLine[]) => lines.map((l) => l.text);
+
+	it('merges the lines each container starts with by time', () => {
+		const sidecar = [at('s1', '2026-11-02T10:00:01Z', 1), at('s2', '2026-11-02T10:00:03.5Z', 1)];
+		const app = [
+			at('a1', '2026-11-02T10:00:00.123456789Z'),
+			at('a2', '2026-11-02T10:00:02Z'),
+			at('a3', '2026-11-02T10:00:04Z')
+		];
+		expect(texts(appendInOrder(sidecar, app))).toEqual(['a1', 's1', 'a2', 's2', 'a3']);
+	});
+
+	it('compares times, not their text', () => {
+		// The kubelet drops trailing zeros: .45 is earlier than .454.
+		const lines = appendInOrder([at('late', '2026-11-02T10:00:00.454Z')], [at('early', '2026-11-02T10:00:00.45Z')]);
+		expect(texts(lines)).toEqual(['early', 'late']);
+	});
+
+	it('keeps the order of lines with the same time and never moves past a marker', () => {
+		const marker = line('restarted', { kind: 'marker', source: null, time: '2026-11-02T10:00:05Z' });
+		const lines = appendInOrder(
+			[at('a', '2026-11-02T10:00:01Z'), marker, at('b', '2026-11-02T10:00:06Z')],
+			[at('c', '2026-11-02T10:00:06Z'), at('d', '2026-11-02T10:00:00Z')]
+		);
+		expect(texts(lines)).toEqual(['a', 'restarted', 'd', 'b', 'c']);
+	});
+
+	it('does not change the lines it is given', () => {
+		const lines = [at('b', '2026-11-02T10:00:02Z')];
+		appendInOrder(lines, [at('a', '2026-11-02T10:00:01Z')]);
+		expect(texts(lines)).toEqual(['b']);
+	});
+});
 
 describe('foldRows', () => {
 	it('counts repeats and folds continuation lines under their first line', () => {

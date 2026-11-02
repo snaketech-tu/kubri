@@ -7,6 +7,7 @@
 	import { selectedText } from '../explain';
 	import { forControl } from '../keys';
 	import {
+		appendInOrder,
 		atLevel,
 		cell,
 		defaultColumns,
@@ -231,7 +232,7 @@
 		let frame = 0;
 		const flush = () => {
 			frame = 0;
-			const all = lines.concat(buffer);
+			const all = appendInOrder(lines, buffer);
 			buffer = [];
 			const excess = all.length - MAX_LINES;
 			if (excess > 0) dropped += excess;

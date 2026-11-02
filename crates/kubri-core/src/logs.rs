@@ -114,12 +114,29 @@ impl LogLine {
         }
     }
 
+    /// The time as text that sorts in time order: the kubelet leaves trailing zeros off
+    /// the fraction, so `.45Z` would sort after `.454Z`.
+    fn sort_key(&self) -> Option<String> {
+        let time = self.time.as_deref()?.strip_suffix('Z')?;
+        let (seconds, fraction) = time.split_once('.').unwrap_or((time, ""));
+        Some(format!("{seconds}.{fraction:0<9}"))
+    }
+
     /// The text with the time in front, as `kubectl logs --timestamps` shows it.
     pub fn with_time(&self) -> String {
         match &self.time {
             Some(time) => format!("{time} {}", self.text),
             None => self.text.clone(),
         }
+    }
+}
+
+/// Puts lines of several containers in time order. Each container's lines are in order already,
+/// but a stream returns them container by container. Lines of the same time keep their order;
+/// without a time on every line the order stays as it is.
+pub(crate) fn sort_by_time(lines: &mut [LogLine]) {
+    if lines.iter().all(|l| l.sort_key().is_some()) {
+        lines.sort_by_cached_key(LogLine::sort_key);
     }
 }
 
@@ -449,7 +466,12 @@ async fn open(client: &Client, index: usize, source: &LogSource, params: LogPara
             .chain(stream::once(async move { Item::Ended(index) }))
             .boxed(),
         Err(err) => {
-            stream::once(async move { Item::Failed(index, crate::Error::from(err).to_string()) }).boxed()
+            let mut message = crate::Error::from(err).to_string();
+            // The kubelet's words for a container that never restarted.
+            if params.previous && message.contains("previous terminated container") {
+                message = "no previous log: the container has not restarted".into();
+            }
+            stream::once(async move { Item::Failed(index, message) }).boxed()
         }
     }
 }
@@ -734,6 +756,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn says_when_there_is_no_previous_log() {
+        let (client, _) = crate::testing::client(|_| {
+            (
+                400,
+                crate::testing::status(
+                    400,
+                    "previous terminated container \"app\" in pod \"web-1\" not found",
+                ),
+            )
+        });
+        let source = LogSource {
+            namespace: "shop".into(),
+            pod: "web-1".into(),
+            container: "app".into(),
+        };
+        let options = LogOptions {
+            previous: true,
+            ..Default::default()
+        };
+        let events: Vec<LogEvent> = stream_logs(client, vec![source], options, None).collect().await;
+        assert!(events.contains(&LogEvent::Error {
+            source: Some(0),
+            message: "no previous log: the container has not restarted".into()
+        }));
+    }
+
+    #[tokio::test]
     async fn merges_containers_and_reports_failures_per_container() {
         let (client, requests) = crate::testing::client(|req| {
             if req.uri.contains("/pods/web-1/log") {
@@ -818,6 +867,27 @@ mod tests {
             uris.contains(&"/api/v1/namespaces/shop/pods/web-1/log?&container=app&follow=true&tailLines=10&timestamps=true".to_owned()),
             "{uris:?}"
         );
+    }
+
+    #[test]
+    fn sorts_lines_of_several_containers_by_time() {
+        let mut lines = vec![
+            LogLine::parse(1, "2026-11-02T10:00:01Z sidecar 1"),
+            LogLine::parse(1, "2026-11-02T10:00:03.5Z sidecar 2"),
+            LogLine::parse(0, "2026-11-02T10:00:00.123456789Z app 1"),
+            LogLine::parse(0, "2026-11-02T10:00:03.45Z app 2"),
+            LogLine::parse(0, "2026-11-02T10:00:03.5Z app 3"),
+        ];
+        sort_by_time(&mut lines);
+        let texts: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
+        assert_eq!(texts, ["app 1", "sidecar 1", "app 2", "sidecar 2", "app 3"]);
+
+        let mut untimed = vec![
+            LogLine::parse(0, "b"),
+            LogLine::parse(0, "2026-11-02T10:00:00Z a"),
+        ];
+        sort_by_time(&mut untimed);
+        assert_eq!(untimed[0].text, "b");
     }
 
     #[test]
