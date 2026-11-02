@@ -368,6 +368,8 @@ class AppState {
 		}
 	}
 	contextMenuOpen = $state(false);
+	/** The dialog listing the kubeconfig files Kubri reads, where more can be loaded. */
+	kubeconfigFilesOpen = $state(false);
 	/** The actions menu that is open, from a right click or a ⋯ or More button. */
 	menu = $state<Menu | null>(null);
 	toasts = $state<Toast[]>([]);
@@ -421,6 +423,7 @@ class AppState {
 			this.tourOpen ||
 			this.activityOpen ||
 			this.contextMenuOpen ||
+			this.kubeconfigFilesOpen ||
 			this.menu !== null ||
 			this.dialog !== null ||
 			this.updateOpen ||
@@ -936,6 +939,9 @@ class AppState {
 				break;
 			case 'snapshot':
 				this.showSnapshot(action.namespace);
+				break;
+			case 'kubeconfig':
+				this.kubeconfigFilesOpen = true;
 				break;
 			case 'object':
 				await this.openObject(action.target, action.kind);

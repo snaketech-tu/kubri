@@ -28,6 +28,7 @@
 	import HelmView from '#lib/components/HelmView.svelte';
 	import KubectlDialog from '#lib/components/KubectlDialog.svelte';
 	import SnapshotDialog from '#lib/components/SnapshotDialog.svelte';
+	import KubeconfigFilesDialog from '#lib/components/KubeconfigFilesDialog.svelte';
 	import ActivityPanel from '#lib/components/ActivityPanel.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import Tour from '#lib/components/Tour.svelte';
@@ -594,6 +595,7 @@
 									Choose context <Icon name="arrow" size={16} />
 								</button>
 								<button onclick={() => app.load()}>Try again</button>
+								<button onclick={() => (app.kubeconfigFilesOpen = true)}>Load kubeconfig file…</button>
 								{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>See all clusters</button>{/if}
 							</div>
 						{/if}
@@ -668,6 +670,7 @@
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}
+{#if app.kubeconfigFilesOpen}<KubeconfigFilesDialog />{/if}
 {#if app.updateOpen && app.release}<UpdateDialog release={app.release} />{/if}
 {#if app.explaining}<ExplainPanel subject={app.explaining} />{/if}
 {#if app.pluginTerminal}
