@@ -2,12 +2,12 @@
 set -x
 mkdir -p shots
 shot() { screencapture -x "shots/$1.png"; }
-appearance() { timeout 20 osascript -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $1"; echo "dark mode $1: $?"; }
+appearance() { perl -e "alarm 20; exec @ARGV" osascript -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $1"; echo "dark mode $1: $?"; }
 appearance false
 open -a /Applications/Kubri.app
 sleep 20
 shot 01-start-system-light
-timeout 10 osascript -e 'tell application "System Events" to get {position, size} of window 1 of (first process whose name is "kubri")'
+perl -e "alarm 10; exec @ARGV" osascript -e 'tell application "System Events" to get {position, size} of window 1 of (first process whose name is "kubri")'
 appearance true
 sleep 5
 shot 02-system-dark

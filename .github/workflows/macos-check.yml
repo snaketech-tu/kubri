@@ -2,6 +2,8 @@ name: macOS check
 on:
   push:
     branches: [fix/macos-theme-check]
+permissions:
+  contents: write
 jobs:
   check:
     runs-on: macos-latest
@@ -23,3 +25,8 @@ jobs:
         with:
           name: shots
           path: shots
+      - if: always()
+        run: |
+          git config user.name snake.tech && git config user.email tolga.urhan@hotmail.de
+          git checkout --orphan shots-out && git rm -rqf . && git add -f shots && git commit -qm shots
+          git push -f origin HEAD:fix/macos-theme-shots
