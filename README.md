@@ -258,6 +258,7 @@ Kubri uses the kubeconfig you already have: every file listed in `KUBECONFIG`, o
 - [Snapshots](docs/SNAPSHOTS.md): a namespace or a cluster saved to one file, opened offline and read-only.
 - [Views for custom resources](docs/VIEWS.md): YAML files that give a CRD columns, a health state, overview sections, actions and graph edges.
 - [Integrations](docs/INTEGRATIONS.md): Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager and right-sizing, found without configuration.
+- [Local terminal](docs/TERMINAL.md): a shell on your computer with `kubectl` and `helm` set to the context and namespace Kubri shows.
 - [Logs and debugging](docs/DEBUGGING.md): searching logs by field, the workspace, debug containers, node shells and the fixes Kubri offers.
 - [Settings and guard rails](docs/SETTINGS.md): context names and colors, production and read-only contexts, permissions, dry-run diffs and the YAML editor.
 - [Using your k9s configuration](docs/K9S.md): what Kubri reads from k9s, and what it covers.

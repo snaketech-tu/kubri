@@ -169,6 +169,8 @@ pub(crate) struct Prepared {
     pub program: String,
     pub args: Vec<String>,
     pub env: Vec<(String, String)>,
+    /// The folder to start in; the home folder when not set.
+    pub cwd: Option<std::path::PathBuf>,
 }
 
 pub(crate) fn prepare(plugin: &Plugin, variables: &Variables, columns: &[Cell]) -> Result<Prepared> {
@@ -190,6 +192,7 @@ pub(crate) fn prepare(plugin: &Plugin, variables: &Variables, columns: &[Cell]) 
         program,
         args: plugin.args.iter().map(|a| variables.expand(a, columns)).collect(),
         env,
+        cwd: None,
     })
 }
 
@@ -234,8 +237,8 @@ pub(crate) fn open(prepared: &Prepared, title: String, cols: u16, rows: u16) -> 
     for (key, value) in &prepared.env {
         command.env(key, value);
     }
-    if let Some(home) = dirs::home_dir() {
-        command.cwd(home);
+    if let Some(dir) = prepared.cwd.clone().or_else(dirs::home_dir) {
+        command.cwd(dir);
     }
     let mut child = pair
         .slave

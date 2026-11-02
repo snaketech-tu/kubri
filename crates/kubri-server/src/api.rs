@@ -47,6 +47,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings/searches", put(set_saved_searches))
         .route("/settings/history", put(set_history_settings))
         .route("/settings/connections", put(set_connection_settings))
+        .route("/settings/terminal", put(set_terminal_settings))
         .route("/settings/columns", put(set_column_settings))
         .route("/settings/agents", put(set_agent_settings))
         .route("/settings/explain", put(set_explain_settings))
@@ -127,6 +128,8 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/k9s/skins/{name}", get(k9s_skin))
         .route("/plugins/run", post(run_plugin))
         .route("/plugins/terminal", any(plugin_terminal))
+        .route("/terminal/local", get(local_terminal_info))
+        .route("/terminal/local/open", any(local_terminal))
         .route("/logs", any(logs))
         .route("/terminal", any(terminal))
         .route("/portforwards", get(port_forwards).post(start_port_forward))
@@ -305,6 +308,13 @@ async fn set_saved_searches(
     Json(req): Json<Vec<kubri_core::SavedSearch>>,
 ) -> ApiResult<Settings> {
     Ok(Json(kubri.set_saved_searches(req)?))
+}
+
+async fn set_terminal_settings(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<kubri_core::TerminalSettings>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_terminal_settings(req)?))
 }
 
 async fn set_connection_settings(
@@ -1146,6 +1156,26 @@ async fn plugin_terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) 
     ws.on_upgrade(move |mut socket| async move {
         let opened = match first_message::<PluginRun>(&mut socket).await {
             Ok(run) => kubri.open_plugin(&run).await.map_err(|e| e.to_string()),
+            Err(err) => Err(err),
+        };
+        run_terminal(socket, opened).await;
+    })
+}
+
+/// Whether a local terminal can be opened, and what it would run with.
+async fn local_terminal_info(State(kubri): State<Arc<Kubri>>) -> Json<kubri_core::LocalTerminalInfo> {
+    Json(kubri.local_terminal_info().await)
+}
+
+/// A shell on this server, when it was started to allow it: the client sends
+/// [`kubri_core::LocalTerminalOptions`] first, then it works like a container shell.
+async fn local_terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(move |mut socket| async move {
+        let opened = match first_message::<kubri_core::LocalTerminalOptions>(&mut socket).await {
+            Ok(options) => kubri
+                .open_local_terminal(&options)
+                .await
+                .map_err(|e| e.to_string()),
             Err(err) => Err(err),
         };
         run_terminal(socket, opened).await;

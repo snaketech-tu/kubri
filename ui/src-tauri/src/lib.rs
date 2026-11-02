@@ -371,6 +371,35 @@ async fn terminal_open(
     Ok(register(&terminals, terminal, on_event))
 }
 
+/// Whether a local terminal can be opened, and what it would run with.
+#[tauri::command]
+async fn local_terminal_info(kubri: State<'_, Arc<Kubri>>) -> CommandResult<kubri_core::LocalTerminalInfo> {
+    Ok(kubri.local_terminal_info().await)
+}
+
+/// Opens a shell on this computer; it is written to and closed like [`terminal_open`].
+#[tauri::command]
+async fn local_terminal_open(
+    kubri: State<'_, Arc<Kubri>>,
+    terminals: State<'_, Arc<Terminals>>,
+    options: kubri_core::LocalTerminalOptions,
+    on_event: Channel<InvokeResponseBody>,
+) -> CommandResult<u32> {
+    let terminal = kubri
+        .open_local_terminal(&options)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(register(&terminals, terminal, on_event))
+}
+
+#[tauri::command]
+async fn set_terminal_settings(
+    kubri: State<'_, Arc<Kubri>>,
+    settings: kubri_core::TerminalSettings,
+) -> CommandResult<Settings> {
+    kubri.set_terminal_settings(settings).map_err(|e| e.to_string())
+}
+
 /// Runs a k9s plugin in a terminal; it is written to and closed like [`terminal_open`].
 #[tauri::command]
 async fn plugin_open(
@@ -1065,6 +1094,7 @@ pub fn run() {
 
     let kubri = Arc::new(Kubri::load());
     kubri.record_changes();
+    kubri.allow_local_terminal();
     let read_only = read_only_requested();
     if read_only {
         kubri.set_read_only();
@@ -1103,6 +1133,9 @@ pub fn run() {
             set_diff_settings,
             set_history_settings,
             set_connection_settings,
+            set_terminal_settings,
+            local_terminal_info,
+            local_terminal_open,
             history,
             history_detail,
             set_column_settings,
