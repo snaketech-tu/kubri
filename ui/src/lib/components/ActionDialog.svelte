@@ -1367,7 +1367,7 @@
 		font-weight: 600;
 	}
 	.grace {
-		width: 110px;
+		width: 130px;
 	}
 	.warn {
 		color: var(--warn);
