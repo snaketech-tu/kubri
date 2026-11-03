@@ -57,7 +57,7 @@ docker run --rm -p 127.0.0.1:7878:7878 \
 
 - `--user "$(id -u)"` lets the container read your kubeconfig, which usually only you may read.
 - `KUBECONFIG` inside the container names one file, `/kubeconfig`, not a folder. The command mounts `~/.kube/config` there; `--mount` stops with an error when that file does not exist, where `-v` would mount an empty folder in its place.
-- If your `KUBECONFIG` lists several files, or your kubeconfig is somewhere else, merge it into one file that only you may read and mount that: `(umask 077; kubectl config view --flatten > ~/.kube/kubri.yaml)`, then `src=$HOME/.kube/kubri.yaml`. `--flatten` copies certificate files into it too, which a mounted kubeconfig could not reach.
+- If your kubeconfigs are several files in `~/.kube`, mount the folder instead, as in [Many kubeconfig files in Docker](#many-kubeconfig-files-in-docker). If they are spread over other folders, or your kubeconfig is somewhere else, merge it into one file that only you may read and mount that: `(umask 077; kubectl config view --flatten > ~/.kube/kubri.yaml)`, then `src=$HOME/.kube/kubri.yaml`. `--flatten` copies certificate files into it too, which a mounted kubeconfig could not reach.
 - In Windows PowerShell, leave out `--user`, write each line's `\` as `` ` `` and use `src=$HOME\.kube\config`.
 - Kubeconfigs whose users run a command for credentials (`aws eks get-token`, `gke-gcloud-auth-plugin`, `kubelogin`) need that command in the image. Build your own image `FROM ghcr.io/snaketech-tu/kubri` that adds it, or use the desktop app.
 - A cluster on your own machine, such as kind or minikube at `127.0.0.1`, is not `127.0.0.1` inside the container. On Linux, add `--network host` and drop `-p`.
@@ -66,18 +66,21 @@ docker run --rm -p 127.0.0.1:7878:7878 \
 
 ### Many kubeconfig files in Docker
 
-When your kubeconfigs are spread over `~/.kube`, as in [this example](CLUSTERS.md#example-many-kubeconfig-files-spread-over-kube), mount the whole folder where the container's home folder has it, and list the files with the `kubeconfigs` function from that example, with the container's paths:
+When your kubeconfigs are spread over `~/.kube`, as in [this example](CLUSTERS.md#example-many-kubeconfig-files-spread-over-kube), mount the whole folder where the container's home folder has it, and leave out `KUBECONFIG`:
 
 ```sh
 docker run --rm -p 127.0.0.1:7878:7878 \
   --user "$(id -u)" \
   --mount "type=bind,src=$HOME/.kube,dst=/home/kubri/.kube,readonly" \
-  -e KUBECONFIG="$(kubeconfigs /home/kubri/.kube)" \
   -e KUBRI_PASSWORD='a long password' \
   ghcr.io/snaketech-tu/kubri
 ```
 
+The image then puts every kubeconfig in that folder into `KUBECONFIG` itself, with `config` first, the same way as the `kubeconfigs` function in that example, and prints the list when it starts. Nothing has to be set up on your computer for it, so the command works the same in every shell. In Windows PowerShell, use `src=$HOME\.kube` and leave out `--user`.
+
 The files keep their places relative to each other, so certificate files they name by a relative path are found. One that names a file by its full path in your home folder, such as `/home/you/.kube/certs/ca.crt`, is not found in the container. For those, use the `--flatten` file from the list above.
+
+When you set `KUBECONFIG` yourself, the image uses it as it is.
 
 To build the image yourself: `docker build -t kubri .`
 

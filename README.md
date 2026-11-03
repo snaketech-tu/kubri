@@ -82,7 +82,7 @@ docker run --rm -p 127.0.0.1:7878:7878 \
 Open <http://127.0.0.1:7878> and sign in with the password.
 
 > [!TIP]
-> If your `KUBECONFIG` lists several files, or you use Windows, see [With Docker](docs/WEB.md#with-docker).
+> If your kubeconfigs are several files in `~/.kube`, mount the whole folder instead and leave out `KUBECONFIG`: `--mount "type=bind,src=$HOME/.kube,dst=/home/kubri/.kube,readonly"`. Kubri then finds every kubeconfig in it. For Windows and more, see [With Docker](docs/WEB.md#with-docker).
 
 ### In a cluster
 
