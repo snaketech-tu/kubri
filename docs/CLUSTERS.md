@@ -87,7 +87,7 @@ For the example above that gives `~/.kube/config:~/.kube/clusters/prod/eks.yaml:
 
 Without the shell, the same works with **Choose files…** in **Kubeconfig files…**: select several files of a folder at once, then do the same for the next folder. Kubri remembers them, but a new file has to be loaded too.
 
-In the browser, [kubri-server in Docker](WEB.md#many-kubeconfig-files-in-docker) can mount the whole folder and use the same function.
+In the browser, [kubri-server in Docker](WEB.md#many-kubeconfig-files-in-docker) can mount the whole folder and finds the files in it by itself, without the function.
 
 ## Limiting namespaces
 

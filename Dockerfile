@@ -86,6 +86,7 @@ RUN apt-get update \
     && chmod g=u /home/kubri
 COPY --from=tools /tools/kubectl /tools/helm /usr/local/bin/
 COPY --from=server /kubri-server /usr/local/bin/kubri-server
+COPY --chmod=755 packaging/docker-entrypoint.sh /usr/local/bin/kubri-entrypoint
 COPY --from=ui /src/ui/build /usr/share/kubri/ui
 # HOME too, for users without an entry in /etc/passwd.
 ENV KUBRI_ADDR=0.0.0.0:7878 \
@@ -94,4 +95,4 @@ ENV KUBRI_ADDR=0.0.0.0:7878 \
 USER 10001
 WORKDIR /home/kubri
 EXPOSE 7878
-ENTRYPOINT ["/usr/bin/tini", "--", "kubri-server"]
+ENTRYPOINT ["/usr/bin/tini", "--", "kubri-entrypoint"]
