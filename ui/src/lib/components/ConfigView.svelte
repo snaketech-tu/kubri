@@ -251,7 +251,7 @@
 		</div>
 
 		{#if app.localTerminal}
-			{@const terminal = app.settings.terminal ?? { shell: '', args: [], startDir: '', fontSize: 13 }}
+			{@const terminal = app.settings.terminal ?? { shell: '', args: [], startDir: '', fontSize: 13, fontFamily: '' }}
 			<div class="block">
 				<h2 id="config-terminal">Terminal</h2>
 				<p class="muted">
@@ -309,6 +309,18 @@
 							}}
 						/>
 						px, for terminals opened next
+					</label>
+					<label>
+						Font
+						<input
+							class="path"
+							type="text"
+							placeholder="Kubri's font"
+							spellcheck="false"
+							title="Installed fonts to use first, separated by commas, like MesloLGS NF. Kubri's own font and its icons for prompts like powerlevel10k fill in the rest."
+							value={terminal.fontFamily}
+							onchange={(e) => app.setTerminalSettings({ ...terminal, fontFamily: e.currentTarget.value.trim() })}
+						/>
 					</label>
 				</div>
 			</div>

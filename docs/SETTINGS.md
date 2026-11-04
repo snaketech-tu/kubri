@@ -44,7 +44,7 @@ Every action can also be copied as the `kubectl` command that does the same: in 
 
 ## Terminal
 
-`terminal` sets up the [local terminal](TERMINAL.md): `shell` and `args` (empty for your login shell, or PowerShell on Windows; `wsl.exe` for WSL), `startDir` (empty for your home folder) and `fontSize` (13, from 8 to 32).
+`terminal` sets up the [local terminal](TERMINAL.md): `shell` and `args` (empty for your login shell, or PowerShell on Windows; `wsl.exe` for WSL), `startDir` (empty for your home folder) `fontSize` (13, from 8 to 32) and `fontFamily` (installed fonts to use first, separated by commas, like `MesloLGS NF`; empty for Kubri's own).
 
 ## What changed
 

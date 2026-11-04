@@ -33,12 +33,14 @@
 	$effect(() => {
 		void restarts;
 		if (!element) return;
+		// Read here, so that a change opens a new terminal: the terminal connects once its fonts are in.
+		const [to, wantedContainer, wantedMode] = [target, container, mode];
 		return mountTerminal(element, (term) => {
 			status = 'connecting';
-			term.write(`\x1b[2m${mode === 'shell' ? 'Starting a shell' : 'Attaching'} in ${target.name}…\x1b[0m\r\n`);
+			term.write(`\x1b[2m${wantedMode === 'shell' ? 'Starting a shell' : 'Attaching'} in ${to.name}…\x1b[0m\r\n`);
 			return backend.openTerminal(
-				target,
-				{ container: container || null, mode, cols: term.cols, rows: term.rows },
+				to,
+				{ container: wantedContainer || null, mode: wantedMode, cols: term.cols, rows: term.rows },
 				(event) => {
 					switch (event.type) {
 						case 'ready':

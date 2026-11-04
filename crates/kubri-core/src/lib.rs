@@ -427,10 +427,16 @@ impl Kubri {
         Ok(settings)
     }
 
-    /// Sets the local terminal's shell, folder and font size.
-    pub fn set_terminal_settings(&self, value: TerminalSettings) -> Result<Settings> {
+    /// Sets the local terminal's shell, folder and font.
+    pub fn set_terminal_settings(&self, mut value: TerminalSettings) -> Result<Settings> {
         if !(8..=32).contains(&value.font_size) {
             return Err(Error::Unsupported("the font size must be from 8 to 32".into()));
+        }
+        value.font_family = value.font_family.trim().to_owned();
+        if value.font_family.len() > 200 || value.font_family.contains(['{', '}', ';', '<', '>', '\\']) {
+            return Err(Error::Unsupported(
+                "the font must be names separated by commas, like MesloLGS NF".into(),
+            ));
         }
         self.update_settings(|s| {
             s.terminal = value;
@@ -2613,6 +2619,21 @@ mod tests {
             .unwrap();
         kubri.keep_warm(fake_session("f", 200).0).await;
         assert!(kubri.warm_contexts().await.is_empty());
+    }
+
+    #[test]
+    fn terminal_fonts_are_names_only() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let font = |family: &str| TerminalSettings {
+            font_family: family.into(),
+            ..Default::default()
+        };
+        let saved = kubri
+            .set_terminal_settings(font("  MesloLGS NF, 'Fira Code' "))
+            .unwrap();
+        assert_eq!(saved.terminal.font_family, "MesloLGS NF, 'Fira Code'");
+        assert!(kubri.set_terminal_settings(font("x} body { color: red")).is_err());
+        assert!(kubri.set_terminal_settings(font(&"a".repeat(201))).is_err());
     }
 
     #[tokio::test]
