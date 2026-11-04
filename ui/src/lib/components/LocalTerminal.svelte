@@ -36,7 +36,7 @@
 					status = 'refused';
 					return;
 				}
-				const fontSize = untrack(() => app.settings.terminal?.fontSize);
+				const { fontSize, fontFamily } = untrack(() => app.settings.terminal ?? { fontSize: 13, fontFamily: '' });
 				unmount = mountTerminal(
 					host,
 					(term) => {
@@ -56,7 +56,7 @@
 							}
 						});
 					},
-					{ fontSize }
+					{ fontSize, fontFamily }
 				);
 			},
 			(err) => {

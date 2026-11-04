@@ -37,6 +37,10 @@ A shell can do anything, so Kubri only opens one where it would let you change t
 
 In the web app, a "local" terminal runs on the server, as the user the server runs as. It is therefore off, and the terminal button and `:term` are hidden, unless the server is started with `--local-terminal` or `KUBRI_LOCAL_TERMINAL=true`, and the server logs a warning when it is on. Turn it on only when everyone who can sign in may run commands on that machine, for example when you run the server on your own computer.
 
+## Fonts
+
+Kubri brings its own fonts, so terminals look right on every system: JetBrains Mono for text, and the Nerd Font symbols that prompts like powerlevel10k or oh-my-posh and tools like lsd use for arrows and icons. Your installed monospace fonts still come first where Kubri knows them. To use a font of your own, such as the MesloLGS NF that powerlevel10k suggests, name it under **Settings > Terminal > Font**; Kubri's fonts fill in what it lacks.
+
 ## Settings
 
-See [Settings](SETTINGS.md#terminal): shell and its arguments, start folder, font size.
+See [Settings](SETTINGS.md#terminal): shell and its arguments, start folder, font size and font.
