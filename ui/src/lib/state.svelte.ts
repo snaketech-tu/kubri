@@ -44,6 +44,7 @@ import { applyZoom, storedZoom } from './appearance';
 import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } from './releases';
 import { loadPins, savePins, samePin, toggled as togglePinIn, type Pin } from './pins';
 import { Places, type Place } from './places';
+import { fromHash, toHash, type Address } from './address';
 import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu, MenuAction } from './menu';
@@ -167,23 +168,26 @@ export function legacyContextSettings(
 	return found;
 }
 
-export type Page =
-	| 'resources'
-	| 'portforwards'
-	| 'benchmarks'
-	| 'pulses'
-	| 'xray'
-	| 'graph'
-	| 'rbac'
-	| 'helm'
-	| 'create'
-	| 'sanitizer'
-	| 'integrations'
-	| 'rightsizing'
-	| 'fleet'
-	| 'search'
-	| 'changes'
-	| 'config';
+export const PAGES = [
+	'resources',
+	'portforwards',
+	'benchmarks',
+	'pulses',
+	'xray',
+	'graph',
+	'rbac',
+	'helm',
+	'create',
+	'sanitizer',
+	'integrations',
+	'rightsizing',
+	'fleet',
+	'search',
+	'changes',
+	'config'
+] as const;
+
+export type Page = (typeof PAGES)[number];
 
 export type Dialog =
 	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[]; statuses?: Record<string, string> }
@@ -427,6 +431,8 @@ class AppState {
 	#restoring = false;
 	/** The k9s `defaultView` applies once, when Kubri starts. */
 	#startup = true;
+	/** The view the web app's address named when it opened, for the first context it connects to. */
+	#addressed: Address<Page, ListScope> | null = null;
 	/**
 	 * True until the first context's k9s files are read, so the overview does not open, and list
 	 * every pod for its counts, just before the `defaultView` replaces it.
@@ -736,6 +742,40 @@ class AppState {
 		xray: this.xrayResource && refOf(this.xrayResource)
 	});
 
+	/** The view as the web app's address, so a reload opens it again; none for a snapshot. */
+	address = $derived.by(() => {
+		if (!this.cluster || this.cluster.snapshot) return null;
+		const { page, resource, namespace, scope, xray } = this.view;
+		// Other pages remember the list to go back to, but it is not where they are.
+		const list = page === 'resources';
+		return toHash({
+			context: this.cluster.context,
+			page,
+			resource: list ? resource : null,
+			namespace,
+			scope: list ? scope : null,
+			xray: page === 'xray' ? xray : null
+		});
+	});
+
+	/** Reads the view to open from the address the web app was opened with. */
+	readAddress(hash: string) {
+		this.#addressed = fromHash<Page, ListScope>(hash, PAGES);
+	}
+
+	/** Opens the view of an address typed or pasted into the address bar, in the connected context. */
+	goToAddress(hash: string) {
+		if (!this.cluster || this.cluster.snapshot || hash === this.address) return;
+		if (drafts.block(() => this.goToAddress(hash))) {
+			// Staying for the unsaved changes: the address says so too.
+			if (this.address) history.replaceState(history.state, '', this.address);
+			return;
+		}
+		this.readAddress(hash);
+		this.openAddressed(this.cluster.context);
+		this.#addressed = null;
+	}
+
 	async load() {
 		this.checkRelease(true);
 		try {
@@ -972,6 +1012,28 @@ class AppState {
 			if (filter) this.filterRequest = filter;
 			if (cursor) this.cursorRequest = cursor;
 		});
+	}
+
+	/** Opens the view the address named, if it is in `context` and the cluster has its kinds. */
+	private openAddressed(context: string) {
+		const address = this.#addressed;
+		if (!address) return;
+		if (address.context !== context) {
+			// Switching here would switch everyone who uses this server.
+			this.toast(`This address is for ${address.context}; switch to that context to open it`);
+			return;
+		}
+		const resource = address.resource && findResource(this.resources, address.resource);
+		if (address.resource && !resource) return;
+		const xray = address.xray && findResource(this.resources, address.xray);
+		if (address.page === 'xray' && !xray) return;
+		this.page = address.page;
+		if (resource) this.selected = resource;
+		if (xray) this.xrayResource = xray;
+		this.namespace = address.namespace;
+		this.scope = address.scope;
+		// The address wins over the k9s `defaultView`, as the view was open before a reload.
+		this.#startup = false;
 	}
 
 	private restore(view: View) {
@@ -1461,6 +1523,8 @@ class AppState {
 		if (this.page === 'xray' && !this.xrayResource) this.page = 'resources';
 		const place = cluster.snapshot ? undefined : this.#places.take(cluster.context);
 		if (place) this.returnTo(place, before);
+		else if (!cluster.snapshot) this.openAddressed(cluster.context);
+		this.#addressed = null;
 		// Hotkeys, plugins and skins can differ per context.
 		this.loadK9s();
 		this.startFavoriteForwards();

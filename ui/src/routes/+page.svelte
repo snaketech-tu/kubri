@@ -77,7 +77,51 @@
 	$effect(() => {
 		// Also after signing in again, when a message from before may still be up.
 		app.error = null;
+		if (!isTauri()) untrack(() => app.readAddress(location.hash));
 		app.load();
+	});
+
+	// In the browser, the address follows the view, so a reload opens it again.
+	$effect(() => {
+		const address = app.address;
+		if (isTauri() || !address) return;
+		untrack(() => {
+			// Back left Kubri's history behind; going somewhere starts it again.
+			if (history.state?.kubri === 'before' && app.canGoBack) history.pushState({ kubri: 'now' }, '', address);
+			else if (location.hash !== address) history.replaceState(history.state, '', address);
+		});
+	});
+
+	/** When the mouse's back button last went back, which some browsers also take as their Back. */
+	let mouseBackAt = 0;
+
+	// The browser's Back goes back in Kubri, as `[` does, and leaves Kubri only from its first view.
+	$effect(() => {
+		if (isTauri()) return;
+		if (history.state?.kubri !== 'now') {
+			history.replaceState({ kubri: 'before' }, '');
+			history.pushState({ kubri: 'now' }, '');
+		}
+		const onpopstate = (e: PopStateEvent) => {
+			if (e.state?.kubri !== 'before') return;
+			if (performance.now() - mouseBackAt < 1000) {
+				// The mouse button went back already.
+				history.pushState({ kubri: 'now' }, '', app.address ?? location.href);
+			} else if (app.canGoBack) {
+				app.go(-1);
+				history.pushState({ kubri: 'now' }, '', app.address ?? location.href);
+			} else {
+				history.back();
+			}
+		};
+		// An address typed or pasted in; Back to the first view is handled above.
+		const onhashchange = () => history.state?.kubri !== 'before' && app.goToAddress(location.hash);
+		addEventListener('popstate', onpopstate);
+		addEventListener('hashchange', onhashchange);
+		return () => {
+			removeEventListener('popstate', onpopstate);
+			removeEventListener('hashchange', onhashchange);
+		};
 	});
 
 	$effect(() => untrack(() => applyScheme(app.scheme)));
@@ -188,6 +232,7 @@
 	function onmouseup(e: MouseEvent) {
 		if ((e.button !== 3 && e.button !== 4) || app.overlayOpen) return;
 		e.preventDefault();
+		if (e.button === 3) mouseBackAt = performance.now();
 		app.go(e.button === 3 ? -1 : 1);
 	}
 
