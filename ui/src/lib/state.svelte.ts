@@ -446,7 +446,6 @@ class AppState {
 		this.paletteOpen ||
 			this.helpOpen ||
 			this.tourOpen ||
-			this.activityOpen ||
 			this.contextMenuOpen ||
 			this.kubeconfigFilesOpen ||
 			this.menu !== null ||
