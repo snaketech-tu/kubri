@@ -2,7 +2,7 @@
 	import { tick } from 'svelte';
 	import type { HTMLButtonAttributes } from 'svelte/elements';
 	import Icon from './Icon.svelte';
-	import { edge, filterOptions, step, typeahead, type SelectOption } from '../select';
+	import { centeredScroll, edge, filterOptions, step, typeahead, type SelectOption } from '../select';
 
 	/*
 	 * A select box drawn by Kubri instead of the system: native ones take the GTK theme in the Linux app,
@@ -74,7 +74,7 @@
 		if (canPopover) popup.showPopover();
 		position();
 		if (withFilter) filterInput?.focus();
-		reveal();
+		reveal(true);
 	}
 
 	function hide(refocus = true) {
@@ -111,9 +111,17 @@
 		};
 	}
 
-	async function reveal() {
+	/** Scrolls the active option into view: to the middle when the list opens, else only as far as needed. */
+	async function reveal(center = false) {
 		await tick();
-		popup?.querySelector(`#${CSS.escape(optionId(active))}`)?.scrollIntoView({ block: 'nearest' });
+		const item = popup?.querySelector<HTMLElement>(`#${CSS.escape(optionId(active))}`);
+		const list = item?.closest('ul');
+		if (!item || !list) return;
+		// Set on the list itself: scrollIntoView would also scroll the page or a dialog behind it.
+		if (center) {
+			const top = item.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
+			list.scrollTop = centeredScroll(top, item.offsetHeight, list.clientHeight, list.scrollHeight);
+		} else item.scrollIntoView({ block: 'nearest' });
 	}
 
 	function move(to: number) {

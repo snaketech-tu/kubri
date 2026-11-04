@@ -64,3 +64,12 @@ export function filterOptions<T>(options: SelectOption<T>[], text: string): numb
 		return words.every((w) => label.includes(w));
 	});
 }
+
+/**
+ * The scroll position that puts an option in the middle of the list, as far as the ends allow:
+ * options near the top or bottom stay at that edge.
+ */
+export function centeredScroll(itemTop: number, itemHeight: number, listHeight: number, scrollHeight: number): number {
+	const max = Math.max(0, scrollHeight - listHeight);
+	return Math.round(Math.min(max, Math.max(0, itemTop + itemHeight / 2 - listHeight / 2)));
+}

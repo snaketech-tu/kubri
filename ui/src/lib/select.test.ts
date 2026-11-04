@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { edge, filterOptions, plainOptions, step, typeahead, type SelectOption } from './select';
+import { centeredScroll, edge, filterOptions, plainOptions, step, typeahead, type SelectOption } from './select';
 
 const options: SelectOption<string>[] = [
 	{ value: 'a', label: 'Apple' },
@@ -64,5 +64,22 @@ describe('select options', () => {
 		expect(filterOptions(options, 'ap')).toEqual([0, 3]);
 		expect(filterOptions(options, 'b rr')).toEqual([4]);
 		expect(filterOptions(options, 'zz')).toEqual([]);
+	});
+});
+
+describe('centeredScroll', () => {
+	// 40 options of 30px in a list 300px high.
+	const at = (i: number) => centeredScroll(i * 30, 30, 300, 1200);
+	it('puts an option in the middle of the list', () => {
+		expect(at(20)).toBe(465);
+		expect(at(20) + 150).toBe(20 * 30 + 15);
+	});
+	it('stays at the ends', () => {
+		expect(at(0)).toBe(0);
+		expect(at(2)).toBe(0);
+		expect(at(39)).toBe(900);
+	});
+	it('does not scroll a list that fits', () => {
+		expect(centeredScroll(90, 30, 300, 200)).toBe(0);
 	});
 });
