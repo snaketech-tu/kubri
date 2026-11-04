@@ -19,6 +19,9 @@
 >
 	<h2 id="draft-title">Keep your YAML changes?</h2>
 	<p>Your changes have not been saved. Save them before continuing, or keep editing.</p>
+	{#if drafts.failed}
+		<p class="failed" role="alert">Saving did not work. Keep editing to see why, or discard your changes.</p>
+	{/if}
 	<div class="buttons">
 		<button disabled={drafts.saving} onclick={() => (drafts.pending = null)}>Keep editing</button>
 		<button disabled={drafts.saving} onclick={() => drafts.proceed('discard')}>Discard changes</button>
@@ -48,6 +51,9 @@
 	p {
 		color: var(--text-muted);
 		line-height: 1.6;
+	}
+	.failed {
+		color: var(--bad);
 	}
 	.buttons {
 		display: flex;
