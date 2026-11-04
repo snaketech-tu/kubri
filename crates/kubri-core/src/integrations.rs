@@ -8,7 +8,8 @@
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use k8s_openapi::api::core::v1::Service;
+use k8s_openapi::api::core::v1::{Pod, Service};
+use kube::api::ListParams;
 use kube::{Api, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -31,8 +32,8 @@ pub struct IntegrationSettings {
     /// A Grafana service account token, sent to a Grafana given by URL.
     pub grafana_token: String,
     pub loki: String,
-    /// Links to Grafanas Kubri does not find, filled in for each object.
-    pub grafana_links: Vec<grafana::GrafanaLink>,
+    /// The Loki data source in Grafana for logs in Explore, by UID or name; found when empty.
+    pub grafana_logs: String,
 }
 
 impl IntegrationSettings {
@@ -50,20 +51,7 @@ impl IntegrationSettings {
             }
         }
         self.grafana_token = self.grafana_token.trim().to_owned();
-        self.grafana_links = std::mem::take(&mut self.grafana_links)
-            .into_iter()
-            .map(|link| grafana::GrafanaLink {
-                title: Some(link.title.trim())
-                    .filter(|t| !t.is_empty())
-                    .unwrap_or("Grafana")
-                    .to_owned(),
-                url: link.url.trim().to_owned(),
-            })
-            .filter(|link| !link.url.is_empty())
-            .collect();
-        if let Some(problem) = self.grafana_links.iter().find_map(grafana::link_problem) {
-            return Err(Error::Unsupported(problem));
-        }
+        self.grafana_logs = self.grafana_logs.trim().to_owned();
         Ok(self)
     }
 }
@@ -931,24 +919,12 @@ impl crate::Kubri {
         Ok((dashboards, note))
     }
 
-    /// Grafana dashboards that show `target`, as links with its variables filled in: the
-    /// context's own links first, for any kind of object, then those Grafana lists, then a
-    /// search of Grafana for the object's name.
+    /// The Grafana dashboards that show `target`, as links with its variables filled in: its
+    /// logs in Explore first, then the dashboards Grafana lists, then a search of Grafana for
+    /// the object's name.
     pub async fn dashboards(&self, target: &ObjectRef) -> Result<grafana::Dashboards> {
         let session = self.object_session(target).await?;
         let kind = session.info_for(&target.resource)?.kind.clone();
-        let values = grafana::object_values(
-            &session.info.context,
-            &kind,
-            target.namespace.as_deref(),
-            &target.name,
-        );
-        let ours = self
-            .settings()
-            .context(&session.info.context)
-            .integrations
-            .grafana_links;
-        let mut links = grafana::settings_links(&ours, &values);
         let namespace = target.namespace.clone().unwrap_or_default();
         let subject = match (target.resource.group.as_str(), kind.as_str()) {
             ("", "Pod") => Some(grafana::Subject::Pod {
@@ -974,29 +950,107 @@ impl crate::Kubri {
             .await
             .is_ok_and(|i| i.endpoint("grafana").is_some());
         if !found {
-            if links.is_empty() && subject.is_some() {
-                return Err(Error::Unsupported(
-                    "no Grafana found; give its URL on the integrations page".into(),
-                ));
-            }
-            return Ok(grafana::Dashboards { links, note: None });
+            return Err(Error::Unsupported(
+                "no Grafana found; give its URL on the integrations page".into(),
+            ));
         }
+        let listed = async {
+            match &subject {
+                Some(_) => Some(self.grafana_dashboards(&session).await),
+                None => None,
+            }
+        };
+        let (logs, listed) = futures::join!(self.grafana_logs(target), listed);
+        // Objects outside a namespace, like nodes, have no logs of their own.
+        let mut links: Vec<_> = logs.ok().into_iter().collect();
         let mut note = None;
-        if let Some(subject) = subject {
-            match self.grafana_dashboards(&session).await {
+        if let (Some(subject), Some(listed)) = (subject, listed) {
+            match listed {
                 Ok((dashboards, why)) => {
                     let listed = grafana::links(&dashboards, &subject);
                     // Why Grafana's list could not be read matters only when nothing matched.
-                    note = why.filter(|_| listed.is_empty() && links.is_empty());
+                    note = why.filter(|_| listed.is_empty());
                     links.extend(listed);
                 }
                 // Such as a Grafana behind a client certificate, which the browser can still open.
-                Err(err) if links.is_empty() => note = Some(err.to_string()),
-                Err(_) => {}
+                Err(err) => note = Some(err.to_string()),
             }
         }
         links.push(grafana::search_link(&target.name));
         Ok(grafana::Dashboards { links, note })
+    }
+
+    /// The logs of `target` in Grafana's Explore, from Loki: those of a pod, a workload's pods,
+    /// a Service's pods, a namespace, or for any other object those of its namespace.
+    pub async fn grafana_logs(&self, target: &ObjectRef) -> Result<grafana::DashboardLink> {
+        let session = self.object_session(target).await?;
+        let kind = session.info_for(&target.resource)?.kind.clone();
+        let integrations = self.integrations(false).await?;
+        let endpoint = integrations.endpoint("grafana").cloned().ok_or_else(|| {
+            Error::Unsupported("no Grafana found; give its URL on the integrations page".into())
+        })?;
+        let own = (target.resource.group.is_empty() && matches!(kind.as_str(), "Pod" | "Service"))
+            || matches!(
+                (target.resource.group.as_str(), kind.as_str()),
+                ("apps", "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet")
+                    | ("batch", "Job" | "CronJob")
+            );
+        let (title, query) = match target.namespace.as_deref().filter(|n| !n.is_empty()) {
+            Some(_) if own => (
+                format!("Logs of {} {}", kind.to_ascii_lowercase(), target.name),
+                self.loki_query(&session, target, None).await?,
+            ),
+            Some(namespace) => (
+                format!("Logs of namespace {namespace}"),
+                loki::namespace_query(namespace),
+            ),
+            None if target.resource.group.is_empty() && kind == "Namespace" => (
+                format!("Logs of namespace {}", target.name),
+                loki::namespace_query(&target.name),
+            ),
+            None => {
+                return Err(Error::Unsupported(format!(
+                    "{kind} {} has no logs of its own; open a namespace, pod or workload",
+                    target.name
+                )));
+            }
+        };
+        let source = self.grafana_loki_source(&session, &endpoint).await;
+        Ok(grafana::DashboardLink {
+            title,
+            folder: "Explore".into(),
+            path: grafana::explore_path(source.as_deref(), &query),
+            filled: Vec::new(),
+        })
+    }
+
+    /// The Loki data source to show logs from: the one in the settings, else the one Grafana
+    /// says it has, looked up once; `None` leaves it to Grafana's default.
+    async fn grafana_loki_source(&self, session: &crate::Session, endpoint: &Endpoint) -> Option<String> {
+        let settings = self.settings().context(&session.info.context).integrations;
+        if !settings.grafana_logs.is_empty() {
+            return Some(settings.grafana_logs);
+        }
+        let mut cached = session.grafana_logs.lock().await;
+        // Asked again once the Grafana or its token changes, as a token may be what it lacked.
+        if let Some((asked, with, found)) = cached.as_ref()
+            && asked == endpoint
+            && *with == settings.grafana_token
+        {
+            return found.clone();
+        }
+        let token = Some(settings.grafana_token.as_str()).filter(|t| !t.is_empty());
+        // A Grafana that needs a login or a client certificate answers no one but the browser.
+        let found = tokio::time::timeout(
+            Duration::from_secs(5),
+            endpoint.get_json(&session.proxy_client, "/api/frontend/settings", token),
+        )
+        .await
+        .ok()
+        .and_then(|answer| answer.ok())
+        .and_then(|settings| grafana::loki_source(&settings));
+        *cached = Some((endpoint.clone(), settings.grafana_token.clone(), found.clone()));
+        found
     }
 
     /// Where the browser reaches a tool: its URL, or for one on a Service a port-forward to
@@ -1063,36 +1117,55 @@ impl crate::Kubri {
             })?;
         let query = match request.query.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
             Some(query) => query.to_owned(),
-            None => self.loki_query(&session, request).await?,
+            None => {
+                self.loki_query(&session, &request.target, request.container.as_deref())
+                    .await?
+            }
         };
         let limit = request.limit.unwrap_or(loki::MAX_LINES).clamp(1, loki::MAX_LINES);
         let seconds = request.seconds.clamp(60, 30 * 24 * 3600);
         loki::query(&session.proxy_client, &endpoint, &query, seconds, limit).await
     }
 
-    /// The LogQL that finds an object's lines: by pod name, or by a Service's selector.
-    async fn loki_query(&self, session: &crate::Session, request: &loki::LokiRequest) -> Result<String> {
-        let target = &request.target;
+    /// The LogQL that finds an object's lines: by the names of its pods.
+    async fn loki_query(
+        &self,
+        session: &crate::Session,
+        target: &ObjectRef,
+        container: Option<&str>,
+    ) -> Result<String> {
         let kind = session.info_for(&target.resource)?.kind.clone();
         let namespace = target.namespace.clone().unwrap_or_default();
-        let selector = if target.resource.group.is_empty() && kind == "Service" {
+        let mut selected = None;
+        if target.resource.group.is_empty() && kind == "Service" {
             let api: Api<Service> = Api::namespaced(session.client.clone(), &namespace);
-            api.get(&target.name).await?.spec.and_then(|s| s.selector)
-        } else {
-            None
-        };
-        if kind == "Service" && selector.as_ref().is_none_or(|s| s.is_empty()) {
-            return Err(Error::Unsupported(format!(
-                "Service {} selects no pods",
-                target.name
-            )));
+            let selector = api.get(&target.name).await?.spec.and_then(|s| s.selector);
+            let selector = selector
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| Error::Unsupported(format!("Service {} selects no pods", target.name)))?;
+            let labels: Vec<String> = selector.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            let pods: Api<Pod> = Api::namespaced(session.client.clone(), &namespace);
+            let names: Vec<String> = pods
+                .list_metadata(&ListParams::default().labels(&labels.join(",")))
+                .await?
+                .items
+                .into_iter()
+                .filter_map(|p| p.metadata.name)
+                .collect();
+            if names.is_empty() {
+                return Err(Error::Unsupported(format!(
+                    "Service {} selects no pods right now",
+                    target.name
+                )));
+            }
+            selected = Some(names);
         }
         Ok(loki::default_query(
             &kind,
             &namespace,
             &target.name,
-            selector.as_ref(),
-            request.container.as_deref(),
+            selected.as_deref(),
+            container,
         ))
     }
 }

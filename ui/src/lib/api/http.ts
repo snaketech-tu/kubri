@@ -240,6 +240,7 @@ export const httpBackend: Backend = {
 	integrations: (fresh) => request('GET', `/integrations?fresh=${fresh}`),
 	charts: (target, range) => request('POST', '/charts', { target, range }),
 	dashboards: (target) => request('POST', '/grafana/dashboards', { target }),
+	grafanaLogs: (target) => request('POST', '/grafana/logs', { target }),
 	integrationUrl: async (id) => ((await request('POST', '/integrations/url', { id })) as { url: string }).url,
 	lokiLogs: (request_) => request('POST', '/loki/logs', request_),
 	usageHistory: (namespace, seconds) =>

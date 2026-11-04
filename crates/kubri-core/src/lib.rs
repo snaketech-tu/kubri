@@ -89,7 +89,7 @@ pub use explain::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject,
 pub use fixes::{MemoryFix, NearMiss, NodeFit, PodMatch, ServiceCheck};
 pub use fleet::FleetCluster;
 pub use gitops::{GitOpsAction, Manager};
-pub use grafana::{DashboardLink, Dashboards, GrafanaLink};
+pub use grafana::{DashboardLink, Dashboards};
 pub use health::Health;
 pub use helm::{HelmChange, HelmChartRef, HelmOutcome, HelmRelease, HelmReleaseDetails, HubChart};
 pub use history::{
@@ -186,6 +186,8 @@ struct Session {
     integrations: tokio::sync::Mutex<Option<(IntegrationSettings, Integrations)>>,
     /// Grafana's dashboards, when they were read and why Grafana's own list was not.
     grafana: tokio::sync::Mutex<Option<grafana::Cached>>,
+    /// The Loki data source a Grafana has, once looked up with a token.
+    grafana_logs: tokio::sync::Mutex<Option<(integrations::Endpoint, String, Option<String>)>>,
 }
 
 pub struct Kubri {
@@ -2259,6 +2261,7 @@ impl Session {
             schemas: Default::default(),
             integrations: Default::default(),
             grafana: Default::default(),
+            grafana_logs: Default::default(),
         }
     }
 
@@ -2637,7 +2640,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn grafana_links_from_the_settings_work_without_a_grafana() {
+    async fn grafana_shows_the_logs_of_the_object_picked() {
         let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
         let (client, _) = testing::client(|_| {
             (
@@ -2646,61 +2649,94 @@ mod tests {
             )
         });
         let info = ClusterInfo {
-            context: "grafana-links-test".into(),
-            server: "https://grafana-links-test".into(),
+            context: "grafana-logs-test".into(),
+            server: "https://grafana-logs-test".into(),
             version: "v1.36.0".into(),
             default_namespace: "default".into(),
             snapshot: None,
             resumed: false,
         };
-        let session = Session::new(info, client, vec![resource("", "v1", "pods", "Pod", true)]);
+        let resources = vec![
+            resource("", "v1", "pods", "Pod", true),
+            resource("", "v1", "configmaps", "ConfigMap", true),
+            resource("", "v1", "namespaces", "Namespace", false),
+            resource("", "v1", "nodes", "Node", false),
+            resource("apps", "v1", "deployments", "Deployment", true),
+        ];
+        let session = Session::new(info, client, resources);
         *kubri.session.write().await = Some(Arc::new(session));
-        let pod = ObjectRef {
+        let object = |group: &str, plural: &str, namespace: Option<&str>, name: &str| ObjectRef {
             resource: ResourceRef {
-                group: String::new(),
+                group: group.into(),
                 version: "v1".into(),
-                plural: "pods".into(),
+                plural: plural.into(),
             },
-            namespace: Some("shop".into()),
-            name: "web-1".into(),
+            namespace: namespace.map(Into::into),
+            name: name.into(),
             context: None,
         };
-        // No Grafana in the cluster and no links: Kubri says where to set one.
-        assert!(kubri.dashboards(&pod).await.is_err());
+        let pod = object("", "pods", Some("shop"), "web-1");
+        // No Grafana in the cluster: Kubri says where to give one.
+        let err = kubri.grafana_logs(&pod).await.unwrap_err().to_string();
+        assert!(err.contains("integrations page"), "{err}");
 
-        let link = |url: &str| GrafanaLink {
-            title: String::new(),
-            url: url.into(),
-        };
         let mut settings = ContextSettings::default();
-        settings.integrations.grafana_links = vec![
-            link(" https://grafana.example.com/d/pod?var-pod={pod}&var-namespace={namespace} "),
-            link("https://grafana.example.com/d/node?var-node={node}"),
-            link("   "),
-        ];
-        kubri
-            .set_context_settings("grafana-links-test", settings.clone())
-            .unwrap();
-        let saved = kubri
-            .settings()
-            .context("grafana-links-test")
-            .integrations
-            .grafana_links;
-        assert_eq!(saved.len(), 2, "empty links are dropped");
-        assert_eq!(saved[0].title, "Grafana");
-        let found = kubri.dashboards(&pod).await.unwrap();
-        assert_eq!(found.links.len(), 1, "the node's link needs a node");
+        settings.integrations.grafana = "https://grafana.example.com/".into();
+        settings.integrations.grafana_logs = " loki-uid ".into();
+        kubri.set_context_settings("grafana-logs-test", settings).unwrap();
+        let saved = kubri.settings().context("grafana-logs-test").integrations;
         assert_eq!(
-            found.links[0].url.as_deref(),
-            Some("https://grafana.example.com/d/pod?var-pod=web-1&var-namespace=shop")
+            (saved.grafana.as_str(), saved.grafana_logs.as_str()),
+            ("https://grafana.example.com", "loki-uid")
         );
 
-        settings.integrations.grafana_links = vec![link("grafana.example.com/d/pod")];
+        let query = |link: &grafana::DashboardLink| {
+            let panes = link.path.strip_prefix("/explore?schemaVersion=1&panes=").unwrap();
+            let decoded = percent_decode(panes);
+            let pane: serde_json::Value = serde_json::from_str(&decoded).unwrap();
+            assert_eq!(pane["kubri"]["datasource"], "loki-uid");
+            pane["kubri"]["queries"][0]["expr"].as_str().unwrap().to_owned()
+        };
+        let logs = kubri.grafana_logs(&pod).await.unwrap();
+        assert_eq!(logs.title, "Logs of pod web-1");
+        assert_eq!(query(&logs), r#"{namespace="shop", pod="web-1"}"#);
+        let logs = kubri
+            .grafana_logs(&object("", "namespaces", None, "shop"))
+            .await
+            .unwrap();
+        assert_eq!(logs.title, "Logs of namespace shop");
+        assert_eq!(query(&logs), r#"{namespace="shop"}"#);
+        let logs = kubri
+            .grafana_logs(&object("", "configmaps", Some("shop"), "settings"))
+            .await
+            .unwrap();
+        assert_eq!(logs.title, "Logs of namespace shop");
+        let logs = kubri
+            .grafana_logs(&object("apps", "deployments", Some("shop"), "web"))
+            .await
+            .unwrap();
+        assert_eq!(logs.title, "Logs of deployment web");
+        assert!(query(&logs).starts_with(r#"{namespace="shop", pod=~"web-"#));
         assert!(
             kubri
-                .set_context_settings("grafana-links-test", settings)
+                .grafana_logs(&object("", "nodes", None, "n1"))
+                .await
                 .is_err()
         );
+    }
+
+    fn percent_decode(text: &str) -> String {
+        let mut out = Vec::new();
+        let mut bytes = text.bytes();
+        while let Some(byte) = bytes.next() {
+            if byte == b'%' {
+                let hex: String = bytes.by_ref().take(2).map(char::from).collect();
+                out.push(u8::from_str_radix(&hex, 16).unwrap());
+            } else {
+                out.push(byte);
+            }
+        }
+        String::from_utf8(out).unwrap()
     }
 
     #[tokio::test]

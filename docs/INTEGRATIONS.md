@@ -5,7 +5,7 @@ Kubri finds the tools most clusters run and uses them without setup. Open **Inte
 | Tool | Found by | What Kubri does with it |
 | --- | --- | --- |
 | Prometheus | A Service like kube-prometheus-stack's `…-prometheus`, `prometheus-server` or `prometheus-operated` | Charts for pods, workloads, nodes and namespaces, and an hour of history in the overview. |
-| Grafana | A Service like `…-grafana` or `grafana` | Links from objects to the dashboards that show them, opened already filtered. |
+| Grafana | A Service like `…-grafana` or `grafana` | The logs of the object you pick in Grafana's Explore, and links to the dashboards that show it, opened already filtered. |
 | Loki | A Service like `loki`, `loki-gateway` or `loki-read` | Log history beyond a pod's lifetime, in the log workspace. |
 | Flux | The `kustomize.toolkit.fluxcd.io` or `helm.toolkit.fluxcd.io` API group | State, revision and managed objects of Kustomizations, HelmReleases and sources; reconcile, suspend and resume. |
 | Argo CD | The `argoproj.io` Applications | Sync state, health and managed objects of Applications; sync, refresh and auto-sync. |
@@ -60,33 +60,33 @@ Suggestions come with a reason, the most urgent first:
 
 The suggested request is use with 20% headroom, the suggested limit use with 50%, rounded up to 5m or 16Mi. The page sums what lowering the over-requested ones would free. **Review…** opens the change with the dry-run diff of the workload's template, the matching `kubectl set resources` command and, when Flux or Argo CD manage the workload, what they will do with it. Setting the values restarts the workload's pods, as any template change does.
 
-## Grafana dashboards
+## Grafana
 
-**Metrics** lists, above the charts, the Grafana dashboards that show the object: those with a variable Kubri can fill, like `pod`, `workload`, `deployment` or `node`, with the namespace too. Each opens in Grafana with those variables set. The Integrations page lists the dashboards for the namespace picked in the sidebar and opens Grafana itself.
+Give Grafana's address under **Point elsewhere > Grafana > URL** on the Integrations page, like `https://grafana.example.com`, or let Kubri find Grafana in the cluster. Kubri fills in the rest from the object you pick.
 
-Dashboards come from Grafana's own list and from the ConfigMaps labeled `grafana_dashboard` that kube-prometheus-stack and most charts ship, so they show even when Grafana needs a login. Kubri reads them again after five minutes.
+### Logs in Grafana
 
-**Grafana…** in the menu of every object lists the same dashboards in a dialog, with **Copy** for each address. With a Grafana URL, it also offers **Search Grafana for** the object's name, which opens Grafana's dashboard search in your browser. That works even when Kubri cannot read Grafana itself, such as behind a login or a client certificate, as your browser signs in.
+**Logs in Grafana** in the menu of a namespace, pod, workload or Service opens its logs of the last hour in Grafana's Explore, with the Loki query already set:
 
-### Dashboards for objects
-
-For a Grafana that Kubri cannot read, such as one a customer runs outside the cluster, add its dashboards under **Point elsewhere > Grafana > Dashboards for objects** on the Integrations page, for the connected context. Paste the address of a dashboard from your browser, like `https://grafana.example.com/d/abc/pods?var-namespace=shop&var-pod=web-1`: Kubri replaces the values of `var-namespace`, `var-pod`, `var-node`, `var-workload` (with `var-type`), `var-deployment`, `var-statefulset` and `var-daemonset` with placeholders, drops a fixed time range, names the dashboard after its address, and says which objects it shows for. **Grafana…** on a pod then opens that dashboard set to the pod.
-
-You can also write the placeholders yourself:
-
-| Placeholder | Filled with |
+| Picked | Query |
 | --- | --- |
-| `{namespace}` | The object's namespace, or a Namespace's own name |
-| `{name}`, `{kind}` | The object's name and its kind in lower case, like `deployment` |
-| `{pod}`, `{deployment}`, `{node}`, `{service}`, … | The object's name, for objects of that kind |
-| `{workload}` | The name of a Deployment, StatefulSet, DaemonSet, ReplicaSet, Job or CronJob |
-| `{context}` | The context's name |
+| A namespace | `{namespace="shop"}` |
+| A pod | `{namespace="shop", pod="web-1"}` |
+| A Deployment, StatefulSet, DaemonSet, ReplicaSet, Job or CronJob | Its pods by the names its controller gives them, like `{namespace="shop", pod=~"web-[a-z0-9]{1,10}-[a-z0-9]{5}"}` |
+| A Service | The pods it selects right now, by name |
+| Anything else in a namespace, like a ConfigMap | Its namespace |
 
-A dashboard shows only for objects that fill all of its placeholders, so one with `{pod}` shows for pods, and one with only `{namespace}` for everything in a namespace. Values are URL-encoded. An address that starts with `/`, like `/d/abc?var-pod={pod}`, opens on the Grafana that Kubri found. These dashboards come first in **Grafana…** and in **Metrics**, and are kept in Kubri's [settings file](SETTINGS.md).
+The queries use the `namespace` and `pod` labels that Promtail, Grafana Alloy and most log collectors set. Kubri asks Grafana which Loki data source it has and takes the default one, else the one named `Loki`. When Grafana needs a login or a client certificate and you gave no token, Kubri cannot ask, and Grafana opens its own default data source; give the name or UID of the Loki data source under **Loki data source** then. Your browser opens the page, so a login or a client certificate there works as usual.
+
+### Dashboards
+
+**Grafana…** in the menu of every object lists, in a dialog, its logs in Explore, the dashboards that show it, and **Search Grafana for** its name, each with **Copy** for its whole address. **Metrics** lists the same above the charts, and the Integrations page lists them for the namespace picked in the sidebar.
+
+A dashboard fits when it has a variable Kubri can fill, like `pod`, `workload`, `deployment` or `node`, with the namespace too, and opens with those variables set. Dashboards come from Grafana's own list and from the ConfigMaps labeled `grafana_dashboard` that kube-prometheus-stack and most charts ship, so they show even when Grafana needs a login. For a Grafana given by URL that needs a login, a service account token with the Viewer role under **Token** lets Kubri read its list and its data sources. Kubri reads them again after five minutes.
 
 ## Loki
 
-In the log workspace (<kbd>l</kbd>), **Loki history** in the source menu shows what Loki kept over the last 15 minutes to 7 days, including pods that no longer exist. The LogQL field starts with the object's own query (by pod name for pods and workloads, by selector labels for a Service, and the container when one is picked) and runs any other with **Run**. The lines take the same search, levels, fields, table and export as live logs. A query returns at most 5000 lines, the newest; a note at the top says when there were more.
+In the log workspace (<kbd>l</kbd>), **Loki history** in the source menu shows what Loki kept over the last 15 minutes to 7 days, including pods that no longer exist. The LogQL field starts with the object's own query (by pod name for pods and workloads, by the names of the pods it selects for a Service, and the container when one is picked) and runs any other with **Run**. The lines take the same search, levels, fields, table and export as live logs. A query returns at most 5000 lines, the newest; a note at the top says when there were more.
 
 ## Flux and Argo CD
 

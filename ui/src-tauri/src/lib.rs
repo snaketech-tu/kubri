@@ -816,6 +816,14 @@ async fn dashboards(
 }
 
 #[tauri::command]
+async fn grafana_logs(
+    kubri: State<'_, Arc<Kubri>>,
+    target: ObjectRef,
+) -> CommandResult<kubri_core::DashboardLink> {
+    kubri.grafana_logs(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn integration_url(kubri: State<'_, Arc<Kubri>>, id: String) -> CommandResult<String> {
     kubri.integration_url(&id).await.map_err(|e| e.to_string())
 }
@@ -1241,6 +1249,7 @@ pub fn run() {
             usage_history,
             prometheus_query,
             dashboards,
+            grafana_logs,
             integration_url,
             loki_logs,
             gitops,

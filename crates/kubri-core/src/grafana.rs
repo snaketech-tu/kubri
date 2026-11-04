@@ -1,5 +1,6 @@
-//! Grafana dashboards for an object: those whose variables Kubri can fill with the object's
-//! namespace, pod, workload or node, as links that open them already filtered.
+//! Grafana for an object: its logs in Grafana's Explore, and the dashboards whose variables
+//! Kubri can fill with its namespace, pod, workload or node, as links that open them already
+//! filtered.
 //!
 //! Dashboards come from Grafana's search API and from ConfigMaps labeled `grafana_dashboard`,
 //! which is how kube-prometheus-stack and most charts ship them; the ConfigMaps need no
@@ -10,7 +11,7 @@ use std::collections::BTreeMap;
 use k8s_openapi::api::core::v1::ConfigMap;
 use kube::api::ListParams;
 use kube::{Api, Client};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::integrations::Endpoint;
@@ -40,19 +41,6 @@ pub struct DashboardLink {
     pub path: String,
     /// The variables Kubri filled in.
     pub filled: Vec<String>,
-    /// A whole URL, from a link in the context's settings, opened as it is; `path` is then
-    /// empty.
-    pub url: Option<String>,
-}
-
-/// A link to a Grafana in a context's settings, with placeholders that an object fills in.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct GrafanaLink {
-    pub title: String,
-    /// A URL like `https://grafana.example.com/d/abc?var-pod={pod}`, or a path like
-    /// `/d/abc?var-namespace={namespace}` on the Grafana Kubri found.
-    pub url: String,
 }
 
 /// Grafana's dashboard search for `name`, which works even where Kubri cannot read
@@ -63,120 +51,7 @@ pub(crate) fn search_link(name: &str) -> DashboardLink {
         folder: String::new(),
         path: format!("/dashboards?query={}", encode(name)),
         filled: Vec::new(),
-        url: None,
     }
-}
-
-/// The kinds a `{workload}` placeholder stands for.
-const WORKLOADS: [&str; 6] = [
-    "Deployment",
-    "StatefulSet",
-    "DaemonSet",
-    "ReplicaSet",
-    "Job",
-    "CronJob",
-];
-
-/// The names of the placeholders in `template`, like `pod` for `{pod}`, in order.
-pub(crate) fn placeholders(template: &str) -> Vec<&str> {
-    let mut out = Vec::new();
-    let mut rest = template;
-    while let Some(start) = rest.find('{') {
-        rest = &rest[start + 1..];
-        let Some(end) = rest.find('}') else { break };
-        let name = &rest[..end];
-        if !name.is_empty()
-            && name
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
-        {
-            out.push(name);
-            rest = &rest[end + 1..];
-        }
-    }
-    out
-}
-
-/// What an object fills in: `context`, `name` and `kind`, `namespace` for objects in one and
-/// for a Namespace itself, the name under its kind, like `pod` or `node`, and `workload` for
-/// Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs and CronJobs.
-pub(crate) fn object_values(
-    context: &str,
-    kind: &str,
-    namespace: Option<&str>,
-    name: &str,
-) -> BTreeMap<String, String> {
-    // The kind's own first, so that a custom kind named like `Name` cannot replace the others.
-    let mut values = BTreeMap::from([(kind.to_ascii_lowercase(), name.to_owned())]);
-    values.insert("context".into(), context.to_owned());
-    values.insert("name".into(), name.to_owned());
-    values.insert("kind".into(), kind.to_ascii_lowercase());
-    if let Some(namespace) = namespace.filter(|n| !n.is_empty()) {
-        values.insert("namespace".into(), namespace.to_owned());
-    } else if kind == "Namespace" {
-        values.insert("namespace".into(), name.to_owned());
-    }
-    if WORKLOADS.contains(&kind) {
-        values.insert("workload".into(), name.to_owned());
-    }
-    values
-}
-
-/// `template` with its placeholders filled, each value URL-encoded; `None` when the object
-/// lacks one of them, so that a link for pods shows only for pods.
-pub(crate) fn fill(template: &str, values: &BTreeMap<String, String>) -> Option<String> {
-    let mut out = template.to_owned();
-    for name in placeholders(template) {
-        out = out.replace(&format!("{{{name}}}"), &encode(values.get(name)?));
-    }
-    Some(out)
-}
-
-/// Why a link from the settings cannot work; `None` when it can.
-pub(crate) fn link_problem(link: &GrafanaLink) -> Option<String> {
-    let url = link.url.as_str();
-    if url.starts_with('/') {
-        return None;
-    }
-    // Every placeholder filled with a plain word, to see that the rest is a URL.
-    let sample: BTreeMap<String, String> = placeholders(url)
-        .into_iter()
-        .map(|p| (p.to_owned(), "x".to_owned()))
-        .collect();
-    match reqwest::Url::parse(&fill(url, &sample).unwrap_or_default()) {
-        Ok(parsed) if matches!(parsed.scheme(), "http" | "https") => None,
-        _ => Some(format!(
-            "the dashboard address `{url}` must start with http:// or https://, or with / for a path on the Grafana Kubri found"
-        )),
-    }
-}
-
-/// The links from the settings that `values` can fill, in their order.
-pub(crate) fn settings_links(links: &[GrafanaLink], values: &BTreeMap<String, String>) -> Vec<DashboardLink> {
-    links
-        .iter()
-        .filter_map(|link| {
-            let filled = fill(&link.url, values)?;
-            let mut names: Vec<String> = Vec::new();
-            for name in placeholders(&link.url) {
-                if !names.iter().any(|n| n == name) {
-                    names.push(name.to_owned());
-                }
-            }
-            let (path, url) = if filled.starts_with('/') {
-                (filled, None)
-            } else {
-                (String::new(), Some(filled))
-            };
-            Some(DashboardLink {
-                title: link.title.clone(),
-                folder: String::new(),
-                path,
-                filled: names,
-                url,
-            })
-        })
-        .collect()
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -366,12 +241,45 @@ pub(crate) fn links(dashboards: &[Dashboard], subject: &Subject) -> Vec<Dashboar
                 folder: d.folder.clone(),
                 path: format!("/d/{}?{}", encode(&d.uid), query.join("&")),
                 filled,
-                url: None,
             },
         ));
     }
     out.sort_by(|(a, x), (b, y)| b.cmp(a).then_with(|| x.title.cmp(&y.title)));
     out.into_iter().map(|(_, link)| link).collect()
+}
+
+/// Grafana's Explore with the logs `query` finds over the last hour, from the Loki data source
+/// `source` (its UID or name), or from Grafana's default data source.
+pub(crate) fn explore_path(source: Option<&str>, query: &str) -> String {
+    // The query names no data source of its own: Grafana gives it the pane's, found by UID or
+    // by name, where a query's own must be a UID.
+    let target = serde_json::json!({"refId": "A", "expr": query, "queryType": "range"});
+    let mut pane = serde_json::json!({"queries": [target], "range": {"from": "now-1h", "to": "now"}});
+    if let Some(source) = source.filter(|s| !s.is_empty()) {
+        pane["datasource"] = source.into();
+    }
+    let panes = serde_json::json!({ "kubri": pane });
+    format!("/explore?schemaVersion=1&panes={}", encode(&panes.to_string()))
+}
+
+/// The UID of the Loki data source in Grafana's frontend settings: the default one, else the
+/// one named `Loki`, else the first by name.
+pub(crate) fn loki_source(settings: &Value) -> Option<String> {
+    let sources = settings.get("datasources")?.as_object()?;
+    let mut lokis: Vec<(&String, &Value)> = sources
+        .iter()
+        .filter(|(_, s)| s.get("type").and_then(Value::as_str) == Some("loki"))
+        .collect();
+    lokis.sort_by_key(|(name, s)| {
+        let default = s.get("isDefault").and_then(Value::as_bool) == Some(true);
+        (
+            !default,
+            !name.eq_ignore_ascii_case("loki"),
+            name.to_ascii_lowercase(),
+        )
+    });
+    let (_, source) = lokis.first()?;
+    source.get("uid").and_then(Value::as_str).map(str::to_owned)
 }
 
 fn encode(text: &str) -> String {
@@ -465,92 +373,64 @@ mod tests {
         );
     }
 
-    fn link(title: &str, url: &str) -> GrafanaLink {
-        GrafanaLink {
-            title: title.into(),
-            url: url.into(),
-        }
-    }
-
-    #[test]
-    fn finds_placeholders() {
-        assert_eq!(
-            placeholders("https://g/d/a?var-ns={namespace}&var-pod={pod}&x={Pod}&y={}&z={pod}"),
-            ["namespace", "pod", "pod"]
-        );
-        assert_eq!(placeholders("https://g/{namespace"), Vec::<&str>::new());
-        assert_eq!(placeholders("https://g/{{pod}"), ["pod"]);
-    }
-
-    #[test]
-    fn settings_links_show_where_the_object_fills_them() {
-        let links = [
-            link(
-                "Pod",
-                "https://grafana.example.com/d/pod?var-namespace={namespace}&var-pod={pod}&from={namespace}",
-            ),
-            link(
-                "Namespace",
-                "https://grafana.example.com/d/ns?var-namespace={namespace}&ctx={context}",
-            ),
-            link("Workload", "/d/wl?var-workload={workload}&var-type={kind}"),
-            link("Anything", "https://logs.example.com/search?q={kind}%2F{name}"),
-        ];
-        let titles = |values: &BTreeMap<String, String>| {
-            settings_links(&links, values)
-                .into_iter()
-                .map(|l| l.title)
-                .collect::<Vec<_>>()
-        };
-        let pod = object_values("prod eu", "Pod", Some("shop"), "web-1");
-        assert_eq!(titles(&pod), ["Pod", "Namespace", "Anything"]);
-        let found = settings_links(&links, &pod);
-        assert_eq!(
-            found[0].url.as_deref(),
-            Some("https://grafana.example.com/d/pod?var-namespace=shop&var-pod=web-1&from=shop")
-        );
-        assert_eq!(found[0].filled, ["namespace", "pod"]);
-        assert_eq!(
-            found[1].url.as_deref(),
-            Some("https://grafana.example.com/d/ns?var-namespace=shop&ctx=prod%20eu")
-        );
-        let deployment = object_values("c", "Deployment", Some("shop"), "web");
-        assert_eq!(titles(&deployment), ["Namespace", "Workload", "Anything"]);
-        let path = &settings_links(&links, &deployment)[1];
-        assert_eq!(
-            (path.path.as_str(), path.url.as_deref()),
-            ("/d/wl?var-workload=web&var-type=deployment", None)
-        );
-        // A node has no namespace; a Namespace fills its own.
-        assert_eq!(titles(&object_values("c", "Node", None, "n1")), ["Anything"]);
-        assert_eq!(
-            titles(&object_values("c", "Namespace", None, "shop")),
-            ["Namespace", "Anything"]
-        );
-    }
-
     #[test]
     fn searches_grafana_for_the_name() {
-        let link = search_link("web 1");
-        assert_eq!(link.path, "/dashboards?query=web%201");
-        assert_eq!(link.url, None);
+        assert_eq!(search_link("web 1").path, "/dashboards?query=web%201");
     }
 
     #[test]
-    fn settings_links_must_be_urls() {
-        assert_eq!(
-            link_problem(&link("", "https://g.example.com/d/a?var-pod={pod}")),
-            None
-        );
-        assert_eq!(link_problem(&link("", "/d/a?var-pod={pod}")), None);
-        assert_eq!(link_problem(&link("", "http://{name}.example.com/")), None);
-        for bad in [
-            "grafana.example.com/d/a",
-            "javascript:alert(1)",
-            "file:///etc/passwd",
-            "{name}",
-        ] {
-            assert!(link_problem(&link("", bad)).is_some(), "{bad}");
+    fn explore_shows_the_query_from_loki() {
+        let path = explore_path(Some("loki-uid"), r#"{namespace="shop", pod="web-1"}"#);
+        let panes = path
+            .strip_prefix("/explore?schemaVersion=1&panes=")
+            .expect("an Explore path");
+        assert!(!panes.contains(['{', '"', ' ', '&']), "{panes}");
+        let decoded: Value = serde_json::from_str(&decode(panes)).unwrap();
+        let pane = &decoded["kubri"];
+        assert_eq!(pane["datasource"], "loki-uid");
+        assert_eq!(pane["queries"][0]["expr"], r#"{namespace="shop", pod="web-1"}"#);
+        assert_eq!(pane["range"]["from"], "now-1h");
+        assert!(pane["queries"][0].get("datasource").is_none());
+        // Without a data source Grafana takes its default one.
+        let decoded: Value = serde_json::from_str(&decode(
+            explore_path(None, "{namespace=\"shop\"}")
+                .strip_prefix("/explore?schemaVersion=1&panes=")
+                .unwrap(),
+        ))
+        .unwrap();
+        assert!(decoded["kubri"].get("datasource").is_none());
+    }
+
+    fn decode(text: &str) -> String {
+        let bytes = text.as_bytes();
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'%' {
+                out.push(u8::from_str_radix(&text[i + 1..i + 3], 16).unwrap());
+                i += 3;
+            } else {
+                out.push(bytes[i]);
+                i += 1;
+            }
         }
+        String::from_utf8(out).unwrap()
+    }
+
+    #[test]
+    fn finds_the_loki_data_source() {
+        let settings = serde_json::json!({"datasources": {
+            "Prometheus": {"type": "prometheus", "uid": "prom", "isDefault": true},
+            "Loki old": {"type": "loki", "uid": "old"},
+            "Loki": {"type": "loki", "uid": "main", "isDefault": false},
+        }});
+        assert_eq!(loki_source(&settings).as_deref(), Some("main"));
+        let settings = serde_json::json!({"datasources": {
+            "B": {"type": "loki", "uid": "b"},
+            "A": {"type": "loki", "uid": "a", "isDefault": true},
+        }});
+        assert_eq!(loki_source(&settings).as_deref(), Some("a"));
+        assert_eq!(loki_source(&serde_json::json!({"datasources": {}})), None);
+        assert_eq!(loki_source(&serde_json::json!([])), None);
     }
 }
