@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { backend, type Dashboards, type ObjectRef } from '../api';
 	import { errorMessage } from '../format';
-	import { linkHost, openDashboard } from '../integrations';
+	import { copyDashboard, linkHost, openDashboard } from '../integrations';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -37,6 +37,7 @@
 	{:else if !found.links.length}
 		<p class="muted">{empty}{found.note ? ` Grafana's own list: ${found.note}` : ''}</p>
 	{:else}
+		{#if found.note}<p class="muted">Kubri could not read Grafana's dashboards: {found.note}</p>{/if}
 		<ul>
 			{#each found.links as link, i (`${i}:${link.url ?? link.path}`)}
 				{@const where = link.folder || linkHost(link)}
@@ -50,6 +51,7 @@
 						{link.title}
 					</button>
 					{#if where}<span class="muted">{where}</span>{/if}
+					<button class="copy" onclick={() => copyDashboard(link)} aria-label="Copy the address of {link.title}">Copy</button>
 				</li>
 			{/each}
 		</ul>
@@ -87,6 +89,19 @@
 	.muted {
 		margin: 4px 0 0;
 		color: var(--text-muted);
+	}
+	.copy {
+		margin-left: auto;
+		padding: 0 6px;
+		border: 1px solid var(--border);
+		border-radius: 5px;
+		background: var(--surface-1);
+		color: var(--text-muted);
+		font-size: 11px;
+		flex: none;
+	}
+	.copy:hover {
+		color: var(--text);
 	}
 	li .muted {
 		margin: 0;

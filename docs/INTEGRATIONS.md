@@ -66,11 +66,13 @@ The suggested request is use with 20% headroom, the suggested limit use with 50%
 
 Dashboards come from Grafana's own list and from the ConfigMaps labeled `grafana_dashboard` that kube-prometheus-stack and most charts ship, so they show even when Grafana needs a login. Kubri reads them again after five minutes.
 
-**Grafana…** in the menus of pods, workloads, nodes and namespaces (and of every object once a context has links of its own) lists the same dashboards in a dialog.
+**Grafana…** in the menu of every object lists the same dashboards in a dialog, with **Copy** for each address. With a Grafana URL, it also offers **Search Grafana for** the object's name, which opens Grafana's dashboard search in your browser. That works even when Kubri cannot read Grafana itself, such as behind a login or a client certificate, as your browser signs in.
 
-### Links of your own
+### Dashboards for objects
 
-For a Grafana that Kubri cannot find, such as one a customer runs outside the cluster, add **Grafana links** under **Point elsewhere** on the Integrations page, for the connected context. A link has a title and a URL with placeholders that each object fills in:
+For a Grafana that Kubri cannot read, such as one a customer runs outside the cluster, add its dashboards under **Point elsewhere > Grafana > Dashboards for objects** on the Integrations page, for the connected context. Paste the address of a dashboard from your browser, like `https://grafana.example.com/d/abc/pods?var-namespace=shop&var-pod=web-1`: Kubri replaces the values of `var-namespace`, `var-pod`, `var-node`, `var-workload`, `var-deployment` and the like with placeholders, drops a fixed time range, names the dashboard after its address, and says which objects it shows for. **Grafana…** on a pod then opens that dashboard set to the pod.
+
+You can also write the placeholders yourself:
 
 | Placeholder | Filled with |
 | --- | --- |
@@ -80,7 +82,7 @@ For a Grafana that Kubri cannot find, such as one a customer runs outside the cl
 | `{workload}` | The name of a Deployment, StatefulSet, DaemonSet, ReplicaSet, Job or CronJob |
 | `{context}` | The context's name |
 
-A link shows only for objects that fill all of its placeholders, so `https://grafana.example.com/d/abc?var-namespace={namespace}&var-pod={pod}` shows for pods, and one with only `{namespace}` for everything in a namespace. Values are URL-encoded. A link that starts with `/`, like `/d/abc?var-pod={pod}`, opens on the Grafana that Kubri found. Links come first in **Grafana…** and in **Metrics**, and are kept in Kubri's [settings file](SETTINGS.md).
+A dashboard shows only for objects that fill all of its placeholders, so one with `{pod}` shows for pods, and one with only `{namespace}` for everything in a namespace. Values are URL-encoded. An address that starts with `/`, like `/d/abc?var-pod={pod}`, opens on the Grafana that Kubri found. These dashboards come first in **Grafana…** and in **Metrics**, and are kept in Kubri's [settings file](SETTINGS.md).
 
 ## Loki
 

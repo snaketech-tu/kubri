@@ -39,11 +39,11 @@
 	<h2>Grafana for {target.name}</h2>
 	<DashboardList
 		{target}
-		title="Dashboards and links"
-		empty="Neither Grafana nor the links of this context have a dashboard for this object."
+		title="Dashboards"
+		empty="No dashboard fits this object. Add one, or a Grafana URL to search it, on the Integrations page."
 	/>
 	<div class="buttons">
-		<button class="secondary" onclick={setUp}>Set up links…</button>
+		<button class="secondary" onclick={setUp}>Set up dashboards…</button>
 		<button class="primary" onclick={close}>Close</button>
 	</div>
 </dialog>

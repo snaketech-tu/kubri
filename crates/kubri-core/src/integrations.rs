@@ -931,8 +931,9 @@ impl crate::Kubri {
         Ok((dashboards, note))
     }
 
-    /// Grafana dashboards that show `target`, as links with its variables filled in.
-    /// The links from the context's settings come first, and show for any kind of object.
+    /// Grafana dashboards that show `target`, as links with its variables filled in: the
+    /// context's own links first, for any kind of object, then those Grafana lists, then a
+    /// search of Grafana for the object's name.
     pub async fn dashboards(&self, target: &ObjectRef) -> Result<grafana::Dashboards> {
         let session = self.object_session(target).await?;
         let kind = session.info_for(&target.resource)?.kind.clone();
@@ -950,35 +951,52 @@ impl crate::Kubri {
         let mut links = grafana::settings_links(&ours, &values);
         let namespace = target.namespace.clone().unwrap_or_default();
         let subject = match (target.resource.group.as_str(), kind.as_str()) {
-            ("", "Pod") => grafana::Subject::Pod {
+            ("", "Pod") => Some(grafana::Subject::Pod {
                 namespace,
                 name: target.name.clone(),
-            },
-            ("", "Node") => grafana::Subject::Node {
+            }),
+            ("", "Node") => Some(grafana::Subject::Node {
                 name: target.name.clone(),
-            },
-            ("", "Namespace") => grafana::Subject::Namespace {
+            }),
+            ("", "Namespace") => Some(grafana::Subject::Namespace {
                 name: target.name.clone(),
-            },
+            }),
             ("apps", "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet")
-            | ("batch", "Job" | "CronJob") => grafana::Subject::Workload {
+            | ("batch", "Job" | "CronJob") => Some(grafana::Subject::Workload {
                 kind,
                 namespace,
                 name: target.name.clone(),
-            },
-            _ => return Ok(grafana::Dashboards { links, note: None }),
+            }),
+            _ => None,
         };
-        let (dashboards, note) = match self.grafana_dashboards(&session).await {
-            Ok(found) => found,
-            // Links from the settings work without a Grafana found in the cluster.
-            Err(_) if !links.is_empty() => return Ok(grafana::Dashboards { links, note: None }),
-            Err(err) => return Err(err),
-        };
-        links.extend(grafana::links(&dashboards, &subject));
-        Ok(grafana::Dashboards {
-            note: note.filter(|_| links.is_empty()),
-            links,
-        })
+        let found = self
+            .integrations(false)
+            .await
+            .is_ok_and(|i| i.endpoint("grafana").is_some());
+        if !found {
+            if links.is_empty() && subject.is_some() {
+                return Err(Error::Unsupported(
+                    "no Grafana found; give its URL on the integrations page".into(),
+                ));
+            }
+            return Ok(grafana::Dashboards { links, note: None });
+        }
+        let mut note = None;
+        if let Some(subject) = subject {
+            match self.grafana_dashboards(&session).await {
+                Ok((dashboards, why)) => {
+                    let listed = grafana::links(&dashboards, &subject);
+                    // Why Grafana's list could not be read matters only when nothing matched.
+                    note = why.filter(|_| listed.is_empty() && links.is_empty());
+                    links.extend(listed);
+                }
+                // Such as a Grafana behind a client certificate, which the browser can still open.
+                Err(err) if links.is_empty() => note = Some(err.to_string()),
+                Err(_) => {}
+            }
+        }
+        links.push(grafana::search_link(&target.name));
+        Ok(grafana::Dashboards { links, note })
     }
 
     /// Where the browser reaches a tool: its URL, or for one on a Service a port-forward to

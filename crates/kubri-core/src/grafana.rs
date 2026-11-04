@@ -55,6 +55,18 @@ pub struct GrafanaLink {
     pub url: String,
 }
 
+/// Grafana's dashboard search for `name`, which works even where Kubri cannot read
+/// Grafana's list, as the browser signs in.
+pub(crate) fn search_link(name: &str) -> DashboardLink {
+    DashboardLink {
+        title: format!("Search Grafana for {name}"),
+        folder: String::new(),
+        path: format!("/dashboards?query={}", encode(name)),
+        filled: Vec::new(),
+        url: None,
+    }
+}
+
 /// The kinds a `{workload}` placeholder stands for.
 const WORKLOADS: [&str; 6] = [
     "Deployment",
@@ -134,7 +146,7 @@ pub(crate) fn link_problem(link: &GrafanaLink) -> Option<String> {
     match reqwest::Url::parse(&fill(url, &sample).unwrap_or_default()) {
         Ok(parsed) if matches!(parsed.scheme(), "http" | "https") => None,
         _ => Some(format!(
-            "the Grafana link `{url}` must start with http://, https:// or / for a path on the Grafana found"
+            "the dashboard address `{url}` must start with http:// or https://, or with / for a path on the Grafana Kubri found"
         )),
     }
 }
@@ -515,6 +527,13 @@ mod tests {
             titles(&object_values("c", "Namespace", None, "shop")),
             ["Namespace", "Anything"]
         );
+    }
+
+    #[test]
+    fn searches_grafana_for_the_name() {
+        let link = search_link("web 1");
+        assert_eq!(link.path, "/dashboards?query=web%201");
+        assert_eq!(link.url, None);
     }
 
     #[test]
