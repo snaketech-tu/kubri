@@ -28,7 +28,7 @@ The file is gzipped JSON; `zcat file.kubri | jq .info` shows what it holds.
 
 ## Opening one
 
-**Open a file…** in the same dialog opens a snapshot in place of the cluster. `kubri-server --snapshot file.kubri` opens one at start, for a machine without a kubeconfig.
+**Open a file…** in the same dialog opens a snapshot in place of the cluster. `kubri-server --snapshot file.kubri` opens one at start, for a machine without a kubeconfig. In the desktop app, `kubri file.kubri` does the same. `kubri snapshot` saves one from the command line, without opening Kubri (see [On the command line](CLI.md#kubri-snapshot)).
 
 While a snapshot is open:
 

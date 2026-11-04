@@ -275,6 +275,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
         <li><a href="docs/CLUSTERS.md">Several clusters</a>: the Clusters page, loading kubeconfig files, added contexts, search and compare</li>
         <li><a href="docs/TOPOLOGY.md">What depends on what</a>: the topology graph, request paths and delete warnings</li>
         <li><a href="docs/CHANGES.md">What changed</a> and <a href="docs/SNAPSHOTS.md">Snapshots</a></li>
+        <li><a href="docs/CLI.md">On the command line</a>: <code>kubri lint</code> for CI, with SARIF for GitHub code scanning, and <code>kubri snapshot</code></li>
       </ul>
     </td>
     <td width="50%" valign="top">
