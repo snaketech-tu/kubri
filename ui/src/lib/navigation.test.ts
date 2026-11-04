@@ -15,6 +15,7 @@ describe('unsaved YAML navigation', () => {
 		expect(next).not.toHaveBeenCalled();
 		expect(guard.dirty).toBe(true);
 		expect(guard.pending).toBe(next);
+		expect(guard.failed).toBe(true);
 	});
 	it('only continues after saving succeeds', async () => {
 		const guard = new DraftGuard(),

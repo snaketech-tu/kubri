@@ -21,6 +21,7 @@
 	import { dock } from '../dock.svelte';
 	import { errorMessage, isNotFound, workloadPrefix } from '../format';
 	import { drafts } from '../navigation.svelte';
+	import { focusForKeys } from '../keys';
 	import { containerNames, hasLogs, hasUsers, isPods, isServices } from '../pods';
 	import { app, type Details, type DetailsTab } from '../state.svelte';
 	import { cellTone } from '../status';
@@ -287,6 +288,8 @@
 		app.toast('Your changes now apply to the latest version');
 	}
 
+	let compareButton = $state<HTMLButtonElement>();
+
 	/** A dry run of the edit, shown as a diff before it is saved. */
 	let review = $state<{ text: string; preview: Preview } | null>(null);
 
@@ -315,7 +318,9 @@
 			return false;
 		}
 		if (serverChanged) {
-			saveError = 'Someone changed this object since you started editing. Compare and take their changes first.';
+			// Where the notice above the editor says so already, lead to its Compare button.
+			if (compareButton) focusForKeys(compareButton);
+			else saveError = 'Someone changed this object since you started editing. Compare and take their changes first.';
 			return false;
 		}
 		// The server only updated the status meanwhile: the edit still applies to the latest version.
@@ -551,8 +556,8 @@
 	{/if}
 	{#if details.editing && serverChanged && !compare && details.tab === 'yaml'}
 		<div class="banner notice" role="status">
-			<span>Someone changed this object on the server since you started editing.</span>
-			<button class="secondary" onclick={showCompare}>Compare</button>
+			<span>Someone changed this object on the server since you started editing. Compare and take their changes before you save.</span>
+			<button class="secondary" bind:this={compareButton} onclick={showCompare}>Compare</button>
 		</div>
 	{/if}
 
