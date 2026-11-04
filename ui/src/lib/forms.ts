@@ -170,3 +170,8 @@ export function rename(object: Record<string, any>, to: string) {
 		if (from && to && getPath(object, path) === from) setPath(object, path, to);
 	}
 }
+
+/** Whether a replicas field holds a count to scale to: a whole number of 0 or more. */
+export function validReplicas(value: number | null | undefined): value is number {
+	return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}

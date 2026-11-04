@@ -35,6 +35,7 @@
 		type ForwardablePort
 	} from '../pods';
 	import { autoscalerFor, type Autoscaler } from '../autoscale';
+	import { validReplicas } from '../forms';
 	import { app, refOf, type Dialog } from '../state.svelte';
 	import { hasUsers, isPods } from '../pods';
 	import { summarizeUsers } from '../references';
@@ -105,6 +106,8 @@
 
 	// Scale
 	let replicas = $state<number | null>(null);
+	/** True until the object's replicas are in; an emptied field is null as well, but stays editable. */
+	let loadingReplicas = $state(true);
 	/** What a scale starts from, and the autoscaler that would undo it. */
 	let currentReplicas = $state<number | null>(null);
 	let autoscaler = $state<Autoscaler | null>(null);
@@ -191,17 +194,22 @@
 			queueMicrotask(focusFirstField);
 		} else if (dialog.kind === 'scaleMany') {
 			// The first one's count, to start from.
+			loadingReplicas = true;
 			backend
 				.getObject(dialog.targets[0])
 				.then((obj) => (replicas = typeof obj.spec?.replicas === 'number' ? obj.spec.replicas : 1))
 				.catch(() => (replicas = 1))
-				.finally(() => queueMicrotask(() => firstField?.focus()));
+				.finally(() => {
+					loadingReplicas = false;
+					queueMicrotask(() => firstField?.focus());
+				});
 		} else if (
 			dialog.kind === 'scale' ||
 			dialog.kind === 'labels' ||
 			dialog.kind === 'portforward' ||
 			dialog.kind === 'image'
 		) {
+			if (dialog.kind === 'scale') loadingReplicas = true;
 			backend
 				.getObject(dialog.target)
 				.then((obj) => {
@@ -234,7 +242,8 @@
 					}
 					queueMicrotask(() => firstField?.focus());
 				})
-				.catch((err) => (error = errorMessage(err)));
+				.catch((err) => (error = errorMessage(err)))
+				.finally(() => (loadingReplicas = false));
 		} else {
 			queueMicrotask(() => danger ? cancelButton?.focus() : confirmButton?.focus());
 		}
@@ -289,6 +298,8 @@
 			return;
 		}
 		if (!confirmed) return;
+		// The field says what is missing; Enter in an empty one does nothing.
+		if ((dialog.kind === 'scale' || dialog.kind === 'scaleMany') && !validReplicas(replicas)) return;
 		busy = true;
 		error = null;
 		let ok = false;
@@ -309,7 +320,7 @@
 					});
 					break;
 				case 'scale':
-					if (replicas === null || replicas < 0 || !Number.isInteger(replicas)) {
+					if (!validReplicas(replicas)) {
 						throw new Error('Replicas must be a whole number of 0 or more');
 					}
 					ok = await scale(dialog.target, replicas);
@@ -321,7 +332,7 @@
 				case 'restartMany': {
 					const many = dialog;
 					const count = replicas;
-					if (many.kind === 'scaleMany' && (count === null || count < 0 || !Number.isInteger(count))) {
+					if (many.kind === 'scaleMany' && !validReplicas(count)) {
 						throw new Error('Replicas must be a whole number of 0 or more');
 					}
 					const results = await Promise.allSettled(
@@ -487,7 +498,7 @@
 		const wanted = app.settings.diff;
 		switch (dialog.kind) {
 			case 'scale':
-				return wanted.scale && replicas !== null ? { type: 'scale', replicas } : null;
+				return wanted.scale && validReplicas(replicas) ? { type: 'scale', replicas } : null;
 			case 'restart':
 				return wanted.restart ? { type: 'restart' } : null;
 			case 'image': {
@@ -802,7 +813,17 @@
 			{#each dialog.targets as t (name(t))}<li>{name(t)}</li>{/each}
 		</ul>
 		{#if dialog.kind === 'scaleMany'}
-			<input class="replicas" type="number" min="0" aria-label="Replicas" bind:value={replicas} bind:this={firstField} />
+			<input
+				class="replicas"
+				type="number"
+				min="0"
+				aria-label="Replicas"
+				aria-invalid={!loadingReplicas && !validReplicas(replicas)}
+				bind:value={replicas}
+				bind:this={firstField}
+				disabled={loadingReplicas}
+			/>
+			{#if !loadingReplicas && !validReplicas(replicas)}<p class="muted">Enter a whole number of 0 or more.</p>{/if}
 		{/if}
 	{:else if dialog.kind === 'scale'}
 		<p>
@@ -822,10 +843,13 @@
 			class="replicas"
 			type="number"
 			min="0"
+			aria-label="Replicas"
+			aria-invalid={!loadingReplicas && !validReplicas(replicas)}
 			bind:value={replicas}
 			bind:this={firstField}
-			disabled={replicas === null}
+			disabled={loadingReplicas}
 		/>
+		{#if !loadingReplicas && !validReplicas(replicas)}<p class="muted">Enter a whole number of 0 or more.</p>{/if}
 	{:else if dialog.kind === 'restart'}
 		<p>Restart all pods of <strong>{name(dialog.target)}</strong> with a rolling update?</p>
 	{:else if dialog.kind === 'labels'}
@@ -1150,7 +1174,10 @@
 			class="primary"
 			class:danger
 			bind:this={confirmButton}
-			disabled={busy || !confirmed || (dialog.kind === 'gitops' && dialog.action === 'autoSync' && !autoSync)}
+			disabled={busy ||
+				!confirmed ||
+				(dialog.kind === 'gitops' && dialog.action === 'autoSync' && !autoSync) ||
+				((dialog.kind === 'scale' || dialog.kind === 'scaleMany') && !validReplicas(replicas))}
 			onclick={confirm}
 		>
 			{busy ? 'Working…' : report ? 'Close' : needsPreview ? 'Review changes' : confirmLabel}

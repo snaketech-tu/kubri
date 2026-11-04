@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { templateObject } from './create';
-import { FORMS, fieldText, fieldValue, getPath, rename, setPath } from './forms';
+import { FORMS, fieldText, fieldValue, getPath, rename, setPath, validReplicas } from './forms';
 
 const field = (kind: string, label: string) => FORMS[kind].find((f) => f.label === label)!;
 
@@ -39,5 +39,19 @@ describe('guided forms', () => {
 		rename(svc, 'web-svc');
 		// A Service keeps pointing at the pods it selected.
 		expect(svc.spec.selector).toEqual({ app: 'web' });
+	});
+});
+
+describe('validReplicas', () => {
+	it('takes whole numbers of 0 or more', () => {
+		expect(validReplicas(0)).toBe(true);
+		expect(validReplicas(3)).toBe(true);
+	});
+	it('rejects an emptied field and other numbers', () => {
+		expect(validReplicas(null)).toBe(false);
+		expect(validReplicas(undefined)).toBe(false);
+		expect(validReplicas(-1)).toBe(false);
+		expect(validReplicas(1.5)).toBe(false);
+		expect(validReplicas(NaN)).toBe(false);
 	});
 });
