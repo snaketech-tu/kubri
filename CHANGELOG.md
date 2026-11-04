@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.0 — 2026-11-04
+
+- Open Grafana from any object: paste a dashboard address once and Kubri fills in the namespace, pod or workload for each object. **Grafana…** in the object menus opens or copies it, also for a Grafana Kubri cannot read itself. See [Integrations](docs/INTEGRATIONS.md).
+- The cluster overview shows what the cluster card shows: the health line, API server and version, a Ready workloads tile, and how much CPU and memory pods request.
+- Terminals bring their own fonts, so prompts like powerlevel10k show their icons everywhere. **Settings > Terminal > Font** names an installed font to use first.
+- In Docker, a mounted `~/.kube` is enough: Kubri finds every kubeconfig in it.
+- While Kubri is read-only, change keys such as <kbd>e</kbd> or <kbd>Ctrl</kbd>+<kbd>D</kbd> say why they do nothing.
+- When someone changed an object while you edit it, saving leads to **Compare** instead of showing the same message twice. Saving no longer leaves a "Keep your YAML changes?" question behind.
+- Enter presses a button you reached with <kbd>Tab</kbd>. Deleting several objects puts the cursor in the field where you type `confirm`.
+- The Scale field stays editable when you clear it, and an opened list shows the selected choice in the middle.
+- The overview no longer counts crash-loop warnings as restarts, and shows small CPU use in millicores instead of "0.0 cores".
+
 ## 1.5.1 — 2026-11-02
 
 - Logs of several containers or pods show in time order, also for the AI agent. Asking for the previous log of a container that never restarted says so.

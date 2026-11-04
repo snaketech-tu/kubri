@@ -1,8 +1,10 @@
 ## What's new
 
-- Refined **Link** logo matching the selected design, with refreshed native icons and favicon.
-- Updated README screenshots, reproducible capture script and a visible application version.
-- More reliable benchmark testing on Windows.
+- **Grafana from any object:** paste a dashboard address once, then open or copy it for any pod, namespace or workload with **Grafana…**.
+- **Fuller cluster overview:** health line, version, Ready workloads, and requested CPU and memory.
+- **Terminal fonts:** prompts with Nerd Font icons show correctly everywhere; pick your own font in Settings.
+- **Docker:** mounting `~/.kube` is enough, Kubri finds every kubeconfig in it.
+- **Fixes:** read-only keys explain themselves, smoother YAML editing when others change the object, Enter on buttons reached with Tab, easier bulk deletes, an editable Scale field, and more accurate overview numbers.
 
 ## Install
 
