@@ -97,8 +97,12 @@
 		subtitle="Every context in your kubeconfig, checked side by side without connecting to it"
 	>
 		{#snippet tools()}
-			{#if checked}<span class="muted small">Checked {relative(new Date(checked).toISOString(), now)}</span>{/if}
-			<button class="btn" onclick={check} disabled={checking}>{checking ? 'Checking…' : 'Check again'}</button>
+			{#if checking}
+				<span class="muted small" role="status">Checking…</span>
+			{:else if checked}
+				<span class="muted small">Checked {relative(new Date(checked).toISOString(), now)}</span>
+			{/if}
+			<button class="btn" onclick={check} disabled={checking}>Check again</button>
 			<button class="btn" onclick={() => (adding = true)}>Add clusters…</button>
 		{/snippet}
 	</PageHeader>
@@ -127,7 +131,7 @@
 					style:--context-color={settings.color || null}
 				>
 					<span class="head">
-						<span class="swatch" aria-hidden="true"></span>
+						{#if settings.color}<span class="swatch" aria-hidden="true"></span>{/if}
 						<span class="names">
 							<button
 								class="name open"
@@ -252,20 +256,14 @@
 		border-color: var(--text-muted);
 		border-top-color: var(--context-color, var(--text-muted));
 	}
-	.cluster.failed {
-		background: color-mix(in srgb, var(--bad) 5%, var(--surface-1));
-		border-color: color-mix(in srgb, var(--bad) 40%, var(--border));
-		border-top-color: var(--context-color, var(--bad));
-	}
-	.cluster.warning {
-		border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
-		border-top-color: var(--context-color, var(--warn));
-	}
+	/* The state line says how a cluster is; the border only marks the connected one. */
 	.cluster.checking {
 		opacity: 0.75;
 	}
 	.cluster.current {
-		box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+		border-color: var(--accent);
+		border-top-color: var(--context-color, var(--accent));
+		box-shadow: 0 0 0 1px var(--accent);
 	}
 	.head {
 		display: flex;
@@ -328,6 +326,12 @@
 		gap: 7px;
 		font-size: 13px;
 		font-weight: 600;
+	}
+	.cluster.failed .state {
+		color: var(--bad);
+	}
+	.cluster.warning .state {
+		color: var(--warn);
 	}
 	.error,
 	.note {

@@ -638,6 +638,8 @@ export interface Guard {
 	canUnlock: boolean;
 	/** Seconds until an unlocked context locks again. */
 	unlockedFor: number | null;
+	/** Read-only for a reason no switch in Kubri lifts: a snapshot, `--read-only`, k9s `readOnly`. */
+	fixed?: boolean;
 }
 
 export interface ContextList {

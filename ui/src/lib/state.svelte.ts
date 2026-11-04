@@ -40,6 +40,7 @@ import {
 } from './api';
 import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
+import { readOnlyReason } from './guard';
 import { applyZoom, storedZoom } from './appearance';
 import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } from './releases';
 import { loadPins, savePins, samePin, toggled as togglePinIn, type Pin } from './pins';
@@ -657,14 +658,7 @@ class AppState {
 	/** Says why an action that changes the cluster did nothing, and how to allow it where that is possible. */
 	explainReadOnly(action: string) {
 		const what = action.replace(/…$/, '');
-		const why = this.k9s?.readOnly
-			? 'k9s readOnly is set for this context'
-			: this.contextSettings.readOnly
-				? 'Read-only is on; switch it off in the header to make changes'
-				: this.guard.canUnlock
-					? 'this context is locked; unlock it with Read-only in the header'
-					: (this.guard.reason ?? 'Kubri does not change this cluster');
-		this.toast(`${what} is not available: ${why}`, 'bad');
+		this.toast(`${what} is not available: ${readOnlyReason(this.guard, this.contextSettings.readOnly, this.k9s?.readOnly ?? false)}`, 'bad');
 	}
 
 	/** The header's lock button: read-only on and off, or a locked context unlocked and locked. */

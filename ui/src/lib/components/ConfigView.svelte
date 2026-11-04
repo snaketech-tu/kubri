@@ -88,7 +88,7 @@
 
 	// Kubri's own colors in light and dark, and as the system is.
 	const lightTheme: SkinTheme = {
-		vars: { '--bg': '#f6f7fb', '--text': '#20283d', '--accent': '#4b64f4', '--ok': '#1f9d55', '--warn': '#c27c0e', '--bad': '#d64545' },
+		vars: { '--bg': '#f6f7fb', '--text': '#20283d', '--accent': '#4b64f4', '--ok': '#157a42', '--warn': '#9a5f00', '--bad': '#c93a3a' },
 		scheme: 'light'
 	};
 	const darkTheme: SkinTheme = {
