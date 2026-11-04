@@ -31,6 +31,8 @@ pub struct IntegrationSettings {
     /// A Grafana service account token, sent to a Grafana given by URL.
     pub grafana_token: String,
     pub loki: String,
+    /// Links to Grafanas Kubri does not find, filled in for each object.
+    pub grafana_links: Vec<grafana::GrafanaLink>,
 }
 
 impl IntegrationSettings {
@@ -48,6 +50,20 @@ impl IntegrationSettings {
             }
         }
         self.grafana_token = self.grafana_token.trim().to_owned();
+        self.grafana_links = std::mem::take(&mut self.grafana_links)
+            .into_iter()
+            .map(|link| grafana::GrafanaLink {
+                title: Some(link.title.trim())
+                    .filter(|t| !t.is_empty())
+                    .unwrap_or("Grafana")
+                    .to_owned(),
+                url: link.url.trim().to_owned(),
+            })
+            .filter(|link| !link.url.is_empty())
+            .collect();
+        if let Some(problem) = self.grafana_links.iter().find_map(grafana::link_problem) {
+            return Err(Error::Unsupported(problem));
+        }
         Ok(self)
     }
 }
@@ -916,9 +932,22 @@ impl crate::Kubri {
     }
 
     /// Grafana dashboards that show `target`, as links with its variables filled in.
+    /// The links from the context's settings come first, and show for any kind of object.
     pub async fn dashboards(&self, target: &ObjectRef) -> Result<grafana::Dashboards> {
         let session = self.object_session(target).await?;
         let kind = session.info_for(&target.resource)?.kind.clone();
+        let values = grafana::object_values(
+            &session.info.context,
+            &kind,
+            target.namespace.as_deref(),
+            &target.name,
+        );
+        let ours = self
+            .settings()
+            .context(&session.info.context)
+            .integrations
+            .grafana_links;
+        let mut links = grafana::settings_links(&ours, &values);
         let namespace = target.namespace.clone().unwrap_or_default();
         let subject = match (target.resource.group.as_str(), kind.as_str()) {
             ("", "Pod") => grafana::Subject::Pod {
@@ -937,10 +966,15 @@ impl crate::Kubri {
                 namespace,
                 name: target.name.clone(),
             },
-            _ => return Ok(grafana::Dashboards::default()),
+            _ => return Ok(grafana::Dashboards { links, note: None }),
         };
-        let (dashboards, note) = self.grafana_dashboards(&session).await?;
-        let links = grafana::links(&dashboards, &subject);
+        let (dashboards, note) = match self.grafana_dashboards(&session).await {
+            Ok(found) => found,
+            // Links from the settings work without a Grafana found in the cluster.
+            Err(_) if !links.is_empty() => return Ok(grafana::Dashboards { links, note: None }),
+            Err(err) => return Err(err),
+        };
+        links.extend(grafana::links(&dashboards, &subject));
         Ok(grafana::Dashboards {
             note: note.filter(|_| links.is_empty()),
             links,

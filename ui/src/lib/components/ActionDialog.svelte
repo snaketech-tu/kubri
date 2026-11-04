@@ -41,7 +41,7 @@
 	import type { Reference } from '../api';
 	import { plainOptions } from '../select';
 
-	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' | 'snapshot' }> } = $props();
+	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' | 'snapshot' | 'grafana' }> } = $props();
 
 	let busy = $state(false);
 

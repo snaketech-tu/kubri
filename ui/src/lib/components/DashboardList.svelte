@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { backend, type Dashboards, type ObjectRef } from '../api';
 	import { errorMessage } from '../format';
-	import { openTool } from '../integrations';
+	import { linkHost, openDashboard } from '../integrations';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -38,13 +38,18 @@
 		<p class="muted">{empty}{found.note ? ` Grafana's own list: ${found.note}` : ''}</p>
 	{:else}
 		<ul>
-			{#each found.links as link (link.path)}
+			{#each found.links as link, i (`${i}:${link.url ?? link.path}`)}
+				{@const where = link.folder || linkHost(link)}
 				<li>
-					<button class="link" onclick={() => openTool('grafana', link.path)} title="Open in Grafana with {link.filled.join(', ')} set">
+					<button
+						class="link"
+						onclick={() => openDashboard(link)}
+						title={link.filled.length ? `Open in Grafana with ${link.filled.join(', ')} set` : 'Open in Grafana'}
+					>
 						<Icon name="popout" size={13} />
 						{link.title}
 					</button>
-					{#if link.folder}<span class="muted">{link.folder}</span>{/if}
+					{#if where}<span class="muted">{where}</span>{/if}
 				</li>
 			{/each}
 		</ul>

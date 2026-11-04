@@ -23,6 +23,7 @@
 	import Dock from '#lib/components/Dock.svelte';
 	import DebugDialog from '#lib/components/DebugDialog.svelte';
 	import CompareDialog from '#lib/components/CompareDialog.svelte';
+	import GrafanaDialog from '#lib/components/GrafanaDialog.svelte';
 	import ForbiddenDialog from '#lib/components/ForbiddenDialog.svelte';
 	import UpdateDialog from '#lib/components/UpdateDialog.svelte';
 	import AgentRequests from '#lib/components/AgentRequests.svelte';
@@ -717,6 +718,8 @@
 	<DebugDialog dialog={app.dialog} />
 {:else if app.dialog?.kind === 'compare'}
 	<CompareDialog dialog={app.dialog} />
+{:else if app.dialog?.kind === 'grafana'}
+	<GrafanaDialog dialog={app.dialog} />
 {:else if app.dialog?.kind === 'snapshot'}
 	<SnapshotDialog dialog={app.dialog} />
 {:else if app.dialog}

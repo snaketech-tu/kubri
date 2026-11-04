@@ -66,6 +66,22 @@ The suggested request is use with 20% headroom, the suggested limit use with 50%
 
 Dashboards come from Grafana's own list and from the ConfigMaps labeled `grafana_dashboard` that kube-prometheus-stack and most charts ship, so they show even when Grafana needs a login. Kubri reads them again after five minutes.
 
+**Grafana…** in the menus of pods, workloads, nodes and namespaces (and of every object once a context has links of its own) lists the same dashboards in a dialog.
+
+### Links of your own
+
+For a Grafana that Kubri cannot find, such as one a customer runs outside the cluster, add **Grafana links** under **Point elsewhere** on the Integrations page, for the connected context. A link has a title and a URL with placeholders that each object fills in:
+
+| Placeholder | Filled with |
+| --- | --- |
+| `{namespace}` | The object's namespace, or a Namespace's own name |
+| `{name}`, `{kind}` | The object's name and its kind in lower case, like `deployment` |
+| `{pod}`, `{deployment}`, `{node}`, `{service}`, … | The object's name, for objects of that kind |
+| `{workload}` | The name of a Deployment, StatefulSet, DaemonSet, ReplicaSet, Job or CronJob |
+| `{context}` | The context's name |
+
+A link shows only for objects that fill all of its placeholders, so `https://grafana.example.com/d/abc?var-namespace={namespace}&var-pod={pod}` shows for pods, and one with only `{namespace}` for everything in a namespace. Values are URL-encoded. A link that starts with `/`, like `/d/abc?var-pod={pod}`, opens on the Grafana that Kubri found. Links come first in **Grafana…** and in **Metrics**, and are kept in Kubri's [settings file](SETTINGS.md).
+
 ## Loki
 
 In the log workspace (<kbd>l</kbd>), **Loki history** in the source menu shows what Loki kept over the last 15 minutes to 7 days, including pods that no longer exist. The LogQL field starts with the object's own query (by pod name for pods and workloads, by selector labels for a Service, and the container when one is picked) and runs any other with **Run**. The lines take the same search, levels, fields, table and export as live logs. A query returns at most 5000 lines, the newest; a note at the top says when there were more.

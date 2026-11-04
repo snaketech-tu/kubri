@@ -43,12 +43,14 @@
 	let checking = $state(false);
 	let saving = $state(false);
 	const context = $derived(app.cluster?.context ?? '');
-	let draft = $state<IntegrationSettings>({ prometheus: '', grafana: '', grafanaToken: '', loki: '' });
-	const saved = $derived(app.contextSettings.integrations ?? { prometheus: '', grafana: '', grafanaToken: '', loki: '' });
+	const EMPTY: IntegrationSettings = { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLinks: [] };
+	let draft = $state<IntegrationSettings>({ ...EMPTY });
+	const saved = $derived({ ...EMPTY, ...app.contextSettings.integrations });
 	const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(saved));
 
 	$effect(() => {
-		draft = { ...saved };
+		// A deep copy: editing a link must not change the saved one.
+		draft = JSON.parse(JSON.stringify(saved));
 	});
 
 	async function check() {
@@ -162,6 +164,32 @@
 				<input type="password" bind:value={draft.grafanaToken} placeholder="A service account token with the Viewer role" autocomplete="off" />
 			</label>
 			<p class="muted small">The token goes only to a Grafana given by URL, and is kept in Kubri’s settings file.</p>
+			<fieldset class="links">
+				<legend>Grafana links</legend>
+				<p class="muted small">
+					Links to a Grafana, for example one per customer, under <strong>Grafana…</strong> in the menus of the objects they fit.
+					An object fills in <code>{'{namespace}'}</code>, <code>{'{name}'}</code>, <code>{'{kind}'}</code>, <code>{'{context}'}</code>, its
+					name by kind like <code>{'{pod}'}</code>, <code>{'{deployment}'}</code> or <code>{'{node}'}</code>, and <code>{'{workload}'}</code>; a link shows
+					only where all of its placeholders are filled. A path like <code>/d/uid?var-pod={'{pod}'}</code> opens on the Grafana above.
+				</p>
+				{#each draft.grafanaLinks as link, i (i)}
+					<div class="link-row">
+						<input class="title" bind:value={link.title} placeholder="Title" aria-label="Title of link {i + 1}" spellcheck="false" autocomplete="off" />
+						<input
+							class="url"
+							bind:value={link.url}
+							placeholder={'https://grafana.example.com/d/uid?var-namespace={namespace}&var-pod={pod}'}
+							aria-label="URL of link {i + 1}"
+							spellcheck="false"
+							autocomplete="off"
+						/>
+						<button class="btn small" type="button" onclick={() => draft.grafanaLinks.splice(i, 1)} aria-label="Remove link {i + 1}">Remove</button>
+					</div>
+				{/each}
+				<div>
+					<button class="btn small" type="button" onclick={() => draft.grafanaLinks.push({ title: '', url: '' })}>Add link</button>
+				</div>
+			</fieldset>
 			<div class="actions">
 				<button class="btn primary" type="submit" disabled={!dirty || saving || !context}>{saving ? 'Saving…' : 'Save'}</button>
 			</div>
@@ -280,5 +308,33 @@
 	.actions {
 		display: flex;
 		justify-content: flex-end;
+	}
+	.links {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		min-width: 0;
+		margin: 0;
+		padding: 0;
+		border: none;
+	}
+	legend {
+		padding: 0;
+		margin-bottom: 4px;
+		font-size: 12.5px;
+		font-weight: 600;
+	}
+	.link-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 4px 6px;
+		align-items: center;
+	}
+	.link-row .url {
+		grid-column: 1;
+	}
+	.link-row .btn {
+		grid-row: 1 / span 2;
+		grid-column: 2;
 	}
 </style>

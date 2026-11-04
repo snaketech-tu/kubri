@@ -191,6 +191,10 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get'), kubectl: k({ op: 'yaml' }) });
 	const logs = isPods(resource) ? on('get', 'log') : need('get', pods, ns, { subresource: 'log' });
 	if (hasCharts(resource) && (app.has('prometheus') || app.has('grafana'))) add('View', 'Metrics', ['m'], show('metrics'), { primary: 9, id: 'metrics' });
+	// Links from the context's settings fit any kind; Grafana's own dashboards those with charts.
+	if (app.contextSettings.integrations?.grafanaLinks?.length || (hasCharts(resource) && app.has('grafana'))) {
+		add('View', 'Grafana…', [], dialog(() => ({ kind: 'grafana', target: { ...target, context: app.cluster?.context } })), { id: 'grafana' });
+	}
 	if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2, id: 'logs', needs: logs, kubectl: k({ op: 'logs', workload: !isPods(resource) }) });
 	const keep = (kind: 'logs' | 'shell', extra: { previous?: boolean; mode?: TerminalMode } = {}) => () =>
 		dock.add({ kind, resource, target: { ...target, context: app.cluster?.context }, ...extra });

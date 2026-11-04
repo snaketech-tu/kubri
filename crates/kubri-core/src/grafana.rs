@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use k8s_openapi::api::core::v1::ConfigMap;
 use kube::api::ListParams;
 use kube::{Api, Client};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::integrations::Endpoint;
@@ -40,6 +40,127 @@ pub struct DashboardLink {
     pub path: String,
     /// The variables Kubri filled in.
     pub filled: Vec<String>,
+    /// A whole URL, from a link in the context's settings, opened as it is; `path` is then
+    /// empty.
+    pub url: Option<String>,
+}
+
+/// A link to a Grafana in a context's settings, with placeholders that an object fills in.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GrafanaLink {
+    pub title: String,
+    /// A URL like `https://grafana.example.com/d/abc?var-pod={pod}`, or a path like
+    /// `/d/abc?var-namespace={namespace}` on the Grafana Kubri found.
+    pub url: String,
+}
+
+/// The kinds a `{workload}` placeholder stands for.
+const WORKLOADS: [&str; 6] = [
+    "Deployment",
+    "StatefulSet",
+    "DaemonSet",
+    "ReplicaSet",
+    "Job",
+    "CronJob",
+];
+
+/// The names of the placeholders in `template`, like `pod` for `{pod}`, in order.
+pub(crate) fn placeholders(template: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        rest = &rest[start + 1..];
+        let Some(end) = rest.find('}') else { break };
+        let name = &rest[..end];
+        if !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        {
+            out.push(name);
+            rest = &rest[end + 1..];
+        }
+    }
+    out
+}
+
+/// What an object fills in: `context`, `name` and `kind`, `namespace` for objects in one and
+/// for a Namespace itself, the name under its kind, like `pod` or `node`, and `workload` for
+/// Deployments, StatefulSets, DaemonSets, ReplicaSets, Jobs and CronJobs.
+pub(crate) fn object_values(
+    context: &str,
+    kind: &str,
+    namespace: Option<&str>,
+    name: &str,
+) -> BTreeMap<String, String> {
+    // The kind's own first, so that a custom kind named like `Name` cannot replace the others.
+    let mut values = BTreeMap::from([(kind.to_ascii_lowercase(), name.to_owned())]);
+    values.insert("context".into(), context.to_owned());
+    values.insert("name".into(), name.to_owned());
+    values.insert("kind".into(), kind.to_ascii_lowercase());
+    if let Some(namespace) = namespace.filter(|n| !n.is_empty()) {
+        values.insert("namespace".into(), namespace.to_owned());
+    } else if kind == "Namespace" {
+        values.insert("namespace".into(), name.to_owned());
+    }
+    if WORKLOADS.contains(&kind) {
+        values.insert("workload".into(), name.to_owned());
+    }
+    values
+}
+
+/// `template` with its placeholders filled, each value URL-encoded; `None` when the object
+/// lacks one of them, so that a link for pods shows only for pods.
+pub(crate) fn fill(template: &str, values: &BTreeMap<String, String>) -> Option<String> {
+    let mut out = template.to_owned();
+    for name in placeholders(template) {
+        out = out.replace(&format!("{{{name}}}"), &encode(values.get(name)?));
+    }
+    Some(out)
+}
+
+/// Why a link from the settings cannot work; `None` when it can.
+pub(crate) fn link_problem(link: &GrafanaLink) -> Option<String> {
+    let url = link.url.as_str();
+    if url.starts_with('/') {
+        return None;
+    }
+    // Every placeholder filled with a plain word, to see that the rest is a URL.
+    let sample: BTreeMap<String, String> = placeholders(url)
+        .into_iter()
+        .map(|p| (p.to_owned(), "x".to_owned()))
+        .collect();
+    match reqwest::Url::parse(&fill(url, &sample).unwrap_or_default()) {
+        Ok(parsed) if matches!(parsed.scheme(), "http" | "https") => None,
+        _ => Some(format!(
+            "the Grafana link `{url}` must start with http://, https:// or / for a path on the Grafana found"
+        )),
+    }
+}
+
+/// The links from the settings that `values` can fill, in their order.
+pub(crate) fn settings_links(links: &[GrafanaLink], values: &BTreeMap<String, String>) -> Vec<DashboardLink> {
+    links
+        .iter()
+        .filter_map(|link| {
+            let filled = fill(&link.url, values)?;
+            let mut names: Vec<String> = placeholders(&link.url).into_iter().map(str::to_owned).collect();
+            names.dedup();
+            let (path, url) = if filled.starts_with('/') {
+                (filled, None)
+            } else {
+                (String::new(), Some(filled))
+            };
+            Some(DashboardLink {
+                title: link.title.clone(),
+                folder: String::new(),
+                path,
+                filled: names,
+                url,
+            })
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -229,6 +350,7 @@ pub(crate) fn links(dashboards: &[Dashboard], subject: &Subject) -> Vec<Dashboar
                 folder: d.folder.clone(),
                 path: format!("/d/{}?{}", encode(&d.uid), query.join("&")),
                 filled,
+                url: None,
             },
         ));
     }
@@ -325,5 +447,87 @@ mod tests {
             links(&dashboards, &Subject::Node { name: "n 1".into() })[0].path,
             "/d/node?var-node=n%201"
         );
+    }
+
+    fn link(title: &str, url: &str) -> GrafanaLink {
+        GrafanaLink {
+            title: title.into(),
+            url: url.into(),
+        }
+    }
+
+    #[test]
+    fn finds_placeholders() {
+        assert_eq!(
+            placeholders("https://g/d/a?var-ns={namespace}&var-pod={pod}&x={Pod}&y={}&z={pod}"),
+            ["namespace", "pod", "pod"]
+        );
+        assert_eq!(placeholders("https://g/{namespace"), Vec::<&str>::new());
+        assert_eq!(placeholders("https://g/{{pod}"), ["pod"]);
+    }
+
+    #[test]
+    fn settings_links_show_where_the_object_fills_them() {
+        let links = [
+            link(
+                "Pod",
+                "https://grafana.example.com/d/pod?var-namespace={namespace}&var-pod={pod}",
+            ),
+            link(
+                "Namespace",
+                "https://grafana.example.com/d/ns?var-namespace={namespace}&ctx={context}",
+            ),
+            link("Workload", "/d/wl?var-workload={workload}&var-type={kind}"),
+            link("Anything", "https://logs.example.com/search?q={kind}%2F{name}"),
+        ];
+        let titles = |values: &BTreeMap<String, String>| {
+            settings_links(&links, values)
+                .into_iter()
+                .map(|l| l.title)
+                .collect::<Vec<_>>()
+        };
+        let pod = object_values("prod eu", "Pod", Some("shop"), "web-1");
+        assert_eq!(titles(&pod), ["Pod", "Namespace", "Anything"]);
+        let found = settings_links(&links, &pod);
+        assert_eq!(
+            found[0].url.as_deref(),
+            Some("https://grafana.example.com/d/pod?var-namespace=shop&var-pod=web-1")
+        );
+        assert_eq!(found[0].filled, ["namespace", "pod"]);
+        assert_eq!(
+            found[1].url.as_deref(),
+            Some("https://grafana.example.com/d/ns?var-namespace=shop&ctx=prod%20eu")
+        );
+        let deployment = object_values("c", "Deployment", Some("shop"), "web");
+        assert_eq!(titles(&deployment), ["Namespace", "Workload", "Anything"]);
+        let path = &settings_links(&links, &deployment)[1];
+        assert_eq!(
+            (path.path.as_str(), path.url.as_deref()),
+            ("/d/wl?var-workload=web&var-type=deployment", None)
+        );
+        // A node has no namespace; a Namespace fills its own.
+        assert_eq!(titles(&object_values("c", "Node", None, "n1")), ["Anything"]);
+        assert_eq!(
+            titles(&object_values("c", "Namespace", None, "shop")),
+            ["Namespace", "Anything"]
+        );
+    }
+
+    #[test]
+    fn settings_links_must_be_urls() {
+        assert_eq!(
+            link_problem(&link("", "https://g.example.com/d/a?var-pod={pod}")),
+            None
+        );
+        assert_eq!(link_problem(&link("", "/d/a?var-pod={pod}")), None);
+        assert_eq!(link_problem(&link("", "http://{name}.example.com/")), None);
+        for bad in [
+            "grafana.example.com/d/a",
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "{name}",
+        ] {
+            assert!(link_problem(&link("", bad)).is_some(), "{bad}");
+        }
     }
 }

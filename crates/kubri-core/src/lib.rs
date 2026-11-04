@@ -89,7 +89,7 @@ pub use explain::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject,
 pub use fixes::{MemoryFix, NearMiss, NodeFit, PodMatch, ServiceCheck};
 pub use fleet::FleetCluster;
 pub use gitops::{GitOpsAction, Manager};
-pub use grafana::{DashboardLink, Dashboards};
+pub use grafana::{DashboardLink, Dashboards, GrafanaLink};
 pub use health::Health;
 pub use helm::{HelmChange, HelmChartRef, HelmOutcome, HelmRelease, HelmReleaseDetails, HubChart};
 pub use history::{
@@ -2613,6 +2613,73 @@ mod tests {
             .unwrap();
         kubri.keep_warm(fake_session("f", 200).0).await;
         assert!(kubri.warm_contexts().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn grafana_links_from_the_settings_work_without_a_grafana() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let (client, _) = testing::client(|_| {
+            (
+                200,
+                r#"{"kind":"List","apiVersion":"v1","metadata":{},"items":[]}"#.into(),
+            )
+        });
+        let info = ClusterInfo {
+            context: "grafana-links-test".into(),
+            server: "https://grafana-links-test".into(),
+            version: "v1.36.0".into(),
+            default_namespace: "default".into(),
+            snapshot: None,
+            resumed: false,
+        };
+        let session = Session::new(info, client, vec![resource("", "v1", "pods", "Pod", true)]);
+        *kubri.session.write().await = Some(Arc::new(session));
+        let pod = ObjectRef {
+            resource: ResourceRef {
+                group: String::new(),
+                version: "v1".into(),
+                plural: "pods".into(),
+            },
+            namespace: Some("shop".into()),
+            name: "web-1".into(),
+            context: None,
+        };
+        // No Grafana in the cluster and no links: Kubri says where to set one.
+        assert!(kubri.dashboards(&pod).await.is_err());
+
+        let link = |url: &str| GrafanaLink {
+            title: String::new(),
+            url: url.into(),
+        };
+        let mut settings = ContextSettings::default();
+        settings.integrations.grafana_links = vec![
+            link(" https://grafana.example.com/d/pod?var-pod={pod}&var-namespace={namespace} "),
+            link("https://grafana.example.com/d/node?var-node={node}"),
+            link("   "),
+        ];
+        kubri
+            .set_context_settings("grafana-links-test", settings.clone())
+            .unwrap();
+        let saved = kubri
+            .settings()
+            .context("grafana-links-test")
+            .integrations
+            .grafana_links;
+        assert_eq!(saved.len(), 2, "empty links are dropped");
+        assert_eq!(saved[0].title, "Grafana");
+        let found = kubri.dashboards(&pod).await.unwrap();
+        assert_eq!(found.links.len(), 1, "the node's link needs a node");
+        assert_eq!(
+            found.links[0].url.as_deref(),
+            Some("https://grafana.example.com/d/pod?var-pod=web-1&var-namespace=shop")
+        );
+
+        settings.integrations.grafana_links = vec![link("grafana.example.com/d/pod")];
+        assert!(
+            kubri
+                .set_context_settings("grafana-links-test", settings)
+                .is_err()
+        );
     }
 
     #[tokio::test]
