@@ -47,25 +47,25 @@ describe('attention items', () => {
 });
 
 describe('shortMessage', () => {
-	it('says a crash loop plainly', () => {
-		expect(
-			shortMessage('BackOff', 'Back-off restarting failed container checkout in pod checkout-7d_shop(0f3a-uuid)', 26)
-		).toBe('Container checkout keeps restarting (26× in the last hour)');
+	it('says a crash loop plainly, without taking the warning count for restarts', () => {
+		expect(shortMessage('BackOff', 'Back-off restarting failed container checkout in pod checkout-7d_shop(0f3a-uuid)')).toBe(
+			'Container checkout keeps restarting'
+		);
 	});
 	it('names the image that cannot be pulled', () => {
-		expect(shortMessage('Failed', 'Failed to pull image "ghcr.io/x/y:1": rpc error: not found', 1)).toBe(
+		expect(shortMessage('Failed', 'Failed to pull image "ghcr.io/x/y:1": rpc error: not found')).toBe(
 			'Cannot pull image ghcr.io/x/y:1'
 		);
 	});
 	it('keeps the node count of a scheduling failure', () => {
-		expect(shortMessage('FailedScheduling', '0/3 nodes are available: 3 Insufficient cpu.', 1)).toBe(
+		expect(shortMessage('FailedScheduling', '0/3 nodes are available: 3 Insufficient cpu.')).toBe(
 			'Cannot be scheduled: 0/3 nodes are available'
 		);
 	});
 	it('cuts unknown texts at the first sentence', () => {
-		expect(shortMessage('Other', 'Something odd happened. More detail follows here.', 1)).toBe('Something odd happened');
-		expect(shortMessage('Other', 'x'.repeat(300), 1).length).toBe(138);
-		expect(shortMessage('Failed', 'Error: ErrImagePull', 1)).toBe('Error: ErrImagePull');
+		expect(shortMessage('Other', 'Something odd happened. More detail follows here.')).toBe('Something odd happened');
+		expect(shortMessage('Other', 'x'.repeat(300)).length).toBe(138);
+		expect(shortMessage('Failed', 'Error: ErrImagePull')).toBe('Error: ErrImagePull');
 	});
 });
 
