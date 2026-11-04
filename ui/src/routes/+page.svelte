@@ -255,6 +255,8 @@
 				['?', 'help']
 			] as [string, string][];
 		}
+		// Typing goes to the shell, so only the panel's keys, which work as buttons too.
+		if (app.details?.tab === 'shell') return [...panel, ['?', 'help']] as [string, string][];
 		if (app.page === 'portforwards') {
 			return [
 				[':', 'command'],
@@ -392,6 +394,13 @@
 	function signOut() {
 		if (!drafts.block(() => session.signOut())) session.signOut();
 	}
+
+	// A menu belongs to the view it opened in: going elsewhere, also with Back, closes it.
+	$effect(() => {
+		void app.view;
+		void app.cluster?.context;
+		untrack(() => (app.menu = null));
+	});
 
 	// A clock for the unlock countdown.
 	let now = $state(Date.now());

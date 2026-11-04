@@ -136,6 +136,17 @@ export function matchResources(term: string, resources: ResourceInfo[]): Resourc
 		.map((x) => x.r);
 }
 
+/**
+ * Whether `term` names the action `label` by its verb, as `restart` names "Restart" and
+ * `scale` names "Scale…". A kind keeps its name: `events` stays the list of events.
+ */
+export function namesAction(label: string, term: string, resources: ResourceInfo[]): boolean {
+	const word = term.trim().toLowerCase();
+	if (!word || /\s/.test(word)) return false;
+	if (resources.some((r) => names(r).includes(word))) return false;
+	return label.toLowerCase().replace(/…$/, '').split(/\s+/)[0] === word;
+}
+
 function resourceLabel(r: ResourceInfo) {
 	return r.group ? `${r.plural}.${r.group}` : r.plural;
 }
