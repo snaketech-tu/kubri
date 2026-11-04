@@ -23,7 +23,7 @@ Kubri keeps the 3 most recent contexts this way, each for up to 30 minutes after
 - how much of the nodes' CPU and memory the pods request
 - the name, color and label you gave the context in its settings, and whether it is production
 
-Contexts are checked six at a time, each with its own ten-second limit, so a cluster that is down shows as **Unreachable** without holding up the others. Clusters that fail or cannot be reached are tinted red, those that need a look amber, and a line above the cards counts both. The page checks again every minute while it is open. Your user needs `list` on nodes, pods and the workload kinds across the cluster to see the counts; without it the card says the cluster is reachable but that nothing may be listed.
+Contexts are checked six at a time, each with its own ten-second limit, so a cluster that is down shows as **Unreachable** without holding up the others. Clusters that fail or cannot be reached are tinted red, those that need a look amber, and a line above the cards counts both. The page checks again every minute while it is open, with the connections it made the first time, so a context that signs in by running a command, like `aws`, does not run it at every check. Your user needs `list` on nodes, pods and the workload kinds across the cluster to see the counts; without it the card says the cluster is reachable but that nothing may be listed.
 
 Clicking a cluster connects Kubri to it and opens its overview. The overview starts with what the card showed: the health line, the API server and version, ready nodes, pods and workloads, and how much CPU and memory pods request and use. When Kubri cannot connect at start, the welcome screen has **See all clusters** to find one that works.
 

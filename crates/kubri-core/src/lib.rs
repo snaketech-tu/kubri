@@ -207,6 +207,8 @@ pub struct Kubri {
     /// Contexts switched away from, most recent first, and when each was left, so switching
     /// back is instant. At most `connections.keep_recent` of them.
     warm: tokio::sync::Mutex<Vec<(std::time::Instant, Arc<Session>)>>,
+    /// Clients the Clusters page checks contexts with, by context.
+    fleet: std::sync::Mutex<HashMap<String, fleet::Kept>>,
     /// Records what changes in the connected context, where this process records.
     recording: AtomicBool,
     /// Local terminals may be opened, and contexts added in Kubri may run commands and read
@@ -325,6 +327,7 @@ impl Kubri {
             unlocks: Default::default(),
             others: Default::default(),
             warm: Default::default(),
+            fleet: Default::default(),
             recording: AtomicBool::new(false),
             local_terminal: AtomicBool::new(false),
             recorder: Default::default(),
@@ -804,6 +807,10 @@ impl Kubri {
         };
         self.others.lock().await.retain(|context, _| same(context));
         self.warm.lock().await.retain(|(_, s)| same(&s.info.context));
+        self.fleet
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|context, _| same(context));
         self.contexts().await
     }
 
