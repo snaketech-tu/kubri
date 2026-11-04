@@ -59,7 +59,8 @@ cargo run --release -p kubri-server    # root, after `pnpm build`: production UI
 - Rust: unit tests in a `mod tests` at the bottom of the module. `kubri_core::testing::client` is a fake API server that answers and records requests; prefer it over a real cluster.
 - UI: `ui/src/lib/*.test.ts` next to the module they test. Keep logic in plain `.ts` modules so it can be tested without rendering components.
 - Browser check against the production UI with fixtures: `pnpm build && pnpm preview --port 4189` in `ui/`, then `node scripts/check-ui.cjs <path-to-playwright-module>`.
-- Real cluster: k3s with `--disable=traefik --write-kubeconfig-mode=644`, kubeconfig at `/etc/rancher/k3s/k3s.yaml` (see the `speed` job in `ci.yml`). Use it for anything that only shows against a cluster: logs, exec, port-forward, watches, RBAC.
+- Real cluster: k3s with `--disable=traefik --write-kubeconfig-mode=644`, kubeconfig at `/etc/rancher/k3s/k3s.yaml` (see the `e2e` job in `ci.yml`). Use it for anything that only shows against a cluster: logs, exec, port-forward, watches, RBAC.
+- End-to-end: `scripts/e2e/` drives the web app against k3s (`node --test scripts/e2e/kubri.test.cjs`, see its README) and starts the desktop app (`desktop.cjs`). CI runs both. Add a test there when you change a flow that only shows against a cluster.
 
 ## Conventions
 
