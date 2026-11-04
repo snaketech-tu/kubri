@@ -1,17 +1,9 @@
 <script lang="ts">
-	import { backend } from '../api';
 	import { parseMarkdown, type Inline } from '../markdown';
 
 	let { text }: { text: string } = $props();
 
 	const blocks = $derived(parseMarkdown(text));
-
-	function follow(e: MouseEvent, href: string) {
-		// The desktop window does not open links itself.
-		if (!backend.desktop) return;
-		e.preventDefault();
-		backend.openUrl(href);
-	}
 </script>
 
 {#snippet line(parts: Inline[])}
@@ -19,7 +11,7 @@
 		{#if part.type === 'code'}<code>{part.text}</code>
 		{:else if part.type === 'strong'}<strong>{part.text}</strong>
 		{:else if part.type === 'em'}<em>{part.text}</em>
-		{:else if part.type === 'link'}<a href={part.href} target="_blank" rel="noopener noreferrer" onclick={(e) => follow(e, part.href)}>{part.text}</a>
+		{:else if part.type === 'link'}<a href={part.href} target="_blank" rel="noopener noreferrer">{part.text}</a>
 		{:else}{part.text}{/if}
 	{/each}
 {/snippet}

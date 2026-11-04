@@ -120,7 +120,7 @@
 						</div>
 						<p class="about">{about?.text}</p>
 						{#if item.source === 'missing' && about?.install}
-							<p class="where"><a href={about.install} target="_blank" rel="noreferrer">How to install {item.name}</a></p>
+							<p class="install"><a href={about.install} target="_blank" rel="noreferrer">How to install {item.name}</a></p>
 						{/if}
 						{#if where(item)}<p class="where">{where(item)}</p>{/if}
 						{#if item.error}<p class="error">{item.error}</p>{/if}

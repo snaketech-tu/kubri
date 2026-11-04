@@ -178,6 +178,11 @@ button:disabled {
 	opacity: 0.55;
 }
 
+/* Links in text, like the install guides on the Integrations page, in the app's own color. */
+a {
+	color: var(--accent-strong);
+}
+
 button:focus-visible,
 a:focus-visible,
 summary:focus-visible,
