@@ -972,14 +972,14 @@
 							class:cursor={i === cursor}
 							class:checked={selection.has(row.key)}
 							onclick={() => (cursorKey = row.key)}
-							onmousedown={(e) => {
-								// A double click opens the row; it should not also select a word. Dragging still selects.
-								if (e.detail > 1) e.preventDefault();
-							}}
 							ondblclick={() => enter(row)}
 							oncontextmenu={(e) => {
 								e.preventDefault();
 								openMenu(row, e.clientX, e.clientY);
+							}}
+							onmousedown={(e) => {
+								// A double click opens the row; it should not also select a word. Dragging still selects.
+								if (e.detail > 1) e.preventDefault();
 							}}
 						>
 							<td class="check">
