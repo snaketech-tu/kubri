@@ -26,7 +26,7 @@ Kubri keeps its own settings in one file. The kubeconfig and the k9s configurati
 | AI agents may change it | Agents connected over MCP may scale, restart, set images and delete here, each change allowed by you in Kubri. Never on production contexts. See [AI agents](AGENTS.md). |
 | Integrations | Where Prometheus, Grafana and Loki are, when Kubri should not find them itself, a Grafana token, and dashboards for objects (`grafanaLinks`, each a `title` and a `url` with placeholders like `{pod}`). Set on the Integrations page. See [Integrations](INTEGRATIONS.md). |
 
-Read-only and locked contexts are enforced in the core, not only hidden in the interface, so plugins and the API refuse changes too. Starting Kubri with `--read-only` (or `KUBRI_READ_ONLY=true`) and `readOnly` in the k9s configuration still apply on top.
+Read-only and locked contexts are enforced in the core, not only hidden in the interface, so plugins and the API refuse changes too. Pressing the key of a change there, such as <kbd>e</kbd> or <kbd>Ctrl</kbd>+<kbd>D</kbd>, says why it is not available instead of doing nothing. Starting Kubri with `--read-only` (or `KUBRI_READ_ONLY=true`) and `readOnly` in the k9s configuration still apply on top.
 
 ## Permissions
 

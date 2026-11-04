@@ -8,7 +8,7 @@
 	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
 	import { age, cpu, memory, relative } from '../format';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
-	import { drill, objectActions, type Subject } from '../objects';
+	import { drill, objectActions, refusedAction, type ActionOptions, type Subject } from '../objects';
 	import { isNodes, isPods, isServices } from '../pods';
 	import { ALL_NAMESPACES, app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
@@ -499,18 +499,22 @@
 	function actionsFor(row: Row | undefined, chosen: Row[]): MenuAction[] {
 		// Rows from when the list was left may be gone; act only on the cluster's own list.
 		if (!row || table.stale) return [];
+		return objectActions(subject(row), actionOptions(row, chosen));
+	}
+
+	function actionOptions(row: Row, chosen: Row[]): ActionOptions {
 		const cleanUp: MenuAction[] =
 			isPods(resource) && canDelete(resource)
 				? [{ group: 'Delete', label: 'Delete finished pods…', keys: ['z'], danger: true, run: sanitize }]
 				: [];
-		return objectActions(subject(row), {
+		return {
 			show: (tab, extra) => open(row, tab, extra),
 			enter: () => void enter(row),
 			chosen: chosen.map(target),
 			namespace,
 			plugins: () => (cursorKey = row.key),
 			extraDanger: cleanUp
-		});
+		};
 	}
 
 	/** What there is to do on the marked rows together. */
@@ -725,9 +729,16 @@
 			const chosen = chosenRows();
 			// With several rows marked, s, r and c work on all of them.
 			const actions = actionsFor(current, chosen);
-			const action = actionFor(selection.size > 1 ? [...markedActions(chosen), ...actions] : actions, keyOf(e));
-			action?.run();
-			return !!action;
+			const key = keyOf(e);
+			const action = actionFor(selection.size > 1 ? [...markedActions(chosen), ...actions] : actions, key);
+			if (action) {
+				action.run();
+				return true;
+			}
+			// Read-only leaves the change keys out; say so instead of doing nothing.
+			const refused = current && !table.stale ? refusedAction(subject(current), actionOptions(current, chosen), key) : undefined;
+			if (refused) app.explainReadOnly(refused.label);
+			return !!refused;
 		})();
 		if (handled) e.preventDefault();
 	}
