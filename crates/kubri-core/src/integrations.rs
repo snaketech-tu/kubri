@@ -324,6 +324,14 @@ fn score(tool: Tool, service: &Service) -> Option<(i32, u16)> {
                 "blackbox",
                 "thanos-sidecar",
                 "config-reloader",
+                // kube-prometheus-stack names all of its Services after itself.
+                "grafana",
+                "kubelet",
+                "coredns",
+                "kube-proxy",
+                "kube-etcd",
+                "kube-scheduler",
+                "kube-controller-manager",
             ];
             if others.iter().any(|o| name.contains(o)) {
                 return None;
@@ -1294,6 +1302,35 @@ mod tests {
             Some(svc("monitoring", "prometheus-server", 80))
         );
         assert_eq!(best(Tool::Grafana, &chart), None);
+        // kube-prometheus-stack with its Prometheus turned off, as with Prometheus elsewhere.
+        let without = [
+            service(
+                "monitoring",
+                "kube-prometheus-stack-grafana",
+                &[("app.kubernetes.io/name", "grafana")],
+                &[("http-web", 80)],
+                false,
+            ),
+            service(
+                "kube-system",
+                "kube-prometheus-stack-coredns",
+                &[],
+                &[("http-metrics", 9153)],
+                true,
+            ),
+            service(
+                "kube-system",
+                "kube-prometheus-stack-kubelet",
+                &[],
+                &[("https-metrics", 10250), ("http-metrics", 10255)],
+                true,
+            ),
+        ];
+        assert_eq!(best(Tool::Prometheus, &without), None);
+        assert_eq!(
+            best(Tool::Grafana, &without),
+            Some(svc("monitoring", "kube-prometheus-stack-grafana", 80))
+        );
     }
 
     #[test]

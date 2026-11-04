@@ -71,10 +71,7 @@
 		return `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${f.localPort}`;
 	}
 
-	function open(f: PortForwardInfo, e?: MouseEvent) {
-		// The desktop window does not open links itself.
-		if (e && !backend.desktop) return;
-		e?.preventDefault();
+	function open(f: PortForwardInfo) {
 		backend.openUrl(url(f)).catch((err) => app.toast(errorMessage(err), 'bad'));
 	}
 
@@ -159,7 +156,7 @@
 							{@const favorite = !!app.favoriteOf(f)}
 							<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)}>
 								<td class="mono">
-									<a href={url(f)} target="_blank" rel="noreferrer" onclick={(e) => open(f, e)} title="Open in the browser (o)">{f.address}:{f.localPort}</a>
+									<a href={url(f)} target="_blank" rel="noreferrer" title="Open in the browser (o)">{f.address}:{f.localPort}</a>
 									<button class="link" onclick={() => copy(f)} title="Copy URL (c)">copy</button>
 								</td>
 								<td class="mono">{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</td>
