@@ -476,9 +476,77 @@ static HTTP: LazyLock<std::result::Result<reqwest::Client, String>> = LazyLock::
     let _ = rustls::crypto::ring::default_provider().install_default();
     reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
+        .dns_resolver(Arc::new(NoMetadata))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 10 {
+                attempt.error("it redirected more than 10 times")
+            } else if let Some(blocked) = metadata_url(attempt.url()) {
+                attempt.error(blocked)
+            } else {
+                attempt.follow()
+            }
+        }))
         .build()
         .map_err(|e| e.to_string())
 });
+
+/// Why Kubri does not read a manifest from an address.
+#[derive(Debug)]
+struct Blocked(String);
+
+impl std::fmt::Display for Blocked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} is a cloud metadata address, which can hand out the credentials of the machine Kubri runs on, so Kubri does not read manifests from it",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for Blocked {}
+
+/// Addresses no manifest comes from, but where clouds answer with the credentials of the
+/// machine Kubri runs on: on a server, anyone who signs in could read them otherwise.
+fn is_metadata(ip: std::net::IpAddr) -> bool {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    let v4 = |ip: Ipv4Addr| ip.is_link_local() || ip == Ipv4Addr::new(100, 100, 100, 200);
+    match ip {
+        IpAddr::V4(ip) => v4(ip),
+        IpAddr::V6(ip) => {
+            ip.to_ipv4_mapped().is_some_and(v4)
+                || (ip.segments()[0] & 0xffc0) == 0xfe80
+                || ip == Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254)
+        }
+    }
+}
+
+/// Why `url` is not read, when it names a metadata address itself.
+fn metadata_url(url: &reqwest::Url) -> Option<Blocked> {
+    let host = url.host_str()?;
+    let ip: std::net::IpAddr = host.trim_start_matches('[').trim_end_matches(']').parse().ok()?;
+    is_metadata(ip).then(|| Blocked(ip.to_string()))
+}
+
+/// Looks host names up as usual, leaving out metadata addresses, so a name pointing at one
+/// cannot reach it either.
+struct NoMetadata;
+
+impl reqwest::dns::Resolve for NoMetadata {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_owned();
+        Box::pin(async move {
+            let found: Vec<std::net::SocketAddr> =
+                tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
+            let allowed: Vec<std::net::SocketAddr> =
+                found.iter().copied().filter(|a| !is_metadata(a.ip())).collect();
+            match (allowed.is_empty(), found.first()) {
+                (true, Some(blocked)) => Err(Box::new(Blocked(format!("{host} ({})", blocked.ip()))) as _),
+                _ => Ok(Box::new(allowed.into_iter()) as reqwest::dns::Addrs),
+            }
+        })
+    }
+}
 
 /// GitHub's page of a file, as people copy it from the browser, means the file itself.
 pub(crate) fn raw_url(url: &str) -> String {
@@ -498,26 +566,46 @@ pub async fn fetch_manifest(url: &str) -> Result<String> {
             "Give an address that starts with https://".into(),
         ));
     }
+    let parsed =
+        reqwest::Url::parse(&url).map_err(|e| Error::Unsupported(format!("{url} is not an address: {e}")))?;
+    if let Some(blocked) = metadata_url(&parsed) {
+        return Err(Error::Unsupported(blocked.to_string()));
+    }
     let client = HTTP.as_ref().map_err(|e| Error::Unsupported(e.clone()))?;
-    let fail = |e: reqwest::Error| Error::Unsupported(format!("Could not read {url}: {e}"));
-    let response = client.get(&url).send().await.map_err(fail)?;
+    let fail = |e: reqwest::Error| {
+        // reqwest's own message leaves out the cause, such as a blocked address.
+        let mut cause: Option<&(dyn std::error::Error + 'static)> = Some(&e);
+        while let Some(err) = cause {
+            if let Some(blocked) = err.downcast_ref::<Blocked>() {
+                return Error::Unsupported(blocked.to_string());
+            }
+            cause = err.source();
+        }
+        Error::Unsupported(format!("Could not read {url}: {e}"))
+    };
+    let mut response = client.get(parsed).send().await.map_err(fail)?;
     if !response.status().is_success() {
         return Err(Error::Unsupported(format!(
             "{url} answered {}",
             response.status()
         )));
     }
+    let too_large = || Error::Unsupported(format!("{url} is larger than 5 MB"));
     if response
         .content_length()
         .is_some_and(|n| n as usize > MAX_MANIFEST)
     {
-        return Err(Error::Unsupported(format!("{url} is larger than 5 MB")));
+        return Err(too_large());
     }
-    let bytes = response.bytes().await.map_err(fail)?;
-    if bytes.len() > MAX_MANIFEST {
-        return Err(Error::Unsupported(format!("{url} is larger than 5 MB")));
+    // Read piece by piece, so an answer without a length cannot fill the memory.
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(fail)? {
+        if bytes.len() + chunk.len() > MAX_MANIFEST {
+            return Err(too_large());
+        }
+        bytes.extend_from_slice(&chunk);
     }
-    String::from_utf8(bytes.to_vec()).map_err(|_| Error::Unsupported(format!("{url} is not text")))
+    String::from_utf8(bytes).map_err(|_| Error::Unsupported(format!("{url} is not text")))
 }
 
 #[cfg(test)]
@@ -535,6 +623,83 @@ mod tests {
             raw_url("https://example.com/a.yaml"),
             "https://example.com/a.yaml"
         );
+    }
+
+    #[test]
+    fn knows_metadata_addresses() {
+        for ip in [
+            "169.254.169.254",
+            "169.254.170.2",
+            "100.100.100.200",
+            "fe80::1",
+            "fd00:ec2::254",
+            "::ffff:169.254.169.254",
+        ] {
+            assert!(is_metadata(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in [
+            "10.0.0.1",
+            "127.0.0.1",
+            "192.168.1.10",
+            "100.64.0.1",
+            "::1",
+            "2001:db8::1",
+        ] {
+            assert!(!is_metadata(ip.parse().unwrap()), "{ip}");
+        }
+    }
+
+    /// A one-shot HTTP server that answers `answer` as it is.
+    async fn answer_once(answer: String) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buffer = [0; 4096];
+            let _ = socket.read(&mut buffer).await;
+            let _ = socket.write_all(answer.as_bytes()).await;
+            let _ = socket.shutdown().await;
+        });
+        url
+    }
+
+    #[tokio::test]
+    async fn reads_no_manifest_from_metadata_addresses() {
+        for url in [
+            "http://169.254.169.254/latest/meta-data/",
+            "http://[fd00:ec2::254]/",
+        ] {
+            let err = fetch_manifest(url).await.unwrap_err().to_string();
+            assert!(err.contains("cloud metadata address"), "{err}");
+        }
+        let redirect = "HTTP/1.1 302 Found\r\nLocation: http://169.254.169.254/latest/meta-data/\r\nContent-Length: 0\r\n\r\n";
+        let url = answer_once(redirect.into()).await;
+        let err = fetch_manifest(&url).await.unwrap_err().to_string();
+        assert!(
+            err.contains("169.254.169.254 is a cloud metadata address"),
+            "{err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn reads_manifests_up_to_5_mb() {
+        let yaml = "kind: ConfigMap\n";
+        let ok = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{yaml}", yaml.len());
+        assert_eq!(fetch_manifest(&answer_once(ok).await).await.unwrap(), yaml);
+
+        // Without a length, the answer is read only until it is too large.
+        let chunk = "x".repeat(1 << 20);
+        let mut large = String::from("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+        for _ in 0..6 {
+            large.push_str(&format!("{:x}\r\n{chunk}\r\n", chunk.len()));
+        }
+        large.push_str("0\r\n\r\n");
+        let err = fetch_manifest(&answer_once(large).await)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("larger than 5 MB"), "{err}");
     }
 
     #[test]

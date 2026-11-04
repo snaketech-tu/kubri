@@ -35,6 +35,7 @@ Clicking a cluster connects Kubri to it and opens its overview. The overview sta
 - Its cluster and user are renamed after the context, so a cluster called `default` in the new file cannot clash with one of the same name in yours.
 - Added contexts come after the files in `KUBECONFIG`, and Kubri hands the same list to helm and to k9s plugins, so they work there too.
 - A context whose name is already taken, whose cluster or user is missing from the file, or that names a certificate or token file by a relative path cannot be added; the dialog says which. Contexts that sign in by running a command, like `aws` or `gke-gcloud-auth-plugin`, say so, since that command must be installed.
+- In the browser, the command would run on the server and the files would be read there, for whoever added the context. So the server adds such contexts only when it allows the local terminal (`KUBRI_LOCAL_TERMINAL=true`, see [Running Kubri in the browser](WEB.md)). Otherwise put the file's content in the kubeconfig, as `certificate-authority-data`, `client-certificate-data`, `client-key-data` or `token`, or add the context to the server's own kubeconfig.
 
 Added contexts have **Remove** on their card. Contexts from your own kubeconfig cannot be removed in Kubri.
 

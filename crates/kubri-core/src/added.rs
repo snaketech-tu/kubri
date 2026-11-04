@@ -71,12 +71,22 @@ fn relative(path: &Option<String>) -> Option<&str> {
         .filter(|p| !p.is_empty() && !Path::new(p).is_absolute())
 }
 
+/// A path to a file, absolute or not.
+fn named(path: &Option<String>) -> Option<&str> {
+    path.as_deref().filter(|p| !p.is_empty())
+}
+
 /// The contexts of `new`, and why any of them cannot be added next to `existing`.
-pub(crate) fn inspect(new: &Kubeconfig, existing: &HashSet<String>) -> Vec<NewContext> {
+///
+/// `local` says whether a context may run commands and read files on the machine Kubri runs
+/// on. On a web server that machine is the server, and everyone who signs in could use a
+/// context they add to run commands there, or to send a file from there to a server of their
+/// choice as a token. So the server allows it only where it allows local terminals.
+pub(crate) fn inspect(new: &Kubeconfig, existing: &HashSet<String>, local: bool) -> Vec<NewContext> {
     new.contexts
         .iter()
-        .map(|named| {
-            let context = named.context.as_ref();
+        .map(|named_context| {
+            let context = named_context.context.as_ref();
             let cluster_name = context.map(|c| c.cluster.clone()).unwrap_or_default();
             let user_name = context.and_then(|c| c.user.clone());
             let cluster = new
@@ -88,31 +98,48 @@ pub(crate) fn inspect(new: &Kubeconfig, existing: &HashSet<String>) -> Vec<NewCo
                 .as_ref()
                 .and_then(|u| new.auth_infos.iter().find(|a| &a.name == u))
                 .and_then(|a| a.auth_info.as_ref());
+            // Each file a context can name, with the field that holds the content instead.
             let files = [
-                cluster.and_then(|c| relative(&c.certificate_authority)),
-                user.and_then(|u| relative(&u.client_certificate)),
-                user.and_then(|u| relative(&u.client_key)),
-                user.and_then(|u| relative(&u.token_file)),
+                (cluster.map(|c| &c.certificate_authority), "certificate-authority-data"),
+                (user.map(|u| &u.client_certificate), "client-certificate-data"),
+                (user.map(|u| &u.client_key), "client-key-data"),
+                (user.map(|u| &u.token_file), "token"),
             ];
-            let problem = if existing.contains(&named.name) {
+            // An exec plugin, or the gcp auth provider's `cmd-path`.
+            let command = user.and_then(|u| u.exec.as_ref()).and_then(|e| e.command.clone()).or_else(|| {
+                user.and_then(|u| u.auth_provider.as_ref())
+                    .and_then(|p| p.config.get("cmd-path").cloned())
+            });
+            let problem = if existing.contains(&named_context.name) {
                 Some("A context with this name is already there".to_owned())
             } else if cluster.is_none() {
                 Some(format!("Its cluster `{cluster_name}` is not in the file"))
             } else if user_name.is_some() && user.is_none() {
                 Some(format!("Its user `{}` is not in the file", user_name.clone().unwrap_or_default()))
+            } else if !local && let Some(command) = &command {
+                Some(format!(
+                    "It signs in by running `{command}` on the server, which the server allows only when started with KUBRI_LOCAL_TERMINAL=true"
+                ))
+            } else if !local {
+                files.iter().find_map(|&(path, data)| {
+                    let file = named(path?)?;
+                    Some(format!(
+                        "It reads the file `{file}` on the server; put the file's content in `{data}` instead"
+                    ))
+                })
             } else {
-                files.into_iter().flatten().next().map(|file| {
+                files.iter().find_map(|&(path, _)| relative(path?)).map(|file| {
                     format!(
                         "It names the file `{file}` relative to where the kubeconfig was; add the kubeconfig to KUBECONFIG instead, or use an absolute path"
                     )
                 })
             };
             NewContext {
-                name: named.name.clone(),
+                name: named_context.name.clone(),
                 server: cluster.and_then(|c| c.server.clone()),
                 user: user_name,
                 namespace: context.and_then(|c| c.namespace.clone()),
-                exec: user.and_then(|u| u.exec.as_ref()).and_then(|e| e.command.clone()),
+                exec: command,
                 problem,
             }
         })
@@ -178,9 +205,16 @@ fn single(new: &Kubeconfig, context: &str) -> Result<Kubeconfig> {
 }
 
 /// Writes one file per context in `names`, readable only by the user since it holds
-/// credentials. Every context must be one [`inspect`] found no problem with.
-pub(crate) fn add(dir: &Path, new: &Kubeconfig, names: &[String], existing: &HashSet<String>) -> Result<()> {
-    let checked = inspect(new, existing);
+/// credentials. Every context must be one [`inspect`] found no problem with, for the same
+/// `local`.
+pub(crate) fn add(
+    dir: &Path,
+    new: &Kubeconfig,
+    names: &[String],
+    existing: &HashSet<String>,
+    local: bool,
+) -> Result<()> {
+    let checked = inspect(new, existing, local);
     for name in names {
         match checked.iter().find(|c| &c.name == name) {
             None => return Err(Error::UnknownContext(name.clone())),
@@ -248,6 +282,11 @@ users:
 - name: eks
   user:
     exec: { apiVersion: client.authentication.k8s.io/v1beta1, command: aws, args: [eks, get-token] }
+- name: google
+  user:
+    auth-provider: { name: gcp, config: { cmd-path: /usr/bin/gcloud, cmd-args: config config-helper } }
+- name: from-files
+  user: { tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token }
 contexts:
 - name: lab
   context: { cluster: default, user: default, namespace: shop }
@@ -257,22 +296,63 @@ contexts:
   context: { cluster: rel, user: default }
 - name: lost
   context: { cluster: nowhere, user: default }
+- name: gcp
+  context: { cluster: default, user: google }
+- name: files
+  context: { cluster: default, user: from-files }
 "#;
 
     #[test]
     fn says_what_can_be_added() {
         let new = parse(FILE).unwrap();
         let existing: HashSet<String> = ["prod".to_owned()].into();
-        let found = inspect(&new, &existing);
+        let found = inspect(&new, &existing, true);
         let problem = |name: &str| found.iter().find(|c| c.name == name).unwrap().problem.clone();
         assert_eq!(problem("lab"), None);
         assert!(problem("prod").unwrap().contains("already there"));
         assert!(problem("relative").unwrap().contains("`ca.crt`"));
         assert!(problem("lost").unwrap().contains("`nowhere`"));
+        assert_eq!(problem("files"), None);
+        assert_eq!(problem("gcp"), None);
+        let gcp = found.iter().find(|c| c.name == "gcp").unwrap();
+        assert_eq!(gcp.exec.as_deref(), Some("/usr/bin/gcloud"));
         let lab = &found[0];
         assert_eq!(lab.server.as_deref(), Some("https://10.0.0.1:6443"));
         assert_eq!(lab.namespace.as_deref(), Some("shop"));
         assert_eq!(found[1].exec.as_deref(), Some("aws"));
+    }
+
+    #[test]
+    fn a_server_runs_no_commands_and_reads_no_files_for_added_contexts() {
+        let new = parse(FILE).unwrap();
+        let found = inspect(&new, &HashSet::new(), false);
+        let problem = |name: &str| found.iter().find(|c| c.name == name).unwrap().problem.clone();
+        assert_eq!(problem("lab"), None);
+        let prod = problem("prod").unwrap();
+        assert!(prod.contains("running `aws`"), "{prod}");
+        assert!(prod.contains("KUBRI_LOCAL_TERMINAL=true"), "{prod}");
+        assert!(problem("gcp").unwrap().contains("running `/usr/bin/gcloud`"));
+        let files = problem("files").unwrap();
+        assert!(
+            files.contains("`/var/run/secrets/kubernetes.io/serviceaccount/token`"),
+            "{files}"
+        );
+        assert!(files.contains("`token`"), "{files}");
+        assert!(
+            problem("relative")
+                .unwrap()
+                .contains("`certificate-authority-data`")
+        );
+
+        let dir = std::env::temp_dir().join(format!("kubri-added-server-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for name in ["prod", "gcp", "files"] {
+            assert!(add(&dir, &new, &[name.into()], &HashSet::new(), false).is_err());
+        }
+        assert!(files_in(&dir).is_empty());
+        add(&dir, &new, &["lab".into()], &HashSet::new(), false).unwrap();
+        assert_eq!(files_in(&dir).len(), 1);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -281,8 +361,8 @@ contexts:
         let _ = std::fs::remove_dir_all(&dir);
         let new = parse(FILE).unwrap();
         let none = HashSet::new();
-        add(&dir, &new, &["lab".into(), "prod".into()], &none).unwrap();
-        assert!(add(&dir, &new, &["relative".into()], &none).is_err());
+        add(&dir, &new, &["lab".into(), "prod".into()], &none, true).unwrap();
+        assert!(add(&dir, &new, &["relative".into()], &none, true).is_err());
         let files = files_in(&dir);
         assert_eq!(files.len(), 2);
 

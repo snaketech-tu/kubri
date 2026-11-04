@@ -7,7 +7,7 @@ Everything `kubectl apply` and `helm upgrade` do, each with a preview of what wi
 Open **Create** in the sidebar, or type `:new` in the palette (`:create` and `:apply` work too). The editor takes YAML from any of these sources:
 
 - **Add**: a template for a common kind (Deployment, Service, ConfigMap, Secret, Job, CronJob, Ingress, StatefulSet, DaemonSet, Pod, PersistentVolumeClaim, ServiceAccount, Namespace). For any other kind, including custom resources, Kubri builds a skeleton from the cluster's schema with the fields it requires. A Service or Ingress added after a workload already points at that workload.
-- **Open files**, **From URL** and **Paste**. A GitHub page of a YAML file loads as the raw file.
+- **Open files**, **From URL** and **Paste**. A GitHub page of a YAML file loads as the raw file. Kubri reads no address where clouds hand out the credentials of the machine it runs on, such as `169.254.169.254`.
 - Short forms in the palette, like `kubectl create`:
 
   ```
