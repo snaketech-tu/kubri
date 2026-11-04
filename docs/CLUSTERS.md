@@ -29,6 +29,8 @@ Contexts are checked six at a time, each with its own ten-second limit, so a clu
 
 Clicking a cluster connects Kubri to it and opens its overview. The overview starts with what the card showed: the health line, the API server and version, ready nodes, pods and workloads, and how much CPU and memory pods request and use. When Kubri cannot connect at start, the welcome screen has **See all clusters** to find one that works.
 
+Below the overview, **Other contexts** shows up to eight of your other contexts with what Kubri last learned about them: healthy or how many pods fail, or that the API server did not answer, and when. A ring instead of a dot means it did not answer. Clicking one switches to it. Contexts not checked in the last five minutes are checked when the overview opens, if you have at most 20.
+
 ## Adding clusters
 
 **Add clusters…** on the Clusters page takes a kubeconfig dropped on it, chosen as a file or pasted, and lists its contexts. Pick the ones to add:

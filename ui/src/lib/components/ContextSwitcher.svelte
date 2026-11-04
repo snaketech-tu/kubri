@@ -3,12 +3,7 @@
 	import Icon from './Icon.svelte';
 	import { relative } from '../format';
 	import { switcherOrder } from '../places';
-	import { reach } from '../reach.svelte';
-
-	/** Contexts not checked for this long are checked again when the list opens. */
-	const STALE_MS = 5 * 60_000;
-	/** Beyond this many contexts, only the Clusters page checks them all. */
-	const CHECK_AT_MOST = 20;
+	import { CHECK_AT_MOST, reach, STALE_MS } from '../reach.svelte';
 
 	let query = $state('');
 	let input = $state<HTMLInputElement>();

@@ -14,6 +14,7 @@
 	import { attentionItems, fill, kindLabel, meterTone, record, shortMessage, splitKinds } from '../pulse';
 	import { app, findResource } from '../state.svelte';
 	import HealthIcon from './HealthIcon.svelte';
+	import OtherContexts from './OtherContexts.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 	import Sparkline from './Sparkline.svelte';
 
@@ -405,6 +406,7 @@
 					</section>
 				</div>
 			</div>
+			<OtherContexts />
 		</div>
 	{:else if !error}
 		<div class="loading">Loading the overview…</div>
