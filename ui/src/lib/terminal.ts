@@ -24,11 +24,19 @@ const FONT_WAIT_MS = 1500;
  */
 async function loadFonts(fontSize: number, family: string): Promise<void> {
 	if (typeof document === 'undefined' || !document.fonts) return;
+	// A font name the browser cannot read throws here; the terminal then opens without waiting.
+	const load = (font: string, text?: string) => {
+		try {
+			return document.fonts.load(font, text);
+		} catch {
+			return Promise.resolve([]);
+		}
+	};
 	const faces = [
-		document.fonts.load(`${fontSize}px ${family}`),
-		document.fonts.load(`bold ${fontSize}px ${family}`),
+		load(`${fontSize}px ${family}`),
+		load(`bold ${fontSize}px ${family}`),
 		// Only fetched for its symbols, like the arrows and icons of powerline prompts.
-		document.fonts.load(`${fontSize}px "Kubri Symbols"`, '\ue0b0')
+		load(`${fontSize}px "Kubri Symbols"`, '\ue0b0')
 	];
 	await Promise.race([Promise.allSettled(faces), new Promise((done) => setTimeout(done, FONT_WAIT_MS))]);
 }
@@ -45,7 +53,7 @@ export function mountTerminal(
 	const family = fontStack(fontFamily, getComputedStyle(element).getPropertyValue('--mono'));
 	let close: (() => void) | null = null;
 	let closed = false;
-	loadFonts(fontSize, family).then(() => {
+	const open = () => {
 		if (closed) return;
 		const term = new Terminal({
 			fontFamily: family,
@@ -72,7 +80,8 @@ export function mountTerminal(
 			session.close();
 			term.dispose();
 		};
-	});
+	};
+	loadFonts(fontSize, family).then(open, open);
 	return () => {
 		closed = true;
 		close?.();
