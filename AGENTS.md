@@ -17,6 +17,7 @@ Kubri is a Kubernetes GUI for desktop and browser that covers what k9s does, by 
 | `docs/` | User documentation, linked from the README. |
 | `packaging/`, `.github/workflows/release.yml` | Installers, package-manager templates, updater `latest.json`. |
 | `bench/speed`, `scripts/` | Speed benchmark against k3s; Playwright UI checks and README screenshots. |
+| `site/`, `scripts/demo/` | The website, and the demo snapshot `ui/static/demo.kubri` with the recorder for the live demo (`ui/src/lib/api/replay.ts`); `.github/workflows/pages.yml` publishes both. |
 
 A new backend call touches every layer: a method on `Kubri` in the core, a route in `crates/kubri-server/src/api.rs`, a command in `ui/src-tauri/src/lib.rs` (registered in `generate_handler!`), the method in `Backend` plus both `http.ts` and `tauri.ts`. Keep both apps behaving the same.
 

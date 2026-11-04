@@ -37,6 +37,8 @@
 	import Tour from '#lib/components/Tour.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
 	import PluginTerminal from '#lib/components/PluginTerminal.svelte';
+	import LocalClusterDialog from '#lib/components/LocalClusterDialog.svelte';
+	import { closeSnapshot, openDemo, retryKubeconfig } from '#lib/start.js';
 	import PortForwardsView from '#lib/components/PortForwardsView.svelte';
 	import PulsesView from '#lib/components/PulsesView.svelte';
 	import RbacView from '#lib/components/RbacView.svelte';
@@ -73,6 +75,8 @@
 	import { LiveTable } from '#lib/watch.svelte.js';
 
 	const namespaces = new LiveTable();
+	/** The dialog that makes a cluster on this computer, from the page shown without a kubeconfig. */
+	let localClusterOpen = $state(false);
 
 	$effect(() => {
 		// Also after signing in again, when a message from before may still be up.
@@ -563,7 +567,7 @@
 						· <span class="left-out" title={snapshot.leftOut.join('\n')}>{snapshot.leftOut.length} left out</span>
 					{/if}
 				</span>
-				<button onclick={() => app.leaveSnapshot()}>Leave snapshot</button>
+				<button onclick={() => (app.contexts.length ? app.leaveSnapshot() : closeSnapshot())}>Leave snapshot</button>
 			</div>
 		{/if}
 		{#if app.settingsError}
@@ -651,8 +655,9 @@
 							<h1>No clusters yet.</h1>
 							<p>
 								{isTauri()
-									? 'Kubri reads your clusters from a kubeconfig, as kubectl does, and found none it can use. Load the kubeconfig file you got for your cluster.'
+									? 'Kubri reads your clusters from a kubeconfig, as kubectl does, and found none it can use. Load the kubeconfig file you got for your cluster, or start a cluster on this computer.'
 									: 'kubri-server found no kubeconfig it can use. Add contexts from a kubeconfig file, or start the server with one.'}
+								To look around first, open the demo: a snapshot of a small shop, read-only.
 							</p>
 							<p class="problem">{app.kubeconfigProblem}</p>
 							<div class="connect-actions">
@@ -660,8 +665,13 @@
 									{isTauri() ? 'Load kubeconfig file…' : 'Add contexts from a file…'}
 									<Icon name="arrow" size={16} />
 								</button>
-								<button onclick={() => app.load()}>Try again</button>
+								{#await backend.localClusters().catch(() => null) then clusters}
+									{#if clusters?.allowed}<button onclick={() => (localClusterOpen = true)}>Start a cluster…</button>{/if}
+								{/await}
+								<button onclick={openDemo}>Open the demo</button>
+								<button onclick={retryKubeconfig}>Try again</button>
 							</div>
+							{#if localClusterOpen}<LocalClusterDialog onclose={() => (localClusterOpen = false)} />{/if}
 							<p class="small">
 								Kubri looks in the files listed in <code>KUBECONFIG</code>, or in <code>~/.kube/config</code>.
 							</p>

@@ -40,6 +40,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
             "/snapshot",
             post(take_snapshot)
                 .put(open_snapshot)
+                .delete(close_snapshot)
                 .layer(DefaultBodyLimit::max(MAX_SNAPSHOT)),
         )
         .route("/settings", get(settings))
@@ -132,6 +133,8 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/plugins/terminal", any(plugin_terminal))
         .route("/terminal/local", get(local_terminal_info))
         .route("/terminal/local/open", any(local_terminal))
+        .route("/local-cluster", get(local_clusters))
+        .route("/local-cluster/create", any(create_local_cluster))
         .route("/logs", any(logs))
         .route("/terminal", any(terminal))
         .route("/portforwards", get(port_forwards).post(start_port_forward))
@@ -273,6 +276,12 @@ async fn take_snapshot(
 #[derive(Deserialize)]
 struct SnapshotFile {
     name: Option<String>,
+}
+
+/// Leaves the open snapshot for no context, when there is none to go back to.
+async fn close_snapshot(State(kubri): State<Arc<Kubri>>) -> Json<()> {
+    kubri.close_snapshot().await;
+    Json(())
 }
 
 /// Opens a snapshot file sent as the request body.
@@ -1200,6 +1209,26 @@ async fn local_terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -
         let opened = match first_message::<kubri_core::LocalTerminalOptions>(&mut socket).await {
             Ok(options) => kubri
                 .open_local_terminal(&options)
+                .await
+                .map_err(|e| e.to_string()),
+            Err(err) => Err(err),
+        };
+        run_terminal(socket, opened).await;
+    })
+}
+
+/// The tools that can make a cluster on this computer, and whether Kubri may run them here.
+async fn local_clusters(State(kubri): State<Arc<Kubri>>) -> Json<kubri_core::LocalClusters> {
+    Json(kubri.local_clusters().await)
+}
+
+/// Makes a cluster with kind or k3d, when the server allows local terminals: the client
+/// sends a [`kubri_core::LocalClusterRequest`] first, then it works like a terminal.
+async fn create_local_cluster(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(move |mut socket| async move {
+        let opened = match first_message::<kubri_core::LocalClusterRequest>(&mut socket).await {
+            Ok(request) => kubri
+                .create_local_cluster(&request)
                 .await
                 .map_err(|e| e.to_string()),
             Err(err) => Err(err),

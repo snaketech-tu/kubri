@@ -239,6 +239,16 @@ jobs:
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/${{ needs.draft.outputs.id }}" \
             -F draft=false -f make_latest=true --jq .html_url
 
+  # The website and its live demo, from the commit just released.
+  website:
+    name: Website
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+
   # Fills the Homebrew cask, winget manifests, AUR package and Flatpak manifest with the
   # release's checksums and publishes each where its secret is set; see docs/RELEASING.md.
   packages:

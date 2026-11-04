@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="https://snaketech-tu.github.io/kubri/demo/"><b>Live demo</b></a> ·
   <a href="#install"><b>Install</b></a> ·
   <a href="#features"><b>Features</b></a> ·
   <a href="#screenshots"><b>Screenshots</b></a> ·

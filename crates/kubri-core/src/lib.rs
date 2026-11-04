@@ -27,6 +27,7 @@ mod integrations;
 mod jsonpath;
 mod k9s;
 mod kubeconfig;
+mod local_cluster;
 mod local_terminal;
 mod logs;
 mod loki;
@@ -99,6 +100,7 @@ pub use integrations::{Endpoint, Integration, IntegrationSettings, Integrations}
 pub use k9s::{
     Alias, ConfigFile, Hotkey, Jump, K9sConfig, Logger, Plugin, PluginInput, Threshold, Thresholds,
 };
+pub use local_cluster::{LocalClusterOption, LocalClusterRequest, LocalClusterTool, LocalClusters};
 pub use local_terminal::{LocalTerminalInfo, LocalTerminalOptions, TerminalSettings};
 pub use logs::{LogEvent, LogLine, LogOptions, LogSource};
 pub use loki::{LokiLogs, LokiRequest};
@@ -553,6 +555,49 @@ impl Kubri {
         )
     }
 
+    /// Why Kubri may not make a cluster on this computer, if it may not.
+    fn local_cluster_refusal(&self) -> Option<String> {
+        if !self.local_terminal.load(Ordering::Relaxed) {
+            return Some(
+                "Kubri makes local clusters only in the desktop app: here the cluster would run on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it."
+                    .into(),
+            );
+        }
+        if self.agent.load(Ordering::Relaxed) {
+            return Some("AI agents cannot make clusters.".into());
+        }
+        if self.read_only.load(Ordering::Relaxed) {
+            return Some("Kubri was started read-only.".into());
+        }
+        None
+    }
+
+    /// The tools Kubri can make a cluster on this computer with, kind and k3d, and whether
+    /// they are installed.
+    pub async fn local_clusters(&self) -> LocalClusters {
+        let reason = self.local_cluster_refusal();
+        let (tools, containers) = tokio::task::spawn_blocking(local_cluster::options)
+            .await
+            .unwrap_or_default();
+        LocalClusters {
+            allowed: reason.is_none(),
+            reason,
+            tools,
+            containers,
+        }
+    }
+
+    /// Makes a cluster on this computer with kind or k3d, in a terminal that shows the tool's
+    /// progress. The tool adds the cluster's context to the kubeconfig; [`Kubri::reload`]
+    /// reads it.
+    pub async fn create_local_cluster(&self, request: &LocalClusterRequest) -> Result<Terminal> {
+        if let Some(reason) = self.local_cluster_refusal() {
+            return Err(Error::Unsupported(reason));
+        }
+        tracing::info!(tool = ?request.tool, "making a local cluster");
+        local_cluster::create(request)
+    }
+
     /// Sets what the change history keeps; recording starts or stops at once.
     pub async fn set_history_settings(&self, value: HistorySettings) -> Result<Settings> {
         let settings = self.update_settings(|s| {
@@ -815,13 +860,16 @@ impl Kubri {
     }
 
     pub async fn contexts(&self) -> Result<ContextList> {
+        let cluster = self.cluster().await;
         let contexts = match &*self.kubeconfig.read().await {
             Ok(kubeconfig) => context::list_contexts(kubeconfig, &added::names()),
+            // A snapshot opened at start needs no kubeconfig: it shows with no context to switch to.
+            Err(_) if cluster.as_ref().is_some_and(|c| c.snapshot.is_some()) => Vec::new(),
             Err(err) => return Err(Error::NoKubeconfig(err.clone())),
         };
         Ok(ContextList {
             contexts,
-            cluster: self.cluster().await,
+            cluster,
             warm: self.warm_contexts().await,
         })
     }
@@ -1063,6 +1111,16 @@ impl Kubri {
         *self.session.write().await = Some(Arc::new(session));
         tracing::info!(context = info.context, "opened a snapshot");
         Ok(info)
+    }
+
+    /// Leaves the snapshot that is open for no context at all, as when there is no kubeconfig
+    /// to go back to. Without a snapshot open, it does nothing.
+    pub async fn close_snapshot(&self) {
+        let mut session = self.session.write().await;
+        if session.as_ref().is_some_and(|s| s.info.snapshot.is_some()) {
+            *session = None;
+            tracing::info!("closed the snapshot");
+        }
     }
 
     /// A connection to `context`, without making it the current one.
@@ -3056,6 +3114,75 @@ contexts: [{name: eks, context: {cluster: c, user: u}}]
         // A file that does not open leaves the snapshot open.
         assert_eq!(
             kubri.cluster().await.map(|c| c.context).as_deref(),
+            Some("prod (snapshot)")
+        );
+    }
+
+    /// The demo the start page opens, `ui/static/demo.kubri`, made by `scripts/demo/make.sh`.
+    #[tokio::test]
+    async fn the_demo_that_comes_with_kubri_opens() {
+        let kubri = Kubri::with_kubeconfig(Err("there is no kubeconfig at ~/.kube/config".into()));
+        let demo = include_bytes!("../../../ui/static/demo.kubri");
+        let info = kubri
+            .open_snapshot(demo, Some("demo.kubri".into()))
+            .await
+            .unwrap();
+        let saved = info.snapshot.unwrap();
+        assert_eq!(saved.namespace.as_deref(), Some("shop"));
+        assert!(saved.objects > 100, "{} objects", saved.objects);
+        assert!(saved.logs > 5, "{} containers with logs", saved.logs);
+        assert!(kubri.contexts().await.unwrap().contexts.is_empty());
+
+        // Leaving it with no context to go to: back to no kubeconfig.
+        kubri.close_snapshot().await;
+        assert!(matches!(kubri.contexts().await, Err(Error::NoKubeconfig(_))));
+    }
+
+    #[tokio::test]
+    async fn local_clusters_are_made_only_where_local_terminals_are_allowed() {
+        let kubri = Kubri::with_kubeconfig(Err("there is no kubeconfig at ~/.kube/config".into()));
+        let clusters = kubri.local_clusters().await;
+        assert!(!clusters.allowed);
+        assert!(clusters.reason.unwrap().contains("KUBRI_LOCAL_TERMINAL"));
+        assert_eq!(clusters.tools.len(), 2);
+        let request = LocalClusterRequest {
+            tool: LocalClusterTool::Kind,
+            cols: 80,
+            rows: 24,
+        };
+        assert!(matches!(
+            kubri.create_local_cluster(&request).await,
+            Err(Error::Unsupported(_))
+        ));
+
+        kubri.allow_local_terminal();
+        assert!(kubri.local_clusters().await.allowed);
+        kubri.set_read_only();
+        assert_eq!(
+            kubri.local_clusters().await.reason.as_deref(),
+            Some("Kubri was started read-only.")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_snapshot_opens_without_a_kubeconfig() {
+        let kubri = Kubri::with_kubeconfig(Err("there is no kubeconfig at ~/.kube/config".into()));
+        assert!(matches!(kubri.contexts().await, Err(Error::NoKubeconfig(_))));
+        let file = serde_json::json!({
+            "format": "kubri-snapshot", "version": 1,
+            "info": { "context": "prod", "server": "https://prod", "kubernetes": "v1.33.5",
+                      "namespace": "shop", "taken": 1_793_000_000_000_i64, "kubri": "1.6.2",
+                      "objects": 0, "logs": 0, "leftOut": [] },
+            "resources": [], "lists": {}, "logs": {}
+        });
+        kubri
+            .open_snapshot(file.to_string().as_bytes(), None)
+            .await
+            .unwrap();
+        let list = kubri.contexts().await.unwrap();
+        assert!(list.contexts.is_empty());
+        assert_eq!(
+            list.cluster.map(|c| c.context).as_deref(),
             Some("prod (snapshot)")
         );
     }
