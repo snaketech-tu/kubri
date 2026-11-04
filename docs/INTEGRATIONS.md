@@ -73,7 +73,7 @@ Give Grafana's address under **Point elsewhere > Grafana > URL** on the Integrat
 | A namespace | `{namespace="shop"}` |
 | A pod | `{namespace="shop", pod="web-1"}` |
 | A Deployment, StatefulSet, DaemonSet, ReplicaSet, Job or CronJob | Its pods by the names its controller gives them, like `{namespace="shop", pod=~"web-[a-z0-9]{1,10}-[a-z0-9]{5}"}` |
-| A Service | Its pods by the Service's selector |
+| A Service | The pods it selects right now, by name |
 | Anything else in a namespace, like a ConfigMap | Its namespace |
 
 The queries use the `namespace` and `pod` labels that Grafana Alloy, Promtail and the Loki chart set. Kubri asks Grafana which Loki data source it has and takes the default one, else the one named `Loki`. When Grafana needs a login or a client certificate, Kubri cannot ask, and Grafana opens its own default data source; give the name or UID of the Loki data source under **Loki data source** then. Your browser opens the page, so a login or a client certificate there works as usual.
@@ -86,7 +86,7 @@ A dashboard fits when it has a variable Kubri can fill, like `pod`, `workload`, 
 
 ## Loki
 
-In the log workspace (<kbd>l</kbd>), **Loki history** in the source menu shows what Loki kept over the last 15 minutes to 7 days, including pods that no longer exist. The LogQL field starts with the object's own query (by pod name for pods and workloads, by selector labels for a Service, and the container when one is picked) and runs any other with **Run**. The lines take the same search, levels, fields, table and export as live logs. A query returns at most 5000 lines, the newest; a note at the top says when there were more.
+In the log workspace (<kbd>l</kbd>), **Loki history** in the source menu shows what Loki kept over the last 15 minutes to 7 days, including pods that no longer exist. The LogQL field starts with the object's own query (by pod name for pods and workloads, by the names of the pods it selects for a Service, and the container when one is picked) and runs any other with **Run**. The lines take the same search, levels, fields, table and export as live logs. A query returns at most 5000 lines, the newest; a note at the top says when there were more.
 
 ## Flux and Argo CD
 

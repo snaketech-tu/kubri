@@ -1,8 +1,6 @@
 //! Log history from Loki, beyond the lifetime of a pod: the same lines the log workspace shows
 //! from the cluster, found with a LogQL query prefilled from the object.
 
-use std::collections::BTreeMap;
-
 use k8s_openapi::jiff::Timestamp;
 use kube::Client;
 use serde::{Deserialize, Serialize};
@@ -50,41 +48,29 @@ fn quoted(text: &str) -> String {
     format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// Loki label names: what promtail and Alloy make of Kubernetes label keys.
-fn label_name(key: &str) -> String {
-    key.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect()
-}
-
 /// The stream selector for all lines of a namespace.
 pub(crate) fn namespace_query(namespace: &str) -> String {
     format!("{{namespace={}}}", quoted(namespace))
 }
 
-/// The stream selector for an object's pods: by name for pods and workloads, by the Service's
-/// selector for a Service.
+/// The stream selector for an object's pods, by their names: a pod's own, those a workload's
+/// controller gives, or for a Service those of the pods it selects now, as log collectors label
+/// lines with the pod but rarely with its labels.
 pub(crate) fn default_query(
     kind: &str,
     namespace: &str,
     name: &str,
-    selector: Option<&BTreeMap<String, String>>,
+    selected: Option<&[String]>,
     container: Option<&str>,
 ) -> String {
     let mut matchers = vec![format!("namespace={}", quoted(namespace))];
-    match (kind, selector) {
+    match (kind, selected) {
         ("Pod", _) => matchers.push(format!("pod={}", quoted(name))),
-        ("Service", Some(selector)) => matchers.extend(
-            selector
-                .iter()
-                .map(|(k, v)| format!("{}={}", label_name(k), quoted(v))),
-        ),
+        ("Service", Some(pods)) => {
+            // Pod names hold only lower-case letters, digits, `-` and `.`, of which `.` is special.
+            let names: Vec<String> = pods.iter().map(|p| p.replace('.', "\\\\.")).collect();
+            matchers.push(format!("pod=~\"{}\"", names.join("|")));
+        }
         _ => matchers.push(format!("pod=~\"{}\"", crate::prometheus::pod_pattern(kind, name))),
     }
     if let Some(container) = container.filter(|c| !c.is_empty()) {
@@ -214,10 +200,10 @@ mod tests {
             default_query("Deployment", "shop", "web", None, Some("nginx")),
             "{namespace=\"shop\", pod=~\"web-[a-z0-9]{1,10}-[a-z0-9]{5}\", container=\"nginx\"}"
         );
-        let selector = BTreeMap::from([("app.kubernetes.io/name".to_owned(), "web".to_owned())]);
+        let pods = ["web-1".to_owned(), "web.2".to_owned()];
         assert_eq!(
-            default_query("Service", "shop", "web", Some(&selector), None),
-            "{namespace=\"shop\", app_kubernetes_io_name=\"web\"}"
+            default_query("Service", "shop", "web", Some(&pods), None),
+            "{namespace=\"shop\", pod=~\"web-1|web\\\\.2\"}"
         );
     }
 

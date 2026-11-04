@@ -8,7 +8,8 @@
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use k8s_openapi::api::core::v1::Service;
+use k8s_openapi::api::core::v1::{Pod, Service};
+use kube::api::ListParams;
 use kube::{Api, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1117,7 +1118,7 @@ impl crate::Kubri {
         loki::query(&session.proxy_client, &endpoint, &query, seconds, limit).await
     }
 
-    /// The LogQL that finds an object's lines: by pod name, or by a Service's selector.
+    /// The LogQL that finds an object's lines: by the names of its pods.
     async fn loki_query(
         &self,
         session: &crate::Session,
@@ -1126,23 +1127,35 @@ impl crate::Kubri {
     ) -> Result<String> {
         let kind = session.info_for(&target.resource)?.kind.clone();
         let namespace = target.namespace.clone().unwrap_or_default();
-        let selector = if target.resource.group.is_empty() && kind == "Service" {
+        let mut selected = None;
+        if target.resource.group.is_empty() && kind == "Service" {
             let api: Api<Service> = Api::namespaced(session.client.clone(), &namespace);
-            api.get(&target.name).await?.spec.and_then(|s| s.selector)
-        } else {
-            None
-        };
-        if kind == "Service" && selector.as_ref().is_none_or(|s| s.is_empty()) {
-            return Err(Error::Unsupported(format!(
-                "Service {} selects no pods",
-                target.name
-            )));
+            let selector = api.get(&target.name).await?.spec.and_then(|s| s.selector);
+            let selector = selector
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| Error::Unsupported(format!("Service {} selects no pods", target.name)))?;
+            let labels: Vec<String> = selector.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            let pods: Api<Pod> = Api::namespaced(session.client.clone(), &namespace);
+            let names: Vec<String> = pods
+                .list_metadata(&ListParams::default().labels(&labels.join(",")))
+                .await?
+                .items
+                .into_iter()
+                .filter_map(|p| p.metadata.name)
+                .collect();
+            if names.is_empty() {
+                return Err(Error::Unsupported(format!(
+                    "Service {} selects no pods right now",
+                    target.name
+                )));
+            }
+            selected = Some(names);
         }
         Ok(loki::default_query(
             &kind,
             &namespace,
             &target.name,
-            selector.as_ref(),
+            selected.as_deref(),
             container,
         ))
     }

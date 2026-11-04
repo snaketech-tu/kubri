@@ -251,13 +251,13 @@ pub(crate) fn links(dashboards: &[Dashboard], subject: &Subject) -> Vec<Dashboar
 /// Grafana's Explore with the logs `query` finds over the last hour, from the Loki data source
 /// `source` (its UID or name), or from Grafana's default data source.
 pub(crate) fn explore_path(source: Option<&str>, query: &str) -> String {
-    let mut target = serde_json::json!({"refId": "A", "expr": query, "queryType": "range"});
-    let mut pane = serde_json::json!({"range": {"from": "now-1h", "to": "now"}});
+    // The query names no data source of its own: Grafana gives it the pane's, found by UID or
+    // by name, where a query's own must be a UID.
+    let target = serde_json::json!({"refId": "A", "expr": query, "queryType": "range"});
+    let mut pane = serde_json::json!({"queries": [target], "range": {"from": "now-1h", "to": "now"}});
     if let Some(source) = source.filter(|s| !s.is_empty()) {
-        target["datasource"] = serde_json::json!({"type": "loki", "uid": source});
         pane["datasource"] = source.into();
     }
-    pane["queries"] = serde_json::json!([target]);
     let panes = serde_json::json!({ "kubri": pane });
     format!("/explore?schemaVersion=1&panes={}", encode(&panes.to_string()))
 }
@@ -389,8 +389,8 @@ mod tests {
         let pane = &decoded["kubri"];
         assert_eq!(pane["datasource"], "loki-uid");
         assert_eq!(pane["queries"][0]["expr"], r#"{namespace="shop", pod="web-1"}"#);
-        assert_eq!(pane["queries"][0]["datasource"]["type"], "loki");
         assert_eq!(pane["range"]["from"], "now-1h");
+        assert!(pane["queries"][0].get("datasource").is_none());
         // Without a data source Grafana takes its default one.
         let decoded: Value = serde_json::from_str(&decode(
             explore_path(None, "{namespace=\"shop\"}")
@@ -399,7 +399,6 @@ mod tests {
         ))
         .unwrap();
         assert!(decoded["kubri"].get("datasource").is_none());
-        assert!(decoded["kubri"]["queries"][0].get("datasource").is_none());
     }
 
     fn decode(text: &str) -> String {
