@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.1 — 2026-11-04
+
+- Grafana needs only its address now. **Logs in Grafana** on a namespace, pod, workload or Service opens its logs in Grafana's Explore with the query already set. **Grafana…** lists that link first, then the matching dashboards, each with **Copy**. Kubri finds Grafana's Loki data source itself, or takes its name from the Integrations page. The editor for pasted dashboard addresses is gone. See [Integrations](docs/INTEGRATIONS.md#grafana).
+- Loki history of a Service finds its lines with any log collector, by the names of the pods it selects.
+
 ## 1.6.0 — 2026-11-04
 
 - Open Grafana from any object: paste a dashboard address once and Kubri fills in the namespace, pod or workload for each object. **Grafana…** in the object menus opens or copies it, also for a Grafana Kubri cannot read itself. See [Integrations](docs/INTEGRATIONS.md).
