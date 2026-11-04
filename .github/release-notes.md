@@ -1,7 +1,9 @@
 ## What's new
 
-- **Logs in Grafana:** give only Grafana's address. On a namespace, pod, workload or Service, **Logs in Grafana** opens its logs in Grafana's Explore right away, and **Grafana…** lets you copy the link.
-- **Fix:** Loki history of a Service shows its lines with any log collector.
+- **Security fix for the web app:** contexts added with **Add clusters…** can no longer run commands or read files on the server. Before, anyone who could sign in could use them to run any command on the server or to send its files elsewhere. Such contexts now need the server to be started with `KUBRI_LOCAL_TERMINAL=true`. If you run Kubri in the browser for others, please update. **From URL** also no longer reads cloud metadata addresses.
+- **Web app:** a reload keeps your view, addresses can be bookmarked, and the browser's Back button goes back inside Kubri.
+- **Desktop app:** links to other sites, such as the install guides on the Integrations page, open in the browser.
+- **Fixes:** lists over several namespaces no longer bring back deleted objects; web lists say why they cannot start; the Clusters page no longer signs in to every cluster each minute; **Add clusters…** reads a pasted kubeconfig right away; kube-prometheus-stack's Grafana is no longer taken for Prometheus.
 
 ## Install
 

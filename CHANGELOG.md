@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.2 — 2026-11-04
+
+- **Security, web app:** contexts added with **Add clusters…** can no longer run commands or read files on the server. Before, anyone who could sign in could add a context that signs in through a command, such as an exec plugin, and so run any command on the server. A context could also name a token file there and send its content to an address of their choice. The server now accepts such contexts only when it is started with `KUBRI_LOCAL_TERMINAL=true`. The desktop app is unchanged. See [Running Kubri in the browser](docs/WEB.md).
+- **From URL** in Create no longer reads cloud metadata addresses such as `169.254.169.254`, also through redirects, and stops at 5 MB.
+- In the web app, the address follows the view, so a reload keeps it and an address can be bookmarked or shared. The browser's Back button goes back through Kubri's views like <kbd>[</kbd>.
+- Lists over several namespaces no longer bring back objects that were deleted in one of them.
+- In the web app, a list that cannot start says why instead of "Lost connection to kubri-server".
+- A port-forward for an object of another context is refused, like other actions on it, instead of reaching an object of the same name in the current context.
+- The Clusters page keeps its connection to each cluster for 15 minutes, so a kubeconfig that signs in through a command such as `aws eks get-token` no longer runs it every minute.
+- **Add clusters…** reads a pasted kubeconfig right away.
+- In the desktop app, links to other sites, such as the install guides on the Integrations page, open in the browser.
+- The Grafana, kubelet and coredns Services of kube-prometheus-stack are no longer taken for Prometheus.
+
 ## 1.6.1 — 2026-11-04
 
 - Grafana needs only its address now. **Logs in Grafana** on a namespace, pod, workload or Service opens its logs in Grafana's Explore with the query already set. **Grafana…** lists that link first, then the matching dashboards, each with **Copy**. Kubri finds Grafana's Loki data source itself, or takes its name from the Integrations page. The editor for pasted dashboard addresses is gone. See [Integrations](docs/INTEGRATIONS.md#grafana).
