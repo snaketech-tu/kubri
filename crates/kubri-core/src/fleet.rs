@@ -13,6 +13,17 @@ use crate::{Error, Kubri, Result, client_config};
 
 /// How long one context may take before the page calls it unreachable.
 const FLEET_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the page keeps using a client it made for a context. The page checks every
+/// minute; signing in each time would run a context's exec plugin, like `aws`, each time too.
+const KEEP_CLIENT_FOR: Duration = Duration::from_secs(15 * 60);
+
+/// A client the page made for a context, the API server it talks to, and when it was made.
+#[derive(Clone)]
+pub(crate) struct Kept {
+    made: Instant,
+    server: String,
+    client: Client,
+}
 
 /// One context on the fleet page.
 #[derive(Debug, Clone, Serialize)]
@@ -80,17 +91,23 @@ impl Kubri {
             cpu: None,
             memory: None,
         };
-        let started = Instant::now();
         let reached = tokio::time::timeout(FLEET_TIMEOUT, async {
-            let config = client_config(&kubeconfig, context).await?;
-            cluster.server = Some(config.cluster_url.to_string().trim_end_matches('/').to_owned());
-            let client = Client::try_from(config)?;
-            cluster.version = Some(client.apiserver_version().await?.git_version);
+            let client = self.fleet_client(&kubeconfig, context).await?;
+            cluster.server = Some(client.server);
+            let started = Instant::now();
+            cluster.version = Some(client.client.apiserver_version().await?.git_version);
             cluster.millis = started.elapsed().as_millis() as u64;
-            gather(client, &mut cluster).await;
+            gather(client.client, &mut cluster).await;
             Ok::<_, Error>(())
         })
         .await;
+        if cluster.version.is_none() {
+            // Signing in again may be what helps, as after credentials changed.
+            self.fleet
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(context);
+        }
         match reached {
             Ok(Ok(())) => {}
             Ok(Err(e)) => cluster.error = Some(e.to_string()),
@@ -101,5 +118,91 @@ impl Kubri {
             Err(_) => cluster.error = Some(Error::Timeout.to_string()),
         }
         Ok(cluster)
+    }
+
+    /// The page's client for `context`: the one it made before, while it is fresh.
+    async fn fleet_client(&self, kubeconfig: &kube::config::Kubeconfig, context: &str) -> Result<Kept> {
+        let kept = self
+            .fleet
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(context)
+            .cloned();
+        if let Some(kept) = kept.filter(|k| k.made.elapsed() < KEEP_CLIENT_FOR) {
+            return Ok(kept);
+        }
+        let config = client_config(kubeconfig, context).await?;
+        let kept = Kept {
+            made: Instant::now(),
+            server: config.cluster_url.to_string().trim_end_matches('/').to_owned(),
+            client: Client::try_from(config)?,
+        };
+        self.fleet
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(context.to_owned(), kept.clone());
+        Ok(kept)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing;
+
+    /// A Kubri whose kubeconfig has the context `far`, at an address nothing answers.
+    fn kubri() -> Kubri {
+        let kubeconfig = kube::config::Kubeconfig::from_yaml(
+            r#"
+clusters: [{name: far, cluster: {server: "https://192.0.2.1:6443"}}]
+users: [{name: far, user: {token: t}}]
+contexts: [{name: far, context: {cluster: far, user: far}}]
+"#,
+        )
+        .unwrap();
+        Kubri::from_kubeconfig(kubeconfig)
+    }
+
+    fn keep(kubri: &Kubri, status: u16) {
+        let (client, _) = testing::client(move |r| {
+            if status != 200 {
+                return (status, testing::status(status, "Unauthorized"));
+            }
+            let body = match r.uri.as_str() {
+                "/version" => serde_json::json!({
+                    "major": "1", "minor": "36", "gitVersion": "v1.36.0", "gitCommit": "", "gitTreeState": "",
+                    "buildDate": "", "goVersion": "", "compiler": "", "platform": ""
+                }),
+                _ => serde_json::json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [] }),
+            };
+            (200, body.to_string())
+        });
+        let kept = Kept {
+            made: Instant::now(),
+            server: "https://far.example:6443".into(),
+            client,
+        };
+        kubri.fleet.lock().unwrap().insert("far".into(), kept);
+    }
+
+    #[tokio::test]
+    async fn checks_with_the_client_it_made_before() {
+        let kubri = kubri();
+        keep(&kubri, 200);
+        let far = kubri.fleet_cluster("far").await.unwrap();
+        assert_eq!(far.error, None);
+        assert_eq!(far.version.as_deref(), Some("v1.36.0"));
+        assert_eq!(far.server.as_deref(), Some("https://far.example:6443"));
+        assert!(kubri.fleet.lock().unwrap().contains_key("far"));
+    }
+
+    #[tokio::test]
+    async fn signs_in_again_after_a_client_failed() {
+        let kubri = kubri();
+        keep(&kubri, 401);
+        let far = kubri.fleet_cluster("far").await.unwrap();
+        assert_eq!(far.version, None);
+        assert!(far.error.is_some());
+        assert!(!kubri.fleet.lock().unwrap().contains_key("far"));
     }
 }
