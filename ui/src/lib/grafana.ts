@@ -3,7 +3,10 @@
  * placeholders each object fills in.
  */
 
-/** Dashboard variables Kubri fills, by the placeholder each one gets. */
+/**
+ * Dashboard variables Kubri fills, by the placeholder each one gets. Names that are also
+ * Prometheus labels for other things, like `job` or `service`, are left to write by hand.
+ */
 const VARIABLES: Record<string, string> = {
 	namespace: 'namespace',
 	pod: 'pod',
@@ -11,15 +14,11 @@ const VARIABLES: Record<string, string> = {
 	workload: 'workload',
 	deployment: 'deployment',
 	statefulset: 'statefulset',
-	daemonset: 'daemonset',
-	replicaset: 'replicaset',
-	job: 'job',
-	cronjob: 'cronjob',
-	service: 'service',
-	ingress: 'ingress',
-	type: 'kind',
-	workload_type: 'kind'
+	daemonset: 'daemonset'
 };
+
+/** The workload's kind, only next to a `var-workload`. */
+const WORKLOAD_TYPES = ['type', 'workload_type'];
 
 /** The placeholders in a template, like `pod` for `{pod}`, each once. */
 export function placeholders(template: string): string[] {
@@ -43,8 +42,10 @@ export function templateFromUrl(text: string): string {
 	}
 	if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.search) return url;
 	const parts: string[] = [];
+	const withWorkload = parsed.searchParams.has('var-workload');
 	for (const [key, value] of parsed.searchParams) {
-		const variable = key.startsWith('var-') ? VARIABLES[key.slice(4).toLowerCase()] : undefined;
+		const name = key.startsWith('var-') ? key.slice(4).toLowerCase() : '';
+		const variable = VARIABLES[name] ?? (withWorkload && WORKLOAD_TYPES.includes(name) ? 'kind' : undefined);
 		// Absolute times would show the moment the link was copied.
 		if ((key === 'from' || key === 'to') && /^\d+$/.test(value)) continue;
 		parts.push(`${encodeURIComponent(key)}=${variable ? `{${variable}}` : encodeURIComponent(value)}`);

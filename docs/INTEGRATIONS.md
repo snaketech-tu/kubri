@@ -70,7 +70,7 @@ Dashboards come from Grafana's own list and from the ConfigMaps labeled `grafana
 
 ### Dashboards for objects
 
-For a Grafana that Kubri cannot read, such as one a customer runs outside the cluster, add its dashboards under **Point elsewhere > Grafana > Dashboards for objects** on the Integrations page, for the connected context. Paste the address of a dashboard from your browser, like `https://grafana.example.com/d/abc/pods?var-namespace=shop&var-pod=web-1`: Kubri replaces the values of `var-namespace`, `var-pod`, `var-node`, `var-workload`, `var-deployment` and the like with placeholders, drops a fixed time range, names the dashboard after its address, and says which objects it shows for. **Grafana…** on a pod then opens that dashboard set to the pod.
+For a Grafana that Kubri cannot read, such as one a customer runs outside the cluster, add its dashboards under **Point elsewhere > Grafana > Dashboards for objects** on the Integrations page, for the connected context. Paste the address of a dashboard from your browser, like `https://grafana.example.com/d/abc/pods?var-namespace=shop&var-pod=web-1`: Kubri replaces the values of `var-namespace`, `var-pod`, `var-node`, `var-workload` (with `var-type`), `var-deployment`, `var-statefulset` and `var-daemonset` with placeholders, drops a fixed time range, names the dashboard after its address, and says which objects it shows for. **Grafana…** on a pod then opens that dashboard set to the pod.
 
 You can also write the placeholders yourself:
 

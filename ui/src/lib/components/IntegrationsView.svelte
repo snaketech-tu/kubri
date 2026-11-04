@@ -217,7 +217,7 @@
 					<summary>Placeholders</summary>
 					<p class="muted small">
 						Kubri replaces <code>var-namespace</code>, <code>var-pod</code>, <code>var-node</code>, <code>var-workload</code>,
-						<code>var-deployment</code> and the like on its own. You can also write them yourself: <code>{'{namespace}'}</code>,
+						<code>var-deployment</code>, <code>var-statefulset</code> and <code>var-daemonset</code> on its own. You can also write them yourself: <code>{'{namespace}'}</code>,
 						<code>{'{name}'}</code>, <code>{'{kind}'}</code>, <code>{'{context}'}</code>, the name by kind like <code>{'{pod}'}</code> or
 						<code>{'{node}'}</code>, and <code>{'{workload}'}</code>. A dashboard shows only for objects that fill all of its placeholders. A
 						path like <code>/d/uid?var-pod={'{pod}'}</code> opens on the Grafana above.

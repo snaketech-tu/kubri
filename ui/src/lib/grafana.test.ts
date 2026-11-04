@@ -16,6 +16,12 @@ describe('templateFromUrl', () => {
 		);
 	});
 
+	it('leaves variables that are also Prometheus labels for other things', () => {
+		expect(templateFromUrl('https://g/d/x/node-exporter?var-job=node&var-node=n1&var-type=a')).toBe(
+			'https://g/d/x/node-exporter?var-job=node&var-node={node}&var-type=a'
+		);
+	});
+
 	it('leaves templates, paths and text alone', () => {
 		expect(templateFromUrl(' https://g/d/a?var-pod={pod} ')).toBe('https://g/d/a?var-pod={pod}');
 		expect(templateFromUrl('/d/a?var-pod=web')).toBe('/d/a?var-pod=web');
