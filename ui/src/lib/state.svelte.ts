@@ -5,6 +5,7 @@ import { creating } from './create.svelte';
 import type { TemplateParams } from './create';
 import type { ChangesFilter } from './changes';
 import { dock } from './dock.svelte';
+import { reach } from './reach.svelte';
 import {
 	backend,
 	type AccessCheck,
@@ -285,6 +286,12 @@ class AppState {
 		this.details = null;
 	}
 	connecting = $state<string | null>(null);
+	/** When the connect under way began, for the time it shows. */
+	connectingSince = $state(0);
+	/** Counts connects, so that one cancelled or overtaken is ignored when it ends. */
+	#connectAttempt = 0;
+	/** A cancel on its way to the backend, which the next connect waits for so it is not cancelled too. */
+	#cancelling: Promise<void> | null = null;
 	error = $state<string | null>(null);
 
 	page = $state<Page>('pulses');
@@ -448,6 +455,7 @@ class AppState {
 			this.tourOpen ||
 			this.activityOpen ||
 			this.contextMenuOpen ||
+			this.connecting !== null ||
 			this.kubeconfigFilesOpen ||
 			this.menu !== null ||
 			this.dialog !== null ||
@@ -889,20 +897,43 @@ class AppState {
 			this.toast('Finish the current action before switching contexts', 'bad');
 			return;
 		}
-		// While connecting, the list is replaced by a notice and forgets its filter and cursor.
+		// The view stays, dimmed, while connecting; it keeps its place for when it comes back.
 		this.savePlace();
+		const attempt = ++this.#connectAttempt;
 		this.connecting = name;
+		this.connectingSince = Date.now();
 		this.error = null;
 		this.connectFailure = null;
 		try {
-			await this.connected(await backend.switchContext(name));
+			await this.#cancelling;
+			const cluster = await backend.switchContext(name);
+			if (attempt !== this.#connectAttempt) return;
+			reach.connected(name, cluster.server);
+			await this.connected(cluster);
 			this.refreshWarm();
 		} catch (err) {
-			this.error = `Could not connect to ${name}: ${errorMessage(err)}`;
+			if (attempt !== this.#connectAttempt) return;
+			const server = this.contexts.find((c) => c.name === name)?.server ?? null;
+			reach.failed(name, errorMessage(err), server);
+			// The connecting card says what failed and what to try.
 			this.connectFailure = { context: name, error: errorMessage(err) };
 		} finally {
-			this.connecting = null;
+			if (attempt === this.#connectAttempt) this.connecting = null;
 		}
+	}
+
+	/** Stops waiting for the context being connected to, and stays where Kubri was. */
+	cancelConnect() {
+		const name = this.connecting;
+		if (name === null || !this.contexts.some((c) => c.name === name)) return;
+		this.#connectAttempt++;
+		this.connecting = null;
+		const cancelling = backend.cancelSwitch().catch(() => {});
+		this.#cancelling = cancelling;
+		void cancelling.then(() => {
+			if (this.#cancelling === cancelling) this.#cancelling = null;
+		});
+		this.toast(this.cluster ? `Stopped connecting to ${name}; still on ${this.contextName(this.cluster.context)}` : `Stopped connecting to ${name}`);
 	}
 
 	/** Shows a resource list, optionally switching namespace, like k9s `:pods kube-system`. */

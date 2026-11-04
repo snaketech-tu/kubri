@@ -30,6 +30,9 @@ pub enum Error {
     ContextChanged(String),
     #[error("timed out while connecting to the cluster")]
     Timeout,
+    /// Connecting to the context was cancelled, or another switch came after it.
+    #[error("connecting to {0} was cancelled")]
+    Cancelled(String),
     /// Changes are turned off; the text says why.
     #[error("Kubri is read-only ({0}), so it does not change the cluster")]
     ReadOnly(String),

@@ -162,6 +162,13 @@ async fn switch_context(kubri: State<'_, Arc<Kubri>>, name: String) -> CommandRe
     kubri.switch_context(&name).await.map_err(|e| e.to_string())
 }
 
+/// Stops waiting for a switch under way; the current connection stays.
+#[tauri::command]
+async fn cancel_switch(kubri: State<'_, Arc<Kubri>>) -> CommandResult<()> {
+    kubri.cancel_switch().await;
+    Ok(())
+}
+
 /// Saves a namespace, or the whole cluster, as a snapshot file in the Downloads folder.
 /// Returns the path.
 #[tauri::command]
@@ -1173,6 +1180,7 @@ pub fn run() {
             contexts,
             reload_contexts,
             switch_context,
+            cancel_switch,
             take_snapshot,
             open_snapshot,
             resources,

@@ -10,6 +10,8 @@ You also land where you left: the same page, kind, namespace, filter, row under 
 
 The context switcher (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>) lists the previous context first, so <kbd>Enter</kbd> goes back to it, and marks kept contexts with a green dot. `:ctx -` in the command palette does the same, like `cd -`. `:ctx prod` switches to `prod`; `:ctx` alone opens Clusters, where you pick one.
 
+While Kubri connects, the page you were on stays, dimmed, under a card with the time so far, the server's address, and **Cancel** (<kbd>Esc</kbd>), which keeps you where you were. Kubri gives up after 15 seconds. When a cluster does not answer, the card names the server and suggests checking the network or VPN, with **Try again** and **Check on the Clusters page**; for other failures, such as credentials the cluster turned down, it says what to try. The switcher shows contexts that failed lately, from connecting or from the Clusters page, such as "Unreachable, 2m ago". Opening it checks contexts not checked for five minutes, when there are at most 20.
+
 Logs and shells in the workspace keep running when you switch. A tab from another context shows that context's name, in red for production, so a shell in production is not mistaken for one in staging. Tabs close only when their context is removed from the kubeconfig, or when you leave a snapshot.
 
 Kubri keeps the 3 most recent contexts this way, each for up to 30 minutes after you left it. Set the number, from 0 (off) to 5, with `connections.keepRecent` in the [settings](SETTINGS.md). Nothing runs for a kept context: no lists, no recording of changes. When the kubeconfig is read again, a kept context whose context, cluster or user entry changed is dropped.

@@ -18,6 +18,7 @@
 	import ConfigView from '#lib/components/ConfigView.svelte';
 	import ContextSettingsForm from '#lib/components/ContextSettingsForm.svelte';
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
+	import ConnectCard from '#lib/components/ConnectCard.svelte';
 	import CreateView from '#lib/components/CreateView.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
 	import Dock from '#lib/components/Dock.svelte';
@@ -31,7 +32,6 @@
 	import KubectlDialog from '#lib/components/KubectlDialog.svelte';
 	import SnapshotDialog from '#lib/components/SnapshotDialog.svelte';
 	import KubeconfigFilesDialog from '#lib/components/KubeconfigFilesDialog.svelte';
-	import { connectHint } from '#lib/connect.js';
 	import ActivityPanel from '#lib/components/ActivityPanel.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import Tour from '#lib/components/Tour.svelte';
@@ -237,6 +237,8 @@
 	}
 
 	const viewHints = $derived.by(() => {
+		// The view waits under the connecting card; only cancelling works.
+		if (app.connecting && app.cluster && app.contexts.some((c) => c.name === app.connecting)) return [['esc', 'cancel']] as [string, string][];
 		const panel: [string, string][] = app.details ? [['f', app.maximized ? 'restore' : 'maximize'], ['esc', 'close']] : [];
 		// The log keys, while the logs are on screen.
 		if (app.details?.tab === 'logs') {
@@ -580,14 +582,20 @@
 		{/if}
 
 		<div class="area" class:right={dock.sessions.length && dock.side === 'right' && !dock.minimized}>
+			{#if app.cluster && (app.connecting || app.connectFailure)}
+				<!-- Over the view Kubri stays on: it is still there if connecting fails or is cancelled. -->
+				<ConnectCard />
+			{/if}
 			<main
+				inert={!!(app.cluster && app.connecting)}
+				class:waiting={app.cluster && app.connecting}
 				class:with-details={app.details}
 				class:wide={app.panelWide}
 				style:--panel-width={app.panelWidth ? `${app.panelWidth}px` : null}
 			>
 				{#if app.page === 'fleet'}
 					<FleetView />
-				{:else if app.cluster && !app.connecting}
+				{:else if app.cluster}
 					{#if app.page === 'portforwards'}
 						<PortForwardsView />
 					{:else if app.page === 'benchmarks'}
@@ -666,36 +674,39 @@
 								Kubri looks in the files listed in <code>KUBECONFIG</code>, or in <code>~/.kube/config</code>.
 							</p>
 						</section>
+					{:else if app.connecting || app.connectFailure}
+						<section class="connect">
+							<img src={logo} alt="" width="56" height="56" />
+							<ConnectCard inline />
+							{#if !app.connecting}
+								<div class="connect-actions">
+									<button onclick={() => (app.kubeconfigFilesOpen = true)}>Kubeconfig files…</button>
+								</div>
+							{/if}
+						</section>
 					{:else}
 						<section class="connect">
 							<img src={logo} alt="" width="56" height="56" />
-							<span class="eyebrow">Your cluster, in focus</span>
-							<h1>{app.connectingText ?? 'Connect to a cluster.'}</h1>
+							<h1>Connect to a cluster.</h1>
 							<p>
 								{isTauri()
 									? 'Choose a context from your kubeconfig. Reload it after you update your credentials.'
 									: 'Choose a context configured on kubri-server. The server holds the credentials.'}
 							</p>
-							{#if !app.connecting && app.connectFailure}
-								{@const hint = connectHint(app.connectFailure.error)}
-								{#if hint}<p class="hint">{hint}</p>{/if}
-							{/if}
-							{#if !app.connecting}
-								<div class="connect-actions">
-									<button
-										class="primary"
-										onclick={() => {
-											app.contextMenuOpen = true;
-											app.reloadContexts(true);
-										}}
-									>
-										{app.connectFailure ? 'Choose another context' : 'Choose context'} <Icon name="arrow" size={16} />
-									</button>
-									<button onclick={() => app.load()}>Try again</button>
-									<button onclick={() => (app.kubeconfigFilesOpen = true)}>Kubeconfig files…</button>
-									{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>See all clusters</button>{/if}
-								</div>
-							{/if}
+							<div class="connect-actions">
+								<button
+									class="primary"
+									onclick={() => {
+										app.contextMenuOpen = true;
+										app.reloadContexts(true);
+									}}
+								>
+									Choose context <Icon name="arrow" size={16} />
+								</button>
+								<button onclick={() => app.load()}>Try again</button>
+								<button onclick={() => (app.kubeconfigFilesOpen = true)}>Kubeconfig files…</button>
+								{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>See all clusters</button>{/if}
+							</div>
 							<p class="small">Your k9s aliases, hotkeys, plugins and skins keep working.</p>
 						</section>
 					{/if}
@@ -1057,11 +1068,17 @@
 	}
 	/* The page, and the workspace below or beside it. */
 	.area {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		flex: 1;
 		min-width: 0;
 		min-height: 0;
+	}
+	main.waiting {
+		opacity: 0.45;
+		filter: saturate(0.6);
+		transition: opacity 0.2s;
 	}
 	.area.right {
 		flex-direction: row;
@@ -1126,13 +1143,6 @@
 		color: var(--bad);
 		font-size: 13px;
 		overflow-wrap: anywhere;
-	}
-	.connect .hint {
-		padding: 8px 12px;
-		border-radius: 8px;
-		background: color-mix(in srgb, var(--warn) 10%, transparent);
-		color: var(--text);
-		font-size: 13px;
 	}
 	.connect .small {
 		margin-top: 18px;

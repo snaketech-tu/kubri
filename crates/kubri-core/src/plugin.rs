@@ -531,6 +531,7 @@ mod tests {
         let context = crate::ContextInfo {
             name: "prod".into(),
             cluster: Some("eu-1".into()),
+            server: None,
             user: Some("admin".into()),
             namespace: None,
             is_default: true,
