@@ -332,6 +332,14 @@
 			['y', 'yaml']
 		];
 		if (!r) return h;
+		// An empty list has no row for the keys to act on.
+		if (app.listRows === 0) {
+			const empty: [string, string][] = [[':', 'command'], ['/', 'filter']];
+			if (app.scope) empty.push(['esc', 'back']);
+			if (app.details) empty.push(['f', app.maximized ? 'restore' : 'maximize']);
+			empty.push(['?', 'help']);
+			return empty;
+		}
 		const writable = !app.readOnly;
 		if (hasLogs(r)) h.push(['l', 'logs']);
 		if (isPods(r) && writable) h.push(['s', 'shell'], ['a', 'attach']);
