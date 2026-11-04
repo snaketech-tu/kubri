@@ -150,8 +150,11 @@
 				extensions: [
 					lineNumbers(),
 					// Tells whether the text differs from where editing began, for the unsaved-changes guard.
+					// Not for the object followed once editing ends, which can arrive before the editor locks.
 					EditorView.updateListener.of((update) => {
-						if (update.docChanged && !update.state.readOnly) onchange?.(update.state.doc.toString() !== original);
+						if (update.docChanged && !update.state.readOnly && !untrack(() => readonly)) {
+							onchange?.(update.state.doc.toString() !== original);
+						}
 						if (update.docChanged || update.selectionSet) followCursor(update.view);
 					}),
 					schemaHelp.of(schemaExtensions(untrack(() => schema))),
