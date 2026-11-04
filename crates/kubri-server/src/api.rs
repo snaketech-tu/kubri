@@ -20,7 +20,7 @@ use kubri_core::{
     TerminalOutput, Usage, XrayNode,
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
-use kubri_core::{Charts, DashboardLink, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
+use kubri_core::{Charts, DashboardLink, Dashboards, Integrations, LokiLogs, LokiRequest, Range};
 use kubri_core::{FleetCluster, GitOpsAction, Manager, NewContext, RightSizing, SearchRequest, SearchResult};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use kubri_core::{RenderedView, ViewSet};
@@ -104,7 +104,6 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/integrations", get(integrations))
         .route("/charts", post(charts))
         .route("/usage-history", get(usage_history))
-        .route("/prometheus/query", post(prometheus_query))
         .route("/grafana/dashboards", post(dashboards))
         .route("/grafana/logs", post(grafana_logs))
         .route("/integrations/url", post(integration_url))
@@ -167,12 +166,11 @@ impl IntoResponse for ApiError {
                 .unwrap_or(StatusCode::BAD_GATEWAY),
             UnknownContext(_) | UnknownResource(_) | NotFound(_) => StatusCode::NOT_FOUND,
             NoKubeconfig(_) | NotConnected | ContextChanged(_) => StatusCode::CONFLICT,
-            Unsupported(_) | InvalidObject(_) => StatusCode::BAD_REQUEST,
+            // A kubeconfig kubectl refuses too, such as one pasted into Add clusters.
+            Unsupported(_) | InvalidObject(_) | InvalidKubeconfig(_) => StatusCode::BAD_REQUEST,
             Timeout => StatusCode::GATEWAY_TIMEOUT,
             ReadOnly(_) | Forbidden(_) => StatusCode::FORBIDDEN,
-            InvalidKubeconfig(_) | Kubeconfig(_) | Kube(_) | Model(_) | Integration(_) => {
-                StatusCode::BAD_GATEWAY
-            }
+            Kubeconfig(_) | Kube(_) | Model(_) | Integration(_) => StatusCode::BAD_GATEWAY,
             Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let body = Json(serde_json::json!({ "error": self.0.to_string() }));
@@ -884,19 +882,6 @@ async fn usage_history(
     Ok(Json(kubri.usage_history(namespace.as_deref(), range).await?))
 }
 
-#[derive(Deserialize)]
-struct PromQuery {
-    query: String,
-    range: Range,
-}
-
-async fn prometheus_query(
-    State(kubri): State<Arc<Kubri>>,
-    Json(req): Json<PromQuery>,
-) -> ApiResult<Vec<Series>> {
-    Ok(Json(kubri.prometheus_query(&req.query, req.range).await?))
-}
-
 async fn dashboards(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Dashboards> {
     Ok(Json(kubri.dashboards(&req.target).await?))
 }
@@ -1390,6 +1375,20 @@ mod tests {
         assert_eq!(body["contexts"][0]["name"], "kind");
         assert_eq!(body["contexts"][0]["isDefault"], true);
         assert!(body["cluster"].is_null());
+    }
+
+    #[tokio::test]
+    async fn a_broken_pasted_kubeconfig_is_a_bad_request() {
+        let inspect = post_json(
+            "/contexts/inspect",
+            &serde_json::json!({ "text": "contexts: [nope" }).to_string(),
+        );
+        let (status, body) = send(disconnected(), inspect).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert!(
+            body["error"].as_str().unwrap().starts_with("invalid kubeconfig"),
+            "{body}"
+        );
     }
 
     #[test]

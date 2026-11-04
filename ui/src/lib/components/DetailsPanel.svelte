@@ -606,7 +606,7 @@
 					{shell}
 					usedBy={hasUsers(details.resource) ? usedBy : undefined}
 				/>
-				{#if details.resource.group === 'apps' && details.resource.plural === 'deployments'}<RolloutHistory target={details.target} {now} />{/if}
+				{#if details.resource.group === 'apps' && ['deployments', 'statefulsets', 'daemonsets'].includes(details.resource.plural)}<RolloutHistory target={details.target} {now} />{/if}
 			</div>
 		{:else if details.tab === 'events'}
 			<div class="scroll events">

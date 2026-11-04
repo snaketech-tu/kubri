@@ -796,18 +796,6 @@ async fn usage_history(
 }
 
 #[tauri::command]
-async fn prometheus_query(
-    kubri: State<'_, Arc<Kubri>>,
-    query: String,
-    range: kubri_core::Range,
-) -> CommandResult<Vec<kubri_core::Series>> {
-    kubri
-        .prometheus_query(&query, range)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 async fn dashboards(
     kubri: State<'_, Arc<Kubri>>,
     target: ObjectRef,
@@ -1247,7 +1235,6 @@ pub fn run() {
             integrations,
             charts,
             usage_history,
-            prometheus_query,
             dashboards,
             grafana_logs,
             integration_url,
