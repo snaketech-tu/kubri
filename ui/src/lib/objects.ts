@@ -9,7 +9,7 @@ import { errorMessage } from './format';
 import { canSuspendFlux, isArgoApp, isFlux } from './gitops';
 import { parseShortcut, pluginApplies, shortcutLabel } from './k9s';
 import { kubectlCommand, type KubectlOp } from './kubectl';
-import type { MenuAction } from './menu';
+import { actionFor, type MenuAction } from './menu';
 import {
 	canPortForward,
 	hasImages,
@@ -161,9 +161,8 @@ export interface ActionOptions {
  * Everything there is to do on an object, for the action bar, the row menu and the keys alike.
  * Where one key has several meanings, the first action with it wins, as in k9s.
  */
-export function objectActions(subject: Subject, options: ActionOptions): MenuAction[] {
+export function objectActions(subject: Subject, options: ActionOptions, writable = !app.readOnly): MenuAction[] {
 	const { resource, target } = subject;
-	const writable = !app.readOnly;
 	const out: MenuAction[] = [];
 	/** Adds an action; with `needs`, one RBAC refuses is offered disabled and explains why. */
 	const add = (
@@ -330,6 +329,15 @@ export function objectActions(subject: Subject, options: ActionOptions): MenuAct
 		add('Delete', label, ['ctrl+d', 'Delete'], run, { danger: true, primary: 0, needs: on('delete'), kubectl: k({ op: 'delete', targets: chosen }) });
 	}
 	return out;
+}
+
+/**
+ * The action a key would run if Kubri were not read-only, for saying why nothing happens.
+ * Undefined when changes are allowed, or the key means nothing here either way.
+ */
+export function refusedAction(subject: Subject, options: ActionOptions, key: string): MenuAction | undefined {
+	if (!app.readOnly) return undefined;
+	return actionFor(objectActions(subject, options, true), key);
 }
 
 /** The subject of an object as the API returns it. */

@@ -648,6 +648,19 @@ class AppState {
 		await this.#askGuard(() => backend.lock());
 	}
 
+	/** Says why an action that changes the cluster did nothing, and how to allow it where that is possible. */
+	explainReadOnly(action: string) {
+		const what = action.replace(/…$/, '');
+		const why = this.k9s?.readOnly
+			? 'k9s readOnly is set for this context'
+			: this.contextSettings.readOnly
+				? 'Read-only is on; switch it off in the header to make changes'
+				: this.guard.canUnlock
+					? 'this context is locked; unlock it with Read-only in the header'
+					: (this.guard.reason ?? 'Kubri does not change this cluster');
+		this.toast(`${what} is not available: ${why}`, 'bad');
+	}
+
 	/** The header's lock button: read-only on and off, or a locked context unlocked and locked. */
 	toggleReadOnly() {
 		if (drafts.block(() => this.toggleReadOnly())) return;
