@@ -58,7 +58,8 @@ struct Args {
     #[arg(long, env = "KUBRI_READ_ONLY", value_parser = clap::builder::BoolishValueParser::new())]
     read_only: bool,
     /// Allow local terminals: a shell on this server, with kubectl pointed at the connected
-    /// context, for everyone who can sign in. Off by default.
+    /// context, for everyone who can sign in. Also lets them add contexts that run a command
+    /// to sign in or read certificate and token files on this server. Off by default.
     #[arg(long, env = "KUBRI_LOCAL_TERMINAL", value_parser = clap::builder::BoolishValueParser::new())]
     local_terminal: bool,
     /// How long signing in lasts, in hours (up to ten years).
@@ -150,7 +151,9 @@ async fn serve(args: Args) -> ExitCode {
     }
     if args.local_terminal {
         kubri.allow_local_terminal();
-        tracing::warn!("local terminals are on: everyone who can sign in can run a shell on this server");
+        tracing::warn!(
+            "local terminals are on: everyone who can sign in can run a shell on this server, and add contexts that run commands here"
+        );
     }
     if let Some(path) = &args.snapshot {
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned());

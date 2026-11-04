@@ -209,7 +209,8 @@ pub struct Kubri {
     warm: tokio::sync::Mutex<Vec<(std::time::Instant, Arc<Session>)>>,
     /// Records what changes in the connected context, where this process records.
     recording: AtomicBool,
-    /// Local terminals may be opened: in the desktop app, or a server started to allow them.
+    /// Local terminals may be opened, and contexts added in Kubri may run commands and read
+    /// files here: in the desktop app, or a server started to allow local terminals.
     local_terminal: AtomicBool,
     recorder: std::sync::Mutex<Option<recorder::Recorder>>,
     history: std::sync::OnceLock<std::result::Result<Arc<history::Store>, String>>,
@@ -446,8 +447,9 @@ impl Kubri {
         })
     }
 
-    /// Lets local terminals be opened: the desktop app calls this, the web server only when
-    /// started with `KUBRI_LOCAL_TERMINAL=true`, as a shell there runs on the server.
+    /// Lets local terminals be opened, and contexts that run a command to sign in or name
+    /// files be added: the desktop app calls this, the web server only when started with
+    /// `KUBRI_LOCAL_TERMINAL=true`, as both run on the server for everyone who signs in.
     pub fn allow_local_terminal(&self) {
         self.local_terminal.store(true, Ordering::Relaxed);
         local_terminal::remove_stale_overlays();
@@ -820,7 +822,8 @@ impl Kubri {
     /// The contexts of a kubeconfig the user picked, and why any cannot be added.
     pub async fn inspect_kubeconfig(&self, text: &str) -> Result<Vec<NewContext>> {
         let new = added::parse(text)?;
-        Ok(added::inspect(&new, &self.context_names().await))
+        let local = self.local_terminal.load(Ordering::Relaxed);
+        Ok(added::inspect(&new, &self.context_names().await, local))
     }
 
     /// Adds `names` from a kubeconfig the user picked, in Kubri's own folder.
@@ -828,7 +831,8 @@ impl Kubri {
         let dir = added::dir()
             .ok_or_else(|| Error::Unsupported("Kubri has no config folder to keep contexts in".into()))?;
         let new = added::parse(text)?;
-        added::add(&dir, &new, names, &self.context_names().await)?;
+        let local = self.local_terminal.load(Ordering::Relaxed);
+        added::add(&dir, &new, names, &self.context_names().await, local)?;
         self.reload().await
     }
 
@@ -2737,6 +2741,23 @@ mod tests {
             }
         }
         String::from_utf8(out).unwrap()
+    }
+
+    #[tokio::test]
+    async fn contexts_that_run_commands_are_added_only_where_local_terminals_are() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let text = r#"
+clusters: [{name: c, cluster: {server: "https://10.0.0.1:6443"}}]
+users: [{name: u, user: {exec: {apiVersion: client.authentication.k8s.io/v1beta1, command: aws}}}]
+contexts: [{name: eks, context: {cluster: c, user: u}}]
+"#;
+        let found = kubri.inspect_kubeconfig(text).await.unwrap();
+        assert!(found[0].problem.as_deref().unwrap().contains("running `aws`"));
+        let err = kubri.add_contexts(text, &["eks".into()]).await.unwrap_err();
+        assert!(err.to_string().contains("KUBRI_LOCAL_TERMINAL=true"), "{err}");
+        kubri.local_terminal.store(true, Ordering::Relaxed);
+        let found = kubri.inspect_kubeconfig(text).await.unwrap();
+        assert_eq!(found[0].problem, None);
     }
 
     #[tokio::test]

@@ -35,7 +35,7 @@ A shell can do anything, so Kubri only opens one where it would let you change t
 
 ## In the web app
 
-In the web app, a "local" terminal runs on the server, as the user the server runs as. It is therefore off, and the terminal button and `:term` are hidden, unless the server is started with `--local-terminal` or `KUBRI_LOCAL_TERMINAL=true`, and the server logs a warning when it is on. Turn it on only when everyone who can sign in may run commands on that machine, for example when you run the server on your own computer.
+In the web app, a "local" terminal runs on the server, as the user the server runs as. It is therefore off, and the terminal button and `:term` are hidden, unless the server is started with `--local-terminal` or `KUBRI_LOCAL_TERMINAL=true`, and the server logs a warning when it is on. Turn it on only when everyone who can sign in may run commands on that machine, for example when you run the server on your own computer. The same setting lets them add contexts that run a command to sign in, like `aws`, or that read certificate and token files on the server.
 
 ## Fonts
 

@@ -2,7 +2,7 @@
 
 `kubri-server` serves the same UI as the desktop app, plus the API it talks to, so Kubri runs in any browser: on your own computer, from a Docker image, or inside a cluster for a team.
 
-Whoever can use Kubri can do everything its kubeconfig or service account allows, open shells in containers, open ports on the machine the server runs on, and run your k9s plugins there, with values from the browser such as `$FILTER` and the columns of a row. Give it a password, serve it over HTTPS when it leaves your computer, and give it only the access its users need.
+Whoever can use Kubri can do everything its kubeconfig or service account allows, open shells in containers, open ports on the machine the server runs on, and run your k9s plugins there, with values from the browser such as `$FILTER` and the columns of a row. Give it a password, serve it over HTTPS when it leaves your computer, and give it only the access its users need. Without `KUBRI_LOCAL_TERMINAL=true`, nobody can run commands of their own on the server: there is no [local terminal](TERMINAL.md#in-the-web-app), and contexts added in the browser cannot run a command to sign in or read certificate and token files there.
 
 One kubri-server is one Kubri, shared by everyone who uses it: switching the context switches it for everyone, and everyone sees and can stop the same port-forwards and benchmarks. For people who work on different clusters at the same time, run one server each.
 
@@ -36,7 +36,7 @@ Signing in lasts a week (`KUBRI_SESSION_HOURS`), until you sign out, or until th
 | `KUBRI_ALLOWED_HOSTS` | `--allowed-hosts` | Without a password, Kubri only answers to localhost and IP addresses. Other host names it should answer to, separated by commas. |
 | `KUBRI_READ_ONLY` | `--read-only` | `true` never changes the cluster: no edits, deletes, scaling, shells or dangerous plugins, whatever the k9s settings say. Lists, logs and port-forwards still work. The desktop app takes it too. |
 | | `--mcp` | Serves MCP over stdin and stdout for an AI agent instead of the web UI, read-only. See [AI agents](AGENTS.md). |
-| `KUBRI_LOCAL_TERMINAL` | `--local-terminal` | `true` allows the [local terminal](TERMINAL.md#in-the-web-app). It runs on the server, as the user the server runs as, so everyone who can sign in can run commands there. Off by default. |
+| `KUBRI_LOCAL_TERMINAL` | `--local-terminal` | `true` allows the [local terminal](TERMINAL.md#in-the-web-app). It runs on the server, as the user the server runs as, so everyone who can sign in can run commands there. It also lets them [add contexts](CLUSTERS.md#adding-clusters) that sign in by running a command, like `aws`, or that name certificate and token files on the server. Off by default. |
 | `KUBRI_CONFIG_DIR` | | The folder for Kubri's settings, the agents' token and their call log. Mount a volume there to keep them. |
 | `KUBRI_SESSION_HOURS` | `--session-hours` | How long signing in lasts, from 1 hour to 87600 (ten years). Default 168 (a week). |
 | `KUBRI_UI_DIR` | `--ui-dir` | The built UI. Default `ui/build`; the Docker image sets it. |
