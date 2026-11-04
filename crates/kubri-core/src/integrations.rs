@@ -954,11 +954,18 @@ impl crate::Kubri {
                 "no Grafana found; give its URL on the integrations page".into(),
             ));
         }
+        let listed = async {
+            match &subject {
+                Some(_) => Some(self.grafana_dashboards(&session).await),
+                None => None,
+            }
+        };
+        let (logs, listed) = futures::join!(self.grafana_logs(target), listed);
         // Objects outside a namespace, like nodes, have no logs of their own.
-        let mut links: Vec<_> = self.grafana_logs(target).await.ok().into_iter().collect();
+        let mut links: Vec<_> = logs.ok().into_iter().collect();
         let mut note = None;
-        if let Some(subject) = subject {
-            match self.grafana_dashboards(&session).await {
+        if let (Some(subject), Some(listed)) = (subject, listed) {
+            match listed {
                 Ok((dashboards, why)) => {
                     let listed = grafana::links(&dashboards, &subject);
                     // Why Grafana's list could not be read matters only when nothing matched.
@@ -1025,8 +1032,10 @@ impl crate::Kubri {
             return Some(settings.grafana_logs);
         }
         let mut cached = session.grafana_logs.lock().await;
-        if let Some((asked, found)) = cached.as_ref()
+        // Asked again once the Grafana or its token changes, as a token may be what it lacked.
+        if let Some((asked, with, found)) = cached.as_ref()
             && asked == endpoint
+            && *with == settings.grafana_token
         {
             return found.clone();
         }
@@ -1040,7 +1049,7 @@ impl crate::Kubri {
         .ok()
         .and_then(|answer| answer.ok())
         .and_then(|settings| grafana::loki_source(&settings));
-        *cached = Some((endpoint.clone(), found.clone()));
+        *cached = Some((endpoint.clone(), settings.grafana_token.clone(), found.clone()));
         found
     }
 

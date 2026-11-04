@@ -7,7 +7,7 @@ export function openDashboard(link: DashboardLink) {
 	return openTool('grafana', link.path);
 }
 
-/** Opens the logs of an object in Grafana's Explore: a pod's, a workload's, or its namespace's. */
+/** Opens the logs of an object in Grafana's Explore: a pod's, a workload's, a Service's, or its namespace's. */
 export function openGrafanaLogs(target: ObjectRef) {
 	return openTool(
 		'grafana',

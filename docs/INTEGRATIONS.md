@@ -76,13 +76,13 @@ Give Grafana's address under **Point elsewhere > Grafana > URL** on the Integrat
 | A Service | The pods it selects right now, by name |
 | Anything else in a namespace, like a ConfigMap | Its namespace |
 
-The queries use the `namespace` and `pod` labels that Grafana Alloy, Promtail and the Loki chart set. Kubri asks Grafana which Loki data source it has and takes the default one, else the one named `Loki`. When Grafana needs a login or a client certificate, Kubri cannot ask, and Grafana opens its own default data source; give the name or UID of the Loki data source under **Loki data source** then. Your browser opens the page, so a login or a client certificate there works as usual.
+The queries use the `namespace` and `pod` labels that Promtail, Grafana Alloy and most log collectors set. Kubri asks Grafana which Loki data source it has and takes the default one, else the one named `Loki`. When Grafana needs a login or a client certificate and you gave no token, Kubri cannot ask, and Grafana opens its own default data source; give the name or UID of the Loki data source under **Loki data source** then. Your browser opens the page, so a login or a client certificate there works as usual.
 
 ### Dashboards
 
 **Grafana…** in the menu of every object lists, in a dialog, its logs in Explore, the dashboards that show it, and **Search Grafana for** its name, each with **Copy** for its whole address. **Metrics** lists the same above the charts, and the Integrations page lists them for the namespace picked in the sidebar.
 
-A dashboard fits when it has a variable Kubri can fill, like `pod`, `workload`, `deployment` or `node`, with the namespace too, and opens with those variables set. Dashboards come from Grafana's own list and from the ConfigMaps labeled `grafana_dashboard` that kube-prometheus-stack and most charts ship, so they show even when Grafana needs a login. For Grafana's own list of a Grafana given by URL that needs a login, add a service account token with the Viewer role under **Token**. Kubri reads them again after five minutes.
+A dashboard fits when it has a variable Kubri can fill, like `pod`, `workload`, `deployment` or `node`, with the namespace too, and opens with those variables set. Dashboards come from Grafana's own list and from the ConfigMaps labeled `grafana_dashboard` that kube-prometheus-stack and most charts ship, so they show even when Grafana needs a login. For a Grafana given by URL that needs a login, a service account token with the Viewer role under **Token** lets Kubri read its list and its data sources. Kubri reads them again after five minutes.
 
 ## Loki
 

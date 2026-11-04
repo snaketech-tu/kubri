@@ -186,8 +186,8 @@ struct Session {
     integrations: tokio::sync::Mutex<Option<(IntegrationSettings, Integrations)>>,
     /// Grafana's dashboards, when they were read and why Grafana's own list was not.
     grafana: tokio::sync::Mutex<Option<grafana::Cached>>,
-    /// The Loki data source a Grafana has, once looked up.
-    grafana_logs: tokio::sync::Mutex<Option<(integrations::Endpoint, Option<String>)>>,
+    /// The Loki data source a Grafana has, once looked up with a token.
+    grafana_logs: tokio::sync::Mutex<Option<(integrations::Endpoint, String, Option<String>)>>,
 }
 
 pub struct Kubri {

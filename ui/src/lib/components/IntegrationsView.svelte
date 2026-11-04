@@ -8,7 +8,7 @@
 	/** What each tool adds, and the kinds to open for the operators. */
 	const ABOUT: Record<string, { text: string; install?: string; kinds?: { group: string; plural: string; label: string }[] }> = {
 		prometheus: { install: 'https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack', text: 'Charts of CPU, memory, restarts, network and requests for pods, workloads and nodes (m), and an hour of history in the overview.' },
-		grafana: { install: 'https://grafana.com/docs/grafana/latest/setup-grafana/installation/kubernetes/', text: 'The logs of the namespace, pod or workload you pick in Grafana’s Explore, and the dashboards that show it.' },
+		grafana: { install: 'https://grafana.com/docs/grafana/latest/setup-grafana/installation/kubernetes/', text: 'The logs of the namespace, pod, workload or Service you pick in Grafana’s Explore, and the dashboards that show it.' },
 		loki: { install: 'https://grafana.com/docs/loki/latest/setup/install/helm/', text: 'Log history beyond a pod’s lifetime, in the log workspace.' },
 		flux: {
 			install: 'https://fluxcd.io/flux/installation/',
@@ -165,7 +165,7 @@
 					<input bind:value={draft.grafana} placeholder={URLS.grafana!.example} spellcheck="false" autocomplete="off" />
 				</label>
 				<p class="muted small">
-					The address only, like <code>https://grafana.example.com</code>. <strong>Logs in Grafana</strong> on a namespace, pod or workload then
+					The address only, like <code>https://grafana.example.com</code>. <strong>Logs in Grafana</strong> on a namespace, pod, workload or Service then
 					opens its logs in Grafana’s Explore, and <strong>Grafana…</strong> lists the dashboards that show it, ready to open or copy. Both work
 					also when Grafana needs a login or a client certificate, as your browser opens them.
 				</p>
@@ -178,7 +178,7 @@
 					<span>Token</span>
 					<input type="password" bind:value={draft.grafanaToken} placeholder="A service account token with the Viewer role" autocomplete="off" />
 				</label>
-				<p class="muted small">Lets Kubri list Grafana’s dashboards itself. It goes only to a Grafana given by URL, and is kept in Kubri’s settings file.</p>
+				<p class="muted small">Lets Kubri list Grafana’s dashboards and find its Loki data source itself. It goes only to a Grafana given by URL, and is kept in Kubri’s settings file.</p>
 			</fieldset>
 			<div class="actions">
 				<button class="btn primary" type="submit" disabled={!dirty || saving || !context}>{saving ? 'Saving…' : 'Save'}</button>

@@ -1591,7 +1591,7 @@ export interface Backend {
 	usageHistory(namespace: string | null, seconds: number): Promise<Charts>;
 	/** Grafana dashboards that show an object, its logs in Explore first. */
 	dashboards(target: ObjectRef): Promise<Dashboards>;
-	/** An object's logs in Grafana's Explore: a pod's, a workload's, or its namespace's. */
+	/** An object's logs in Grafana's Explore: a pod's, a workload's, a Service's, or its namespace's. */
 	grafanaLogs(target: ObjectRef): Promise<DashboardLink>;
 	/** Where the browser reaches a tool; a port-forward for one on a Service. */
 	integrationUrl(id: IntegrationId): Promise<string>;
