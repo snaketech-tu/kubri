@@ -72,6 +72,7 @@
 	let firstField = $state<HTMLInputElement | HTMLTextAreaElement>();
 	let box = $state<HTMLDialogElement>();
 	let cancelButton = $state<HTMLButtonElement>();
+	let confirmInput = $state<HTMLInputElement>();
 	/** The context the targets were reviewed in; the dialog refuses to run in another. */
 	const context = untrack(() => app.cluster?.context);
 	/** What the user typed to confirm a bulk or production action. */
@@ -245,7 +246,8 @@
 				.catch((err) => (error = errorMessage(err)))
 				.finally(() => (loadingReplicas = false));
 		} else {
-			queueMicrotask(() => danger ? cancelButton?.focus() : confirmButton?.focus());
+			// Where a word must be typed first, its field; Enter there does nothing until it matches.
+			queueMicrotask(() => (danger ? (confirmInput ?? cancelButton)?.focus() : confirmButton?.focus()));
 		}
 	});
 
@@ -582,8 +584,10 @@
 			e.preventDefault();
 			close();
 		} else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || !(e.target instanceof HTMLTextAreaElement))) {
-			// Enter confirms a destructive action only from its own button, never by accident.
-			if (danger && e.target !== confirmButton) {
+			// Enter confirms a destructive action only from its own button, or once the word to type
+			// matches, never by accident.
+			const typed = e.target === confirmInput && confirmed && !busy;
+			if (danger && e.target !== confirmButton && !typed) {
 				if (!(e.target instanceof HTMLButtonElement)) e.preventDefault();
 				return;
 			}
@@ -1158,7 +1162,7 @@
 				{#if app.production}<strong class="production">Production.</strong>{/if}
 				Type <code>{confirmWord}</code> to continue
 			</span>
-			<input bind:value={confirmation} autocomplete="off" spellcheck="false" />
+			<input bind:value={confirmation} bind:this={confirmInput} autocomplete="off" spellcheck="false" />
 		</label>
 	{/if}
 	{#if error}
