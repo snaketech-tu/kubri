@@ -255,8 +255,10 @@
 				['?', 'help']
 			] as [string, string][];
 		}
-		// Typing goes to the shell, so only the panel's keys, which work as buttons too.
-		if (app.details?.tab === 'shell') return [...panel, ['?', 'help']] as [string, string][];
+		// Typing goes to the shell. The panel's keys work there as buttons, and after Esc twice.
+		if (app.details?.tab === 'shell') {
+			return [['esc esc', 'leave terminal'], ['ctrl+d', 'exit shell'], ...panel, ['?', 'help']] as [string, string][];
+		}
 		if (app.page === 'portforwards') {
 			return [
 				[':', 'command'],
