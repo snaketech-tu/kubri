@@ -485,12 +485,26 @@ async fn table(
     State(kubri): State<Arc<Kubri>>,
     Query(query): Query<TableQuery>,
     ws: WebSocketUpgrade,
-) -> Result<Response, ApiError> {
+) -> Response {
     let namespace = query.namespace.filter(|ns| !ns.is_empty());
-    let events = kubri
+    let events = match kubri
         .watch_table(&query.resource, namespace.as_deref(), query.scope)
-        .await?;
-    Ok(ws.on_upgrade(move |socket| forward(socket, events)))
+        .await
+    {
+        Ok(events) => events.boxed(),
+        // A browser cannot read why a WebSocket was turned away, so the reason goes over
+        // the socket, which then stays open, as the desktop app's channel does.
+        Err(err) => refused(err).boxed(),
+    };
+    ws.on_upgrade(move |socket| forward(socket, events))
+}
+
+/// A list that could not start: its error, then nothing until the client goes.
+fn refused(err: kubri_core::Error) -> impl Stream<Item = kubri_core::TableEvent> + Send + 'static {
+    let error = kubri_core::TableEvent::Error {
+        message: err.to_string(),
+    };
+    futures::stream::once(futures::future::ready(error)).chain(futures::stream::pending())
 }
 
 /// Proxies close sockets that stay quiet, often after a minute; a ping every 30 seconds
@@ -1336,6 +1350,18 @@ mod tests {
     use axum::http::Request;
     use http_body_util::BodyExt;
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn a_list_that_cannot_start_says_why_and_stays_open() {
+        let mut events = std::pin::pin!(refused(kubri_core::Error::NotConnected));
+        let first = serde_json::to_value(events.next().await.unwrap()).unwrap();
+        assert_eq!(first["type"], "error");
+        assert!(
+            first["message"].as_str().unwrap().contains("not connected"),
+            "{first}"
+        );
+        assert!(futures::FutureExt::now_or_never(events.next()).is_none());
+    }
 
     async fn send(router: Router, request: Request<Body>) -> (StatusCode, Value) {
         let response = router.oneshot(request).await.unwrap();

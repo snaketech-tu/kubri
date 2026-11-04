@@ -205,26 +205,58 @@ pub(crate) fn watch_tables(
                 .boxed()
         })
         .collect();
-    let mut parts: Vec<Option<Vec<Row>>> = vec![None; streams.len()];
-    let mut columns = Vec::new();
-    let merged = futures::stream::select_all(streams).filter_map(move |(i, event)| {
-        let out = match event {
-            TableEvent::Reset { columns: c, rows } => {
-                parts[i] = Some(rows);
-                if columns.is_empty() {
-                    columns = c;
+    let mut merged = Merged::new(streams.len());
+    let events = futures::stream::select_all(streams).map(move |(i, event)| merged.apply(i, event));
+    futures::stream::once(futures::future::ready(TableEvent::Notice { message: notice })).chain(events)
+}
+
+/// The rows of several collections as one table. Each part follows its own changes, so when
+/// one collection is listed again, the table has the others as they are now, not as they were
+/// when they were listed.
+struct Merged {
+    parts: Vec<Option<Vec<Row>>>,
+    columns: Vec<Column>,
+}
+
+impl Merged {
+    fn new(parts: usize) -> Self {
+        Self {
+            parts: vec![None; parts],
+            columns: Vec::new(),
+        }
+    }
+
+    /// Takes in `event` from collection `i`, and returns what the client gets for it.
+    fn apply(&mut self, i: usize, event: TableEvent) -> TableEvent {
+        match event {
+            TableEvent::Reset { columns, rows } => {
+                self.parts[i] = Some(rows);
+                if self.columns.is_empty() {
+                    self.columns = columns;
                 }
-                let rows = parts.iter().flatten().flatten().cloned().collect();
-                Some(TableEvent::Reset {
-                    columns: columns.clone(),
-                    rows,
-                })
+                TableEvent::Reset {
+                    columns: self.columns.clone(),
+                    rows: self.parts.iter().flatten().flatten().cloned().collect(),
+                }
             }
-            other => Some(other),
-        };
-        futures::future::ready(out)
-    });
-    futures::stream::once(futures::future::ready(TableEvent::Notice { message: notice })).chain(merged)
+            TableEvent::Upsert { row } => {
+                if let Some(rows) = &mut self.parts[i] {
+                    match rows.iter_mut().find(|r| r.key == row.key) {
+                        Some(old) => *old = row.clone(),
+                        None => rows.push(row.clone()),
+                    }
+                }
+                TableEvent::Upsert { row }
+            }
+            TableEvent::Delete { row } => {
+                if let Some(rows) = &mut self.parts[i] {
+                    rows.retain(|r| r.key != row.key);
+                }
+                TableEvent::Delete { row }
+            }
+            other => other,
+        }
+    }
 }
 
 /// Streams table updates for the collection at `url` until the stream is dropped.
@@ -556,6 +588,42 @@ mod tests {
 
     fn page(list: Value) -> ListPage {
         serde_json::from_str(&list.to_string()).unwrap()
+    }
+
+    #[test]
+    fn merged_lists_keep_every_part_current() {
+        let row = |key: &str, ready: &str| Row {
+            key: key.into(),
+            name: key.into(),
+            namespace: None,
+            created: None,
+            labels: Default::default(),
+            owners: Vec::new(),
+            cells: vec![json!(ready)],
+        };
+        let reset = |rows| TableEvent::Reset {
+            columns: Vec::new(),
+            rows,
+        };
+        let mut merged = Merged::new(2);
+        merged.apply(0, reset(vec![row("a", "1/1")]));
+        merged.apply(1, reset(vec![row("x", "0/1"), row("y", "1/1")]));
+        merged.apply(1, TableEvent::Delete { row: row("y", "1/1") });
+        merged.apply(1, TableEvent::Upsert { row: row("x", "1/1") });
+        merged.apply(1, TableEvent::Upsert { row: row("z", "1/1") });
+        // The first namespace is listed again, as after its watch expired.
+        let TableEvent::Reset { rows, .. } = merged.apply(0, reset(vec![row("a", "0/1")])) else {
+            panic!("a reset gives a reset");
+        };
+        let rows: Vec<(String, Value)> = rows.into_iter().map(|r| (r.key, r.cells[0].clone())).collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("a".into(), json!("0/1")),
+                ("x".into(), json!("1/1")),
+                ("z".into(), json!("1/1")),
+            ]
+        );
     }
 
     #[test]
