@@ -126,7 +126,7 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 	namespaceSelector: '',
 	agentWrites: false,
 	forwards: [],
-	integrations: { prometheus: '', grafana: '', grafanaToken: '', loki: '' }
+	integrations: { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLinks: [] }
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -225,6 +225,8 @@ export type Dialog =
 	| { kind: 'debug'; on: 'pod' | 'node'; target: ObjectRef; way?: 'ephemeral' | 'copy'; container?: string }
 	/** The same object in another context or namespace, side by side. */
 	| { kind: 'compare'; resource: ResourceInfo; target: ObjectRef }
+	/** The Grafana dashboards and the context's links for an object. */
+	| { kind: 'grafana'; target: ObjectRef }
 	/** A higher memory limit for a container, on the workload that owns its pod. */
 	| { kind: 'memory'; resource: ResourceInfo; target: ObjectRef; fix: MemoryFix }
 	/** The kubectl commands for an object's actions, to copy. */

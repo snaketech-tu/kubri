@@ -102,6 +102,15 @@ export interface IntegrationSettings {
 	/** Sent to a Grafana given by URL. */
 	grafanaToken: string;
 	loki: string;
+	/** Links to Grafanas Kubri does not find, filled in for each object. */
+	grafanaLinks: GrafanaLink[];
+}
+
+/** A link with placeholders like `{namespace}` or `{pod}` that an object fills in. */
+export interface GrafanaLink {
+	title: string;
+	/** A whole URL, or a path on the Grafana Kubri found. */
+	url: string;
 }
 
 /** How Kubri reaches a tool: through the API server's service proxy, or at a URL. */
@@ -156,9 +165,11 @@ export interface Chart {
 export interface DashboardLink {
 	title: string;
 	folder: string;
-	/** Path and query on Grafana. */
+	/** Path and query on Grafana; empty when `url` is set. */
 	path: string;
 	filled: string[];
+	/** A whole URL, from a link in the context's settings. */
+	url: string | null;
 }
 
 export interface Dashboards {

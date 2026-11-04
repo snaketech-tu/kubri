@@ -31,6 +31,8 @@ pub struct IntegrationSettings {
     /// A Grafana service account token, sent to a Grafana given by URL.
     pub grafana_token: String,
     pub loki: String,
+    /// Links to Grafanas Kubri does not find, filled in for each object.
+    pub grafana_links: Vec<grafana::GrafanaLink>,
 }
 
 impl IntegrationSettings {
@@ -48,6 +50,20 @@ impl IntegrationSettings {
             }
         }
         self.grafana_token = self.grafana_token.trim().to_owned();
+        self.grafana_links = std::mem::take(&mut self.grafana_links)
+            .into_iter()
+            .map(|link| grafana::GrafanaLink {
+                title: Some(link.title.trim())
+                    .filter(|t| !t.is_empty())
+                    .unwrap_or("Grafana")
+                    .to_owned(),
+                url: link.url.trim().to_owned(),
+            })
+            .filter(|link| !link.url.is_empty())
+            .collect();
+        if let Some(problem) = self.grafana_links.iter().find_map(grafana::link_problem) {
+            return Err(Error::Unsupported(problem));
+        }
         Ok(self)
     }
 }
@@ -915,36 +931,72 @@ impl crate::Kubri {
         Ok((dashboards, note))
     }
 
-    /// Grafana dashboards that show `target`, as links with its variables filled in.
+    /// Grafana dashboards that show `target`, as links with its variables filled in: the
+    /// context's own links first, for any kind of object, then those Grafana lists, then a
+    /// search of Grafana for the object's name.
     pub async fn dashboards(&self, target: &ObjectRef) -> Result<grafana::Dashboards> {
         let session = self.object_session(target).await?;
         let kind = session.info_for(&target.resource)?.kind.clone();
+        let values = grafana::object_values(
+            &session.info.context,
+            &kind,
+            target.namespace.as_deref(),
+            &target.name,
+        );
+        let ours = self
+            .settings()
+            .context(&session.info.context)
+            .integrations
+            .grafana_links;
+        let mut links = grafana::settings_links(&ours, &values);
         let namespace = target.namespace.clone().unwrap_or_default();
         let subject = match (target.resource.group.as_str(), kind.as_str()) {
-            ("", "Pod") => grafana::Subject::Pod {
+            ("", "Pod") => Some(grafana::Subject::Pod {
                 namespace,
                 name: target.name.clone(),
-            },
-            ("", "Node") => grafana::Subject::Node {
+            }),
+            ("", "Node") => Some(grafana::Subject::Node {
                 name: target.name.clone(),
-            },
-            ("", "Namespace") => grafana::Subject::Namespace {
+            }),
+            ("", "Namespace") => Some(grafana::Subject::Namespace {
                 name: target.name.clone(),
-            },
+            }),
             ("apps", "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet")
-            | ("batch", "Job" | "CronJob") => grafana::Subject::Workload {
+            | ("batch", "Job" | "CronJob") => Some(grafana::Subject::Workload {
                 kind,
                 namespace,
                 name: target.name.clone(),
-            },
-            _ => return Ok(grafana::Dashboards::default()),
+            }),
+            _ => None,
         };
-        let (dashboards, note) = self.grafana_dashboards(&session).await?;
-        let links = grafana::links(&dashboards, &subject);
-        Ok(grafana::Dashboards {
-            note: note.filter(|_| links.is_empty()),
-            links,
-        })
+        let found = self
+            .integrations(false)
+            .await
+            .is_ok_and(|i| i.endpoint("grafana").is_some());
+        if !found {
+            if links.is_empty() && subject.is_some() {
+                return Err(Error::Unsupported(
+                    "no Grafana found; give its URL on the integrations page".into(),
+                ));
+            }
+            return Ok(grafana::Dashboards { links, note: None });
+        }
+        let mut note = None;
+        if let Some(subject) = subject {
+            match self.grafana_dashboards(&session).await {
+                Ok((dashboards, why)) => {
+                    let listed = grafana::links(&dashboards, &subject);
+                    // Why Grafana's list could not be read matters only when nothing matched.
+                    note = why.filter(|_| listed.is_empty() && links.is_empty());
+                    links.extend(listed);
+                }
+                // Such as a Grafana behind a client certificate, which the browser can still open.
+                Err(err) if links.is_empty() => note = Some(err.to_string()),
+                Err(_) => {}
+            }
+        }
+        links.push(grafana::search_link(&target.name));
+        Ok(grafana::Dashboards { links, note })
     }
 
     /// Where the browser reaches a tool: its URL, or for one on a Service a port-forward to
