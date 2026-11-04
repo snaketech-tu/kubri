@@ -148,9 +148,11 @@
 		else app.toast(`${event.objectKind} ${event.object.name} cannot be opened here`, 'bad');
 	}
 
+	/** CPU in cores, and below a tenth of one in millicores, so a small use does not read 0.0. */
 	function cores(millicores: number) {
+		if (millicores > 0 && millicores < 100) return `${Math.max(1, Math.round(millicores))}m`;
 		const value = millicores / 1000;
-		return value < 10 ? value.toFixed(1) : Math.round(value).toString();
+		return `${value < 10 ? value.toFixed(1) : Math.round(value)} cores`;
 	}
 
 	const percent = (value: number) => `${Math.round(value * 100)}%`;
@@ -260,7 +262,7 @@
 				{@render countCard(0, 'Healthy pods', 'pod', pods, namespace ? `In ${namespace}` : 'All namespaces')}
 				{@render countCard(1, 'Ready nodes', 'node', nodes, 'Cluster-wide')}
 				{@render countCard(2, 'Ready workloads', 'deployment', work ?? undefined, namespace ? `In ${namespace}` : 'All namespaces')}
-				{@render usageCard(3, 'CPU utilization', 'benchmark', pulse.cpu, (m) => `${cores(m)} cores`)}
+				{@render usageCard(3, 'CPU utilization', 'benchmark', pulse.cpu, cores)}
 				{@render usageCard(4, 'Memory utilization', 'volume', pulse.memory, memory)}
 			</div>
 
@@ -294,7 +296,7 @@
 											</span>
 										</span>
 										<span class="message" title={item.event.message}
-											>{shortMessage(item.event.reason, item.event.message, item.count)}</span
+											>{shortMessage(item.event.reason, item.event.message)}</span
 										>
 										<span class="where">
 											<code
@@ -394,7 +396,7 @@
 							<span class="muted">{namespace ? 'This namespace' : 'Cluster-wide'}</span>
 						</div>
 						<div class="trends">
-							{@render trend('CPU', pulse.cpu, cpuTrend, (m) => `${cores(m)} cores`)}
+							{@render trend('CPU', pulse.cpu, cpuTrend, cores)}
 							{@render trend('Memory', pulse.memory, memoryTrend, memory)}
 						</div>
 						<p class="note">

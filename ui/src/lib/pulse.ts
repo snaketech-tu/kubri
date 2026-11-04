@@ -79,20 +79,20 @@ export function attentionItems(events: RecentEvent[]): AttentionItem[] {
 
 /**
  * A kubelet text in plain words. The original stays in the tooltip. Unknown texts are cut at
- * the first sentence and at 140 characters.
+ * the first sentence and at 140 characters. How often it came is shown beside it: that counts
+ * the warnings, not restarts or pulls, and since the event began rather than in the last hour.
  */
-export function shortMessage(reason: string, message: string, count: number): string {
-	const times = count > 1 ? ` (${count}× in the last hour)` : '';
+export function shortMessage(reason: string, message: string): string {
 	const back = /^Back-off restarting failed container\s+"?([^\s"]+)"?/i.exec(message);
-	if (back) return `Container ${back[1]} keeps restarting${times}`;
+	if (back) return `Container ${back[1]} keeps restarting`;
 	const pull = /(?:Failed to pull image|Error: ErrImagePull|ImagePullBackOff).*?"([^"]+)"/i.exec(message);
-	if (pull) return `Cannot pull image ${pull[1]}${times}`;
+	if (pull) return `Cannot pull image ${pull[1]}`;
 	if (/^Back-off pulling image\s+"([^"]+)"/i.test(message)) {
-		return `Cannot pull image ${/"([^"]+)"/.exec(message)?.[1] ?? ''}${times}`;
+		return `Cannot pull image ${/"([^"]+)"/.exec(message)?.[1] ?? ''}`;
 	}
-	if (/OOMKilled/i.test(message) || reason === 'OOMKilling') return `Ran out of memory and was stopped${times}`;
+	if (/OOMKilled/i.test(message) || reason === 'OOMKilling') return `Ran out of memory and was stopped`;
 	const nodes = /^(0\/\d+ nodes are available)/.exec(message);
-	if (nodes) return `Cannot be scheduled: ${nodes[1]}${times}`;
+	if (nodes) return `Cannot be scheduled: ${nodes[1]}`;
 	const first = message.split(/(?<=\.)\s/)[0].replace(/\.$/, '');
 	return first.length > 140 ? `${first.slice(0, 137)}…` : first;
 }
