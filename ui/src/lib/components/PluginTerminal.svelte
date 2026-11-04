@@ -18,9 +18,11 @@
 
 	$effect(() => {
 		if (!element) return;
+		// Read here, so that a change opens a new terminal: the terminal connects once its fonts are in.
+		const [name, request] = [plugin.name, { ...run }];
 		return mountTerminal(element, (term) => {
-			term.write(`\x1b[2mStarting ${plugin.name}…\x1b[0m\r\n`);
-			return backend.openPlugin({ ...run, cols: term.cols, rows: term.rows }, (event) => {
+			term.write(`\x1b[2mStarting ${name}…\x1b[0m\r\n`);
+			return backend.openPlugin({ ...request, cols: term.cols, rows: term.rows }, (event) => {
 				switch (event.type) {
 					case 'ready':
 						status = 'running';

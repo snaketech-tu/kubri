@@ -36,6 +36,9 @@ pub struct TerminalSettings {
     pub start_dir: String,
     /// The terminal's font size in pixels.
     pub font_size: u32,
+    /// Fonts to try before Kubri's own, separated by commas, like `MesloLGS NF`; empty for
+    /// Kubri's.
+    pub font_family: String,
 }
 
 impl Default for TerminalSettings {
@@ -45,6 +48,7 @@ impl Default for TerminalSettings {
             args: Vec::new(),
             start_dir: String::new(),
             font_size: 13,
+            font_family: String::new(),
         }
     }
 }
@@ -408,6 +412,13 @@ mod tests {
                 .contains("more than one minor version")
         );
         assert!(skew("v1.36.0", "v1.33.1").is_some());
+    }
+
+    #[test]
+    fn settings_without_a_font_family_still_load() {
+        let settings: TerminalSettings = serde_json::from_str(r#"{"shell":"zsh","fontSize":14}"#).unwrap();
+        assert_eq!(settings.font_size, 14);
+        assert_eq!(settings.font_family, "");
     }
 
     #[test]

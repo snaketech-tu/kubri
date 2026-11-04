@@ -280,6 +280,8 @@ export interface TerminalSettings {
 	startDir: string;
 	/** In pixels, 8 to 32. */
 	fontSize: number;
+	/** Fonts to try before Kubri's own, separated by commas; empty for Kubri's. */
+	fontFamily: string;
 }
 
 /** Whether a local terminal can be opened now, and what it would run with. */

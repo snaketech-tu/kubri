@@ -139,7 +139,7 @@ const DEFAULT_SETTINGS: Settings = {
 	searches: [],
 	history: { record: true, keepDays: 14, maxMb: 200 },
 	connections: { keepRecent: 3 },
-	terminal: { shell: '', args: [], startDir: '', fontSize: 13 }
+	terminal: { shell: '', args: [], startDir: '', fontSize: 13, fontFamily: '' }
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
