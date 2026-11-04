@@ -2005,8 +2005,8 @@ impl Kubri {
     /// picks another.
     pub async fn start_port_forward(&self, request: PortForwardRequest) -> Result<PortForwardInfo> {
         portforward::validate_address(request.address.as_deref())?;
-        let session = self.session().await?;
         let target = &request.target;
+        let session = self.object_session(target).await?;
         let api = session.pod_api(target.namespace.as_deref())?;
         let (pod, port) = session.forward_destination(target, request.remote_port).await?;
         let repick: Option<portforward::Repick> = if session.is_core(&target.resource, "Pod")? {
@@ -2846,6 +2846,17 @@ mod tests {
             kubri.delete(&target, &DeleteOptions::default()).await,
             Err(Error::ContextChanged(_))
         ));
+        let forward = PortForwardRequest {
+            target: target.clone(),
+            remote_port: 8080,
+            local_port: None,
+            address: None,
+        };
+        assert!(matches!(
+            kubri.start_port_forward(forward).await,
+            Err(Error::ContextChanged(_))
+        ));
+        assert!(kubri.port_forwards().is_empty());
         assert!(requests.lock().unwrap().is_empty());
     }
 
