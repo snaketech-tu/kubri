@@ -145,8 +145,12 @@ pub(crate) fn settings_links(links: &[GrafanaLink], values: &BTreeMap<String, St
         .iter()
         .filter_map(|link| {
             let filled = fill(&link.url, values)?;
-            let mut names: Vec<String> = placeholders(&link.url).into_iter().map(str::to_owned).collect();
-            names.dedup();
+            let mut names: Vec<String> = Vec::new();
+            for name in placeholders(&link.url) {
+                if !names.iter().any(|n| n == name) {
+                    names.push(name.to_owned());
+                }
+            }
             let (path, url) = if filled.starts_with('/') {
                 (filled, None)
             } else {
@@ -471,7 +475,7 @@ mod tests {
         let links = [
             link(
                 "Pod",
-                "https://grafana.example.com/d/pod?var-namespace={namespace}&var-pod={pod}",
+                "https://grafana.example.com/d/pod?var-namespace={namespace}&var-pod={pod}&from={namespace}",
             ),
             link(
                 "Namespace",
@@ -491,7 +495,7 @@ mod tests {
         let found = settings_links(&links, &pod);
         assert_eq!(
             found[0].url.as_deref(),
-            Some("https://grafana.example.com/d/pod?var-namespace=shop&var-pod=web-1")
+            Some("https://grafana.example.com/d/pod?var-namespace=shop&var-pod=web-1&from=shop")
         );
         assert_eq!(found[0].filled, ["namespace", "pod"]);
         assert_eq!(
