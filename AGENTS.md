@@ -88,4 +88,4 @@ cargo run --release -p kubri-server    # root, after `pnpm build`: production UI
 
 ## Releases
 
-See `docs/RELEASING.md`. In short: set the version in `Cargo.toml` (`[workspace.package]`), `ui/package.json` and `ui/src-tauri/tauri.conf.json`, run `cargo check` so `Cargo.lock` follows, add a `CHANGELOG.md` entry, merge to `main`, then tag `vX.Y.Z` on the merge commit. The Release workflow refuses a tag that does not match `Cargo.toml`; it and the Docker workflow build the installers and the image.
+See `docs/RELEASING.md`. In short: set the version in `Cargo.toml` (`[workspace.package]`), `ui/package.json` and `ui/src-tauri/tauri.conf.json`, run `cargo check` so `Cargo.lock` follows, add a `CHANGELOG.md` entry, write `.github/release-notes.md`, merge to `main`, then run the Release workflow on `main` with `publish` (`gh workflow run release.yml --ref main -f publish=true`, or the Actions API). It refuses a version that is already released, builds the installers and the image into a draft, and publishes it, which creates the tag, once everything is attached.

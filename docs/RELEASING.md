@@ -1,29 +1,21 @@
 # Releasing
 
-A release is a version tag. Pushing it builds the desktop app and the Docker image; the installers land in a draft release that is published by hand.
+A release is built and published in one run of the **Release** workflow.
 
-1. Set the new version in [`Cargo.toml`](../Cargo.toml) (`[workspace.package]`), [`ui/package.json`](../ui/package.json) and [`ui/src-tauri/tauri.conf.json`](../ui/src-tauri/tauri.conf.json), run `cargo check` so `Cargo.lock` follows, and merge that to `main`.
-2. Tag the merge commit and push the tag:
+1. Set the new version in [`Cargo.toml`](../Cargo.toml) (`[workspace.package]`), [`ui/package.json`](../ui/package.json) and [`ui/src-tauri/tauri.conf.json`](../ui/src-tauri/tauri.conf.json), run `cargo check` so `Cargo.lock` follows, write what changed under "What's new" in [`.github/release-notes.md`](../.github/release-notes.md), and merge that to `main`.
+2. Open **Actions → Release → Run workflow**, keep `main`, tick **publish** and choose **Run workflow**. From a terminal: `gh workflow run release.yml --ref main -f publish=true`.
+3. The run checks that the version is not released yet and creates a draft release with the text from `.github/release-notes.md`. It attaches the desktop builds to it: `.dmg` for macOS on Apple silicon and Intel, `.deb`, `.rpm` and `.AppImage` for Linux on x64 and Arm, and `.msi` and `-setup.exe` for Windows. With the updater key set up, it also attaches their signatures and `latest.json` (see [Updates in the app](#updates-in-the-app)). It publishes `ghcr.io/snaketech-tu/kubri` for amd64 and arm64 as `X.Y.Z`, `X.Y` and `latest`; every push to `main` also publishes `edge`.
+4. When every build is attached, the run publishes the release, which creates the tag `vX.Y.Z` on the commit it ran on, and then updates the [package managers](#package-managers). Until then nobody sees the release. If a build fails, the draft stays: run the failed jobs again, or the whole workflow, which uses the same draft.
 
-   ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
-   ```
+Pushing a tag still works too (`git tag v1.6.1 && git push origin v1.6.1`): the builds then land in a draft to publish by hand, and the **Docker** workflow publishes the image. A release published on GitHub's release page creates its tag and gets the builds attached as they finish, so it is public before it is complete.
 
-3. Two workflows start:
-   - **Release** checks that the tag matches the version, creates a draft release with the text from [`.github/release-notes.md`](../.github/release-notes.md), and attaches the desktop builds: `.dmg` for macOS on Apple silicon and Intel, `.deb`, `.rpm` and `.AppImage` for Linux on x64 and Arm, and `.msi` and `-setup.exe` for Windows. With the updater key set up, it also attaches their signatures and `latest.json` (see [Updates in the app](#updates-in-the-app)).
-   - **Docker** publishes `ghcr.io/snaketech-tu/kubri` for amd64 and arm64 as `0.2.0`, `0.2` and `latest`. Every push to `main` also publishes `edge`.
-4. When all builds are attached, open the draft on GitHub, write what changed under "What's new", and publish it.
-
-Without a terminal, the release page on GitHub can make the tag instead: open `https://github.com/snaketech-tu/kubri/releases/new?tag=v0.2.0&target=main`, write the text (the one from `.github/release-notes.md` with "What's new" filled in) and choose **Publish release**. Saving it as a draft does not create the tag, so nothing would start. The same two workflows then run, and Release attaches the builds to this release instead of making a draft. It is public right away, and the installers show up as each build finishes, within about half an hour.
-
-To try the installers before tagging, run the Release workflow by hand (Actions → Release → Run workflow): it builds them without a release and keeps them as workflow artifacts. Pull requests that change the packaging do the same.
+To try the installers before releasing, run the Release workflow by hand without **publish**: it builds them without a release and keeps them as workflow artifacts. Pull requests that change the packaging do the same.
 
 The first time an image is published, GitHub makes the package private: make it public under the package's settings (Package settings → Change visibility) so `docker pull` works without signing in.
 
 ## Package managers
 
-After the desktop builds, the **Packages** job fills the templates in [`packaging/`](../packaging) with the version and the checksums of the release's downloads ([`packaging/render.sh`](../packaging/render.sh)), keeps the results as the `packages` workflow artifact, and publishes each one whose secret is set. While the release is still a draft it only fills them in, since the packages point at downloads that are not public yet; run the job again after publishing.
+After the desktop builds, the **Packages** job fills the templates in [`packaging/`](../packaging) with the version and the checksums of the release's downloads ([`packaging/render.sh`](../packaging/render.sh)), keeps the results as the `packages` workflow artifact, and publishes each one whose secret is set. In a run with **publish** this happens after the release is published. For a release that is still a draft, it only fills them in, since the packages point at downloads that are not public yet; run the job again after publishing.
 
 | Channel | What happens | Secret |
 | --- | --- | --- |
