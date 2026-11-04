@@ -6,6 +6,8 @@ Whoever can use Kubri can do everything its kubeconfig or service account allows
 
 One kubri-server is one Kubri, shared by everyone who uses it: switching the context switches it for everyone, and everyone sees and can stop the same port-forwards and benchmarks. For people who work on different clusters at the same time, run one server each.
 
+The address bar shows where you are, such as `#/lab/resources/deployments.v1.apps?ns=shop`. Reloading the page opens the same view, and the browser's Back goes back through what you looked at, like <kbd>[</kbd>, until it leaves Kubri from the first view. You can bookmark an address or send it to someone who uses the same server. Opening an address for another context never switches contexts, since that would switch them for everyone; Kubri says which context it is for instead.
+
 ## On your computer
 
 Build the UI once, then start the server from the repository root:
