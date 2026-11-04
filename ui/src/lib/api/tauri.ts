@@ -159,6 +159,7 @@ export const tauriBackend: Backend = {
 	integrations: (fresh) => invoke('integrations', { fresh }),
 	charts: (target, range) => invoke('charts', { target, range }),
 	dashboards: (target) => invoke('dashboards', { target }),
+	grafanaLogs: (target) => invoke('grafana_logs', { target }),
 	integrationUrl: (id) => invoke('integration_url', { id }),
 	lokiLogs: (request) => invoke('loki_logs', { request }),
 	usageHistory: (namespace, seconds) => invoke('usage_history', { namespace, seconds }),

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { backend, type Dashboards, type ObjectRef } from '../api';
 	import { errorMessage } from '../format';
-	import { copyDashboard, linkHost, openDashboard } from '../integrations';
+	import { copyDashboard, openDashboard } from '../integrations';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -39,8 +39,7 @@
 	{:else}
 		{#if found.note}<p class="muted">Kubri could not read Grafana's dashboards: {found.note}</p>{/if}
 		<ul>
-			{#each found.links as link, i (`${i}:${link.url ?? link.path}`)}
-				{@const where = link.folder || linkHost(link)}
+			{#each found.links as link, i (`${i}:${link.path}`)}
 				<li>
 					<button
 						class="link"
@@ -50,7 +49,7 @@
 						<Icon name="popout" size={13} />
 						{link.title}
 					</button>
-					{#if where}<span class="muted">{where}</span>{/if}
+					{#if link.folder}<span class="muted">{link.folder}</span>{/if}
 					<button class="copy" onclick={() => copyDashboard(link)} aria-label="Copy the address of {link.title}">Copy</button>
 				</li>
 			{/each}

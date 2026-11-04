@@ -63,6 +63,11 @@ fn label_name(key: &str) -> String {
         .collect()
 }
 
+/// The stream selector for all lines of a namespace.
+pub(crate) fn namespace_query(namespace: &str) -> String {
+    format!("{{namespace={}}}", quoted(namespace))
+}
+
 /// The stream selector for an object's pods: by name for pods and workloads, by the Service's
 /// selector for a Service.
 pub(crate) fn default_query(

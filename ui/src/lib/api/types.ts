@@ -102,17 +102,11 @@ export interface IntegrationSettings {
 	/** Sent to a Grafana given by URL. */
 	grafanaToken: string;
 	loki: string;
-	/** Links to Grafanas Kubri does not find, filled in for each object. */
-	grafanaLinks: GrafanaLink[];
+	/** The Loki data source in Grafana for logs in Explore, by UID or name; found when empty. */
+	grafanaLogs: string;
 }
 
 /** A link with placeholders like `{namespace}` or `{pod}` that an object fills in. */
-export interface GrafanaLink {
-	title: string;
-	/** A whole URL, or a path on the Grafana Kubri found. */
-	url: string;
-}
-
 /** How Kubri reaches a tool: through the API server's service proxy, or at a URL. */
 export type Endpoint =
 	| { via: 'service'; namespace: string; name: string; port: number; https: boolean }
@@ -165,11 +159,10 @@ export interface Chart {
 export interface DashboardLink {
 	title: string;
 	folder: string;
-	/** Path and query on Grafana; empty when `url` is set. */
+	/** Path and query on Grafana. */
 	path: string;
+	/** The variables Kubri filled in. */
 	filled: string[];
-	/** A whole URL, from a link in the context's settings. */
-	url: string | null;
 }
 
 export interface Dashboards {
@@ -1596,8 +1589,10 @@ export interface Backend {
 	charts(target: ObjectRef, range: ChartRange): Promise<Charts>;
 	/** CPU and memory of a namespace, or the cluster, from Prometheus. */
 	usageHistory(namespace: string | null, seconds: number): Promise<Charts>;
-	/** Grafana dashboards that show an object. */
+	/** Grafana dashboards that show an object, its logs in Explore first. */
 	dashboards(target: ObjectRef): Promise<Dashboards>;
+	/** An object's logs in Grafana's Explore: a pod's, a workload's, or its namespace's. */
+	grafanaLogs(target: ObjectRef): Promise<DashboardLink>;
 	/** Where the browser reaches a tool; a port-forward for one on a Service. */
 	integrationUrl(id: IntegrationId): Promise<string>;
 	/** Log history from Loki. */

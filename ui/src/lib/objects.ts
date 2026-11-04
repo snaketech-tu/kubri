@@ -7,6 +7,7 @@ import { creating } from './create.svelte';
 import { dock } from './dock.svelte';
 import { errorMessage } from './format';
 import { canSuspendFlux, isArgoApp, isFlux } from './gitops';
+import { openGrafanaLogs } from './integrations';
 import { parseShortcut, pluginApplies, shortcutLabel } from './k9s';
 import { kubectlCommand, type KubectlOp } from './kubectl';
 import { actionFor, type MenuAction } from './menu';
@@ -190,10 +191,12 @@ export function objectActions(subject: Subject, options: ActionOptions, writable
 	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get'), kubectl: k({ op: 'yaml' }) });
 	const logs = isPods(resource) ? on('get', 'log') : need('get', pods, ns, { subresource: 'log' });
 	if (hasCharts(resource) && (app.has('prometheus') || app.has('grafana'))) add('View', 'Metrics', ['m'], show('metrics'), { primary: 9, id: 'metrics' });
-	// Any object: the context's dashboards fit by their placeholders, and Grafana's search by name.
-	const grafana = app.contextSettings.integrations;
-	if (grafana?.grafanaLinks?.length || (grafana?.grafana && grafana.grafana !== 'off') || app.has('grafana')) {
-		add('View', 'Grafana…', [], dialog(() => ({ kind: 'grafana', target: { ...target, context: app.cluster?.context } })), { id: 'grafana' });
+	// Any object: its logs in Explore, the dashboards that fit it, and Grafana's search by name.
+	const grafana = app.contextSettings.integrations?.grafana;
+	if ((grafana && grafana !== 'off') || app.has('grafana')) {
+		const here = { ...target, context: app.cluster?.context };
+		if (ns || (!resource.group && resource.plural === 'namespaces')) add('View', 'Logs in Grafana', [], () => openGrafanaLogs(here), { id: 'grafana-logs' });
+		add('View', 'Grafana…', [], dialog(() => ({ kind: 'grafana', target: here })), { id: 'grafana' });
 	}
 	if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2, id: 'logs', needs: logs, kubectl: k({ op: 'logs', workload: !isPods(resource) }) });
 	const keep = (kind: 'logs' | 'shell', extra: { previous?: boolean; mode?: TerminalMode } = {}) => () =>

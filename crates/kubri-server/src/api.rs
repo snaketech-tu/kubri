@@ -20,7 +20,7 @@ use kubri_core::{
     TerminalOutput, Usage, XrayNode,
 };
 use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
-use kubri_core::{Charts, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
+use kubri_core::{Charts, DashboardLink, Dashboards, Integrations, LokiLogs, LokiRequest, Range, Series};
 use kubri_core::{FleetCluster, GitOpsAction, Manager, NewContext, RightSizing, SearchRequest, SearchResult};
 use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use kubri_core::{RenderedView, ViewSet};
@@ -106,6 +106,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/usage-history", get(usage_history))
         .route("/prometheus/query", post(prometheus_query))
         .route("/grafana/dashboards", post(dashboards))
+        .route("/grafana/logs", post(grafana_logs))
         .route("/integrations/url", post(integration_url))
         .route("/loki/logs", post(loki_logs))
         .route("/xray", get(xray))
@@ -884,6 +885,10 @@ async fn prometheus_query(
 
 async fn dashboards(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Dashboards> {
     Ok(Json(kubri.dashboards(&req.target).await?))
+}
+
+async fn grafana_logs(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<DashboardLink> {
+    Ok(Json(kubri.grafana_logs(&req.target).await?))
 }
 
 #[derive(Deserialize)]

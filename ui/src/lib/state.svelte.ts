@@ -126,7 +126,7 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 	namespaceSelector: '',
 	agentWrites: false,
 	forwards: [],
-	integrations: { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLinks: [] }
+	integrations: { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLogs: '' }
 };
 
 const DEFAULT_SETTINGS: Settings = {

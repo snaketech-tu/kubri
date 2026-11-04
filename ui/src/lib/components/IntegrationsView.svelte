@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Integration, IntegrationSettings } from '../api';
-	import { fitsText, templateFromUrl, titleFromUrl } from '../grafana';
 	import { openTool } from '../integrations';
 	import { app } from '../state.svelte';
 	import DashboardList from './DashboardList.svelte';
@@ -9,7 +8,7 @@
 	/** What each tool adds, and the kinds to open for the operators. */
 	const ABOUT: Record<string, { text: string; install?: string; kinds?: { group: string; plural: string; label: string }[] }> = {
 		prometheus: { install: 'https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack', text: 'Charts of CPU, memory, restarts, network and requests for pods, workloads and nodes (m), and an hour of history in the overview.' },
-		grafana: { install: 'https://grafana.com/docs/grafana/latest/setup-grafana/installation/kubernetes/', text: 'Links from objects to the dashboards that show them.' },
+		grafana: { install: 'https://grafana.com/docs/grafana/latest/setup-grafana/installation/kubernetes/', text: 'The logs of the namespace, pod or workload you pick in Grafana’s Explore, and the dashboards that show it.' },
 		loki: { install: 'https://grafana.com/docs/loki/latest/setup/install/helm/', text: 'Log history beyond a pod’s lifetime, in the log workspace.' },
 		flux: {
 			install: 'https://fluxcd.io/flux/installation/',
@@ -44,14 +43,13 @@
 	let checking = $state(false);
 	let saving = $state(false);
 	const context = $derived(app.cluster?.context ?? '');
-	const EMPTY: IntegrationSettings = { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLinks: [] };
+	const EMPTY: IntegrationSettings = { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLogs: '' };
 	let draft = $state<IntegrationSettings>({ ...EMPTY });
 	const saved = $derived({ ...EMPTY, ...app.contextSettings.integrations });
 	const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(saved));
 
 	$effect(() => {
-		// A deep copy: editing a link must not change the saved one.
-		draft = JSON.parse(JSON.stringify(saved));
+		draft = { ...saved };
 	});
 
 	async function check() {
@@ -132,7 +130,7 @@
 							</div>
 							{#if namespaceRef}
 								<div class="dashboards">
-									<DashboardList target={namespaceRef} title="Dashboards for {app.namespace}" empty="Grafana has no dashboard for {app.namespace} alone." />
+									<DashboardList target={namespaceRef} title="Grafana for {app.namespace}" empty="Grafana has nothing for {app.namespace}." />
 								</div>
 							{/if}
 						{/if}
@@ -167,62 +165,20 @@
 					<input bind:value={draft.grafana} placeholder={URLS.grafana!.example} spellcheck="false" autocomplete="off" />
 				</label>
 				<p class="muted small">
-					With a URL, <strong>Grafana…</strong> on any object searches Grafana for its name in your browser, also when Grafana needs a login or a
-					client certificate.
+					The address only, like <code>https://grafana.example.com</code>. <strong>Logs in Grafana</strong> on a namespace, pod or workload then
+					opens its logs in Grafana’s Explore, and <strong>Grafana…</strong> lists the dashboards that show it, ready to open or copy. Both work
+					also when Grafana needs a login or a client certificate, as your browser opens them.
 				</p>
+				<label>
+					<span>Loki data source</span>
+					<input bind:value={draft.grafanaLogs} placeholder="Found in Grafana, else its default" spellcheck="false" autocomplete="off" />
+				</label>
+				<p class="muted small">The name or UID of the Loki data source in Grafana. Leave it empty unless Kubri picks the wrong one.</p>
 				<label>
 					<span>Token</span>
 					<input type="password" bind:value={draft.grafanaToken} placeholder="A service account token with the Viewer role" autocomplete="off" />
 				</label>
 				<p class="muted small">Lets Kubri list Grafana’s dashboards itself. It goes only to a Grafana given by URL, and is kept in Kubri’s settings file.</p>
-
-				<span class="label">Dashboards for objects</span>
-				<p class="muted small">
-					Paste the address of a dashboard from your browser. Kubri puts the namespace, pod, node or workload you pick in its place, so
-					<strong>Grafana…</strong> opens that dashboard set to the object.
-				</p>
-				{#each draft.grafanaLinks as link, i (i)}
-					<div class="link-row">
-						<input class="title" bind:value={link.title} placeholder="Title" aria-label="Title of dashboard {i + 1}" spellcheck="false" autocomplete="off" />
-						<input
-							class="url"
-							bind:value={link.url}
-							onchange={() => {
-								link.url = templateFromUrl(link.url);
-								if (!link.title.trim()) link.title = titleFromUrl(link.url);
-							}}
-							onpaste={(e) => {
-								const text = e.clipboardData?.getData('text') ?? '';
-								const input = e.currentTarget;
-								// Only a whole address replaces the field; pasting into a part of it stays a plain paste.
-								const whole = !input.value.trim() || (input.selectionStart === 0 && input.selectionEnd === input.value.length);
-								if (!text || !whole) return;
-								e.preventDefault();
-								link.url = templateFromUrl(text);
-								if (!link.title.trim()) link.title = titleFromUrl(link.url);
-							}}
-							placeholder="https://grafana.example.com/d/uid/pods?var-namespace=shop&var-pod=web-1"
-							aria-label="Address of dashboard {i + 1}"
-							spellcheck="false"
-							autocomplete="off"
-						/>
-						<button class="btn small" type="button" onclick={() => draft.grafanaLinks.splice(i, 1)} aria-label="Remove dashboard {i + 1}">Remove</button>
-						{#if link.url.trim()}<span class="fits">{fitsText(link.url)}</span>{/if}
-					</div>
-				{/each}
-				<div>
-					<button class="btn small" type="button" onclick={() => draft.grafanaLinks.push({ title: '', url: '' })}>Add dashboard</button>
-				</div>
-				<details class="help">
-					<summary>Placeholders</summary>
-					<p class="muted small">
-						Kubri replaces <code>var-namespace</code>, <code>var-pod</code>, <code>var-node</code>, <code>var-workload</code>,
-						<code>var-deployment</code>, <code>var-statefulset</code> and <code>var-daemonset</code> on its own. You can also write them yourself: <code>{'{namespace}'}</code>,
-						<code>{'{name}'}</code>, <code>{'{kind}'}</code>, <code>{'{context}'}</code>, the name by kind like <code>{'{pod}'}</code> or
-						<code>{'{node}'}</code>, and <code>{'{workload}'}</code>. A dashboard shows only for objects that fill all of its placeholders. A
-						path like <code>/d/uid?var-pod={'{pod}'}</code> opens on the Grafana above.
-					</p>
-				</details>
 			</fieldset>
 			<div class="actions">
 				<button class="btn primary" type="submit" disabled={!dirty || saving || !context}>{saving ? 'Saving…' : 'Save'}</button>
@@ -357,35 +313,5 @@
 		padding: 0 4px;
 		font-size: 12.5px;
 		font-weight: 600;
-	}
-	.label {
-		margin-top: 6px;
-		font-size: 12.5px;
-	}
-	.fits {
-		grid-column: 1 / -1;
-		font-size: 11.5px;
-		color: var(--text-muted);
-	}
-	.help summary {
-		cursor: pointer;
-		font-size: 12px;
-		color: var(--accent-strong);
-	}
-	.help p {
-		margin-top: 6px;
-	}
-	.link-row {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
-		gap: 4px 6px;
-		align-items: center;
-	}
-	.link-row .url {
-		grid-column: 1;
-	}
-	.link-row .btn {
-		grid-row: 1 / span 2;
-		grid-column: 2;
 	}
 </style>
