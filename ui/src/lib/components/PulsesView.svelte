@@ -10,8 +10,10 @@
 	import { tick } from 'svelte';
 	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization } from '../api';
 	import { age, errorMessage, memory, relative } from '../format';
+	import { fleetState, serverHost, workloads } from '../fleet';
 	import { attentionItems, fill, kindLabel, meterTone, record, shortMessage, splitKinds } from '../pulse';
 	import { app, findResource } from '../state.svelte';
+	import HealthIcon from './HealthIcon.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 	import Sparkline from './Sparkline.svelte';
 
@@ -105,6 +107,11 @@
 
 	const pods = $derived(pulse?.kinds.find((k) => k.kind === 'Pod'));
 	const nodes = $derived(pulse?.kinds.find((k) => k.kind === 'Node'));
+	const work = $derived(pulse ? workloads(pulse.kinds) : null);
+	/** The same line the cluster's card on the Clusters page shows. */
+	const health = $derived(
+		pulse && app.cluster ? fleetState({ ...app.cluster, error: null, millis: 0, kinds: pulse.kinds, cpu: null, memory: null }) : null
+	);
 	const usageList: ResourceRef = $derived(
 		namespace ? { group: '', version: 'v1', plural: 'pods' } : { group: '', version: 'v1', plural: 'nodes' }
 	);
@@ -117,14 +124,18 @@
 	const tiles = $derived<(() => void)[]>([
 		() => openList({ group: '', version: 'v1', plural: 'pods' }),
 		() => openList({ group: '', version: 'v1', plural: 'nodes' }),
+		() => openList(work?.resource ?? { group: 'apps', version: 'v1', plural: 'deployments' }),
 		() => openList(usageList),
 		() => openList(usageList),
 		...shownKinds.map((k) => () => openList(k.resource))
 	]);
-	const KIND_TILES = 4;
+	const KIND_TILES = 5;
 
 	const attention = $derived(attentionItems(pulse?.events.recent ?? []));
 	const scopeText = $derived(namespace ? `Namespace ${namespace}` : 'All namespaces');
+	const clusterText = $derived(
+		app.cluster ? [serverHost(app.cluster.server), app.cluster.version].filter(Boolean).join(' · ') : ''
+	);
 
 	function openCertificate(alert: CertificateAlert) {
 		const resource = findResource(app.resources, alert.object.resource);
@@ -216,9 +227,15 @@
 		<div class="heading">
 			<div>
 				<h1>Cluster overview</h1>
-				<p class="subtitle">{scopeText}{app.environment ? ` · ${app.environment}` : ''}</p>
+				<p class="subtitle">
+					{scopeText}{app.environment ? ` · ${app.environment}` : ''}
+					{#if clusterText}<span class="mono">· {clusterText}</span>{/if}
+				</p>
 			</div>
 			<div class="state">
+				{#if health?.health}
+					<span class="health" role="status"><HealthIcon health={health.health} size={11} />{health.summary}</span>
+				{/if}
 				{#if attention.length}
 					<span class="tag warn"><Icon name="warning" size={14} />{attention.length} need attention</span>
 				{/if}
@@ -242,8 +259,9 @@
 			<div class="kpis">
 				{@render countCard(0, 'Healthy pods', 'pod', pods, namespace ? `In ${namespace}` : 'All namespaces')}
 				{@render countCard(1, 'Ready nodes', 'node', nodes, 'Cluster-wide')}
-				{@render usageCard(2, 'CPU utilization', 'benchmark', pulse.cpu, (m) => `${cores(m)} cores`)}
-				{@render usageCard(3, 'Memory utilization', 'volume', pulse.memory, memory)}
+				{@render countCard(2, 'Ready workloads', 'deployment', work ?? undefined, namespace ? `In ${namespace}` : 'All namespaces')}
+				{@render usageCard(3, 'CPU utilization', 'benchmark', pulse.cpu, (m) => `${cores(m)} cores`)}
+				{@render usageCard(4, 'Memory utilization', 'volume', pulse.memory, memory)}
 			</div>
 
 			<div class="columns">
@@ -434,11 +452,16 @@
 			<span class="kpi-value">{Math.round(level.value * 100)}<small>%{level.measured ? '' : ' requested'}</small></span>
 			<span class="kpi-note">
 				{#if level.measured && u.used !== null}
-					{format(u.used)} of {format(u.capacity)}{u.requested !== null ? ` · ${format(u.requested)} requested` : ''}
+					{format(u.used)} used of {format(u.capacity)}
 				{:else}
 					{format(u.requested ?? 0)} of {format(u.capacity)} · no metrics-server
 				{/if}
 			</span>
+			{#if level.measured && u.requested !== null}
+				<span class="kpi-note requested">
+					<strong>{percent(u.requested / u.capacity)}</strong> requested · {format(u.requested)}
+				</span>
+			{/if}
 			<span
 				class="meter"
 				role="meter"
@@ -595,7 +618,7 @@
 	}
 	.kpis {
 		display: grid;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: repeat(5, minmax(0, 1fr));
 		border: 1px solid var(--border);
 		border-radius: 10px;
 		background: var(--surface-1);
@@ -608,12 +631,12 @@
 		min-width: 0;
 		padding: 18px 20px;
 		border: none;
-		border-left: 1px solid var(--border);
+		/* Lines left and above each tile; the box clips those of the first column and row. */
+		box-shadow:
+			-1px 0 0 var(--border),
+			0 -1px 0 var(--border);
 		background: none;
 		text-align: left;
-	}
-	.kpi:first-child {
-		border-left: none;
 	}
 	.kpi:hover {
 		background: color-mix(in srgb, var(--surface-2) 50%, transparent);
@@ -640,6 +663,17 @@
 	.kpi-value small {
 		font-size: 17px;
 		font-weight: 400;
+		color: var(--text-muted);
+	}
+	.kpi-note.requested strong {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.health {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 12.5px;
 		color: var(--text-muted);
 	}
 	.kpi-note {
@@ -959,14 +993,15 @@
 	}
 
 	@media (max-width: 1100px) {
+		/* Three counts above, the two meters below. */
 		.kpis {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
+			grid-template-columns: repeat(6, minmax(0, 1fr));
 		}
-		.kpi:nth-child(3) {
-			border-left: none;
+		.kpi {
+			grid-column: span 2;
 		}
-		.kpi:nth-child(n + 3) {
-			border-top: 1px solid var(--border);
+		.kpi:nth-child(n + 4) {
+			grid-column: span 3;
 		}
 		.columns {
 			grid-template-columns: minmax(0, 1fr);
@@ -982,8 +1017,16 @@
 		.go {
 			display: none;
 		}
-		.kpi {
+		.kpis {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.kpi,
+		.kpi:nth-child(n + 4) {
+			grid-column: span 1;
 			padding: 14px;
+		}
+		.kpi:nth-child(3) {
+			grid-column: span 2;
 		}
 		.kpi-value {
 			font-size: 24px;
