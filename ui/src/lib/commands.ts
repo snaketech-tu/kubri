@@ -279,7 +279,7 @@ function builtins(
 
 	const sanitizer = (namespace?: string): Suggestion => ({
 		label: namespace ? `popeye ${namespace}` : 'popeye',
-		detail: 'Sanitizer: problems and risky settings, with a score',
+		detail: 'Sanitizer: problems and risky settings, scored like Popeye',
 		action: { type: 'sanitizer', namespace }
 	});
 	if (SANITIZER_COMMANDS.includes(cmd)) return [sanitizer(rest[0])];

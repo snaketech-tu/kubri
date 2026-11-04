@@ -231,7 +231,7 @@
 	<PageHeader
 		crumbs={['Sanitizer']}
 		title="Sanitizer"
-		subtitle="Checks objects for common mistakes {namespace ? `in ${namespace}` : 'in all namespaces'}"
+		subtitle="Checks objects for common mistakes, like Popeye, {namespace ? `in ${namespace}` : 'in all namespaces'}"
 	>
 		{#snippet tools()}
 			<button class="btn" onclick={scan} disabled={scanning} title="Scan again (Shift+R)">{scanning ? 'Scanning…' : 'Scan again'}</button>
