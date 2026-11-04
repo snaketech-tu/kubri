@@ -11,6 +11,7 @@
 	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization } from '../api';
 	import { age, errorMessage, memory, relative } from '../format';
 	import { fleetState, serverHost, workloads } from '../fleet';
+	import { attentionTitle } from '../causes';
 	import { attentionItems, fill, kindLabel, meterTone, record, shortMessage, splitKinds } from '../pulse';
 	import { app, findResource } from '../state.svelte';
 	import HealthIcon from './HealthIcon.svelte';
@@ -290,13 +291,13 @@
 									>
 									<span class="copy">
 										<span class="headline">
-											<strong>{item.reasons.join(', ')}</strong>
+											<strong>{attentionTitle(item.event.object.name, item.reasons, item.event.message)}</strong>
 											<span class="tag {item.severity === 'critical' ? 'bad' : 'warn'}">
 												{item.severity === 'critical' ? 'Critical' : 'Warning'}
 											</span>
 										</span>
 										<span class="message" title={item.event.message}
-											>{shortMessage(item.event.reason, item.event.message)}</span
+											><code class="reasons">{item.reasons.join(', ')}</code> {shortMessage(item.event.reason, item.event.message)}</span
 										>
 										<span class="where">
 											<code
@@ -395,10 +396,15 @@
 							<h2 id="trend-title">Usage trend</h2>
 							<span class="muted">{namespace ? 'This namespace' : 'Cluster-wide'}</span>
 						</div>
-						<div class="trends">
-							{@render trend('CPU', pulse.cpu, cpuTrend, cores)}
-							{@render trend('Memory', pulse.memory, memoryTrend, memory)}
-						</div>
+						{#if cpuTrend.length < 2 && memoryTrend.length < 2 && (fill(pulse.cpu) || fill(pulse.memory))}
+							<!-- One line until there is a trend to draw, not two empty charts. -->
+							<p class="trend-wait" role="status"><span class="loader" aria-hidden="true"></span>The trend appears after a few updates.</p>
+						{:else}
+							<div class="trends">
+								{@render trend('CPU', pulse.cpu, cpuTrend, cores)}
+								{@render trend('Memory', pulse.memory, memoryTrend, memory)}
+							</div>
+						{/if}
 						<p class="note">
 							{trendWindow ? 'The last hour from Prometheus, measured use.' : 'Kept for this session; Kubri stores no history.'}
 						</p>
@@ -830,6 +836,49 @@
 		font-size: 12.5px;
 		color: var(--text-muted);
 		overflow-wrap: anywhere;
+	}
+	.trend-wait {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin: 4px 0;
+		color: var(--text-muted);
+		font-size: 12.5px;
+	}
+	.loader {
+		position: relative;
+		width: 48px;
+		height: 4px;
+		overflow: hidden;
+		border-radius: 2px;
+		background: var(--surface-2);
+	}
+	.loader::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		width: 40%;
+		border-radius: 2px;
+		background: var(--accent);
+		animation: slide 1.4s ease-in-out infinite;
+	}
+	@keyframes slide {
+		from {
+			transform: translateX(-100%);
+		}
+		to {
+			transform: translateX(250%);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.loader::after {
+			animation: none;
+		}
+	}
+	.reasons {
+		margin-right: 4px;
+		font-family: var(--mono);
+		font-size: 11.5px;
 	}
 	.where {
 		display: flex;
