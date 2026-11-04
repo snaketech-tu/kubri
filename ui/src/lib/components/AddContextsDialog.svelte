@@ -22,18 +22,37 @@
 		return () => previous?.focus();
 	});
 
+	/** The text last read, and which reading is the latest, so an older answer cannot win. */
+	let inspected: string | null = null;
+	let reading = 0;
+	let pause: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => () => clearTimeout(pause));
+
 	async function inspect() {
+		clearTimeout(pause);
+		if (text === inspected) return;
+		inspected = text;
+		const mine = ++reading;
 		error = null;
 		found = [];
 		chosen = [];
 		if (!text.trim()) return;
 		try {
-			found = await backend.inspectKubeconfig(text);
+			const contexts = await backend.inspectKubeconfig(text);
+			if (mine !== reading) return;
+			found = contexts;
 			chosen = found.filter((c) => !c.problem).map((c) => c.name);
 			if (!found.length) error = 'This kubeconfig has no contexts.';
 		} catch (err) {
-			error = errorMessage(err);
+			if (mine === reading) error = errorMessage(err);
 		}
+	}
+
+	/** Pasted or typed text is read as soon as typing pauses, not only when the field is left. */
+	function typed() {
+		source = '';
+		clearTimeout(pause);
+		pause = setTimeout(inspect, 400);
 	}
 
 	async function read(file: File | undefined) {
@@ -105,10 +124,8 @@
 			rows="5"
 			spellcheck="false"
 			placeholder="apiVersion: v1&#10;kind: Config&#10;clusters: …"
-			onchange={() => {
-				source = '';
-				inspect();
-			}}
+			oninput={typed}
+			onchange={inspect}
 		></textarea>
 	</label>
 
