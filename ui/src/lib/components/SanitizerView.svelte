@@ -229,9 +229,9 @@
 
 <section>
 	<PageHeader
-		crumbs={['Sanitizer']}
-		title="Sanitizer"
-		subtitle="Checks objects for common mistakes, like Popeye, {namespace ? `in ${namespace}` : 'in all namespaces'}"
+		crumbs={['Checks']}
+		title="Checks"
+		subtitle="Common mistakes and risky settings, {namespace ? `in ${namespace}` : 'in all namespaces'}"
 	>
 		{#snippet tools()}
 			<button class="btn" onclick={scan} disabled={scanning} title="Scan again (Shift+R)">{scanning ? 'Scanning…' : 'Scan again'}</button>
@@ -271,7 +271,7 @@
 				{/each}
 			</div>
 		</div>
-		<div class="list" bind:this={scroller} role="tree" aria-label="Sanitizer findings">
+		<div class="list" bind:this={scroller} role="tree" aria-label="Findings">
 			{#each rows as row, i (row.id)}
 				{#if row.type === 'section'}
 					{@const s = row.section}

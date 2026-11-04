@@ -14,60 +14,86 @@
 			]
 		],
 		[
-			'Navigate',
+			'Move',
 			[
-				[':  or  Ctrl+K', 'Command palette (pods, deploy, ctx, ns …)'],
+				[':  or  Ctrl+K', 'Command palette: kinds, objects, actions, ctx, ns …'],
 				['Ctrl+Shift+C', 'Switch context'],
-				['Ctrl+`  or  :term', 'Terminal with kubectl and helm set to this context (Shift: another one)'],
+				['0', 'All namespaces'],
 				['j / k  or  ↑ / ↓', 'Move'],
 				['g / G', 'First / last row'],
 				['Ctrl+F / B  or  PgDn / PgUp', 'A page down / up'],
 				['/', 'Filter: regex, !inverse, -f fuzzy, -l app=web'],
-				['0', 'All namespaces'],
 				['[ / ]  or  Alt+← / →', 'Back / forward'],
-				['Ctrl+ +  /  −  /  0', 'Zoom in, out, back to 100% (:appearance for colors)'],
 				['-', 'Last view, and back again'],
 				['Shift+W', 'Warp to the namespace of the row'],
 				['Shift+J', 'Jump to the owner'],
-				[':pulses', 'Cluster overview'],
-				[':xray deploy [ns]', 'XRay: what each object depends on'],
-				[':graph [ns]', 'XRay graph: how objects connect, and Ingress request paths'],
-				[':changes [ns] [1h]', 'What changed: rollouts, scaling, config edits and warnings Kubri recorded'],
-				[':snapshot [ns|all]', 'Save a namespace or the cluster to a file to open offline, or open one'],
-				[':kubeconfig', 'The kubeconfig files Kubri reads, and load more'],
-				[':rbac', 'Who may do what'],
-				[':helm', 'Helm releases'],
-				[':new [kind name --image …]', 'Create from a template or YAML, like kubectl create'],
-				[':popeye', 'Sanitizer: problems, scored'],
-				[':integrations', 'Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager'],
-				[':rightsizing', 'Requests far from what containers use'],
-				[':fleet', 'Every context at once, with its health'],
-				[':search web ctx:*', 'Objects by name, label and field, in one context or several'],
-				[':bench', 'HTTP benchmarks'],
-				[':pf', 'Port-forwards'],
-				[':config', 'k9s aliases, hotkeys, plugins and skins'],
-				[':skin name', 'Switch skin; :skin kubri for the built-in colors'],
-				['w', 'Wide columns'],
-				['Shift+N / A / S / P', 'Sort by name / age / status / namespace'],
-				['Shift+R / T / I / O', 'Sort pods by ready / restarts / IP / node'],
-				['Shift+C / M / X / Z', 'Sort by CPU / memory / %CPU / %memory'],
-				['Ctrl+Z', 'Only faulty rows'],
 				['Esc', 'Close, clear selection or filter, go back']
 			]
 		],
 		[
-			'Inspect',
+			'Look',
 			[
 				['Enter', 'Open: pods of a workload, jobs of a CronJob, … (jumps.yaml)'],
 				['d', 'Describe'],
 				['y', 'YAML'],
-				['m', 'Metrics from Prometheus'],
-				['e', 'Edit YAML (Ctrl+S saves)'],
 				['l', 'Logs of a pod, workload or service'],
 				['p', 'Logs of the previous container'],
+				['m', 'Metrics from Prometheus'],
 				['f', 'Maximize or restore the panel'],
+				['w', 'More columns'],
+				['Shift+N / A / S / P', 'Sort by name / age / status / namespace'],
+				['Shift+R / T / I / O', 'Sort pods by ready / restarts / IP / node'],
+				['Shift+C / M / X / Z', 'Sort by CPU / memory / %CPU / %memory'],
+				['Ctrl+Z', 'Only faulty rows'],
+				['Shift+E', 'Explain with your model (also findings)'],
 				['c / n', 'Copy names / namespaces'],
 				['Ctrl+S', 'Save the list as CSV']
+			]
+		],
+		[
+			'Change',
+			[
+				['Space', 'Mark the row'],
+				['Ctrl+Space', 'Mark up to here'],
+				['Ctrl+A / Ctrl+\\', 'Mark all / none'],
+				['e', 'Edit YAML (Ctrl+S saves)'],
+				['s', 'Scale'],
+				['r', 'Rollout restart'],
+				['Shift+L', 'Labels and annotations'],
+				['Ctrl+D  or  Delete', 'Delete'],
+				[':new [kind name --image …]', 'Create from a template or YAML, like kubectl create']
+			]
+		],
+		[
+			'Tools',
+			[
+				[':pulses  or  :overview', 'Overview: health, warnings, CPU and memory'],
+				[':xray deploy [ns]', 'Topology as trees: what each object depends on'],
+				[':graph [ns]', 'Topology as one graph, with Ingress request paths'],
+				[':changes [ns] [1h]', 'What changed: rollouts, scaling, config edits and warnings'],
+				[':helm', 'Helm releases'],
+				[':pf', 'Port-forwards'],
+				[':rbac  or  :access', 'Access: who may do what'],
+				[':popeye  or  :checks', 'Checks: common mistakes, scored'],
+				[':rightsizing', 'Requests far from what containers use'],
+				[':bench', 'HTTP benchmarks'],
+				[':tools', 'Every tool on one page'],
+				[':kinds', 'Every kind the cluster serves'],
+				[':fleet', 'Every context at once, with its health'],
+				[':search web ctx:*', 'Objects by name, label and field, in one context or several'],
+				[':integrations', 'Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager']
+			]
+		],
+		[
+			'App',
+			[
+				['Ctrl+`  or  :term', 'Terminal with kubectl and helm set to this context (Shift: another one)'],
+				[':snapshot [ns|all]', 'Save a namespace or the cluster to a file to open offline, or open one'],
+				[':kubeconfig', 'The kubeconfig files Kubri reads, and load more'],
+				[':config', 'Settings, with k9s aliases, hotkeys, plugins and skins'],
+				[':skin name', 'Switch skin; :skin kubri for the built-in colors'],
+				['Ctrl+ +  /  −  /  0', 'Zoom in, out, back to 100% (:appearance for colors)'],
+				['?', 'This help']
 			]
 		],
 		[
@@ -82,20 +108,6 @@
 				['x', 'Explain the selected lines, or the last 200'],
 				['c / Ctrl+S', 'Copy / save'],
 				['Shift+C', 'Clear']
-			]
-		],
-		[
-			'Act',
-			[
-				['Space', 'Select row'],
-				['Ctrl+Space', 'Select up to here'],
-				['Ctrl+A / Ctrl+\\', 'Select all / none'],
-				['Ctrl+D  or  Delete', 'Delete'],
-				['s', 'Scale'],
-				['r', 'Rollout restart'],
-				['Shift+L', 'Labels and annotations'],
-				['Shift+E', 'Explain with your model (also findings)'],
-				['?', 'This help']
 			]
 		],
 		[
@@ -141,7 +153,7 @@
 			]
 		],
 		[
-			'XRay',
+			'Topology',
 			[
 				['h / l  or  ← / →', 'Collapse / expand'],
 				['Space', 'Toggle'],
@@ -163,7 +175,7 @@
 			]
 		],
 		[
-			'Sanitizer',
+			'Checks',
 			[
 				['h / l', 'Collapse / expand a kind'],
 				['Enter  or  d', 'Describe the object'],
@@ -330,13 +342,17 @@
 		margin: 0 0 8px;
 		font-size: 17px;
 	}
+	/* Groups flow down the columns, so a short one leaves no gap beside a long one. */
 	.groups {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-		gap: 8px 28px;
+		columns: 2 300px;
+		column-gap: 28px;
+	}
+	section {
+		break-inside: avoid;
+		padding: 12px 0 6px;
 	}
 	h3 {
-		margin: 14px 0 8px;
+		margin: 0 0 8px;
 		font-size: 11px;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;

@@ -156,14 +156,17 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Topology', 'Graph']}
-		title="Topology graph"
+		crumbs={['Topology']}
+		title="Topology"
 		count={graph?.nodes.length}
 		subtitle="How the objects {namespace ? `in ${namespace}` : 'in all namespaces'} connect, from Ingresses to the nodes their pods run on"
 	>
 		{#if issues}<span class="tag bad"><HealthIcon health="failed" />{issues} with issues</span>{/if}
 		{#snippet tools()}
-			<button class="btn" onclick={showTrees} title="XRay trees, one per object">Trees</button>
+			<div class="segmented" role="group" aria-label="Show as">
+				<button aria-pressed="false" onclick={showTrees} title="A tree for each object (:xray)">Trees</button>
+				<button aria-pressed="true" title="All objects as one graph, with request paths (:graph)">Graph</button>
+			</div>
 		{/snippet}
 	</PageHeader>
 

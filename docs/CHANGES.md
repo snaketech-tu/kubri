@@ -1,6 +1,6 @@
 # What changed
 
-While it runs, Kubri records what changes in the context it is connected to. **What changed** (`:changes`, in the sidebar under Explore) shows it as a timeline, so "it worked an hour ago" has an answer.
+While it runs, Kubri records what changes in the context it is connected to. **What changed** (`:changes`, in the sidebar under Tools) shows it as a timeline, so "it worked an hour ago" has an answer.
 
 ## What is recorded
 

@@ -228,7 +228,7 @@
 		</nav>
 		<div class="heading">
 			<div>
-				<h1>Cluster overview</h1>
+				<h1>Overview</h1>
 				<p class="subtitle">
 					{scopeText}{app.environment ? ` · ${app.environment}` : ''}
 					{#if clusterText}<span class="mono">· {clusterText}</span>{/if}
