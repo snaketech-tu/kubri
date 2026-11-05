@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalSession } from './api';
 import { fontStack } from './fonts';
+import { escapeTwice } from './keys';
 
 /** A dark terminal in both themes: the ANSI colors programs use are made for it. */
 export const TERMINAL_BACKGROUND = '#0f131a';
@@ -69,6 +70,14 @@ export function mountTerminal(
 		const session = connect(term);
 		const input = term.onData((data) => session.write(data));
 		const resized = term.onResize(({ cols, rows }) => session.resize(cols, rows));
+		// Esc twice leaves the terminal, so that Kubri's keys work again; a single Esc still
+		// reaches the program.
+		const twice = escapeTwice();
+		term.attachCustomKeyEventHandler((e) => {
+			if (e.type !== 'keydown' || !twice(e.key, e.timeStamp)) return true;
+			term.blur();
+			return false;
+		});
 		// Panels change size with the window and when they are maximized.
 		const observer = new ResizeObserver(() => fit.fit());
 		observer.observe(element);

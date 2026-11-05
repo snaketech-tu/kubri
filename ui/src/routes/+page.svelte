@@ -256,6 +256,10 @@
 				['?', 'help']
 			] as [string, string][];
 		}
+		// Typing goes to the shell. The panel's keys work there as buttons, and after Esc twice.
+		if (app.details?.tab === 'shell') {
+			return [['esc esc', 'leave terminal'], ['ctrl+d', 'exit shell'], ...panel, ['?', 'help']] as [string, string][];
+		}
 		if (app.page === 'portforwards') {
 			return [
 				[':', 'command'],
@@ -393,6 +397,13 @@
 	function signOut() {
 		if (!drafts.block(() => session.signOut())) session.signOut();
 	}
+
+	// A menu belongs to the view it opened in: going elsewhere, also with Back, closes it.
+	$effect(() => {
+		void app.view;
+		void app.cluster?.context;
+		untrack(() => (app.menu = null));
+	});
 
 	// A clock for the unlock countdown.
 	let now = $state(Date.now());

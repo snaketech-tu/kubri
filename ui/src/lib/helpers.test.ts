@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContextInfo, ResourceInfo, Row } from './api';
-import { matchResources, suggest } from './commands';
+import { matchResources, namesAction, suggest } from './commands';
 import { age, cpu, isNotFound, memory, workloadPrefix } from './format';
 import { cellTone } from './status';
 import { filterRows, isFaulty, sortRows, toCsv } from './table';
@@ -153,6 +153,22 @@ describe('command palette', () => {
 	it('passes a namespace argument to resource commands', () => {
 		const s = suggest('po kube-system', resources, contexts, []);
 		expect(s[0].action).toMatchObject({ type: 'resource', namespace: 'kube-system' });
+	});
+});
+
+describe('namesAction', () => {
+	it('puts an action first when its verb is typed', () => {
+		expect(namesAction('Restart', 'restart', resources)).toBe(true);
+		expect(namesAction('Scale…', ' Scale ', resources)).toBe(true);
+		expect(namesAction('Copy name', 'copy', resources)).toBe(true);
+	});
+
+	it('leaves kinds, aliases and parts of words alone', () => {
+		expect(namesAction('Events', 'events', resources)).toBe(false);
+		expect(namesAction('Port-forward…', 'po', resources)).toBe(false);
+		expect(namesAction('Restart', 'rest', resources)).toBe(false);
+		expect(namesAction('Copy name', 'copy name', resources)).toBe(false);
+		expect(namesAction('Restart', '', resources)).toBe(false);
 	});
 });
 

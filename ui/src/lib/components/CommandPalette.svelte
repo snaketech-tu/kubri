@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { backend, type SearchHit } from '../api';
-	import { suggest, type Suggestion } from '../commands';
+	import { namesAction, suggest, type Suggestion } from '../commands';
 	import type { RecentObject } from '../search';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { stepZoom } from '../appearance';
@@ -103,11 +103,16 @@
 		return [...forRow, ...appCommands].filter(matches).slice(0, 6);
 	});
 
+	// A verb such as `restart` or `scale` asks for the action, so it comes before kinds that
+	// merely start with the same letters.
+	const named = $derived(doings.filter((s) => namesAction(s.label, term, app.resources)));
+
 	const suggestions = $derived(
 		input.trim()
 			? [
+					...named,
 					...suggest(input, app.resources, app.contexts, app.namespaces, app.paletteConfig),
-					...doings,
+					...doings.filter((s) => !named.includes(s)),
 					...(lookup ? objects : []),
 					...(/^(search|find|grep)\b/i.test(term)
 						? []

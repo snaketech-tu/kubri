@@ -41,6 +41,15 @@
 	let sort = $state<SortState>({ column: -1, descending: false });
 	let sortedByUser = false;
 	let cursorKey = $state<string | null>(null);
+	/**
+	 * Whether the user put the cursor somewhere. Until then the keys still work on the first row,
+	 * as in k9s, but the action bar offers nothing for a row nobody chose.
+	 */
+	let picked = $state(false);
+	function pick(key: string) {
+		cursorKey = key;
+		picked = true;
+	}
 	/** Where Ctrl+Space marks a range from. */
 	let anchorKey = $state<string | null>(null);
 	let now = $state(Date.now());
@@ -298,7 +307,7 @@
 		const row = table.rows.find(
 			(r) => r.name === wanted.name && (wanted.namespace === null || r.namespace === wanted.namespace)
 		);
-		if (row) cursorKey = row.key;
+		if (row) pick(row.key);
 		else app.toast(`${wanted.name} is not in the list`, 'bad');
 		app.cursorRequest = null;
 	});
@@ -317,7 +326,7 @@
 	function move(delta: number) {
 		if (!rows.length) return;
 		const next = Math.max(0, Math.min(rows.length - 1, cursor + delta));
-		cursorKey = rows[next].key;
+		pick(rows[next].key);
 	}
 
 	function toggleMark(row: Row) {
@@ -445,7 +454,7 @@
 
 	function open(row: Row | undefined, tab: DetailsTab = 'describe', extra: DetailsExtra = {}) {
 		if (!row) return false;
-		cursorKey = row.key;
+		pick(row.key);
 		app.showDetails(resource, target(row), tab, extra);
 		return true;
 	}
@@ -453,7 +462,7 @@
 	/** Enter: what belongs to the row, or else its description. */
 	async function enter(row: Row | undefined) {
 		if (!row) return;
-		cursorKey = row.key;
+		pick(row.key);
 		if (isServices(resource) && cell(row, 'Selector') !== null && /^(|<none>)$/.test(cell(row, 'Selector') ?? '')) {
 			open(row);
 			return;
@@ -519,7 +528,7 @@
 			enter: () => void enter(row),
 			chosen: chosen.map(target),
 			namespace,
-			plugins: () => (cursorKey = row.key),
+			plugins: () => pick(row.key),
 			extraDanger: cleanUp
 		};
 	}
@@ -576,7 +585,7 @@
 
 	/** The row menu, from a right click or the row's ⋯ button. Marked rows go together. */
 	function openMenu(row: Row, x: number, y: number, align: 'left' | 'right' = 'left', column?: DisplayColumn) {
-		cursorKey = row.key;
+		pick(row.key);
 		const marked = chosenRows();
 		const actions = selection.has(row.key) && marked.length > 1 ? markedActions(marked) : actionsFor(row, [row]);
 		// The cell's copy actions join the Copy group, after what people do most: view, connect, change.
@@ -885,8 +894,13 @@
 			{#if selection.size}
 				{@const marked = chosenRows()}
 				<ActionBar actions={markedActions(marked)} marked>{marked.length} marked</ActionBar>
-			{:else if current}
+			{:else if current && app.details}
+				<!-- The inspector holds the actions while it is open: one place, not two. -->
+				<ActionBar actions={[]}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
+			{:else if current && picked}
 				<ActionBar actions={actionsFor(current, [current])}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
+			{:else if current}
+				<ActionBar actions={[]}><span class="choose">Click a row or press <kbd>↓</kbd> to act on it</span></ActionBar>
 			{/if}
 		</div>
 
@@ -928,7 +942,7 @@
 							aria-rowindex={windowed ? i + 2 : undefined}
 							class:cursor={i === cursor}
 							class:checked={selection.has(row.key)}
-							onclick={() => (cursorKey = row.key)}
+							onclick={() => pick(row.key)}
 							ondblclick={() => enter(row)}
 							oncontextmenu={(e) => {
 								e.preventDefault();
@@ -1038,6 +1052,17 @@
 </section>
 
 <style>
+	.choose {
+		font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+		font-size: 13px;
+	}
+	.choose kbd {
+		padding: 0 4px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		font-family: var(--mono);
+		font-size: 11px;
+	}
 	table.stale tbody {
 		opacity: 0.55;
 	}
