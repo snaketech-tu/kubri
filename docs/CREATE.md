@@ -67,6 +67,15 @@ An empty list of a kind you may create offers **Create** right there, and an emp
 - Right-click a cell to copy its value, or the whole column as the list shows it.
 - Mark rows with <kbd>Space</kbd> (or <kbd>Ctrl</kbd>+<kbd>Space</kbd> for a range) to copy their names, **Scale** (<kbd>s</kbd>) them all to the same count, **Restart** (<kbd>r</kbd>) them all, or delete them.
 
+## Requests and limits
+
+**Requests & limits…** (<kbd>Shift</kbd>+<kbd>Q</kbd>, in the menus of Deployments, StatefulSets, DaemonSets and their pods) shows the CPU and memory requests and limits of every container of the workload in one dialog. On a pod it opens the workload that owns it.
+
+- <kbd>↑</kbd> and <kbd>↓</kbd> in a field step through common sizes, such as 100m, 150m, 200m or 128Mi, 192Mi, 256Mi. You can also type any amount Kubernetes takes.
+- An emptied field removes the value. A container without a request gets its limit as the request, as in Kubernetes.
+- Below the fields, the dialog shows the room on the nodes the pods may run on: what other pods request there, what these pods request now and with the new values, and how many pods of the new size fit. It warns when a pod fits on no node, when fewer pods fit than the workload runs, when the nodes would be more than 90% requested, when a new pod only fits once an old one is gone, and when a quota of the namespace would be exceeded. The warnings do not stop you, for example when you add nodes next.
+- Setting the values patches all containers at once, after the diff of the dry run, and replaces the pods with a rolling update.
+
 ## Port-forwards that stay
 
 - A forward to a Service or workload moves to another ready pod when its pod goes away, as after a restart or rollout. A forward straight to a pod keeps using that pod's name.

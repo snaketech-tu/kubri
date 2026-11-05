@@ -79,11 +79,7 @@
 			kind: 'resources',
 			resource,
 			target: a.workload,
-			container: a.container,
-			name: a.resource,
-			request: a.suggestedRequest ?? a.request ?? '',
-			limit: a.suggestedLimit ?? a.limit ?? '',
-			current: { request: a.request, limit: a.limit },
+			focus: { container: a.container, name: a.resource, request: a.suggestedRequest, limit: a.suggestedLimit },
 			note: `${why(a).text}: ${usedNote(a)}`
 		};
 	}

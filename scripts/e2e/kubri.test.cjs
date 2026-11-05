@@ -240,6 +240,32 @@ describe('changes', () => {
 		}
 	});
 
+	check('sets requests and limits with the room on the nodes', async () => {
+		h.kubectl('create', 'deployment', 'sized', '-n', 'e2e', '--image=busybox:1.36', '--replicas=0', '--', 'sleep', '1000000');
+		try {
+			await h.openList(page, server.url, { resource: 'deployments.v1.apps', heading: 'Deployments', filter: 'sized' });
+			await page.keyboard.press('Shift+Q');
+			const dialog = page.getByRole('dialog', { name: 'Requests & limits' });
+			const request = dialog.getByRole('combobox', { name: 'busybox: CPU request' });
+			await request.waitFor();
+			// Focused, empty: the arrow key starts at a small size, then steps up.
+			await page.keyboard.press('ArrowUp');
+			await page.keyboard.press('ArrowUp');
+			assert.equal(await request.inputValue(), '150m');
+			await h.until(async () => /requested/.test(await dialog.getByRole('region', { name: 'Room on the nodes' }).innerText()), {
+				message: 'the room on the nodes'
+			});
+			await dialog.getByRole('button', { name: 'Review changes' }).click();
+			await dialog.getByRole('button', { name: 'Set', exact: true }).click();
+			await h.until(
+				() => h.kubectl('get', 'deployment', 'sized', '-n', 'e2e', '-o', 'jsonpath={.spec.template.spec.containers[0].resources.requests.cpu}') === '150m',
+				{ message: 'the new CPU request' }
+			);
+		} finally {
+			h.kubectl('delete', 'deployment', 'sized', '-n', 'e2e', '--ignore-not-found', '--wait=false');
+		}
+	});
+
 	check('deletes after confirming', async () => {
 		h.kubectl('create', 'configmap', 'doomed', '-n', 'e2e', '--from-literal=a=b');
 		await h.openList(page, server.url, { resource: 'configmaps.v1', heading: 'ConfigMaps', filter: 'doomed' });

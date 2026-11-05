@@ -218,19 +218,18 @@ export type Dialog =
 	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef; owner?: { kind: string; plural: string; name: string }; revision?: number }
 	/** A Flux or Argo CD action; `autoSync` turns Argo CD's auto-sync off or on, as it is now. */
 	| { kind: 'gitops'; resource: ResourceInfo; target: ObjectRef; action: GitOpsAction | 'autoSync' }
-	/** One container's requests and limits, prefilled from right-sizing advice. */
+	/**
+	 * The requests and limits of a workload's containers, with the room on its nodes. `focus`
+	 * prefills one container's CPU or memory, as right-sizing advice suggests it; without a
+	 * container, the first that requests it.
+	 */
 	| {
 			kind: 'resources';
 			resource: ResourceInfo;
 			target: ObjectRef;
-			container: string;
-			/** `cpu` or `memory`. */
-			name: string;
-			request: string;
-			limit: string;
-			current: { request: string | null; limit: string | null };
+			focus?: { container: string | null; name: 'cpu' | 'memory'; request: string | null; limit: string | null };
 			/** Why, as the advice says it. */
-			note: string;
+			note?: string;
 	  }
 	/** Has cert-manager issue a Certificate again now. */
 	| { kind: 'renew'; resource: ResourceInfo; target: ObjectRef }

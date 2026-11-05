@@ -18,7 +18,7 @@
 		triggerCronJob
 	} from '../actions';
 	import { parseHeaders } from '../bench';
-	import { backend, type Change, type ContainerImage, type DeleteOptions, type DrainReport, type Preview } from '../api';
+	import { backend, type Amounts, type Capacity, type Change, type ContainerImage, type DeleteOptions, type DrainReport, type Preview } from '../api';
 	import { helmCommand, kubectlCommand } from '../kubectl';
 	import DiffView from './DiffView.svelte';
 	import HelmCompare from './HelmCompare.svelte';
@@ -43,6 +43,8 @@
 	import { plainOptions } from '../select';
 	import { plural, t } from '../i18n';
 	import Phrase from './Phrase.svelte';
+	import ResourcesEditor from './ResourcesEditor.svelte';
+	import { fieldProblems, initRequests, resourceChanges, rowsOf, type ResourceRow } from '../resources';
 
 	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' | 'snapshot' | 'grafana' }> } = $props();
 
@@ -159,17 +161,13 @@
 
 	// Memory limit
 	let memory = $state(untrack(() => (dialog.kind === 'memory' ? dialog.fix.suggested : '')));
-	// Right-sizing: one resource's request and limit, prefilled with the advice.
-	let sizeRequest = $state(untrack(() => (dialog.kind === 'resources' ? dialog.request : '')));
-	let sizeLimit = $state(untrack(() => (dialog.kind === 'resources' ? dialog.limit : '')));
-	/** The requests and limits that change, as typed. */
-	function sizeChange() {
-		if (dialog.kind !== 'resources') return null;
-		const changed = (value: string, now: string | null) => (value.trim() && value.trim() !== now ? { [dialog.name]: value.trim() } : {});
-		const requests = changed(sizeRequest, dialog.current.request);
-		const limits = changed(sizeLimit, dialog.current.limit);
-		return Object.keys(requests).length || Object.keys(limits).length ? { requests, limits } : null;
-	}
+	// Requests and limits of every container, with the room on the nodes.
+	let sizeRows = $state<ResourceRow[] | null>(null);
+	let sizeInit = $state<Amounts>({ cpu: 0, memory: 0 });
+	let capacity = $state<Capacity | null>(null);
+	let capacityError = $state<string | null>(null);
+	const sizeChanges = $derived(sizeRows ? resourceChanges(sizeRows) : []);
+	const sizeProblems = $derived(sizeRows ? fieldProblems(sizeRows) : []);
 
 	// Drain
 	let ignoreDaemonsets = $state(true);
@@ -184,7 +182,36 @@
 	}
 
 	$effect(() => {
-		if (dialog.kind === 'benchmark' || dialog.kind === 'memory' || dialog.kind === 'resources') {
+		if (dialog.kind === 'resources') {
+			const { target, focus } = dialog;
+			backend
+				.getObject(target)
+				.then((obj) => {
+					const rows = rowsOf(obj);
+					let field = rows[0] ? `${rows[0].container}/requests/${focus?.name ?? 'cpu'}` : null;
+					if (focus) {
+						const row =
+							rows.find((r) => r.container === focus.container) ?? rows.find((r) => r.was.requests[focus.name]) ?? rows[0];
+						if (row) {
+							if (focus.request) row.requests[focus.name] = focus.request;
+							if (focus.limit) row.limits[focus.name] = focus.limit;
+							field = `${row.container}/requests/${focus.name}`;
+						}
+					}
+					sizeInit = initRequests(obj);
+					sizeRows = rows;
+					void tick().then(() => {
+						const input = box?.querySelector<HTMLInputElement>(`[data-field="${CSS.escape(field ?? '')}"]`);
+						(input ?? box?.querySelector<HTMLInputElement>('input'))?.focus();
+						input?.select();
+					});
+				})
+				.catch((err) => (error = errorMessage(err)));
+			backend.capacity(target).then(
+				(found) => (capacity = found),
+				(err) => (capacityError = errorMessage(err))
+			);
+		} else if (dialog.kind === 'benchmark' || dialog.kind === 'memory') {
 			queueMicrotask(() => firstField?.focus());
 		} else if (dialog.kind === 'plugin' && dialog.plugin.inputs.length) {
 			queueMicrotask(focusFirstField);
@@ -432,15 +459,10 @@
 					ok = await rollback(dialog.target);
 					break;
 				case 'resources': {
-					const change = sizeChange();
-					if (!change) throw new Error(t('Nothing changes'));
-					await backend.setResources(dialog.target, dialog.container, change.requests, change.limits);
-					const where = { container: dialog.container, name: dialog.target.name };
-					app.toast(
-						dialog.name === 'cpu'
-							? t('Set the CPU of {container} in {name}; new pods start with it', where)
-							: t('Set the memory of {container} in {name}; new pods start with it', where)
-					);
+					if (sizeProblems.length) throw new Error(sizeProblems[0].text);
+					if (!sizeChanges.length) throw new Error(t('Nothing changes'));
+					await backend.setResources(dialog.target, sizeChanges);
+					app.toast(t('Set the requests and limits of {name}; new pods start with them', { name: dialog.target.name }));
 					ok = true;
 					break;
 				}
@@ -529,8 +551,7 @@
 			}
 			case 'resources': {
 				// Always: the diff shows the pods will be replaced.
-				const change = sizeChange();
-				return change ? { type: 'resources', container: dialog.container, ...change } : null;
+				return sizeChanges.length && !sizeProblems.length ? { type: 'resources', containers: sizeChanges } : null;
 			}
 			case 'memory':
 				// Always: the diff shows the pods will be replaced.
@@ -586,10 +607,8 @@
 				});
 			case 'memory':
 				return kubectlCommand(ctx, dialog.target, { op: 'memory', container: dialog.fix.container, memory: memory.trim() });
-			case 'resources': {
-				const change = sizeChange() ?? { requests: {}, limits: {} };
-				return kubectlCommand(ctx, dialog.target, { op: 'resources', container: dialog.container, ...change });
-			}
+			case 'resources':
+				return kubectlCommand(ctx, dialog.target, { op: 'resources', containers: sizeChanges });
 			case 'helmRollback':
 				return helmCommand(ctx, dialog.release, { op: 'rollback', revision: dialog.revision });
 			case 'helmUninstall':
@@ -712,7 +731,7 @@
 			case 'memory':
 				return t('Raise memory limit');
 			case 'resources':
-				return dialog.name === 'cpu' ? t('Right-size CPU') : t('Right-size memory');
+				return t('Requests & limits');
 		}
 	});
 	const confirmLabel = $derived(
@@ -787,7 +806,7 @@
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	class:wide={reviewing}
+	class:wide={reviewing || dialog.kind === 'resources'}
 	aria-label={title}
 	{onkeydown}
 	oncancel={(e) => {
@@ -1220,22 +1239,23 @@
 	{:else if dialog.kind === 'resources'}
 		<p>
 			<Phrase
-				text={t('{container} in {object}: {note} Its pods are replaced with a rolling update.', { note: dialog.note })}
-				strong={{ container: dialog.container, object: `${dialog.resource.kind} ${name(dialog.target)}` }}
+				text={t('Set what the containers of {object} request and may use at most. Its pods are replaced with a rolling update.')}
+				strong={{ object: `${dialog.resource.kind} ${name(dialog.target)}` }}
 			/>
 		</p>
-		<div class="pair">
-			<label class="field">
-				<span
-					>{dialog.name === 'cpu' ? t('CPU request') : t('Memory request')}{dialog.current.request ? t(', now {value}', { value: dialog.current.request }) : ''}</span
-				>
-				<input class="mono" bind:value={sizeRequest} bind:this={firstField} spellcheck="false" placeholder={dialog.name === 'cpu' ? '100m' : '128Mi'} />
-			</label>
-			<label class="field">
-				<span>{t('Limit')}{dialog.current.limit ? t(', now {value}', { value: dialog.current.limit }) : ''}</span>
-				<input class="mono" bind:value={sizeLimit} spellcheck="false" placeholder={t('none')} />
-			</label>
-		</div>
+		{#if dialog.note}<p class="muted">{dialog.note}</p>{/if}
+		{#if sizeRows === null}
+			{#if !error}<p class="muted">{t('Loading containers…')}</p>{/if}
+		{:else}
+			<ResourcesEditor
+				bind:rows={sizeRows}
+				{capacity}
+				{capacityError}
+				init={sizeInit}
+				daemon={dialog.resource.kind === 'DaemonSet'}
+				problems={sizeProblems}
+			/>
+		{/if}
 	{:else if dialog.kind === 'image'}
 		<p><Phrase text={t('Set the container images of {name}.')} strong={{ name: name(dialog.target) }} /></p>
 		{#if images === null}
@@ -1298,7 +1318,8 @@
 			disabled={busy ||
 				!confirmed ||
 				(dialog.kind === 'gitops' && dialog.action === 'autoSync' && !autoSync) ||
-				((dialog.kind === 'scale' || dialog.kind === 'scaleMany') && !validReplicas(replicas))}
+				((dialog.kind === 'scale' || dialog.kind === 'scaleMany') && !validReplicas(replicas)) ||
+				(dialog.kind === 'resources' && (!sizeChanges.length || sizeProblems.length > 0))}
 			onclick={confirm}
 		>
 			{busy ? t('Working…') : report ? t('Close') : needsPreview ? t('Review changes') : confirmLabel}
@@ -1403,11 +1424,6 @@
 		align-items: center;
 		gap: 8px;
 		margin: 8px 0;
-	}
-	.pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 12px;
 	}
 	.field {
 		display: flex;
