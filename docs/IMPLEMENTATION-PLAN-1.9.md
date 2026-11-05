@@ -1,7 +1,8 @@
 # Kubri implementation plan: 1.9
 
-Date: 5 November 2026. Starting point: Kubri 1.8.0 (main at `9f7bb99`). Status: proposed,
-nothing implemented yet.
+Date: 5 November 2026. Starting point: Kubri 1.8.0 (main at `9f7bb99`). Status: implemented
+in pull requests #157 to #164, waiting for review. "As built" below lists where the result
+differs from this plan.
 
 1.9 makes everyday work smoother in four places:
 
@@ -13,6 +14,19 @@ nothing implemented yet.
   pod may use at most.
 - **Requests and limits made easy** (**R1** to **R4**): one dialog for a workload's requests and
   limits, with the room the nodes still have shown as a budget.
+
+## As built
+
+| Item | Pull request | Differences from the plan |
+| --- | --- | --- |
+| S1, S2 | #157 | The last context, the start setting and the views are kept in the app's local storage, not in the settings file, so each browser and the desktop app remember their own. The setting is **On start** in Settings. The namespace scope is not restored. |
+| P1 to P4 | #159 | Both causes were confirmed against k3s: the client's half-close ended the connection at once, and idle connections dropped behind proxies. Kubri now runs its own forwarder loop: it keeps reading after the client is done until the pod closes or is quiet for 15 seconds, and pings every 20 seconds. The Port-forwards view says how the last connection ended. |
+| L1, L2 | #158 | The request and limit columns need metrics-server, like the use columns. Sums per workload were left out. |
+| R1 to R3 | #161 | The action is **Requests & limits…** on <kbd>Shift</kbd>+<kbd>Q</kbd>. Warnings about room do not block setting the values. Right-sizing's **Review…** fills in all suggestions of the workload. The MCP server does not use the budget yet. |
+| R4 | #162 | Only "CPU free" and "Mem free" in the Nodes list. Quotas show in the dialog instead of the namespace details; the overview tile already opens the Nodes list; one review per workload replaces a multi-select in Right-sizing. |
+| Added | #160 | The Integrations page layout: tools found, tools missing and the settings each get their own place, also at narrow widths. |
+| Added | #163 | Label templates for logs: other label names for namespace, pod and container (such as `exported_namespace`), kept once and picked per context, used by Logs in Grafana and the Loki log history. |
+| Added | #164 | Production namespaces: in a context that is not production, single namespaces get its care (banner, typed names, notes, no changes by AI agents). The automatic lock stays per context. |
 
 ## Decisions
 
