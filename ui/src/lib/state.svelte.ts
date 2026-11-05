@@ -212,7 +212,7 @@ export type Dialog =
 	| { kind: 'trigger'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'suspend'; resource: ResourceInfo; target: ObjectRef; suspend: boolean }
 	| { kind: 'image'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef }
+	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef; owner?: { kind: string; plural: string; name: string }; revision?: number }
 	/** A Flux or Argo CD action; `autoSync` turns Argo CD's auto-sync off or on, as it is now. */
 	| { kind: 'gitops'; resource: ResourceInfo; target: ObjectRef; action: GitOpsAction | 'autoSync' }
 	/** One container's requests and limits, prefilled from right-sizing advice. */

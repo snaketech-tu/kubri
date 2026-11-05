@@ -1567,7 +1567,7 @@ export interface Backend {
 	/** The health and sections the kind's view gives `object`; null without a view. */
 	renderView(resource: ResourceRef, object: unknown): Promise<RenderedView | null>;
 	setImages(target: ObjectRef, images: ContainerImage[]): Promise<void>;
-	/** Rolls a ReplicaSet's Deployment back to it; returns the Deployment's name. */
+	/** Rolls a ReplicaSet's Deployment, or a ControllerRevision's StatefulSet or DaemonSet, back to it; returns what it rolled back, like `Deployment web`. */
 	rollback(target: ObjectRef): Promise<string>;
 	events(namespace: string | null, uid: string): Promise<EventInfo[]>;
 	metrics(kind: MetricsKind, namespace: string | null): Promise<Usage[]>;
