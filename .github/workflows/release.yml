@@ -71,9 +71,12 @@ jobs:
           if [ -z "$id" ] && [ "$GITHUB_REF_TYPE" != tag ]; then
             id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
               --jq ".[] | select(.draft and .tag_name == \"$TAG\") | .id" | head -n 1)
-            # A run by hand tags this commit when it publishes the draft.
+            # A run by hand tags this commit when it publishes the draft. The tag name is sent
+            # again, as GitHub can drop it from a draft whose target changes, and the notes are
+            # the ones of this commit.
             if [ -n "$id" ]; then
-              gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$id" -f target_commitish="$GITHUB_SHA" > /dev/null
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$id" -f tag_name="$TAG" \
+                -f target_commitish="$GITHUB_SHA" -F body=@.github/release-notes.md > /dev/null
             fi
           fi
           if [ -n "$id" ]; then
@@ -237,7 +240,7 @@ jobs:
       - name: Publish the release
         run: |
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/${{ needs.draft.outputs.id }}" \
-            -F draft=false -f make_latest=true --jq .html_url
+            -f tag_name="${{ needs.draft.outputs.tag }}" -F draft=false -f make_latest=true --jq .html_url
 
   # The website and its live demo, from the commit just released.
   website:
