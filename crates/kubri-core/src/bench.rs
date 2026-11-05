@@ -613,6 +613,7 @@ mod tests {
             local_port: port,
             started: String::new(),
             connections: 0,
+            last_end: None,
             error: None,
         }
     }

@@ -7,6 +7,7 @@ mod access;
 mod added;
 mod apply;
 mod bench;
+mod capacity;
 mod certmanager;
 mod chosen;
 mod context;
@@ -84,6 +85,7 @@ pub use apply::{ApplyItem, ApplyOutcome, ApplyRequest, fetch_manifest};
 pub use bench::{
     BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
 };
+pub use capacity::{Amounts, Capacity, NodeRoom, QuotaRoom};
 pub use context::{ContextInfo, write_in_cluster_kubeconfig};
 pub use debug::{DebugRequest, DebugSession, DebugSettings};
 pub use error::{Error, Result};
@@ -116,7 +118,7 @@ pub use pulse::{CertificateAlert, EventPulse, KindPulse, Pulse, RecentEvent, Uti
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
-pub use rightsizing::{RightSizing, SizeAdvice, SizeReason};
+pub use rightsizing::{ContainerResources, RightSizing, SizeAdvice, SizeReason};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
 pub use search::{FieldTest, SearchHit, SearchProblem, SearchRequest, SearchResult};
 pub use settings::{
@@ -1482,12 +1484,8 @@ impl Kubri {
                     api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,
                 )
             }
-            Change::Resources {
-                container,
-                requests,
-                limits,
-            } => {
-                let patch = rightsizing::resources_patch(&container, &requests, &limits)?;
+            Change::Resources { containers } => {
+                let patch = rightsizing::resources_patch(&containers)?;
                 (
                     api.get(&obj.name).await?,
                     api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,
@@ -1819,8 +1817,14 @@ impl Kubri {
                 }
             }
             MetricsKind::Nodes => {
-                if let Ok(nodes) = typed::list(Api::<Node>::all(client)).await {
+                if let Ok(nodes) = typed::list(Api::<Node>::all(client.clone())).await {
                     metrics::add_node_allocatable(&mut usage, &nodes);
+                }
+                // What the pods on each node request, for the room left. Without the right to
+                // list every pod, the columns stay empty.
+                let scheduled = ListParams::default().fields("spec.nodeName!=");
+                if let Ok(pods) = Api::<Pod>::all(client).list(&scheduled).await {
+                    metrics::add_node_requests(&mut usage, &pods.items);
                 }
             }
         }

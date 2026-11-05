@@ -16,7 +16,8 @@ pub struct Usage {
     /// Memory in bytes.
     pub memory: f64,
     /// What a pod's containers request and may use at most, for %CPU/R, %CPU/L and the
-    /// like. A limit is only known when every container sets one.
+    /// like. A limit is only known when every container sets one. For a node, `requests` is
+    /// what the pods on it request.
     #[serde(skip_serializing_if = "Limits::is_empty")]
     pub requests: Limits,
     #[serde(skip_serializing_if = "Limits::is_empty")]
@@ -133,6 +134,34 @@ pub(crate) fn add_node_allocatable(usage: &mut [Usage], nodes: &[Node]) {
         u.allocatable = Limits {
             cpu: get("cpu").map(|c| c * 1000.0),
             memory: get("memory"),
+        };
+    }
+}
+
+/// Adds what the pods on each node request to its usage, so the room left shows.
+pub(crate) fn add_node_requests(usage: &mut [Usage], pods: &[Pod]) {
+    let mut by_node: HashMap<&str, (f64, f64)> = HashMap::new();
+    for pod in pods {
+        let finished = matches!(
+            pod.status.as_ref().and_then(|s| s.phase.as_deref()),
+            Some("Succeeded" | "Failed")
+        );
+        let Some(node) = pod.spec.as_ref().and_then(|s| s.node_name.as_deref()) else {
+            continue;
+        };
+        if finished {
+            continue;
+        }
+        let (cpu, memory) = crate::fixes::pod_requests(pod);
+        let sum = by_node.entry(node).or_default();
+        sum.0 += cpu;
+        sum.1 += memory;
+    }
+    for u in usage {
+        let (cpu, memory) = by_node.get(u.name.as_str()).copied().unwrap_or_default();
+        u.requests = Limits {
+            cpu: Some(cpu * 1000.0),
+            memory: Some(memory),
         };
     }
 }
@@ -304,5 +333,39 @@ mod tests {
         let usage = parse_usage(&list);
         assert_eq!(usage[0].cpu, 1000.0);
         assert_eq!(usage[0].namespace, None);
+    }
+
+    #[test]
+    fn adds_what_the_pods_on_a_node_request() {
+        let pod = |name: &str, node: &str, cpu: &str, phase: &str| -> Pod {
+            serde_json::from_value(json!({
+                "metadata": { "name": name, "namespace": "shop" },
+                "spec": { "nodeName": node, "containers": [
+                    { "name": "app", "resources": { "requests": { "cpu": cpu, "memory": "64Mi" } } }
+                ] },
+                "status": { "phase": phase }
+            }))
+            .unwrap()
+        };
+        let pods = [
+            pod("a", "n1", "250m", "Running"),
+            pod("b", "n1", "500m", "Pending"),
+            pod("done", "n1", "1", "Succeeded"),
+            pod("c", "n2", "100m", "Running"),
+        ];
+        let mut usage = vec![
+            Usage {
+                name: "n1".into(),
+                ..Usage::default()
+            },
+            Usage {
+                name: "idle".into(),
+                ..Usage::default()
+            },
+        ];
+        add_node_requests(&mut usage, &pods);
+        assert_eq!(usage[0].requests.cpu, Some(750.0));
+        assert_eq!(usage[0].requests.memory, Some(128.0 * 1024.0 * 1024.0));
+        assert_eq!(usage[1].requests.cpu, Some(0.0));
     }
 }

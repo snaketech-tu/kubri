@@ -1,4 +1,4 @@
-import type { ContainerImage, DeleteOptions, DrainOptions, ObjectRef, ResourceRef } from './api';
+import type { ContainerImage, ContainerResources, DeleteOptions, DrainOptions, ObjectRef, ResourceRef } from './api';
 
 /** What Kubri is about to do, in the terms `kubectl` needs. */
 export type KubectlOp =
@@ -11,7 +11,7 @@ export type KubectlOp =
 	| { op: 'debug'; container?: string | null; image?: string | null; copy?: boolean }
 	| { op: 'nodeShell'; image?: string | null }
 	| { op: 'memory'; container: string; memory?: string | null }
-	| { op: 'resources'; container: string; requests: Record<string, string>; limits: Record<string, string> }
+	| { op: 'resources'; containers: ContainerResources[] }
 	| { op: 'portForward'; local?: number | null; remote?: number | null; address?: string | null }
 	| { op: 'cordon' }
 	| { op: 'uncordon' }
@@ -78,11 +78,24 @@ export function kubectlCommand(context: string | null | undefined, target: Objec
 		case 'memory':
 			return run('set', 'resources', ref, '-c', op.container, `--limits=memory=${op.memory || 'MEMORY'}`);
 		case 'resources': {
-			const flag = (name: string, values: Record<string, string>) => {
-				const set = Object.entries(values).filter(([, v]) => v);
-				return set.length ? [`--${name}=${set.map(([k, v]) => `${k}=${v}`).join(',')}`] : [];
-			};
-			return run('set', 'resources', ref, '-c', op.container, ...flag('requests', op.requests), ...flag('limits', op.limits));
+			// `set resources` takes one container and cannot remove a value; a patch does both.
+			const [only] = op.containers;
+			const removes = op.containers.some((c) => [...Object.values(c.requests), ...Object.values(c.limits)].includes(null));
+			if (op.containers.length === 1 && !removes) {
+				const flag = (name: string, values: Record<string, string | null>) => {
+					const set = Object.entries(values);
+					return set.length ? [`--${name}=${set.map(([k, v]) => `${k}=${v}`).join(',')}`] : [];
+				};
+				return run('set', 'resources', ref, '-c', only.container, ...flag('requests', only.requests), ...flag('limits', only.limits));
+			}
+			const containers = op.containers.map((c) => ({
+				name: c.container,
+				resources: Object.fromEntries(
+					(['requests', 'limits'] as const).filter((part) => Object.keys(c[part]).length).map((part) => [part, c[part]])
+				)
+			}));
+			const patch = { spec: { template: { spec: { containers: containers.length ? containers : [{ name: 'CONTAINER' }] } } } };
+			return run('patch', ref, '--type=strategic', '-p', JSON.stringify(patch));
 		}
 		case 'nodeShell':
 			return command(context, null, ['debug', `node/${target.name}`, '-it', '--profile=sysadmin', `--image=${op.image || 'busybox'}`, '--', 'chroot', '/host', 'sh']);
