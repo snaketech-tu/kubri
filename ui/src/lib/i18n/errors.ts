@@ -84,7 +84,46 @@ export const SOURCE_TEXTS: Record<string, string[]> = {
 		'not enough memory: the pod requests {0}, {1} is free',
 		'the node runs as many pods as it may'
 	],
-	'local_terminal.rs': ["kubectl {0} is more than one minor version away from the cluster's {1}; some commands may not work"]
+	'local_terminal.rs': ["kubectl {0} is more than one minor version away from the cluster's {1}; some commands may not work"],
+	// What the checks find. Health texts such as "0/1 ready" stay as the lists show them.
+	'sanitizer.rs': [
+		'Scaled to 0',
+		'Suspended',
+		'Not used by any workload',
+		'Not used by any workload, service account or ingress',
+		'Not mounted by any pod',
+		'Not bound by any role binding',
+		'Not bound by any role binding or cluster role binding',
+		'Not claimed by any volume claim',
+		'Restarted {0} times',
+		'Not managed by a controller, so nothing recreates it',
+		'Uses the default service account',
+		'No liveness or readiness probe',
+		'No readiness probe',
+		'No liveness probe',
+		'No CPU or memory requests',
+		'No memory request',
+		'No CPU request',
+		'No memory limit',
+		'Has a port without a name',
+		'May run as root',
+		'Image {0} has no tag, so it means latest',
+		'Image {0} uses the latest tag',
+		'Type NodePort opens a port on every node',
+		'Waiting for a load balancer address',
+		'Selects no pods',
+		'None of its pods is ready',
+		'Port {0} targets {1}, which none of its pods names',
+		'Scales {0} {1}, which does not exist',
+		'Allows no disruptions right now, so node drains stop at its pods',
+		'Sends traffic to service {0}, which does not exist',
+		'Service {0} has no port {1}',
+		'Its TLS secret {0} does not exist',
+		'Refers to {0} {1}, which does not exist',
+		'Binds service account {0}, which does not exist',
+		'Cordoned, so no new pods are scheduled',
+		'{0} use is at {1}% of what is allocatable'
+	]
 };
 
 const SOURCE = Object.values(SOURCE_TEXTS).flat();
@@ -92,8 +131,9 @@ const WHOLE = [...CORE_TEXTS, ...SOURCE.filter((text) => !/\{\d\}/.test(text))];
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// The longer of the check formats first, as the shorter would match it too.
-const PATTERNS = [...ERROR_FORMATS, ...CHECK_FORMATS, ...NOTICE_FORMATS, ...SOURCE.filter((text) => /\{\d\}/.test(text))].map((format) => ({
+// The texts of single files first, as "{0} does not exist" would match "Its TLS secret {0} does
+// not exist" too; and the longer of the check formats first, for the same reason.
+const PATTERNS = [...SOURCE.filter((text) => /\{\d\}/.test(text)), ...ERROR_FORMATS, ...CHECK_FORMATS, ...NOTICE_FORMATS].map((format) => ({
 	format,
 	pattern: new RegExp(`^${escape(format).replace(/\\\{\d\\\}/g, '([\\s\\S]+?)')}$`)
 }));

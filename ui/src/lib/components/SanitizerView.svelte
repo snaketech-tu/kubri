@@ -329,7 +329,7 @@
 							{#each f.issues as issue, j (j)}
 								<li>
 									<LevelIcon level={issue.level} size={8} />
-									<span class="message">{issue.message}</span>
+									<span class="message">{coreText(issue.message)}</span>
 									{#if issue.container}<span class="container">{issue.container}</span>{/if}
 									<span class="code">{issue.code}</span>
 								</li>

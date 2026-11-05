@@ -144,6 +144,8 @@ describe('i18n', () => {
 		expect(coreText('not enough memory: the pod requests 2Gi, 512Mi is free')).toBe('nicht genug Speicher: der Pod fordert 2Gi an, frei ist 512Mi');
 		expect(coreText('node selector wants disk=ssd, the node has no disk label')).toBe('der Node-Selector will disk=ssd, der Node hat kein Label disk');
 		expect(coreText('node selector wants disk=ssd, the node has disk=hdd')).toBe('der Node-Selector will disk=ssd, der Node hat disk=hdd');
+		expect(coreText('Its TLS secret web-tls does not exist')).toBe('Sein TLS-Secret web-tls gibt es nicht');
+		expect(coreText('Memory use is at 93% of what is allocatable')).toBe('Speicher-Nutzung liegt bei 93% dessen, was zuteilbar ist');
 	});
 
 	it('only takes texts written out, so the test above sees them', () => {
