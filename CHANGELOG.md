@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.0 — 2026-11-05
+
+- **Requests and limits in one dialog.** **Requests & limits…** (<kbd>Shift</kbd>+<kbd>Q</kbd>) on a workload, or on a pod for the workload that owns it, sets CPU and memory requests and limits for all its containers at once. It shows what the pods use and the room still free on the nodes and in the namespace's quotas, warns before a pod would no longer fit, and offers common values and steps with <kbd>↑</kbd> and <kbd>↓</kbd>. **Review…** in Right-sizing fills in all suggestions of a workload. See [Requests and limits](docs/CREATE.md#requests-and-limits).
+- **Limits in the pod list.** CPU and Mem show the limit after what a pod uses, such as `120m / 500m`, with a bar that turns red at 90 %. The Nodes list shows **CPU free** and **Mem free**, the room left for new pods.
+- **Start where you left off.** Kubri connects to the context you used last and opens the view you left. **On start** under Settings can follow the kubeconfig's current context instead. See [Clusters](docs/CLUSTERS.md#starting-where-you-left-off).
+- **Port-forwards stay open.** Connections no longer end when the client is done sending, and idle connections no longer drop behind proxies. The Port-forwards page says how the last connection ended.
+- **Favorite port-forwards with one click.** Favorites are listed under **Port-forwards** in the sidebar: one click starts a forward, another stops it. **Keep as a favorite** in the port-forward dialog keeps one as you start it. Starting on connect is now a choice per favorite; favorites kept before 1.9 still start on connect. See [Port-forwards that stay](docs/CREATE.md#port-forwards-that-stay).
+- **Production namespaces.** In a context that is not production, namespaces can be marked as production, from the namespace menu or the context settings. They get the same care as a production context: a banner, typing the name before deleting, and no changes by AI agents. See [Settings](docs/SETTINGS.md#per-context).
+- **Other label names for logs.** When the log collector names labels differently, such as `exported_namespace`, a label template on the Integrations page tells Kubri, for Logs in Grafana and the Loki log history. A template is kept once and picked per context. See [Other label names](docs/INTEGRATIONS.md#other-label-names).
+- Pinned places come first in the sidebar. The Integrations page gives the tools found, the tools missing and the settings each their own place, also in narrow windows.
+
 ## 1.8.0 — 2026-11-05
 
 - **Kubri in German.** **Language** under Settings → Appearance picks English, German or the system's language, which is the default. All of Kubri is translated, including the findings of Checks and why a pod fits on no node. The words of Kubernetes stay English (Pod, Deployment, Namespace and the other kinds), and so do the columns of the lists and what the cluster itself says, such as events. See [Settings](docs/SETTINGS.md#appearance).

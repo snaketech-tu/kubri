@@ -1,10 +1,12 @@
 ## What's new
 
-- **Kubri in German:** **Language** under Settings → Appearance picks English, German or the system's language. The words of Kubernetes, such as Pod and Deployment, stay English.
-- **A Kubri for your team:** kubri-server signs people in with your OpenID Connect provider, each person works with their own Kubernetes permissions, and every change goes to an audit log. A Helm chart installs it; see [A Kubri for your team](https://github.com/snaketech-tu/kubri/blob/main/docs/TEAMS.md).
-- **Feedback from the app:** `:feedback` and the links in the help open a GitHub issue with your version filled in.
-- **Coming from k9s:** a [new page](https://github.com/snaketech-tu/kubri/blob/main/docs/FROM-K9S.md) covers the first few minutes.
-- **Fix:** closing a shell in Kubri ends the shell in the container too.
+- **Requests and limits in one dialog:** <kbd>Shift</kbd>+<kbd>Q</kbd> sets CPU and memory for all containers of a workload, with the room left on the nodes and in quotas.
+- **Limits in the pod list:** CPU and Mem show the limit next to the use, and the Nodes list shows the room left on each node.
+- **Start where you left off:** Kubri opens the context and view you used last.
+- **Port-forwards stay open**, and favorites start or stop with one click from the sidebar.
+- **Production namespaces:** mark single namespaces as production for the same care as a production context.
+- **Other label names for logs**, such as `exported_namespace`, saved as templates for every context.
+- Pinned places come first in the sidebar, and the Integrations page has a clearer layout.
 
 ## Install
 
