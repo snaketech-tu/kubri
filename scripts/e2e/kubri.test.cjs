@@ -5,6 +5,7 @@
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
+const net = require('node:net');
 const path = require('node:path');
 const { after, before, describe, test } = require('node:test');
 
@@ -164,6 +165,18 @@ describe('port-forward', () => {
 			},
 			{ message: `an answer on port ${port}` }
 		);
+
+		// A client that stops sending after its request still gets the whole answer.
+		const halfClosed = await new Promise((resolve, reject) => {
+			const socket = net.connect(port, '127.0.0.1', () => socket.end('GET / HTTP/1.0\r\n\r\n'));
+			let answer = '';
+			socket.setEncoding('utf8');
+			socket.on('data', (chunk) => (answer += chunk));
+			socket.on('end', () => resolve(answer));
+			socket.on('error', reject);
+			socket.setTimeout(20_000, () => reject(new Error('no answer after a half-close')));
+		});
+		assert.match(halfClosed, /hello from web/);
 
 		await h.command(page, 'pf');
 		const row = page.getByRole('row', { name: new RegExp(`\\b${port}\\b`) });

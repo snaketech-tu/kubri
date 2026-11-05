@@ -952,6 +952,8 @@ export interface PortForwardInfo {
 	started: string;
 	connections: number;
 	error: string | null;
+	/** How and when the last connection ended. */
+	lastEnd?: { at: string; by: 'pod' | 'client' | 'error' } | null;
 }
 
 export interface BenchRequest {

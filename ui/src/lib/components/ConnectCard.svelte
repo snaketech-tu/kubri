@@ -94,12 +94,19 @@
 		</div>
 		<p>{detail}</p>
 		<p class="raw">{connectError(failure.error)}</p>
+		{#if !app.cluster && app.startFallback && app.startFallback !== failure.context}
+			<p class="muted">{t('Kubri started in the context you used last. Your kubeconfig names {name}.', { name: app.contextName(app.startFallback) })}</p>
+		{/if}
 		{#if app.cluster && !inline}
 			<p class="muted">{t('Kubri stayed on {name}.', { name: app.contextName(app.cluster.context) })}</p>
 		{/if}
 		<div class="buttons">
 			<button class="primary" onclick={retry}>{t('Try again')}</button>
 			{#if app.contexts.length > 1}<button onclick={checkClusters}>{t('Check on the Clusters page')}</button>{/if}
+			{#if !app.cluster && app.startFallback && app.startFallback !== failure.context}
+				{@const fallback = app.startFallback}
+				<button onclick={() => app.switchContext(fallback)}>{t('Connect to {name} instead', { name: app.contextName(fallback) })}</button>
+			{/if}
 			{#if !app.cluster}<button onclick={chooseAnother}>{t('Choose another context')}</button>{/if}
 		</div>
 	</div>

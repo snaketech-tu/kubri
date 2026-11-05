@@ -12,6 +12,7 @@ kube.workspace = true
 k8s-openapi.workspace = true
 tokio.workspace = true
 futures.workspace = true
+tokio-tungstenite = { version = "0.29", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
