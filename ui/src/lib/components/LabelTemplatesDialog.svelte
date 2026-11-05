@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { LabelTemplate } from '../api';
 	import { lightDismiss } from '../dismiss';
 	import { t } from '../i18n';
@@ -13,10 +14,14 @@
 	] as const;
 
 	let templates = $state<LabelTemplate[]>(app.settings.labelTemplates.map((x) => ({ ...x })));
+	/** The names the templates had when the dialog opened, to follow a rename. */
+	const originals = new Map<LabelTemplate, string>();
 	let saving = $state(false);
 	let box = $state<HTMLDialogElement>();
 
-	$effect(() => {
+	// Once: removing the last template must not add an empty one again.
+	onMount(() => {
+		for (const x of templates) originals.set(x, x.name);
 		box?.showModal();
 		if (!templates.length) add();
 	});
@@ -32,6 +37,17 @@
 		// Rows left without a name or a label are dropped, not refused.
 		const kept = templates.filter((x) => x.name.trim() || x.namespace.trim() || x.pod.trim() || x.container.trim());
 		const ok = await app.setLabelTemplates(kept);
+		// Contexts that picked a renamed template keep it under its new name.
+		for (const x of ok ? kept : []) {
+			const before = originals.get(x);
+			const after = x.name.trim();
+			if (!before || before === after) continue;
+			for (const [context, settings] of Object.entries(app.settings.contexts)) {
+				if (settings.integrations?.labels === before) {
+					await app.setContextSettings(context, { ...settings, integrations: { ...settings.integrations, labels: after } });
+				}
+			}
+		}
 		saving = false;
 		if (ok) onclose(kept.length === 1 ? kept[0].name.trim() : undefined);
 	}
