@@ -53,8 +53,7 @@ pub(crate) const NO_ADDED_CONTEXTS: &str =
     "on a Kubri shared by a team, the contexts come from the server's kubeconfig";
 pub(crate) const NO_PLUGINS: &str =
     "k9s plugins run with the server's own credentials, so a Kubri shared by a team does not run them";
-pub(crate) const NO_LOCAL_TERMINAL: &str =
-    "A Kubri shared by a team has no local terminal: it would run on the server, with the server's own credentials.";
+pub(crate) const NO_LOCAL_TERMINAL: &str = "A Kubri shared by a team has no local terminal: it would run on the server, with the server's own credentials.";
 
 /// Makes `config` act as the person instead of as the server.
 pub(crate) fn apply(config: &mut Config, act_as: &ActAs) {
@@ -211,7 +210,10 @@ contexts: [{name: x, context: {cluster: c, user: u}}]
         apply(&mut config, &ActAs::Impersonate(alice()));
         let user = &config.auth_info;
         assert_eq!(user.impersonate.as_deref(), Some("alice@example.com"));
-        assert_eq!(user.impersonate_groups, Some(vec!["devs".into(), "oncall".into()]));
+        assert_eq!(
+            user.impersonate_groups,
+            Some(vec!["devs".into(), "oncall".into()])
+        );
         assert_eq!(user.impersonate_uid, None);
         assert_eq!(user.impersonate_user_extra, None);
         // The server's own token still authenticates the requests.
@@ -250,7 +252,9 @@ contexts: [{name: x, context: {cluster: c, user: u}}]
         )
         .unwrap();
         let act_as = ActAs::Impersonate(alice());
-        let config = crate::client_config(&kubeconfig, "x", Some(&act_as)).await.unwrap();
+        let config = crate::client_config(&kubeconfig, "x", Some(&act_as))
+            .await
+            .unwrap();
         assert_eq!(config.auth_info.impersonate.as_deref(), Some("alice@example.com"));
     }
 
@@ -287,12 +291,18 @@ contexts: [{name: x, context: {cluster: c, user: u}}]
         assert!(!written.contains("c2VjcmV0"), "{written}");
         let written = Kubeconfig::from_yaml(&written).unwrap();
         let user = written.auth_infos[0].auth_info.as_ref().unwrap();
-        assert_eq!(user.token_file, Some(dir.join("token").to_string_lossy().into_owned()));
+        assert_eq!(
+            user.token_file,
+            Some(dir.join("token").to_string_lossy().into_owned())
+        );
         assert!(user.client_key_data.is_none());
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(dir.join("kubeconfig")).unwrap().permissions().mode();
+            let mode = std::fs::metadata(dir.join("kubeconfig"))
+                .unwrap()
+                .permissions()
+                .mode();
             assert_eq!(mode & 0o777, 0o600);
         }
         std::fs::remove_dir_all(&dir).unwrap();

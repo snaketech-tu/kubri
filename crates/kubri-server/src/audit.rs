@@ -196,10 +196,8 @@ impl Recorder {
     ) -> Entry {
         let person = self.caller.person.as_ref();
         Entry {
-            time: jiff::Timestamp::now()
-                .round(jiff::Unit::Millisecond)
-                .unwrap_or_else(|_| jiff::Timestamp::now())
-                .to_string(),
+            // Always three digits for the milliseconds, so the times line up and sort as text.
+            time: format!("{:.3}", jiff::Timestamp::now()),
             person: person.map(|p| p.name.clone()),
             groups: person.map(|p| p.groups.clone()).unwrap_or_default(),
             client: self.client.clone(),
@@ -253,7 +251,9 @@ pub async fn record(State(audit): State<Audit>, mut request: Request, next: Next
     let response = next.run(Request::from_parts(parts, Body::from(bytes))).await;
     let favorites = action == "port-forward favorites";
     if response.status().is_success() && !favorites {
-        audit.log.write(recorder.entry(action, context, target, detail, Ok(())));
+        audit
+            .log
+            .write(recorder.entry(action, context, target, detail, Ok(())));
         return response;
     }
     let (response, body) = read(response).await;
@@ -454,11 +454,20 @@ mod tests {
             },
             "replicas": 3
         });
-        assert_eq!(send(&app, "POST", "/object/scale", &alice, target).await, StatusCode::OK);
+        assert_eq!(
+            send(&app, "POST", "/object/scale", &alice, target).await,
+            StatusCode::OK
+        );
         let drain = serde_json::json!({ "name": "n1" });
-        assert_eq!(send(&app, "POST", "/node/drain", &bob, drain).await, StatusCode::FORBIDDEN);
+        assert_eq!(
+            send(&app, "POST", "/node/drain", &bob, drain).await,
+            StatusCode::FORBIDDEN
+        );
         // Reading, dry runs and the key itself are not written down.
-        assert_eq!(send(&app, "GET", "/pods", &alice, Value::Null).await, StatusCode::OK);
+        assert_eq!(
+            send(&app, "GET", "/pods", &alice, Value::Null).await,
+            StatusCode::OK
+        );
         let dry = serde_json::json!({ "name": "x", "namespace": "shop", "dryRun": true });
         send(&app, "POST", "/helm/change", &alice, dry).await;
         let key = serde_json::json!({ "key": "sk-secret" });
@@ -466,7 +475,10 @@ mod tests {
 
         let written = std::fs::read_to_string(&path).unwrap();
         assert!(!written.contains("sk-secret"));
-        let lines: Vec<Value> = written.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        let lines: Vec<Value> = written
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
         assert_eq!(lines.len(), 3, "{written}");
         assert_eq!(lines[0]["person"], "alice");
         assert_eq!(lines[0]["groups"], serde_json::json!(["devs"]));
@@ -479,11 +491,18 @@ mod tests {
         assert_eq!(lines[0]["detail"], serde_json::json!({"replicas": 3}));
         assert_eq!(lines[0]["ok"], true);
         assert_eq!(lines[1]["action"], "drain");
-        assert_eq!(lines[1]["target"], serde_json::json!({"resource": "nodes", "name": "n1"}));
+        assert_eq!(
+            lines[1]["target"],
+            serde_json::json!({"resource": "nodes", "name": "n1"})
+        );
         assert_eq!(lines[1]["ok"], false);
         assert_eq!(lines[1]["error"], "nodes \"n1\" is forbidden");
         assert_eq!(lines[2]["action"], "change settings");
-        assert!(lines[0]["time"].as_str().unwrap().ends_with('Z'));
+        let time = lines[0]["time"].as_str().unwrap();
+        assert!(
+            time.ends_with('Z') && time.len() == "2026-11-05T00:36:28.040Z".len(),
+            "{time}"
+        );
 
         // Alice sees her own changes; Bob, in a reader group, sees everyone's.
         let mine = log.visible_to(&alice);

@@ -130,7 +130,12 @@ struct Args {
     oidc_ca_file: Option<PathBuf>,
     /// How people's requests reach the clusters: `impersonate`, with the server's own
     /// credentials impersonating each person, or `token`, passing on each person's ID token.
-    #[arg(long, env = "KUBRI_TEAM_CREDENTIALS", value_enum, default_value = "impersonate")]
+    #[arg(
+        long,
+        env = "KUBRI_TEAM_CREDENTIALS",
+        value_enum,
+        default_value = "impersonate"
+    )]
     team_credentials: Credentials,
     /// The address people reach Kubri at, such as `https://kubri.example.com`, for the
     /// provider to send them back to. Taken from each request when not set.

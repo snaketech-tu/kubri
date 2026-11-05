@@ -167,7 +167,9 @@ impl Auth {
         let tokens = session.tokens.as_ref()?;
         if !due(tokens)
             || tokens.refresh_token.is_none()
-            || session.refresh_failed.is_some_and(|t| t.elapsed() < REFRESH_AGAIN_AFTER)
+            || session
+                .refresh_failed
+                .is_some_and(|t| t.elapsed() < REFRESH_AGAIN_AFTER)
         {
             return self.unless_expired(id, session);
         }
@@ -274,7 +276,10 @@ fn due(tokens: &Tokens) -> bool {
 }
 
 fn person_name(session: &Session) -> String {
-    session.person.as_ref().map_or_else(|| "someone".into(), |p| p.name.clone())
+    session
+        .person
+        .as_ref()
+        .map_or_else(|| "someone".into(), |p| p.name.clone())
 }
 
 /// The address limits apply to. One IPv6 user usually has a whole /64 network to pick from.
@@ -472,7 +477,10 @@ async fn logout(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Response {
 /// Sends the browser to the OpenID Connect provider.
 async fn oidc_login(State(auth): State<Arc<Auth>>, headers: HeaderMap) -> Response {
     let Method::Oidc(oidc) = &auth.method else {
-        return error(StatusCode::NOT_FOUND, "This Kubri does not sign in with OpenID Connect");
+        return error(
+            StatusCode::NOT_FOUND,
+            "This Kubri does not sign in with OpenID Connect",
+        );
     };
     let Some(redirect_uri) = auth.redirect_uri(&headers) else {
         return error(StatusCode::BAD_REQUEST, "No Host header to send you back to");
@@ -507,7 +515,10 @@ async fn oidc_callback(
     Query(callback): Query<Callback>,
 ) -> Response {
     let Method::Oidc(oidc) = &auth.method else {
-        return error(StatusCode::NOT_FOUND, "This Kubri does not sign in with OpenID Connect");
+        return error(
+            StatusCode::NOT_FOUND,
+            "This Kubri does not sign in with OpenID Connect",
+        );
     };
     let signed_in = async {
         if let Some(error) = callback.error {

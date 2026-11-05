@@ -1172,7 +1172,9 @@ async fn terminal(
                     .map_err(|e| e.to_string());
                 if let Some(Extension(recorder)) = &recorder {
                     let result = opened.as_ref().map(|_| ()).map_err(Clone::clone);
-                    recorder.record("shell", Some(audit::Target::of(&req.target)), result).await;
+                    recorder
+                        .record("shell", Some(audit::Target::of(&req.target)), result)
+                        .await;
                 }
                 opened
             }
@@ -1209,7 +1211,9 @@ async fn plugin_terminal(
                 if let Some(Extension(recorder)) = &recorder {
                     let result = opened.as_ref().map(|_| ()).map_err(Clone::clone);
                     let action = format!("plugin {}", run.plugin);
-                    recorder.record(&action, run.target.as_ref().map(audit::Target::of), result).await;
+                    recorder
+                        .record(&action, run.target.as_ref().map(audit::Target::of), result)
+                        .await;
                 }
                 opened
             }

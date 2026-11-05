@@ -810,7 +810,12 @@ pub(crate) async fn rollback(
     .await
 }
 
-pub(crate) async fn uninstall(access: &HelmAccess, context: &str, namespace: &str, name: &str) -> Result<String> {
+pub(crate) async fn uninstall(
+    access: &HelmAccess,
+    context: &str,
+    namespace: &str,
+    name: &str,
+) -> Result<String> {
     validate_name(namespace)?;
     validate_name(name)?;
     run(

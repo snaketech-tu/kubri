@@ -98,7 +98,10 @@ pub fn off() -> Router {
             }),
         )
         .route("/agents/token", post(|| async { (StatusCode::FORBIDDEN, WHY) }))
-        .route("/agents/pending", get(|| async { Json(Vec::<ConfirmRequest>::new()) }))
+        .route(
+            "/agents/pending",
+            get(|| async { Json(Vec::<ConfirmRequest>::new()) }),
+        )
         .route("/agents/answer", post(|| async { Json(false) }))
         .route("/agents/calls", get(|| async { Json(Vec::<CallRecord>::new()) }))
 }

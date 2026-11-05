@@ -94,6 +94,8 @@ kubectl -n kubri port-forward svc/kubri 7878:80
 
 Kubri then sees what its service account may see. [Running Kubri in the browser](docs/WEB.md#in-a-kubernetes-cluster) explains how to give it more rights and put it behind a proxy.
 
+For a team, install the Helm chart with OpenID Connect: everyone signs in with their own account, works with their own Kubernetes permissions, and every change goes to an audit log. See [A Kubri for your team](docs/TEAMS.md).
+
 <a id="features"></a>
 
 ## 🧰 Features
@@ -285,6 +287,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
         <li><a href="docs/VIEWS.md">Views for custom resources</a> and <a href="docs/K9S.md">your k9s configuration</a></li>
         <li><a href="docs/AGENTS.md">AI agents (MCP)</a> and <a href="docs/EXPLAIN.md">Explain</a></li>
         <li><a href="docs/WEB.md">In the browser</a>: settings, sign-in, Docker, Kubernetes and reverse proxies</li>
+        <li><a href="docs/TEAMS.md">A Kubri for your team</a>: sign-in with OpenID Connect, each person's own permissions, the audit log and the Helm chart</li>
         <li><a href="docs/SPEED.md">Speed</a>: how fast Kubri is with 10,000 pods, and how to measure it yourself</li>
       </ul>
     </td>

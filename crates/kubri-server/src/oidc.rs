@@ -116,8 +116,12 @@ impl Oidc {
             .timeout(Duration::from_secs(20))
             .redirect(reqwest::redirect::Policy::none());
         if let Some(file) = &config.ca_file {
-            let pem = std::fs::read(file)
-                .map_err(|e| format!("cannot read the provider's certificate authority {}: {e}", file.display()))?;
+            let pem = std::fs::read(file).map_err(|e| {
+                format!(
+                    "cannot read the provider's certificate authority {}: {e}",
+                    file.display()
+                )
+            })?;
             for certificate in reqwest::Certificate::from_pem_bundle(&pem)
                 .map_err(|e| format!("cannot read the certificates in {}: {e}", file.display()))?
             {
@@ -170,7 +174,10 @@ impl Oidc {
             .await
             .map_err(|e| format!("cannot reach the sign-in provider at {url}: {e}"))?;
         if !response.status().is_success() {
-            return Err(format!("the sign-in provider answered {} for {url}", response.status()));
+            return Err(format!(
+                "the sign-in provider answered {} for {url}",
+                response.status()
+            ));
         }
         response
             .json()
@@ -295,7 +302,11 @@ impl Oidc {
         })
     }
 
-    async fn token_request(&self, provider: &Provider, form: &[(&str, &str)]) -> Result<TokenResponse, String> {
+    async fn token_request(
+        &self,
+        provider: &Provider,
+        form: &[(&str, &str)],
+    ) -> Result<TokenResponse, String> {
         let mut form: Vec<(&str, &str)> = form.to_vec();
         form.push(("client_id", &self.config.client_id));
         let mut request = self
@@ -342,10 +353,18 @@ impl Oidc {
     }
 
     /// The ID token's claims, after checking its signature, issuer, audience and expiry.
-    async fn verify(&self, provider: &Provider, token: &str) -> Result<serde_json::Map<String, Value>, String> {
-        let header = jsonwebtoken::decode_header(token).map_err(|e| format!("the ID token is not valid: {e}"))?;
+    async fn verify(
+        &self,
+        provider: &Provider,
+        token: &str,
+    ) -> Result<serde_json::Map<String, Value>, String> {
+        let header =
+            jsonwebtoken::decode_header(token).map_err(|e| format!("the ID token is not valid: {e}"))?;
         if !ASYMMETRIC.contains(&header.alg) {
-            return Err(format!("the ID token is signed with {:?}, which Kubri does not accept", header.alg));
+            return Err(format!(
+                "the ID token is signed with {:?}, which Kubri does not accept",
+                header.alg
+            ));
         }
         let jwk = match self.key(provider, header.kid.as_deref(), header.alg) {
             Some(jwk) => jwk,
@@ -382,9 +401,11 @@ impl Oidc {
             jwk.common
                 .key_algorithm
                 .is_none_or(|a| format!("{a:?}") == format!("{alg:?}"))
-                && jwk.common.public_key_use.as_ref().is_none_or(|u| {
-                    matches!(u, jsonwebtoken::jwk::PublicKeyUse::Signature)
-                })
+                && jwk
+                    .common
+                    .public_key_use
+                    .as_ref()
+                    .is_none_or(|u| matches!(u, jsonwebtoken::jwk::PublicKeyUse::Signature))
         };
         match kid {
             Some(kid) => keys.0.find(kid).filter(fits).cloned(),
@@ -430,7 +451,11 @@ impl Oidc {
             return Err(format!("{name} is a name Kubernetes keeps for itself"));
         }
         let raw: Vec<String> = match claims.get(&config.groups_claim) {
-            Some(Value::Array(groups)) => groups.iter().filter_map(Value::as_str).map(String::from).collect(),
+            Some(Value::Array(groups)) => groups
+                .iter()
+                .filter_map(Value::as_str)
+                .map(String::from)
+                .collect(),
             Some(Value::String(group)) => vec![group.clone()],
             _ => Vec::new(),
         };
@@ -466,7 +491,11 @@ fn expiry(claims: &serde_json::Map<String, Value>) -> SystemTime {
 }
 
 fn subject(claims: &serde_json::Map<String, Value>) -> String {
-    claims.get("sub").and_then(Value::as_str).unwrap_or_default().to_owned()
+    claims
+        .get("sub")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
 }
 
 fn form_encode(value: &str) -> String {
@@ -633,9 +662,11 @@ mod tests {
         headers: HeaderMap,
         Form(form): Form<HashMap<String, String>>,
     ) -> Response {
-        let refused = |error: &str| (StatusCode::BAD_REQUEST, Json(json!({ "error": error }))).into_response();
+        let refused =
+            |error: &str| (StatusCode::BAD_REQUEST, Json(json!({ "error": error }))).into_response();
         let basic = base64::engine::general_purpose::STANDARD.encode("kubri:s%C3%A9cret");
-        if headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) != Some(&format!("Basic {basic}")) {
+        if headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) != Some(&format!("Basic {basic}"))
+        {
             return refused("invalid_client");
         }
         match form.get("grant_type").map(String::as_str) {
@@ -659,7 +690,7 @@ mod tests {
                 .into_response()
             }
             Some("refresh_token") => {
-                if fake.behavior.lock().unwrap().refuse_refresh || form.get("refresh_token").is_none() {
+                if fake.behavior.lock().unwrap().refuse_refresh || !form.contains_key("refresh_token") {
                     return refused("invalid_grant");
                 }
                 let n = fake.refreshes.fetch_add(1, Ordering::Relaxed) + 2;
@@ -691,14 +722,25 @@ mod tests {
     }
 
     fn kubri(config: Config) -> Router {
-        let auth = Arc::new(Auth::with_oidc(Oidc::new(config).unwrap(), Duration::from_secs(3600), None));
+        let auth = Arc::new(Auth::with_oidc(
+            Oidc::new(config).unwrap(),
+            Duration::from_secs(3600),
+            None,
+        ));
         let who = |Extension(caller): Extension<Caller>| async move {
             let person = caller.person.map(|p| format!("{} {:?}", p.name, p.groups));
-            format!("{}|{}", person.unwrap_or_default(), caller.token.as_deref().unwrap_or(""))
+            format!(
+                "{}|{}",
+                person.unwrap_or_default(),
+                caller.token.as_deref().unwrap_or("")
+            )
         };
         let api = Router::new()
             .route("/who", get(who))
-            .layer(axum::middleware::from_fn_with_state(auth.clone(), crate::auth::require))
+            .layer(axum::middleware::from_fn_with_state(
+                auth.clone(),
+                crate::auth::require,
+            ))
             .merge(crate::auth::router(auth));
         Router::new().nest("/api", api)
     }
@@ -726,14 +768,26 @@ mod tests {
 
     /// Starts signing in and returns the provider's URL and the cookie binding the browser.
     async fn start(app: &Router) -> (reqwest::Url, String) {
-        let response = app.clone().oneshot(request("/api/auth/login", None)).await.unwrap();
-        assert_eq!(response.status(), StatusCode::SEE_OTHER, "{:?}", response.headers());
+        let response = app
+            .clone()
+            .oneshot(request("/api/auth/login", None))
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::SEE_OTHER,
+            "{:?}",
+            response.headers()
+        );
         let url = reqwest::Url::parse(&location(&response)).unwrap();
         (url, cookies(&response).remove(0))
     }
 
     fn param(url: &reqwest::Url, name: &str) -> String {
-        url.query_pairs().find(|(k, _)| k == name).map(|(_, v)| v.into_owned()).unwrap_or_default()
+        url.query_pairs()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.into_owned())
+            .unwrap_or_default()
     }
 
     /// The provider lets the person in and sends the browser back.
@@ -819,14 +873,22 @@ mod tests {
         let (url, _) = start(&app).await;
         let (_, other) = start(&app).await;
         let response = come_back(&app, &fake, &url, &other).await;
-        assert!(location(&response).contains("another+browser"), "{}", location(&response));
+        assert!(
+            location(&response).contains("another+browser"),
+            "{}",
+            location(&response)
+        );
 
         // A state works once.
         let (url, cookie) = start(&app).await;
         let response = come_back(&app, &fake, &url, &cookie).await;
         assert_eq!(location(&response), "/");
         let response = come_back(&app, &fake, &url, &cookie).await;
-        assert!(location(&response).contains("already+used"), "{}", location(&response));
+        assert!(
+            location(&response).contains("already+used"),
+            "{}",
+            location(&response)
+        );
 
         // The provider's own refusal reaches the page.
         let response = app
@@ -837,7 +899,11 @@ mod tests {
             ))
             .await
             .unwrap();
-        assert!(location(&response).contains("Not+today"), "{}", location(&response));
+        assert!(
+            location(&response).contains("Not+today"),
+            "{}",
+            location(&response)
+        );
     }
 
     #[tokio::test]
@@ -868,7 +934,10 @@ mod tests {
 
         let mut only_admins = config(&fake);
         only_admins.allowed_groups = vec!["admins".into()];
-        refused(&sign_in(&kubri(only_admins), &fake).await.unwrap_err(), "none of the groups");
+        refused(
+            &sign_in(&kubri(only_admins), &fake).await.unwrap_err(),
+            "none of the groups",
+        );
 
         let mut prefixed = config(&fake);
         prefixed.username_prefix = "oidc:".into();
@@ -887,8 +956,16 @@ mod tests {
         let fake = Fake::start().await;
         fake.behave(|b| b.issuer = Some("https://elsewhere.example.com".into()));
         let app = kubri(config(&fake));
-        let response = app.clone().oneshot(request("/api/auth/login", None)).await.unwrap();
-        assert!(location(&response).contains("elsewhere.example.com"), "{}", location(&response));
+        let response = app
+            .clone()
+            .oneshot(request("/api/auth/login", None))
+            .await
+            .unwrap();
+        assert!(
+            location(&response).contains("elsewhere.example.com"),
+            "{}",
+            location(&response)
+        );
     }
 
     #[tokio::test]
