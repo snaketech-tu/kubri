@@ -17,7 +17,8 @@
 	import { parse, stringify } from 'yaml';
 	import { canEdit, save } from '../actions';
 	import { hasCharts } from '../charts';
-	import { backend, type EventInfo, type KubeObject, type Preview, type Reference, type TerminalMode } from '../api';
+	import { backend, type EventInfo, type KubeObject, type ObjectRef, type Preview, type Reference, type TerminalMode } from '../api';
+	import { autoscalerCause } from '../causes';
 	import { dock } from '../dock.svelte';
 	import { errorMessage, isNotFound, workloadPrefix } from '../format';
 	import { drafts } from '../navigation.svelte';
@@ -29,6 +30,7 @@
 	import type { FieldPath, KindSchema } from '../schema';
 	import { changedMeaningfully, comparable, threeWay } from '../threeway';
 	import ActionBar from './ActionBar.svelte';
+	import CauseCard from './CauseCard.svelte';
 	import Describe from './Describe.svelte';
 	import DiffView from './DiffView.svelte';
 	import EventTimeline from './EventTimeline.svelte';
@@ -155,6 +157,18 @@
 
 	/** Logs and shells, which take the place of the list unless kept beside it. */
 	const tool = $derived(details.tab === 'logs' || details.tab === 'shell');
+
+	/** Why an autoscaler does not scale, and the workload it scales, where its requests are set. */
+	const scaling = $derived.by((): { cause: NonNullable<ReturnType<typeof autoscalerCause>>; workload: ObjectRef | undefined } | null => {
+		if (object?.kind !== 'HorizontalPodAutoscaler') return null;
+		const cause = autoscalerCause(object);
+		if (!cause) return null;
+		const ref = (object.spec as { scaleTargetRef?: { apiVersion?: string; kind: string; name: string } } | undefined)?.scaleTargetRef;
+		const group = ref?.apiVersion?.includes('/') ? ref.apiVersion.split('/')[0] : '';
+		const resource = ref && app.resources.find((r) => r.kind === ref.kind && r.group === group);
+		const workload = ref && resource ? { ...details.target, resource: { group, version: resource.version, plural: resource.plural }, name: ref.name } : undefined;
+		return { cause, workload };
+	});
 
 	const MIN_WIDTH = 320;
 	let aside = $state<HTMLElement>();
@@ -571,6 +585,7 @@
 						previous={details.previous}
 						container={picked.logs}
 						active={details.tab === 'logs' && dock.focused === null}
+						pod={isPods(details.resource) ? object : null}
 					/>
 				</div>
 			{/if}
@@ -594,6 +609,11 @@
 				<StatusSummary {object} target={details.target} {now} />
 				<ViewSummary {object} resource={details.resource} {now} />
 				<PodSummary {object} target={details.target} onlogs={logs ? openLogs : undefined} />
+				{#if scaling}
+					<div class="causes">
+						<CauseCard cause={scaling.cause} target={details.target} {object} workload={scaling.workload} />
+					</div>
+				{/if}
 				{#if isServices(details.resource)}<ServiceSummary {object} target={details.target} />{/if}
 				<Describe
 					{object}
@@ -663,6 +683,9 @@
 </aside>
 
 <style>
+	.causes {
+		padding: 16px 20px 0;
+	}
 	aside {
 		position: relative;
 		display: flex;
