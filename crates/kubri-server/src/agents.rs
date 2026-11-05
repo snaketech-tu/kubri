@@ -81,6 +81,28 @@ impl Agents {
     }
 }
 
+/// The routes for a Kubri shared by a team, where agents cannot connect: they would act
+/// with the server's own credentials, not as the person who let them in.
+pub fn off() -> Router {
+    const WHY: &str = "AI agents cannot connect to a Kubri shared by a team yet: they would act with the server's own credentials.";
+    Router::new()
+        .route(
+            "/agents",
+            get(|| async {
+                Json(Connection {
+                    url: None,
+                    error: Some(WHY.into()),
+                    token: None,
+                    command: kubri_mcp::stdio_command(),
+                })
+            }),
+        )
+        .route("/agents/token", post(|| async { (StatusCode::FORBIDDEN, WHY) }))
+        .route("/agents/pending", get(|| async { Json(Vec::<ConfirmRequest>::new()) }))
+        .route("/agents/answer", post(|| async { Json(false) }))
+        .route("/agents/calls", get(|| async { Json(Vec::<CallRecord>::new()) }))
+}
+
 async fn connection(State(agents): State<Arc<Agents>>) -> Json<Connection> {
     Json(agents.connection())
 }

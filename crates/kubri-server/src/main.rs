@@ -2,8 +2,11 @@
 
 mod agents;
 mod api;
+mod audit;
 mod auth;
 mod guard;
+mod oidc;
+mod team;
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -22,7 +25,9 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
+use audit::AuditLog;
 use auth::Auth;
+use team::{Credentials, Team};
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -71,8 +76,74 @@ struct Args {
     )]
     session_hours: u64,
     /// Open a snapshot file at start, for looking at a cluster saved by someone else.
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", conflicts_with = "oidc_issuer")]
     snapshot: Option<PathBuf>,
+    /// Sign people in with this OpenID Connect provider, for a Kubri shared by a team: each
+    /// person then acts with their own Kubernetes permissions. See docs/TEAMS.md.
+    #[arg(
+        long,
+        env = "KUBRI_OIDC_ISSUER",
+        requires = "oidc_client_id",
+        conflicts_with_all = ["password", "password_file", "no_auth", "local_terminal"]
+    )]
+    oidc_issuer: Option<String>,
+    /// The client ID Kubri has at the provider.
+    #[arg(long, env = "KUBRI_OIDC_CLIENT_ID", requires = "oidc_issuer")]
+    oidc_client_id: Option<String>,
+    /// The client secret Kubri has at the provider.
+    #[arg(
+        long,
+        env = "KUBRI_OIDC_CLIENT_SECRET",
+        hide_env_values = true,
+        conflicts_with = "oidc_client_secret_file"
+    )]
+    oidc_client_secret: Option<String>,
+    /// A file holding the client secret, such as a Kubernetes secret.
+    #[arg(long, env = "KUBRI_OIDC_CLIENT_SECRET_FILE")]
+    oidc_client_secret_file: Option<PathBuf>,
+    /// The provider's name on the sign-in button. The issuer's host name by default.
+    #[arg(long, env = "KUBRI_OIDC_NAME")]
+    oidc_name: Option<String>,
+    /// The scopes to ask for, separated by commas or spaces. By default `openid email
+    /// profile`, with `groups` and `offline_access` where the provider has them.
+    #[arg(long, env = "KUBRI_OIDC_SCOPES")]
+    oidc_scopes: Option<String>,
+    /// The claim that names a person in Kubernetes.
+    #[arg(long, env = "KUBRI_OIDC_USERNAME_CLAIM", default_value = "email")]
+    oidc_username_claim: String,
+    /// Put before every user name, such as `oidc:`, to match the cluster's RoleBindings.
+    #[arg(long, env = "KUBRI_OIDC_USERNAME_PREFIX", default_value = "")]
+    oidc_username_prefix: String,
+    /// The claim with a person's groups.
+    #[arg(long, env = "KUBRI_OIDC_GROUPS_CLAIM", default_value = "groups")]
+    oidc_groups_claim: String,
+    /// Put before every group name, such as `oidc:`.
+    #[arg(long, env = "KUBRI_OIDC_GROUPS_PREFIX", default_value = "")]
+    oidc_groups_prefix: String,
+    /// Only members of these groups may sign in, separated by commas. Everyone the
+    /// provider knows may when empty.
+    #[arg(long, env = "KUBRI_OIDC_ALLOWED_GROUPS", value_delimiter = ',')]
+    oidc_allowed_groups: Vec<String>,
+    /// A PEM file with the certificate authority of the provider, if the system does not
+    /// trust it.
+    #[arg(long, env = "KUBRI_OIDC_CA_FILE")]
+    oidc_ca_file: Option<PathBuf>,
+    /// How people's requests reach the clusters: `impersonate`, with the server's own
+    /// credentials impersonating each person, or `token`, passing on each person's ID token.
+    #[arg(long, env = "KUBRI_TEAM_CREDENTIALS", value_enum, default_value = "impersonate")]
+    team_credentials: Credentials,
+    /// The address people reach Kubri at, such as `https://kubri.example.com`, for the
+    /// provider to send them back to. Taken from each request when not set.
+    #[arg(long, env = "KUBRI_PUBLIC_URL")]
+    public_url: Option<String>,
+    /// Write every change made through Kubri to this file as JSON lines, or to stdout
+    /// with `-`.
+    #[arg(long, env = "KUBRI_AUDIT_LOG", value_name = "FILE")]
+    audit_log: Option<String>,
+    /// Groups whose members see everyone's changes on the Activity panel, separated by
+    /// commas. Everyone else sees their own.
+    #[arg(long, env = "KUBRI_ACTIVITY_GROUPS", value_delimiter = ',')]
+    activity_groups: Vec<String>,
     /// Serve MCP over stdio for an AI agent instead of the web UI. Agents only read this way.
     #[arg(long)]
     mcp: bool,
@@ -169,14 +240,47 @@ async fn serve(args: Args) -> ExitCode {
     if !args.ui_dir.join("index.html").exists() {
         tracing::warn!(dir = %args.ui_dir.display(), "UI not found, only the API is served");
     }
-    let agents = agents::Agents::new(kubri.clone(), args.addr, args.read_only);
-    let api = api::router(kubri)
-        .merge(agents.router())
+    let audit = match AuditLog::open(args.audit_log.as_deref(), args.activity_groups.clone()) {
+        Ok(audit) => Arc::new(audit),
+        Err(err) => {
+            tracing::error!("{err}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Some(path) = &args.audit_log {
+        tracing::info!(to = path, "writing every change to the audit log");
+    }
+    let activity = Router::new()
+        .route("/activity", axum::routing::get(audit::activity))
+        .with_state(audit.clone());
+    let (api, endpoint) = if args.oidc_issuer.is_some() {
+        let team = match Team::new(kubri, args.team_credentials, auth.clone(), audit) {
+            Ok(team) => team,
+            Err(err) => {
+                tracing::error!("{err}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let api = Router::new().fallback(team::dispatch).with_state(team);
+        (api.merge(agents::off()), Router::new())
+    } else {
+        let agents = agents::Agents::new(kubri.clone(), args.addr, args.read_only);
+        let record = audit::Audit {
+            log: audit,
+            kubri: kubri.clone(),
+        };
+        let api = api::router(kubri)
+            .layer(axum::middleware::from_fn_with_state(record, audit::record))
+            .merge(agents.router());
+        (api, agents.endpoint())
+    };
+    let api = api
+        .merge(activity)
         .layer(axum::middleware::from_fn_with_state(auth.clone(), auth::require))
         .merge(auth::router(auth));
     let app = Router::new()
         .nest("/api", api)
-        .merge(agents.endpoint())
+        .merge(endpoint)
         .fallback_service(ui(&args.ui_dir))
         .layer(axum::middleware::from_fn_with_state(guard, guard::check))
         .layer(axum::middleware::from_fn(guard::headers))
@@ -233,9 +337,12 @@ async fn cache_control(request: Request, next: Next) -> Response {
     response
 }
 
-/// Decides whether people sign in, and with which password.
+/// Decides whether people sign in, and with which password or provider.
 fn auth(args: &Args) -> Result<Auth, String> {
     let ttl = Duration::from_secs(args.session_hours.saturating_mul(3600));
+    if let Some(issuer) = &args.oidc_issuer {
+        return oidc(args, issuer, ttl);
+    }
     let password = match (&args.password, &args.password_file) {
         (Some(password), _) => Some(password.clone()),
         (None, Some(file)) => {
@@ -270,6 +377,59 @@ fn auth(args: &Args) -> Result<Auth, String> {
             Ok(Auth::with_password(&password, ttl))
         }
     }
+}
+
+/// Signing in with OpenID Connect, for a Kubri shared by a team.
+fn oidc(args: &Args, issuer: &str, ttl: Duration) -> Result<Auth, String> {
+    let client_secret = match (&args.oidc_client_secret, &args.oidc_client_secret_file) {
+        (Some(secret), _) => Some(secret.clone()),
+        (None, Some(file)) => Some(
+            std::fs::read_to_string(file)
+                .map_err(|err| format!("cannot read the client secret file {}: {err}", file.display()))?
+                .trim()
+                .to_owned(),
+        ),
+        (None, None) => None,
+    };
+    let url = reqwest::Url::parse(issuer).map_err(|e| format!("KUBRI_OIDC_ISSUER is not a URL: {e}"))?;
+    if url.scheme() != "https" {
+        tracing::warn!("the sign-in provider is not reached over HTTPS: use that for anything but a test");
+    }
+    if let Some(public_url) = &args.public_url {
+        reqwest::Url::parse(public_url).map_err(|e| format!("KUBRI_PUBLIC_URL is not a URL: {e}"))?;
+    }
+    let scopes = args
+        .oidc_scopes
+        .as_deref()
+        .unwrap_or_default()
+        .split([',', ' '])
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+    let config = oidc::Config {
+        issuer: issuer.to_owned(),
+        client_id: args.oidc_client_id.clone().unwrap_or_default(),
+        client_secret,
+        name: args
+            .oidc_name
+            .clone()
+            .unwrap_or_else(|| url.host_str().unwrap_or("your provider").to_owned()),
+        scopes,
+        username_claim: args.oidc_username_claim.clone(),
+        username_prefix: args.oidc_username_prefix.clone(),
+        groups_claim: args.oidc_groups_claim.clone(),
+        groups_prefix: args.oidc_groups_prefix.clone(),
+        allowed_groups: args.oidc_allowed_groups.clone(),
+        keep_tokens: args.team_credentials == Credentials::Token,
+        ca_file: args.oidc_ca_file.clone(),
+    };
+    let oidc = oidc::Oidc::new(config)?;
+    tracing::info!(
+        issuer,
+        credentials = ?args.team_credentials,
+        "shared by a team: people sign in with OpenID Connect and act with their own permissions"
+    );
+    Ok(Auth::with_oidc(oidc, ttl, args.public_url.clone()))
 }
 
 /// Ctrl+C, or `docker stop` and Kubernetes, which send SIGTERM.

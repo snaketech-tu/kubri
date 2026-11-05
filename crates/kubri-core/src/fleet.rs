@@ -131,7 +131,7 @@ impl Kubri {
         if let Some(kept) = kept.filter(|k| k.made.elapsed() < KEEP_CLIENT_FOR) {
             return Ok(kept);
         }
-        let config = client_config(kubeconfig, context).await?;
+        let config = client_config(kubeconfig, context, self.act_as.as_ref()).await?;
         let kept = Kept {
             made: Instant::now(),
             server: config.cluster_url.to_string().trim_end_matches('/').to_owned(),

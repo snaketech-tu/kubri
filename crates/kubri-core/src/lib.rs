@@ -52,6 +52,7 @@ mod selector;
 mod settings;
 mod snapshot;
 mod table;
+mod team;
 mod template;
 mod terminal;
 #[cfg(test)]
@@ -131,6 +132,7 @@ pub fn config_dir() -> Option<std::path::PathBuf> {
 pub use chosen::KubeconfigFile;
 pub use graph::{EdgeKind, Graph, GraphEdge, GraphNode, PathStep, RequestPath};
 pub use table::{Column, Owner, Row, TableEvent, TableScope};
+pub use team::{ActAs, Person, write_private};
 pub use terminal::{Terminal, TerminalInput, TerminalMode, TerminalOptions, TerminalOutput};
 pub use workload::{ContainerImage, Drill};
 pub use xray::XrayNode;
@@ -191,7 +193,8 @@ struct Session {
 }
 
 pub struct Kubri {
-    kubeconfig: RwLock<Result<Kubeconfig, String>>,
+    /// Shared with the Kubris made for people by [`Kubri::for_person`].
+    kubeconfig: Arc<RwLock<Result<Kubeconfig, String>>>,
     session: RwLock<Option<Arc<Session>>>,
     forwards: std::sync::Mutex<portforward::Forwards>,
     benchmarks: std::sync::Mutex<bench::Benchmarks>,
@@ -199,7 +202,8 @@ pub struct Kubri {
     read_only: AtomicBool,
     /// Acting for an AI agent: changes need the context's consent in the settings.
     agent: AtomicBool,
-    settings: std::sync::RwLock<SettingsFile>,
+    /// Shared with the Kubris made for people by [`Kubri::for_person`].
+    settings: team::SharedSettings,
     /// Locked contexts unlocked until then, by name. Never saved: a restart locks them again.
     unlocks: std::sync::Mutex<HashMap<String, std::time::Instant>>,
     /// Connections to other contexts, for reading objects there, and when they were made.
@@ -216,10 +220,12 @@ pub struct Kubri {
     local_terminal: AtomicBool,
     recorder: std::sync::Mutex<Option<recorder::Recorder>>,
     history: std::sync::OnceLock<std::result::Result<Arc<history::Store>, String>>,
+    /// The person this Kubri acts for, on a server shared by a team.
+    act_as: Option<team::ActAs>,
 }
 
 /// The settings and where they are kept.
-struct SettingsFile {
+pub(crate) struct SettingsFile {
     /// `None` keeps them in memory only, as in tests.
     path: Option<std::path::PathBuf>,
     settings: Settings,
@@ -255,7 +261,12 @@ fn context_entry(kubeconfig: &Kubeconfig, context: &str) -> Option<Value> {
 }
 
 /// The client configuration for `context`, read the way kubectl reads it.
-pub(crate) async fn client_config(kubeconfig: &Kubeconfig, context: &str) -> Result<Config> {
+/// With `act_as`, the client acts for that person instead of as the kubeconfig's user.
+pub(crate) async fn client_config(
+    kubeconfig: &Kubeconfig,
+    context: &str,
+    act_as: Option<&team::ActAs>,
+) -> Result<Config> {
     let mut kubeconfig = kubeconfig.clone();
     kubeconfig::prepare(&mut kubeconfig, context)?;
     let options = KubeConfigOptions {
@@ -263,6 +274,9 @@ pub(crate) async fn client_config(kubeconfig: &Kubeconfig, context: &str) -> Res
         ..Default::default()
     };
     let mut config = Config::from_custom_kubeconfig(kubeconfig.clone(), &options).await?;
+    if let Some(act_as) = act_as {
+        team::apply(&mut config, act_as);
+    }
     config
         .headers
         .extend(kubeconfig::impersonation_headers(&config.auth_info)?);
@@ -312,18 +326,26 @@ impl Kubri {
     }
 
     fn with_kubeconfig(kubeconfig: Result<Kubeconfig, String>) -> Self {
+        let settings = SettingsFile {
+            path: None,
+            settings: Settings::default(),
+            error: None,
+        };
+        Self::sharing(
+            Arc::new(RwLock::new(kubeconfig)),
+            Arc::new(std::sync::RwLock::new(settings)),
+        )
+    }
+
+    fn sharing(kubeconfig: Arc<RwLock<Result<Kubeconfig, String>>>, settings: team::SharedSettings) -> Self {
         Self {
-            kubeconfig: RwLock::new(kubeconfig),
+            kubeconfig,
             session: RwLock::new(None),
             forwards: Default::default(),
             benchmarks: Default::default(),
             read_only: AtomicBool::new(false),
             agent: AtomicBool::new(false),
-            settings: std::sync::RwLock::new(SettingsFile {
-                path: None,
-                settings: Settings::default(),
-                error: None,
-            }),
+            settings,
             unlocks: Default::default(),
             others: Default::default(),
             warm: Default::default(),
@@ -332,6 +354,7 @@ impl Kubri {
             local_terminal: AtomicBool::new(false),
             recorder: Default::default(),
             history: Default::default(),
+            act_as: None,
         }
     }
 
@@ -460,6 +483,9 @@ impl Kubri {
 
     /// Why a local terminal cannot be opened for the connected context now, if it cannot.
     async fn local_terminal_refusal(&self) -> Option<String> {
+        if self.act_as.is_some() {
+            return Some(team::NO_LOCAL_TERMINAL.into());
+        }
         if !self.local_terminal.load(Ordering::Relaxed) {
             return Some(
                 "The local terminal is off here: it would be a shell on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it."
@@ -574,7 +600,11 @@ impl Kubri {
     /// The change history, opened on first use: `history.db` in Kubri's config folder, or a
     /// database in memory when there is no settings file, as in tests.
     fn history_store(&self) -> Result<Arc<history::Store>> {
-        let path = self.settings_file().path.clone();
+        // What one person's Kubri recorded is not for others to see.
+        let path = match self.act_as {
+            Some(_) => None,
+            None => self.settings_file().path.clone(),
+        };
         self.history
             .get_or_init(|| {
                 let store = match path.as_ref().and_then(|p| p.parent()) {
@@ -828,6 +858,7 @@ impl Kubri {
 
     /// The contexts of a kubeconfig the user picked, and why any cannot be added.
     pub async fn inspect_kubeconfig(&self, text: &str) -> Result<Vec<NewContext>> {
+        self.ensure_not_team(team::NO_ADDED_CONTEXTS)?;
         let new = added::parse(text)?;
         let local = self.local_terminal.load(Ordering::Relaxed);
         Ok(added::inspect(&new, &self.context_names().await, local))
@@ -835,6 +866,7 @@ impl Kubri {
 
     /// Adds `names` from a kubeconfig the user picked, in Kubri's own folder.
     pub async fn add_contexts(&self, text: &str, names: &[String]) -> Result<ContextList> {
+        self.ensure_not_team(team::NO_ADDED_CONTEXTS)?;
         let dir = added::dir()
             .ok_or_else(|| Error::Unsupported("Kubri has no config folder to keep contexts in".into()))?;
         let new = added::parse(text)?;
@@ -845,6 +877,7 @@ impl Kubri {
 
     /// Removes a context added in Kubri. Contexts from the user's kubeconfig stay.
     pub async fn remove_context(&self, name: &str) -> Result<ContextList> {
+        self.ensure_not_team(team::NO_ADDED_CONTEXTS)?;
         if self.cluster().await.is_some_and(|c| c.context == name) {
             return Err(Error::Unsupported(format!(
                 "Kubri is connected to {name}; switch to another context first"
@@ -871,12 +904,14 @@ impl Kubri {
     /// Reads the kubeconfig files at `paths` from now on, where they are, after the user's
     /// own. Each must be a kubeconfig Kubri can read, or none is added.
     pub async fn add_kubeconfig_files(&self, paths: &[String]) -> Result<ContextList> {
+        self.ensure_not_team(team::NO_ADDED_CONTEXTS)?;
         chosen::add(&kubeconfig::own_paths(), paths)?;
         self.reload().await
     }
 
     /// Stops reading a file chosen in Kubri. The user's own files stay.
     pub async fn remove_kubeconfig_file(&self, path: &str) -> Result<ContextList> {
+        self.ensure_not_team(team::NO_ADDED_CONTEXTS)?;
         let file = self.kubeconfig_files().into_iter().find(|f| f.path == path);
         if let (Some(file), Some(cluster)) = (&file, self.cluster().await)
             && file.chosen
@@ -1083,7 +1118,7 @@ impl Kubri {
             .unwrap_or_else(|| "default".to_owned());
 
         let session = tokio::time::timeout(CONNECT_TIMEOUT, async {
-            let config = client_config(&kubeconfig, context).await?;
+            let config = client_config(&kubeconfig, context, self.act_as.as_ref()).await?;
             let server = config.cluster_url.to_string().trim_end_matches('/').to_owned();
             let mut once = config.clone();
             once.default_retry = false;
@@ -1755,7 +1790,7 @@ impl Kubri {
     pub async fn helm_rollback(&self, namespace: &str, name: &str, revision: u32) -> Result<String> {
         self.ensure_writable().await?;
         let context = self.session().await?.info.context.clone();
-        helm::rollback(&context, namespace, name, revision).await
+        helm::rollback(&self.helm_access().await?, &context, namespace, name, revision).await
     }
 
     /// Installs or upgrades a release, on the connected context. A dry run renders it against
@@ -1765,26 +1800,27 @@ impl Kubri {
             self.ensure_writable().await?;
         }
         let session = self.session().await?;
-        helm::change(session.client.clone(), &session.info.context, change).await
+        let access = self.helm_access().await?;
+        helm::change(session.client.clone(), &access, &session.info.context, change).await
     }
 
     /// A chart's default values as YAML, like `helm show values`.
     pub async fn helm_chart_values(&self, chart: &HelmChartRef) -> Result<String> {
         let context = self.session().await?.info.context.clone();
-        helm::show_values(&context, chart).await
+        helm::show_values(&self.helm_access().await?, &context, chart).await
     }
 
     /// Charts on Artifact Hub matching `query`, like `helm search hub`.
     pub async fn helm_search(&self, query: &str) -> Result<Vec<HubChart>> {
         let context = self.session().await?.info.context.clone();
-        helm::search_hub(&context, query).await
+        helm::search_hub(&self.helm_access().await?, &context, query).await
     }
 
     /// Uninstalls a release with `helm uninstall`, on the connected context.
     pub async fn helm_uninstall(&self, namespace: &str, name: &str) -> Result<String> {
         self.ensure_writable().await?;
         let context = self.session().await?.info.context.clone();
-        helm::uninstall(&context, namespace, name).await
+        helm::uninstall(&self.helm_access().await?, &context, namespace, name).await
     }
 
     /// The k9s aliases, hotkeys, plugins, skins and settings, with those of the connected
@@ -1792,6 +1828,10 @@ impl Kubri {
     pub async fn k9s_config(&self) -> K9sConfig {
         let mut config = self.k9s_files().await;
         config.read_only |= self.read_only.load(Ordering::Relaxed);
+        if self.act_as.is_some() {
+            config.plugins.clear();
+            return config;
+        }
         // Views' actions run as plugins of their kind.
         if let Ok(session) = self.session().await {
             for view in self.views().await.views {
@@ -1870,6 +1910,7 @@ impl Kubri {
     /// Finds the plugin in the configuration on disk, never trusting a command from the
     /// caller, and checks that the target exists and is in the plugin's scope.
     async fn prepare_plugin(&self, run: &PluginRun) -> Result<(Plugin, plugin::Prepared)> {
+        self.ensure_not_team(team::NO_PLUGINS)?;
         let session = self.session().await?;
         let context = self.context_info().await.ok_or(Error::NotConnected)?;
         let config = self.k9s_config().await;
