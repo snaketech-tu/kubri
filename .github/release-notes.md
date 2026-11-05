@@ -1,9 +1,12 @@
 ## What's new
 
-- **Security fix for the web app:** contexts added with **Add clusters…** can no longer run commands or read files on the server. Before, anyone who could sign in could use them to run any command on the server or to send its files elsewhere. Such contexts now need the server to be started with `KUBRI_LOCAL_TERMINAL=true`. If you run Kubri in the browser for others, please update. **From URL** also no longer reads cloud metadata addresses.
-- **Web app:** a reload keeps your view, addresses can be bookmarked, and the browser's Back button goes back inside Kubri.
-- **Desktop app:** links to other sites, such as the install guides on the Integrations page, open in the browser.
-- **Fixes:** lists over several namespaces no longer bring back deleted objects; web lists say why they cannot start; the Clusters page no longer signs in to every cluster each minute; **Add clusters…** reads a pasted kubeconfig right away; kube-prometheus-stack's Grafana is no longer taken for Prometheus.
+- **Try Kubri without a cluster:** without a kubeconfig, **Open the demo** opens a small shop that comes with the app, and **Start a cluster…** makes one on this computer with kind or k3d.
+- **Why a container does not run:** for an image that cannot be pulled, a missing Secret, out of memory, a crash loop or a pod with no room, Kubri says what is wrong in one sentence and offers the action that helps.
+- **A clearer layout:** a new sidebar with one name per view, lists that fit the window (**All columns** with <kbd>w</kbd>), an object's actions in one place, and a card with **Cancel** while a context connects.
+- **Roll back StatefulSets and DaemonSets** to an earlier revision, like Deployments.
+- **Command line:** `kubri lint` and `kubri snapshot` run the checks and save snapshots in CI pipelines, with SARIF for GitHub code scanning.
+- **Web app:** the unused Prometheus query route is gone, so signed-in users can no longer run their own PromQL through the server.
+- **Fixes:** drain checks that it may evict pods before it cordons the node; read-only says the real reason; status colors in light mode have more contrast; a snapshot opens without a kubeconfig.
 
 ## Install
 
