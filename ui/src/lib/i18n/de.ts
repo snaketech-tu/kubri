@@ -1695,6 +1695,8 @@ const de: Record<string, string> = {
 	'Contexts': 'Kontexte',
 	'Dry-run diffs': 'Diffs aus Probeläufen',
 	'Recent contexts': 'Letzte Kontexte',
+	'Last connection closed by the pod, {when}': 'Letzte Verbindung vom Pod geschlossen, {when}',
+	'Last connection closed by the client, {when}': 'Letzte Verbindung vom Client geschlossen, {when}',
 	'Appearance': 'Darstellung',
 	'Updates': 'Updates',
 	'Views': 'Views',
