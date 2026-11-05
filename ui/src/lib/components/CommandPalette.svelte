@@ -199,7 +199,7 @@
 			aria-controls="palette-suggestions"
 			aria-autocomplete="list"
 			aria-activedescendant={suggestions.length ? `palette-option-${active}` : undefined}
-			placeholder="pods, deploy kube-system, po app=web, ctx, ns default, skin…"
+			placeholder="A kind, object or action: pods, deploy kube-system, ns default, restart…"
 			spellcheck="false"
 			autocomplete="off"
 		/>
@@ -266,12 +266,19 @@
 	}
 	.prompt input {
 		flex: 1;
+		min-width: 0;
+		text-overflow: ellipsis;
 		padding: 0;
 		border: none;
 		background: none;
 		box-shadow: none;
 		font-family: var(--mono);
 		font-size: 16px;
+	}
+	/* The hint reads as a sentence, not as typed text. */
+	.prompt input::placeholder {
+		font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+		font-size: 14.5px;
 	}
 	ul {
 		margin: 0;

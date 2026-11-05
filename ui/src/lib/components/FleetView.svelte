@@ -239,7 +239,8 @@
 	}
 	.grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+		/* A few contexts use the width; many wrap into columns of at least 300px. */
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 560px));
 		gap: 14px;
 	}
 	.cluster {

@@ -17,6 +17,7 @@
 		bind:value={app.namespace}
 		options={[{ value: ALL_NAMESPACES, label: 'All namespaces' }, ...plainOptions(options)]}
 		disabled={app.page === 'resources' && !app.selected?.namespaced}
+		searchable
 		quiet
 	/>
 </label>

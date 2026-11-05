@@ -514,13 +514,24 @@
 					<div class="popover">
 						<p class="popover-title">Settings for <strong>{app.cluster.context}</strong></p>
 						<ContextSettingsForm context={app.cluster.context} namespaces={app.namespaces} />
-						<p class="note">Kept in Kubri's settings file; the kubeconfig is never changed.</p>
+						<p class="note">
+							Kept in Kubri's settings file; the kubeconfig is never changed.
+							<button
+								class="all-contexts"
+								onclick={(e) => {
+									e.currentTarget.closest('details')?.removeAttribute('open');
+									app.showConfig('contexts');
+								}}
+							>
+								All contexts in Settings
+							</button>
+						</p>
 					</div>
 				</details>
 			{/if}
 			<span class="divider"></span>
 			<NamespacePicker />
-			<button class="palette-button" onclick={() => (app.paletteOpen = true)} aria-label="Search or run a command">
+			<button class="palette-button" data-tour="palette" onclick={() => (app.paletteOpen = true)} aria-label="Search or run a command">
 				<Icon name="search" size={17} />
 				<span>Search or run a command</span>
 				<kbd>Ctrl K</kbd>
@@ -549,6 +560,7 @@
 			</button>
 			<button
 				class="mode"
+				data-tour="read-only"
 				class:locked={app.readOnly}
 				class:unlocked={app.unlockedUntil !== null}
 				role="switch"
@@ -748,6 +760,7 @@
 				{/if}
 			</main>
 			{#if dock.sessions.length}<Dock />{/if}
+			{#if app.activityOpen}<ActivityPanel />{/if}
 		</div>
 
 		<footer>
@@ -779,7 +792,7 @@
 					<button class="close" onclick={() => app.dismissRelease()} aria-label="Hide until the next release">×</button>
 				</span>
 			{/if}
-			<span class="hints">
+			<span class="hints" data-tour="keys">
 				{#each hints as [key, label], i (key + i)}
 					{#if keyFromLabel(key)}
 						<button onclick={() => press(key)} onmousedown={keepFocus} title="{label} ({key})"><kbd>{key}</kbd>{label}</button>
@@ -795,7 +808,6 @@
 {#if app.paletteOpen}<CommandPalette />{/if}
 {#if app.helpOpen}<HelpOverlay />{/if}
 {#if app.tourOpen}<Tour />{/if}
-{#if app.activityOpen}<ActivityPanel />{/if}
 {#if app.menu}<ActionMenu menu={app.menu} />{/if}
 <AgentRequests />
 {#if app.dialog?.kind === 'forbidden'}
@@ -947,6 +959,19 @@
 		margin: 0;
 		color: var(--text-muted);
 		font-size: 12px;
+	}
+	.environment .all-contexts {
+		display: block;
+		margin-top: 6px;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent-strong);
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.environment .all-contexts:hover {
+		text-decoration: underline;
 	}
 	/* The context's color, as a strip over the header. */
 	.shell.tinted header {

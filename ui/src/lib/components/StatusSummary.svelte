@@ -151,8 +151,14 @@
 		cursor: pointer;
 		overflow-wrap: anywhere;
 	}
-	.link:hover {
+	/* A soft underline tells links from text without hovering. */
+	.link {
 		text-decoration: underline;
+		text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+		text-underline-offset: 2px;
+	}
+	.link:hover {
+		text-decoration-color: currentColor;
 	}
 	.more {
 		margin-top: 6px;

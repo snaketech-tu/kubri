@@ -523,10 +523,24 @@
 		{/if}
 		<span class="spacer"></span>
 		{#if details.tab === 'yaml'}
-			<label class="managed"><input type="checkbox" bind:checked={showManaged} disabled={details.editing} /> managed fields</label>
-			{#if schema}
-				<label class="managed"><input type="checkbox" checked={fieldHelp} onchange={toggleFieldHelp} /> field help</label>
-			{/if}
+			<span class="view" role="group" aria-label="Show in the YAML">
+				<span class="view-label" aria-hidden="true">Show</span>
+				<span class="segmented">
+					<button
+						aria-pressed={showManaged}
+						disabled={details.editing}
+						onclick={() => (showManaged = !showManaged)}
+						title="The fields the server keeps on which client set what"
+					>
+						Managed fields
+					</button>
+					{#if schema}
+						<button aria-pressed={fieldHelp} onclick={toggleFieldHelp} title="What the field under the cursor means, below the editor">
+							Field help
+						</button>
+					{/if}
+				</span>
+			</span>
 			{#if details.editing && compare}
 				<button class="secondary" onclick={() => (compare = null)}>Back to editing</button>
 				<button class="primary" onclick={rebase}>Apply mine to theirs</button>
@@ -855,13 +869,18 @@
 	.spacer {
 		flex: 1;
 	}
-	.managed {
+	.view {
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: 6px;
 		margin-right: 8px;
+	}
+	.view-label {
 		font-size: 12px;
 		color: var(--text-muted);
+	}
+	.view .segmented button:disabled {
+		opacity: 0.5;
 	}
 	.primary,
 	.secondary {
