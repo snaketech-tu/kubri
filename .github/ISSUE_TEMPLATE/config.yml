@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/snaketech-tu/kubri#documentation
+    about: How to install Kubri, use your k9s configuration, run it in the browser and more.

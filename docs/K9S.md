@@ -1,6 +1,6 @@
 # Using your k9s configuration
 
-Kubri reads the aliases, hotkeys, plugins, skins, jumps and settings you set up for k9s, from the same files, so they work in Kubri without changes. `:config` in the command palette shows what was found, which files could not be read and why, and lets you pick a skin.
+Kubri reads the aliases, hotkeys, plugins, skins, jumps and settings you set up for k9s, from the same files, so they work in Kubri without changes. `:config` in the command palette shows what was found, which files could not be read and why, and lets you pick a skin. New to Kubri? [Coming from k9s](FROM-K9S.md) is the short tour.
 
 ## Where Kubri looks
 

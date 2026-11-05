@@ -1,0 +1,58 @@
+name: Report a problem
+description: Something in Kubri does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. **Report a problem** in Kubri's help (at the bottom of `?`), or `:feedback`, fills in the version and where it runs for you.
+
+        Please leave out secrets, tokens and names you do not want to be public: issues are public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you saw, and what you expected instead.
+      placeholder: |
+        I opened the logs of a pod with two containers and pressed 0.
+        The second container's lines did not show.
+        I expected the lines of both containers.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      description: The steps, if you know them. A screenshot helps too.
+      placeholder: |
+        1. :pods shop
+        2. Enter on web-...
+        3. l, then 0
+  - type: input
+    id: version
+    attributes:
+      label: Kubri version
+      description: At the bottom of the help in Kubri (`?`), or `kubri-server --version`.
+      placeholder: "1.7.0"
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where Kubri runs
+      description: The desktop app and its system, or the browser and how kubri-server runs (Docker, Helm, ...).
+      placeholder: Desktop app on Windows 11
+    validations:
+      required: true
+  - type: input
+    id: cluster
+    attributes:
+      label: Kubernetes
+      description: The cluster's version and kind, if it matters, such as EKS 1.33, k3s, kind or OpenShift.
+      placeholder: EKS 1.33
+  - type: textarea
+    id: logs
+    attributes:
+      label: Messages
+      description: Error messages from Kubri, or kubri-server's log. Run it with `RUST_LOG=debug` for more.
+      render: text

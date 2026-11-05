@@ -31,8 +31,8 @@
 </p>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/pods-dark.png">
-  <img src="docs/assets/screenshots/pods-light.png" alt="Kubri listing the pods of a namespace, with CPU and memory against their requests">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kubri-tour-dark.gif">
+  <img src="docs/assets/kubri-tour-light.gif" alt="A short tour of Kubri: the cluster overview, the command palette going to the Deployments of a namespace, a Deployment's pods, their JSON logs as a table of fields, a shell in a pod, and switching to another context">
 </picture>
 
 ## ✨ Why Kubri
@@ -175,6 +175,11 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
 
 ## 📸 Screenshots
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/pods-dark.png">
+  <img src="docs/assets/screenshots/pods-light.png" alt="Kubri listing the pods of a namespace, with CPU and memory against their requests">
+</picture>
+
 <table>
   <tr>
     <td width="50%" valign="top"><img src="docs/assets/screenshots/overview.png" alt="Cluster overview: pods and nodes, CPU and memory, and the objects that need attention"><br><b>Overview</b>: what needs attention first, with health and trends (<kbd>:pulses</kbd>)</td>
@@ -252,7 +257,7 @@ Kubri reads your k9s configuration and uses the same keys, so you can start righ
 | <kbd>Ctrl</kbd>+<kbd>D</kbd> | Delete |
 | <kbd>?</kbd> | All keys |
 
-[Using your k9s configuration](docs/K9S.md) lists what Kubri covers and what it does not.
+[Coming from k9s](docs/FROM-K9S.md) covers the first few minutes: what carries over, what works a little differently, and what there is besides. [Using your k9s configuration](docs/K9S.md) lists what Kubri covers and what it does not.
 
 ## 🔑 Your kubeconfig
 
@@ -286,7 +291,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
       <ul>
         <li><a href="docs/SETTINGS.md">Settings and guard rails</a>: context colors, production and read-only contexts, permissions</li>
         <li><a href="docs/INTEGRATIONS.md">Integrations</a>: Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager and right-sizing</li>
-        <li><a href="docs/VIEWS.md">Views for custom resources</a> and <a href="docs/K9S.md">your k9s configuration</a></li>
+        <li><a href="docs/FROM-K9S.md">Coming from k9s</a>, <a href="docs/K9S.md">your k9s configuration</a> and <a href="docs/VIEWS.md">views for custom resources</a></li>
         <li><a href="docs/AGENTS.md">AI agents (MCP)</a> and <a href="docs/EXPLAIN.md">Explain</a></li>
         <li><a href="docs/WEB.md">In the browser</a>: settings, sign-in, Docker, Kubernetes and reverse proxies</li>
         <li><a href="docs/TEAMS.md">A Kubri for your team</a>: sign-in with OpenID Connect, each person's own permissions, the audit log and the Helm chart</li>
@@ -333,6 +338,10 @@ cd ui && pnpm check && pnpm test
 ```
 
 </details>
+
+## 💬 Feedback
+
+Something wrong or missing? [Report a problem](https://github.com/snaketech-tu/kubri/issues/new?template=bug.yml) or [suggest an idea](https://github.com/snaketech-tu/kubri/issues/new?template=idea.yml). From inside Kubri, the links at the bottom of the help (<kbd>?</kbd>) or `:feedback` open the same forms with your version and system filled in.
 
 ## 📄 License
 
