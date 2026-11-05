@@ -34,7 +34,7 @@ While a snapshot is open:
 
 - A banner names the context it came from, the namespace, and when it was taken, and the context switcher says **Snapshot**. Nothing claims to be live.
 - It is read-only: actions that change something are not offered, and port-forwards, shells and the debug tools have nothing to connect to.
-- Ages, "recent" events on the Overview and the sanitizer count from when the snapshot was taken, not from now.
+- Ages, "recent" events on the Overview and Checks count from when the snapshot was taken, not from now.
 - Logs show the saved lines. **Compare** in an object's menu compares it with the same object in a live context of your kubeconfig, which shows what changed since.
 - What changed and the integrations (Prometheus, Grafana, Loki) have nothing to show.
 

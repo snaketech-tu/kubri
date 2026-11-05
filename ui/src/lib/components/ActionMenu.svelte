@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { actionFor, grouped, hintOf, keyOf, type Menu, type MenuAction } from '../menu';
+	import { actionFor, hintOf, keyOf, menuEntries, type Menu, type MenuAction } from '../menu';
 	import { app } from '../state.svelte';
 
 	let { menu }: { menu: Menu } = $props();
@@ -9,14 +9,31 @@
 	let position = $state({ left: 0, top: 0 });
 	let active = $state(0);
 
-	const groups = $derived(grouped(menu.actions));
-	/** In the order the menu shows them, for the arrow keys. */
-	const flat = $derived(groups.flatMap(([, actions]) => actions));
+	/** The folds that are open, such as Copy. */
+	let open = $state(new Set<string>());
+	const groups = $derived(menuEntries(menu.actions, open));
+	/** The lines in the order the menu shows them, for the arrow keys. */
+	const flat = $derived(groups.flatMap(([, entries]) => entries));
 
-	// Opens at the point, moved back in where it would run off the window.
+	function toggle(id: string, show = !open.has(id)) {
+		const next = new Set(open);
+		if (show) next.add(id);
+		else next.delete(id);
+		open = next;
+	}
+
+	// A new menu starts at its first line, with its folds closed.
 	$effect(() => {
 		void menu;
 		active = 0;
+		open = new Set();
+		tick().then(() => element?.querySelector<HTMLButtonElement>('button')?.focus());
+	});
+
+	// Opens at the point, moved back in where it would run off the window, also after a fold opens.
+	$effect(() => {
+		void menu;
+		void open;
 		tick().then(() => {
 			if (!element) return;
 			const { width, height } = element.getBoundingClientRect();
@@ -25,7 +42,6 @@
 				left: Math.max(8, Math.min(left, window.innerWidth - width - 8)),
 				top: Math.max(8, Math.min(menu.y, window.innerHeight - height - 8))
 			};
-			element.querySelector<HTMLButtonElement>('button')?.focus();
 		});
 	});
 
@@ -41,6 +57,11 @@
 	function focusItem(index: number) {
 		active = (index + flat.length) % flat.length;
 		element?.querySelectorAll<HTMLButtonElement>('button')[active]?.focus();
+	}
+
+	function choose(entry: (typeof flat)[number]) {
+		if (entry.kind === 'fold') toggle(entry.id);
+		else run(entry.action);
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -64,11 +85,18 @@
 					return true;
 				case 'Enter':
 				case ' ':
-					if (flat[active]) run(flat[active]);
+					if (flat[active]) choose(flat[active]);
 					return true;
+				case 'ArrowRight':
+				case 'ArrowLeft': {
+					const entry = flat[active];
+					if (entry?.kind !== 'fold') return false;
+					toggle(entry.id, e.key === 'ArrowRight');
+					return true;
+				}
 			}
-			// The keys work here too, which is how the menu teaches them.
-			const action = menu.hints === false ? undefined : actionFor(flat, keyOf(e));
+			// The keys work here too, also for actions in a closed fold, which is how the menu teaches them.
+			const action = menu.hints === false ? undefined : actionFor(menu.actions, keyOf(e));
 			if (action) run(action);
 			return !!action;
 		})();
@@ -99,27 +127,47 @@
 	style:top="{position.top}px"
 	{onkeydown}
 >
-	{#each groups as [group, actions], g (g)}
+	{#each groups as [group, entries], g (g)}
 		{#if g > 0}<div class="separator" role="separator"></div>{/if}
-		<div class="group" aria-hidden="true">{group}</div>
-		{#each actions as action, i (i)}
-			{@const hint = menu.hints === false ? null : hintOf(flat, action)}
-			<button
-				role="menuitem"
-				class:danger={action.danger}
-				class:refused={action.disabled}
-				aria-disabled={action.disabled ? 'true' : undefined}
-				title={action.disabled ? `${action.disabled}. Choose it for details.` : undefined}
-				onclick={() => run(action)}
-				onmouseenter={(e) => {
-					active = flat.indexOf(action);
-					e.currentTarget.focus();
-				}}
-			>
-				<span>{action.label}</span>
-				{#if action.disabled}<span class="lock" aria-label="not allowed">⊘</span>{/if}
-				{#if hint}<kbd>{hint}</kbd>{/if}
-			</button>
+		{#if group}<div class="group" aria-hidden="true">{group}</div>{/if}
+		{#each entries as entry (entry.kind === 'fold' ? `fold:${entry.id}` : `${entry.nested}:${entry.action.label}`)}
+			{#if entry.kind === 'fold'}
+				<button
+					role="menuitem"
+					class="fold"
+					aria-haspopup="true"
+					aria-expanded={open.has(entry.id)}
+					onclick={() => toggle(entry.id)}
+					onmouseenter={(e) => {
+						active = flat.indexOf(entry);
+						e.currentTarget.focus();
+					}}
+				>
+					<span>{entry.label}</span>
+					<span class="count">{entry.actions.length}</span>
+					<span class="chevron" aria-hidden="true">{open.has(entry.id) ? '▾' : '▸'}</span>
+				</button>
+			{:else}
+				{@const action = entry.action}
+				{@const hint = menu.hints === false ? null : hintOf(menu.actions, action)}
+				<button
+					role="menuitem"
+					class:nested={entry.nested}
+					class:danger={action.danger}
+					class:refused={action.disabled}
+					aria-disabled={action.disabled ? 'true' : undefined}
+					title={action.disabled ? `${action.disabled}. Choose it for details.` : undefined}
+					onclick={() => run(action)}
+					onmouseenter={(e) => {
+						active = flat.indexOf(entry);
+						e.currentTarget.focus();
+					}}
+				>
+					<span>{action.label}</span>
+					{#if action.disabled}<span class="lock" aria-label="not allowed">⊘</span>{/if}
+					{#if hint}<kbd>{hint}</kbd>{/if}
+				</button>
+			{/if}
 		{/each}
 	{/each}
 </div>
@@ -194,6 +242,19 @@
 		color: var(--text-muted);
 	}
 	button.refused {
+		color: var(--text-muted);
+	}
+	button.nested {
+		padding-left: 22px;
+	}
+	.fold .count {
+		margin-left: auto;
+		font-size: 11px;
+		color: var(--text-muted);
+	}
+	.fold .chevron {
+		width: 10px;
+		font-size: 11px;
 		color: var(--text-muted);
 	}
 	.lock {

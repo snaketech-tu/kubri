@@ -80,3 +80,31 @@ export function keyFromLabel(label: string): KeyboardEventInit | null {
 	if (label.startsWith('⇧') && label.length === 2) return { key: label[1].toUpperCase(), shiftKey: true };
 	return [...label].length === 1 ? { key: label } : null;
 }
+
+/** Groups the menu folds into one line, as their actions are rarely what one comes for. */
+const FOLDED = new Set(['Copy', 'Go to']);
+
+/** A line in a menu: an action, or a fold that opens to show a few more. */
+export type MenuEntry =
+	| { kind: 'action'; action: MenuAction; nested: boolean }
+	| { kind: 'fold'; id: string; label: string; actions: MenuAction[] };
+
+/**
+ * The menu's lines per group, short enough to fit on screen: Copy and Go to fold into one line
+ * each, and in other groups the actions without a key or a button (two or more) fold under
+ * "More". `open` names the folds that are open; their actions follow them, nested.
+ */
+export function menuEntries(actions: MenuAction[], open: ReadonlySet<string>): [string, MenuEntry[]][] {
+	return grouped(actions).map(([group, list]) => {
+		const fold = (id: string, label: string, inside: MenuAction[]): MenuEntry[] => [
+			{ kind: 'fold', id, label, actions: inside },
+			...(open.has(id) ? inside.map((action) => ({ kind: 'action' as const, action, nested: true })) : [])
+		];
+		const plain = (list: MenuAction[]) => list.map((action) => ({ kind: 'action' as const, action, nested: false }));
+		if (FOLDED.has(group) && list.length > 1) return [group, fold(group, `${group}…`, list)];
+		const quiet = list.filter((a) => !a.keys.length && a.primary === undefined && !a.danger);
+		if (quiet.length < 2) return [group, plain(list)];
+		const loud = list.filter((a) => !quiet.includes(a));
+		return [group, [...plain(loud), ...fold(`${group}:more`, group ? `More in ${group.toLowerCase()}…` : 'More…', quiet)]];
+	});
+}

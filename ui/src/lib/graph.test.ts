@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Graph, GraphNode } from './api';
-import { BOX, curve, layoutGraph, matches, neighborhood } from './graph';
+import { BOX, curve, fit, layoutGraph, matches, neighborhood, READABLE } from './graph';
 
 const node = (kind: string, name: string, extra: Partial<GraphNode> = {}): GraphNode => ({
 	id: `${kind}/shop/${name}`,
@@ -85,5 +85,18 @@ describe('graph helpers', () => {
 		);
 		expect(matches(graph.nodes[1], 'serv')).toBe(true);
 		expect(matches(graph.nodes[1], 'nope')).toBe(false);
+	});
+});
+
+describe('fit', () => {
+	it('opens a wide graph at a readable size and the Fit button shows all of it', () => {
+		expect(fit({ width: 3000, height: 800 }, 1000, 600, true).scale).toBe(READABLE);
+		expect(fit({ width: 3000, height: 800 }, 1000, 600).scale).toBeCloseTo(1000 / 3000);
+	});
+
+	it('centers a graph narrower than the view', () => {
+		const view = fit({ width: 500, height: 300 }, 1000, 600, true);
+		expect(view.scale).toBe(1.1);
+		expect(view.x).toBeCloseTo((1000 - 550) / 2);
 	});
 });

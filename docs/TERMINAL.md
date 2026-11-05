@@ -7,6 +7,7 @@ Kubri can open a shell on your own computer in which `kubectl` and `helm` alread
 - <kbd>Ctrl</kbd>+<kbd>`</kbd> (the key left of <kbd>1</kbd>; <kbd>Cmd</kbd> on macOS), `:term` in the command palette, or the terminal button at the top. It opens as a tab in the workspace below the list, beside logs and shells, and keeps running while you browse.
 - Pressing it again shows the terminal already open for this context. With <kbd>Shift</kbd>, or `:term new`, it opens another one.
 - The tab names the context, in red for a production context. The header shows the context and namespace the commands talk to, and the versions of `kubectl` and `helm`.
+- While you type in a terminal, keys go to the shell. Press <kbd>Esc</kbd> twice quickly to leave it and use Kubri's keys again; a single <kbd>Esc</kbd> still reaches the program, as vim needs it. The same works in pod shells and plugin terminals.
 - **Restart** opens a fresh shell. A terminal of another context keeps running when you switch, but can only be opened again after switching back to its context.
 
 ## What it sets up

@@ -55,6 +55,7 @@
 		box-shadow: none;
 	}
 	kbd {
+		flex: none;
 		padding: 0 5px;
 		border: 1px solid var(--border);
 		border-radius: 4px;

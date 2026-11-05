@@ -462,8 +462,14 @@
 		font: inherit;
 		text-align: left;
 	}
-	.link:hover {
+	/* A soft underline tells links from text without hovering. */
+	.link {
 		text-decoration: underline;
+		text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+		text-underline-offset: 2px;
+	}
+	.link:hover {
+		text-decoration-color: currentColor;
 	}
 	.actions button + button {
 		margin-left: 4px;

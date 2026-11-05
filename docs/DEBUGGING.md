@@ -46,13 +46,17 @@ Either way the shell opens in the inspector. The likely-problem summary of a cra
 
 ## Fixes from the likely problem
 
-The summary at the top of a failing pod names the likely problem, and now offers what to do about it:
+When something does not run, Kubri says why in one plain sentence, such as "cart never started: the image busybox:does-not-exist cannot be pulled", with Kubernetes' own reason beside it and the one action that helps most. The same card shows at the top of a failing pod, in place of the logs of a container that never started, and on an autoscaler that does not scale. **Show events** opens the object's events. In read-only mode only the events are offered.
 
 | Problem | What Kubri offers |
 | --- | --- |
-| Crash loop | The previous container's logs, the current logs, and a debug copy. |
+| Crash loop | **Read previous logs**, the current logs, and a debug copy. |
 | OOMKilled | **Raise memory limit…** on the Deployment, StatefulSet or DaemonSet that owns the pod, with a suggested limit and the change as a dry-run diff before it is applied. |
-| Image pull errors | The image, its registry and the pull secrets, and whether each secret exists. |
-| Pending | **Why not each node?** lists per node what rules it out: not ready, cordoned, taints, the node selector, required node affinity, CPU, memory and the pod count. Pod affinity, topology spread and volumes are left to the scheduler's own message. |
+| Image pull errors | **Set image…** on the workload that owns the pod, and the image, its registry and the pull secrets, and whether each secret exists. |
+| Missing Secret or ConfigMap | **Create Secret…** or **Create ConfigMap…** on the Create page, with the name and the keys the container reads. |
+| Pending for CPU or memory | **Change CPU request…** or **Change memory request…** on the owning workload. **Why not each node?** lists per node what rules it out: not ready, cordoned, taints, the node selector, required node affinity, CPU, memory and the pod count. Pod affinity, topology spread and volumes are left to the scheduler's own message. |
+| Autoscaler without metrics | What is missing: Kubernetes' metrics API, or a CPU or memory request on the pods, with **Change CPU request…** for the latter. |
+
+The overview's **Needs attention** uses the same plain headlines, such as "web gets no metrics", with the reasons Kubernetes gives below them.
 
 A Service whose pods do not get traffic gets a summary too: no pod matches its selector (with the pods that nearly match and the labels that differ), no matching pod is ready, or the pods lack a named target port.
