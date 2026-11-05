@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.0 — 2026-11-05
+
+- **Kubri in German.** **Language** under Settings → Appearance picks English, German or the system's language, which is the default. All of Kubri is translated, including the findings of Checks and why a pod fits on no node. The words of Kubernetes stay English (Pod, Deployment, Namespace and the other kinds), and so do the columns of the lists and what the cluster itself says, such as events. See [Settings](docs/SETTINGS.md#appearance).
+- **A Kubri for your team.** kubri-server can sign people in with your OpenID Connect provider, such as Keycloak, Dex, Entra ID, Google, Okta or GitLab. Each person gets a Kubri of their own that reaches the cluster with their own permissions, by impersonating them or with their own token, and every change goes to an audit log. **Activity** shows the team's changes. A Helm chart installs it in a cluster. See [A Kubri for your team](docs/TEAMS.md).
+- **Feedback from the app.** `:feedback` and the links at the bottom of the help open a GitHub issue with your Kubri version and system filled in. New issue forms ask for what helps.
+- **Coming from k9s:** a new page covers the first few minutes: what carries over, what works a little differently, and what there is besides. See [Coming from k9s](docs/FROM-K9S.md).
+- Closing a shell in Kubri now ends the shell in the container too, instead of leaving `sh` running in the pod.
+
 ## 1.7.0 — 2026-11-05
 
 - **Try Kubri without a cluster.** Without a kubeconfig, **Open the demo** opens a snapshot of a small shop that comes with the app, and **Start a cluster…** makes one on this computer with kind or k3d. **Try again** reads the kubeconfig files again. A live demo runs in the browser on the new website.
