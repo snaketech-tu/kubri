@@ -308,6 +308,29 @@ export interface LocalTerminalInfo {
 	skew: string | null;
 }
 
+/** A tool that makes a Kubernetes cluster in containers on this computer. */
+export type LocalClusterTool = 'kind' | 'k3d';
+
+/** What Kubri can make a cluster on this computer with. */
+export interface LocalClusters {
+	/** Always in the desktop app; in the web app only when the server allows local terminals. */
+	allowed: boolean;
+	/** Why not, when it may not. */
+	reason: string | null;
+	tools: {
+		tool: LocalClusterTool;
+		found: boolean;
+		/** The command Kubri runs, as it would be typed. */
+		command: string;
+		/** The context the tool adds to the kubeconfig. */
+		context: string;
+		/** Where to get the tool. */
+		install: string;
+	}[];
+	/** Docker or Podman is installed: both tools run the cluster in containers. */
+	containers: boolean;
+}
+
 /** What a local terminal opens with: the namespace shown, null for all namespaces. */
 export interface LocalTerminalOptions {
 	namespace: string | null;
@@ -1465,6 +1488,8 @@ export interface Backend {
 	takeSnapshot(namespace: string | null): Promise<string | null>;
 	/** Opens a snapshot file in place of a cluster, read-only. */
 	openSnapshot(file: File): Promise<ClusterInfo>;
+	/** Leaves the open snapshot for no context, when there is none to go back to. */
+	closeSnapshot(): Promise<void>;
 	resources(): Promise<ResourceInfo[]>;
 	/** Runs discovery again, after a switch to a kept connection. */
 	refreshResources(): Promise<ResourceInfo[]>;
@@ -1639,6 +1664,13 @@ export interface Backend {
 	runPlugin(run: PluginRun): Promise<void>;
 	/** Runs a plugin in a terminal. */
 	openPlugin(run: PluginRun, onEvent: (event: TerminalEvent) => void): TerminalSession;
+	/** The tools that can make a cluster on this computer, and whether Kubri may run them. */
+	localClusters(): Promise<LocalClusters>;
+	/** Makes a cluster on this computer, showing the tool's progress like a terminal. */
+	createLocalCluster(
+		request: { tool: LocalClusterTool; cols: number; rows: number },
+		onEvent: (event: TerminalEvent) => void
+	): TerminalSession;
 	/** Whether a local terminal can be opened for the connected context. */
 	localTerminalInfo(): Promise<LocalTerminalInfo>;
 	/** Opens a shell on this computer, or on the server in the web app. */

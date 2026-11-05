@@ -55,6 +55,7 @@ export const tauriBackend: Backend = {
 	takeSnapshot: (namespace) => invoke('take_snapshot', { namespace }),
 	openSnapshot: async (file) =>
 		invoke('open_snapshot', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-name': encodeURIComponent(file.name) } }),
+	closeSnapshot: () => invoke('close_snapshot'),
 	resources: () => invoke('resources'),
 	refreshResources: () => invoke('refresh_resources'),
 	preview: (target, change) => invoke('preview', { target, change }),
@@ -189,6 +190,8 @@ export const tauriBackend: Backend = {
 	k9sSkin: (name) => invoke('k9s_skin', { name }),
 	runPlugin: (run) => invoke('plugin_run', { run }),
 	openPlugin: (run, onEvent) => terminalChannel('plugin_open', { run }, onEvent),
+	localClusters: () => invoke('local_clusters'),
+	createLocalCluster: (request, onEvent) => terminalChannel('local_cluster_create', { request }, onEvent),
 	localTerminalInfo: () => invoke('local_terminal_info'),
 	openLocalTerminal: (options, onEvent) => terminalChannel('local_terminal_open', { options }, onEvent),
 	desktop: true,

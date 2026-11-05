@@ -1,0 +1,106 @@
+name: Website
+
+# Builds the website with the live demo: site/ at the top, and the web app at demo/, answering
+# from a recording of kubri-server showing the demo snapshot (scripts/demo/record.cjs).
+#
+# Pull requests that touch it only build it. The Release workflow publishes it after each
+# release, and it can be run by hand. Publishing needs GitHub Pages set to "GitHub Actions" in
+# the repository's settings; until then the build runs and publishing is skipped.
+
+on:
+  pull_request:
+    paths:
+      - site/**
+      - scripts/demo/**
+      - ui/static/demo.kubri
+      - ui/src/lib/api/replay.ts
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      publish: ${{ steps.pages.outputs.publish }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Look up GitHub Pages
+        id: pages
+        run: |
+          if site=$(gh api "repos/$GITHUB_REPOSITORY/pages" 2>/dev/null) && [ "$(jq -r .build_type <<<"$site")" = workflow ]; then
+            base=$(jq -r .html_url <<<"$site" | sed -E 's#^https?://[^/]+##; s#/$##')
+            echo "publish=${{ github.event_name != 'pull_request' }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::GitHub Pages is not set to GitHub Actions in the repository's settings, so the website is built but not published."
+            base="/${GITHUB_REPOSITORY#*/}"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the web app and kubri-server
+        run: |
+          (cd ui && pnpm install --frozen-lockfile && pnpm build)
+          cargo build --release -p kubri-server
+      - name: Install Playwright
+        run: npm install --no-save --prefix "$RUNNER_TEMP/pw" playwright@1.63.0 && "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Record the demo
+        run: node scripts/demo/record.cjs "$RUNNER_TEMP/pw/node_modules/playwright" "$RUNNER_TEMP/demo-recording.json"
+      - name: Build the live demo
+        working-directory: ui
+        env:
+          KUBRI_BASE_PATH: ${{ steps.pages.outputs.base }}/demo
+          VITE_KUBRI_DEMO: demo-recording.json
+        run: pnpm build
+      - name: Put the website together
+        run: |
+          mkdir -p _site/assets
+          cp -r site/. _site/
+          cp -r ui/build _site/demo
+          cp "$RUNNER_TEMP/demo-recording.json" _site/demo/
+          cp docs/assets/kubri-logo.svg docs/assets/kubri-logo-dark.svg docs/assets/kubri-link.svg _site/assets/
+          cp docs/assets/screenshots/{pods-light,pods-dark,overview,logs,xray,palette}.png _site/assets/
+          du -sh _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publish:
+    name: Publish
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
