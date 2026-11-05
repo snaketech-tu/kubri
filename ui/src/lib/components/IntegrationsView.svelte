@@ -112,135 +112,143 @@
 	</PageHeader>
 
 	<div class="body">
-		{#if !app.integrations}
-			<p class="muted">{checking ? t('Looking for Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager…') : t('Kubri could not look for integrations.')}</p>
-		{:else}
-			{#if present.length}
-				<ul class="tools">
-					{#each present as item (item.id)}
-						{@const s = status(item)}
-						{@const about = ABOUT[item.id]}
-						<li>
-							<div class="head">
-								<strong>{item.name}</strong>
-								<span class="status {s.tone}">{s.text}</span>
-							</div>
-							<p class="about">{about?.text}</p>
-							{#if where(item)}<p class="where">{where(item)}</p>{/if}
-							{#if item.error}<p class="error">{item.error}</p>{/if}
-							{#if item.id === 'grafana' && item.endpoint && !item.error}
-								<div class="kinds">
-									<button class="btn" onclick={() => openTool('grafana', '/')}>{t('Open Grafana')}</button>
-								</div>
-								{#if namespaceRef}
-									<div class="dashboards">
-										<DashboardList target={namespaceRef} title={t('Grafana for {namespace}', { namespace: app.namespace })} empty={t('Grafana has nothing for {namespace}.', { namespace: app.namespace })} />
-									</div>
-								{/if}
-							{/if}
-							{#if about?.kinds && item.source === 'found'}
-								<div class="kinds">
-									{#each about.kinds.filter((k) => app.resources.some((r) => r.group === k.group && r.plural === k.plural)) as kind (kind.plural)}
-										<button class="btn" onclick={() => openKind(kind.group, kind.plural)}>{kind.label}</button>
-									{/each}
-								</div>
-							{/if}
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			{#if absent.length}
-				<div class="absent">
-					<h2>{present.length ? t('Not in this cluster') : t('None of these runs in this cluster')}</h2>
-					<ul>
-						{#each absent as item (item.id)}
+		<div class="main">
+			{#if !app.integrations}
+				<p class="muted">{checking ? t('Looking for Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager…') : t('Kubri could not look for integrations.')}</p>
+			{:else}
+				{#if present.length}
+					<h2 class="section">{t('In this cluster')}</h2>
+					<ul class="tools">
+						{#each present as item (item.id)}
+							{@const s = status(item)}
 							{@const about = ABOUT[item.id]}
 							<li>
-								<strong>{item.name}</strong>
-								<span class="muted">{about?.text}</span>
-								{#if item.source === 'off'}
-									<span class="muted off">{t('Off')}</span>
-								{:else if about?.install}
-									<a href={about.install} target="_blank" rel="noreferrer" aria-label={t('How to install {name}', { name: item.name })}>{t('How to install')}</a>
+								<div class="head">
+									<strong>{item.name}</strong>
+									<span class="status {s.tone}">{s.text}</span>
+								</div>
+								<p class="about">{about?.text}</p>
+								{#if where(item)}<p class="where">{where(item)}</p>{/if}
+								{#if item.error}<p class="error">{item.error}</p>{/if}
+								{#if item.id === 'grafana' && item.endpoint && !item.error}
+									<div class="kinds">
+										<button class="btn" onclick={() => openTool('grafana', '/')}>{t('Open Grafana')}</button>
+									</div>
+									{#if namespaceRef}
+										<div class="dashboards">
+											<DashboardList target={namespaceRef} title={t('Grafana for {namespace}', { namespace: app.namespace })} empty={t('Grafana has nothing for {namespace}.', { namespace: app.namespace })} />
+										</div>
+									{/if}
+								{/if}
+								{#if about?.kinds && item.source === 'found'}
+									<div class="kinds">
+										{#each about.kinds.filter((k) => app.resources.some((r) => r.group === k.group && r.plural === k.plural)) as kind (kind.plural)}
+											<button class="btn" onclick={() => openKind(kind.group, kind.plural)}>{kind.label}</button>
+										{/each}
+									</div>
 								{/if}
 							</li>
 						{/each}
 					</ul>
-				</div>
+				{/if}
+				{#if absent.length}
+					<div class="absent">
+						<h2 class="section">{present.length ? t('Not in this cluster') : t('None of these runs in this cluster')}</h2>
+						<ul>
+							{#each absent as item (item.id)}
+								{@const about = ABOUT[item.id]}
+								<li>
+									<strong>{item.name}</strong>
+									<span class="muted">{about?.text}</span>
+									{#if item.source === 'off'}
+										<span class="muted off">{t('Off')}</span>
+									{:else if about?.install}
+										<a href={about.install} target="_blank" rel="noreferrer" aria-label={t('How to install {name}', { name: item.name })}>{t('How to install')}</a>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
 			{/if}
-		{/if}
+		</div>
 
-		<form class="settings" onsubmit={save}>
-			<h2>{t('Point elsewhere')}</h2>
-			<p class="muted">{t('For {context} only. Leave a field empty and Kubri finds the tool in the cluster.', { context: app.contextName(context) })}</p>
-			<details class="help">
-				<summary>{t('How to fill these in')}</summary>
-				<p>
-					<Phrase
-						text={t('Type {off} to turn a tool off. A URL like {url} reaches that Service through the API server.')}
-						code={{ off: 'off', url: 'http://name.namespace.svc:port' }}
-					/>
-				</p>
-				<p>
-					<Phrase
-						text={t('{field} is the address only, like {url}. {logs} on a namespace, pod, workload or Service then opens its logs in Grafana’s Explore, and {dashboards} lists the dashboards that show it, ready to open or copy. Both work also when Grafana needs a login or a client certificate, as your browser opens them.')}
-						strong={{ field: t('Grafana URL'), logs: t('Logs in Grafana'), dashboards: t('Grafana…') }}
-						code={{ url: 'https://grafana.example.com' }}
-					/>
-				</p>
-				<p>
-					<Phrase
-						text={t('{field} is the name or UID of the Loki data source in Grafana. Leave it empty unless Kubri picks the wrong one.')}
-						strong={{ field: t('Loki data source') }}
-					/>
-				</p>
-				<p>
-					<Phrase
-						text={t('{field} lets Kubri list Grafana’s dashboards and find its Loki data source itself. It goes only to a Grafana given by URL.')}
-						strong={{ field: t('Token') }}
-					/>
-				</p>
-			</details>
-			{#each [URLS.prometheus, URLS.loki] as url (url!.key)}
-				<label>
-					<span>{url!.key === 'prometheus' ? t('Prometheus') : t('Loki')} URL</span>
-					<input bind:value={draft[url!.key]} placeholder="e.g. {url!.example}" spellcheck="false" autocomplete="off" />
-				</label>
-			{/each}
-			<fieldset class="grafana">
-				<legend>{t('Grafana')}</legend>
-				<label>
-					<span>URL</span>
-					<input bind:value={draft.grafana} placeholder="e.g. {URLS.grafana!.example}" spellcheck="false" autocomplete="off" />
-				</label>
-				<label>
-					<span>{t('Loki data source')}</span>
-					<input bind:value={draft.grafanaLogs} placeholder={t('Found in Grafana, else its default')} spellcheck="false" autocomplete="off" />
-				</label>
-				<label>
-					<span>{t('Token')}</span>
-					<input type="password" bind:value={draft.grafanaToken} placeholder={t('A service account token with the Viewer role')} autocomplete="off" />
-				</label>
-				<p class="muted small">{t('Kept in Kubri’s settings file.')}</p>
-			</fieldset>
-			<div class="actions">
-				<button class="btn primary" type="submit" disabled={!dirty || saving || !context}>{saving ? t('Saving…') : t('Save')}</button>
-			</div>
-		</form>
+		<div class="side">
+			<h2 class="section" id="point-elsewhere">{t('Point elsewhere')}</h2>
+			<form class="settings" onsubmit={save} aria-labelledby="point-elsewhere">
+				<p class="muted">{t('For {context} only. Leave a field empty and Kubri finds the tool in the cluster.', { context: app.contextName(context) })}</p>
+				<details class="help">
+					<summary>{t('How to fill these in')}</summary>
+					<p>
+						<Phrase
+							text={t('Type {off} to turn a tool off. A URL like {url} reaches that Service through the API server.')}
+							code={{ off: 'off', url: 'http://name.namespace.svc:port' }}
+						/>
+					</p>
+					<p>
+						<Phrase
+							text={t('{field} is the address only, like {url}. {logs} on a namespace, pod, workload or Service then opens its logs in Grafana’s Explore, and {dashboards} lists the dashboards that show it, ready to open or copy. Both work also when Grafana needs a login or a client certificate, as your browser opens them.')}
+							strong={{ field: t('Grafana URL'), logs: t('Logs in Grafana'), dashboards: t('Grafana…') }}
+							code={{ url: 'https://grafana.example.com' }}
+						/>
+					</p>
+					<p>
+						<Phrase
+							text={t('{field} is the name or UID of the Loki data source in Grafana. Leave it empty unless Kubri picks the wrong one.')}
+							strong={{ field: t('Loki data source') }}
+						/>
+					</p>
+					<p>
+						<Phrase
+							text={t('{field} lets Kubri list Grafana’s dashboards and find its Loki data source itself. It goes only to a Grafana given by URL.')}
+							strong={{ field: t('Token') }}
+						/>
+					</p>
+				</details>
+				{#each [URLS.prometheus, URLS.loki] as url (url!.key)}
+					<label>
+						<span>{url!.key === 'prometheus' ? t('Prometheus') : t('Loki')} URL</span>
+						<input bind:value={draft[url!.key]} placeholder="e.g. {url!.example}" spellcheck="false" autocomplete="off" />
+					</label>
+				{/each}
+				<fieldset class="grafana">
+					<legend>{t('Grafana')}</legend>
+					<label>
+						<span>URL</span>
+						<input bind:value={draft.grafana} placeholder="e.g. {URLS.grafana!.example}" spellcheck="false" autocomplete="off" />
+					</label>
+					<label>
+						<span>{t('Loki data source')}</span>
+						<input bind:value={draft.grafanaLogs} placeholder={t('Found in Grafana, else its default')} spellcheck="false" autocomplete="off" />
+					</label>
+					<label>
+						<span>{t('Token')}</span>
+						<input type="password" bind:value={draft.grafanaToken} placeholder={t('A service account token with the Viewer role')} autocomplete="off" />
+					</label>
+					<p class="muted small">{t('Kept in Kubri’s settings file.')}</p>
+				</fieldset>
+				<div class="actions">
+					<button class="btn primary" type="submit" disabled={!dirty || saving || !context}>{saving ? t('Saving…') : t('Save')}</button>
+				</div>
+			</form>
+		</div>
 	</div>
 </section>
 
 <style>
 	.page {
+		container: page / inline-size;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
 		height: 100%;
 		padding: 0 24px;
 	}
+	/* The tools and the settings side by side only where both have room; the sidebar takes
+	   part of the window, so this follows the page's width, not the window's. */
 	.body {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+		grid-template-columns: minmax(0, 1fr);
 		gap: 24px;
 		flex: 1;
 		min-height: 0;
@@ -248,10 +256,25 @@
 		overflow: auto;
 		align-items: start;
 	}
-	@media (max-width: 900px) {
+	@container page (min-width: 960px) {
 		.body {
-			grid-template-columns: minmax(0, 1fr);
+			grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
 		}
+	}
+	.main {
+		container: tools / inline-size;
+		min-width: 0;
+	}
+	.side {
+		min-width: 0;
+	}
+	h2.section {
+		margin: 0 0 6px;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 	}
 	.tools {
 		display: grid;
@@ -312,10 +335,6 @@
 		flex-direction: column;
 		gap: 10px;
 	}
-	.settings h2 {
-		margin: 0;
-		font-size: 14px;
-	}
 	label {
 		display: flex;
 		flex-direction: column;
@@ -345,14 +364,6 @@
 	.absent:first-child {
 		margin-top: 0;
 	}
-	.absent h2 {
-		margin: 0 0 6px;
-		color: var(--text-muted);
-		font-size: 12px;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
 	.absent ul {
 		margin: 0;
 		padding: 0;
@@ -375,7 +386,7 @@
 	.absent a {
 		white-space: nowrap;
 	}
-	@media (max-width: 640px) {
+	@container tools (max-width: 560px) {
 		.absent li {
 			grid-template-columns: minmax(0, 1fr) auto;
 		}
@@ -407,19 +418,23 @@
 		display: flex;
 		justify-content: flex-end;
 	}
+	/* Grafana's three fields, under a line, flush with the fields above. */
 	.grafana {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 10px;
 		min-width: 0;
-		margin: 0;
-		padding: 12px;
-		border: 1px solid var(--border);
-		border-radius: 8px;
+		margin: 4px 0 0;
+		padding: 12px 0 0;
+		border: none;
+		border-top: 1px solid var(--border-subtle);
 	}
 	legend {
-		padding: 0 4px;
-		font-size: 12.5px;
+		float: left;
+		width: 100%;
+		margin: 0 0 2px;
+		padding: 0;
+		font-size: 13px;
 		font-weight: 600;
 	}
 </style>
