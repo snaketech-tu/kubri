@@ -1,7 +1,7 @@
 # Kubri implementation plan: 1.9
 
 Date: 5 November 2026. Starting point: Kubri 1.8.0 (main at `9f7bb99`). Status: implemented
-in pull requests #157 to #164, waiting for review. "As built" below lists where the result
+in pull requests #157 to #166 and released in 1.9.0. "As built" below lists where the result
 differs from this plan.
 
 1.9 makes everyday work smoother in four places:
@@ -27,6 +27,8 @@ differs from this plan.
 | Added | #160 | The Integrations page layout: tools found, tools missing and the settings each get their own place, also at narrow widths. |
 | Added | #163 | Label templates for logs: other label names for namespace, pod and container (such as `exported_namespace`), kept once and picked per context, used by Logs in Grafana and the Loki log history. |
 | Added | #164 | Production namespaces: in a context that is not production, single namespaces get its care (banner, typed names, notes, no changes by AI agents). The automatic lock stays per context. |
+| Added | #165 | Pinned places come first in the sidebar, above Overview. |
+| Added | #166 | Favorite port-forwards are listed under Port-forwards in the sidebar and start or stop with one click. The port-forward dialog can keep a forward as a favorite. Starting on connect is now a choice per favorite: new favorites start by click only, favorites saved before 1.9 keep starting on connect. |
 
 ## Decisions
 
