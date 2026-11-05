@@ -5,6 +5,7 @@
 	import { backend, type ResourceInfo, type XrayNode } from '../api';
 	import { errorMessage } from '../format';
 	import type { MenuAction } from '../menu';
+	import { pluralKind } from '../nav';
 	import { openObjectMenu } from '../objects';
 	import { app, findResource, refOf } from '../state.svelte';
 	import { allIds, initialExpanded, issuesBelow, kindTag, visibleRows, xrayResources, type TreeRow } from '../xray';
@@ -203,11 +204,14 @@
 		crumbs={['Topology']}
 		title="Topology"
 		count={loaded ? roots.length : null}
-		subtitle="XRay of {resource.kind.toLowerCase()}s and what they own, {namespace ? `in ${namespace}` : 'in all namespaces'}"
+		subtitle="{pluralKind(resource.kind, resource.plural)} and what they own and use, {namespace ? `in ${namespace}` : 'in all namespaces'}"
 	>
 		{#if withIssues}<span class="tag bad"><HealthIcon health="failed" />{withIssues} with issues</span>{/if}
 		{#snippet tools()}
-			<button class="btn" onclick={() => app.showGraph()} title="All objects as one graph, with request paths (:graph)">Graph</button>
+			<div class="segmented" role="group" aria-label="Show as">
+				<button aria-pressed="true" title="A tree for each object (:xray)">Trees</button>
+				<button aria-pressed="false" onclick={() => app.showGraph()} title="All objects as one graph, with request paths (:graph)">Graph</button>
+			</div>
 			<button class="btn" onclick={expandAll} title="Open every tree">Expand all</button>
 			<button class="btn" onclick={() => expanded.clear()} title="Close every tree">Collapse all</button>
 		{/snippet}
@@ -234,7 +238,7 @@
 			</button>
 		</div>
 
-		<div class="tree" bind:this={scroller} role="tree" aria-label="XRay of {resource.kind}s">
+		<div class="tree" bind:this={scroller} role="tree" aria-label="Topology of {resource.kind}s">
 			{#each rows as row, i (row.node.id)}
 				{@const node = row.node}
 				{@const hidden = row.expanded ? 0 : issuesBelow(node)}

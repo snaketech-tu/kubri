@@ -18,6 +18,7 @@
 	import ConfigView from '#lib/components/ConfigView.svelte';
 	import ContextSettingsForm from '#lib/components/ContextSettingsForm.svelte';
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
+	import ConnectCard from '#lib/components/ConnectCard.svelte';
 	import CreateView from '#lib/components/CreateView.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
 	import Dock from '#lib/components/Dock.svelte';
@@ -31,7 +32,6 @@
 	import KubectlDialog from '#lib/components/KubectlDialog.svelte';
 	import SnapshotDialog from '#lib/components/SnapshotDialog.svelte';
 	import KubeconfigFilesDialog from '#lib/components/KubeconfigFilesDialog.svelte';
-	import { connectHint } from '#lib/connect.js';
 	import ActivityPanel from '#lib/components/ActivityPanel.svelte';
 	import HelpOverlay from '#lib/components/HelpOverlay.svelte';
 	import Tour from '#lib/components/Tour.svelte';
@@ -42,6 +42,8 @@
 	import RbacView from '#lib/components/RbacView.svelte';
 	import ResourceView from '#lib/components/ResourceView.svelte';
 	import SanitizerView from '#lib/components/SanitizerView.svelte';
+	import ToolsView from '#lib/components/ToolsView.svelte';
+	import KindsView from '#lib/components/KindsView.svelte';
 	import IntegrationsView from '#lib/components/IntegrationsView.svelte';
 	import RightSizingView from '#lib/components/RightSizingView.svelte';
 	import FleetView from '#lib/components/FleetView.svelte';
@@ -49,6 +51,7 @@
 	import GraphView from '#lib/components/GraphView.svelte';
 	import ChangesView from '#lib/components/ChangesView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
+	import { readOnlyFixed, readOnlyReason } from '#lib/guard.js';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
 	import { parseShortcut, pluginApplies, shortcutLabel } from '#lib/k9s.js';
@@ -237,6 +240,8 @@
 	}
 
 	const viewHints = $derived.by(() => {
+		// The view waits under the connecting card; only cancelling works.
+		if (app.connecting && app.cluster && app.contexts.some((c) => c.name === app.connecting)) return [['esc', 'cancel']] as [string, string][];
 		const panel: [string, string][] = app.details ? [['f', app.maximized ? 'restore' : 'maximize'], ['esc', 'close']] : [];
 		// The log keys, while the logs are on screen.
 		if (app.details?.tab === 'logs') {
@@ -254,6 +259,10 @@
 				...panel,
 				['?', 'help']
 			] as [string, string][];
+		}
+		// Typing goes to the shell. The panel's keys work there as buttons, and after Esc twice.
+		if (app.details?.tab === 'shell') {
+			return [['esc esc', 'leave terminal'], ['ctrl+d', 'exit shell'], ...panel, ['?', 'help']] as [string, string][];
 		}
 		if (app.page === 'portforwards') {
 			return [
@@ -279,6 +288,9 @@
 				...panel,
 				['?', 'help']
 			] as [string, string][];
+		}
+		if (app.page === 'kinds') {
+			return [[':', 'command'], ['/', 'find'], ['j/k', 'move'], ['enter', 'open'], ['?', 'help']] as [string, string][];
 		}
 		if (app.page === 'rbac') {
 			return [[':', 'command'], ['/', 'filter'], ['j/k', 'move'], ...panel, ['?', 'help']] as [string, string][];
@@ -332,6 +344,14 @@
 			['y', 'yaml']
 		];
 		if (!r) return h;
+		// An empty list has no row for the keys to act on.
+		if (app.listRows === 0) {
+			const empty: [string, string][] = [[':', 'command'], ['/', 'filter']];
+			if (app.scope) empty.push(['esc', 'back']);
+			if (app.details) empty.push(['f', app.maximized ? 'restore' : 'maximize']);
+			empty.push(['?', 'help']);
+			return empty;
+		}
 		const writable = !app.readOnly;
 		if (hasLogs(r)) h.push(['l', 'logs']);
 		if (isPods(r) && writable) h.push(['s', 'shell'], ['a', 'attach']);
@@ -393,6 +413,13 @@
 		if (!drafts.block(() => session.signOut())) session.signOut();
 	}
 
+	// A menu belongs to the view it opened in: going elsewhere, also with Back, closes it.
+	$effect(() => {
+		void app.view;
+		void app.cluster?.context;
+		untrack(() => (app.menu = null));
+	});
+
 	// A clock for the unlock countdown.
 	let now = $state(Date.now());
 	$effect(() => {
@@ -401,9 +428,10 @@
 		return () => clearInterval(timer);
 	});
 	const unlockLeft = $derived(app.unlockedUntil === null ? null : Math.max(0, Math.ceil((app.unlockedUntil - now) / 1000)));
+	const lockFixed = $derived(readOnlyFixed(app.guard, app.k9s?.readOnly ?? false, app.contextSettings.readOnly));
 	const lockTitle = $derived(
-		app.k9s?.readOnly
-			? 'k9s readOnly is set: Kubri does not change this cluster'
+		lockFixed
+			? `${readOnlyReason(app.guard, app.contextSettings.readOnly, app.k9s?.readOnly ?? false)}.`
 			: app.contextSettings.readOnly
 				? 'Read-only in Kubri: no edits, deletes, scaling or shells. Click to allow changes.'
 				: unlockLeft !== null
@@ -486,13 +514,24 @@
 					<div class="popover">
 						<p class="popover-title">Settings for <strong>{app.cluster.context}</strong></p>
 						<ContextSettingsForm context={app.cluster.context} namespaces={app.namespaces} />
-						<p class="note">Kept in Kubri's settings file; the kubeconfig is never changed.</p>
+						<p class="note">
+							Kept in Kubri's settings file; the kubeconfig is never changed.
+							<button
+								class="all-contexts"
+								onclick={(e) => {
+									e.currentTarget.closest('details')?.removeAttribute('open');
+									app.showConfig('contexts');
+								}}
+							>
+								All contexts in Settings
+							</button>
+						</p>
 					</div>
 				</details>
 			{/if}
 			<span class="divider"></span>
 			<NamespacePicker />
-			<button class="palette-button" onclick={() => (app.paletteOpen = true)} aria-label="Search or run a command">
+			<button class="palette-button" data-tour="palette" onclick={() => (app.paletteOpen = true)} aria-label="Search or run a command">
 				<Icon name="search" size={17} />
 				<span>Search or run a command</span>
 				<kbd>Ctrl K</kbd>
@@ -521,12 +560,13 @@
 			</button>
 			<button
 				class="mode"
+				data-tour="read-only"
 				class:locked={app.readOnly}
 				class:unlocked={app.unlockedUntil !== null}
 				role="switch"
 				aria-checked={app.readOnly}
 				aria-label="Read-only"
-				disabled={!app.cluster || app.k9s?.readOnly || (app.guard.readOnly && !app.guard.canUnlock && !app.contextSettings.readOnly)}
+				disabled={!app.cluster || lockFixed}
 				onclick={() => app.toggleReadOnly()}
 				title={lockTitle}
 			>
@@ -580,14 +620,20 @@
 		{/if}
 
 		<div class="area" class:right={dock.sessions.length && dock.side === 'right' && !dock.minimized}>
+			{#if app.cluster && (app.connecting || app.connectFailure)}
+				<!-- Over the view Kubri stays on: it is still there if connecting fails or is cancelled. -->
+				<ConnectCard />
+			{/if}
 			<main
+				inert={!!(app.cluster && app.connecting)}
+				class:waiting={app.cluster && app.connecting}
 				class:with-details={app.details}
 				class:wide={app.panelWide}
 				style:--panel-width={app.panelWidth ? `${app.panelWidth}px` : null}
 			>
 				{#if app.page === 'fleet'}
 					<FleetView />
-				{:else if app.cluster && !app.connecting}
+				{:else if app.cluster}
 					{#if app.page === 'portforwards'}
 						<PortForwardsView />
 					{:else if app.page === 'benchmarks'}
@@ -599,6 +645,12 @@
 					{:else if app.page === 'integrations'}
 						{#key app.cluster?.context}
 							<IntegrationsView />
+						{/key}
+					{:else if app.page === 'tools'}
+						<ToolsView />
+					{:else if app.page === 'kinds'}
+						{#key app.cluster?.context}
+							<KindsView />
 						{/key}
 					{:else if app.page === 'rightsizing'}
 						{#key `${app.cluster?.context}/${app.namespace}`}
@@ -666,36 +718,39 @@
 								Kubri looks in the files listed in <code>KUBECONFIG</code>, or in <code>~/.kube/config</code>.
 							</p>
 						</section>
+					{:else if app.connecting || app.connectFailure}
+						<section class="connect">
+							<img src={logo} alt="" width="56" height="56" />
+							<ConnectCard inline />
+							{#if !app.connecting}
+								<div class="connect-actions">
+									<button onclick={() => (app.kubeconfigFilesOpen = true)}>Kubeconfig files…</button>
+								</div>
+							{/if}
+						</section>
 					{:else}
 						<section class="connect">
 							<img src={logo} alt="" width="56" height="56" />
-							<span class="eyebrow">Your cluster, in focus</span>
-							<h1>{app.connectingText ?? 'Connect to a cluster.'}</h1>
+							<h1>Connect to a cluster.</h1>
 							<p>
 								{isTauri()
 									? 'Choose a context from your kubeconfig. Reload it after you update your credentials.'
 									: 'Choose a context configured on kubri-server. The server holds the credentials.'}
 							</p>
-							{#if !app.connecting && app.connectFailure}
-								{@const hint = connectHint(app.connectFailure.error)}
-								{#if hint}<p class="hint">{hint}</p>{/if}
-							{/if}
-							{#if !app.connecting}
-								<div class="connect-actions">
-									<button
-										class="primary"
-										onclick={() => {
-											app.contextMenuOpen = true;
-											app.reloadContexts(true);
-										}}
-									>
-										{app.connectFailure ? 'Choose another context' : 'Choose context'} <Icon name="arrow" size={16} />
-									</button>
-									<button onclick={() => app.load()}>Try again</button>
-									<button onclick={() => (app.kubeconfigFilesOpen = true)}>Kubeconfig files…</button>
-									{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>See all clusters</button>{/if}
-								</div>
-							{/if}
+							<div class="connect-actions">
+								<button
+									class="primary"
+									onclick={() => {
+										app.contextMenuOpen = true;
+										app.reloadContexts(true);
+									}}
+								>
+									Choose context <Icon name="arrow" size={16} />
+								</button>
+								<button onclick={() => app.load()}>Try again</button>
+								<button onclick={() => (app.kubeconfigFilesOpen = true)}>Kubeconfig files…</button>
+								{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>See all clusters</button>{/if}
+							</div>
 							<p class="small">Your k9s aliases, hotkeys, plugins and skins keep working.</p>
 						</section>
 					{/if}
@@ -705,6 +760,7 @@
 				{/if}
 			</main>
 			{#if dock.sessions.length}<Dock />{/if}
+			{#if app.activityOpen}<ActivityPanel />{/if}
 		</div>
 
 		<footer>
@@ -736,7 +792,7 @@
 					<button class="close" onclick={() => app.dismissRelease()} aria-label="Hide until the next release">×</button>
 				</span>
 			{/if}
-			<span class="hints">
+			<span class="hints" data-tour="keys">
 				{#each hints as [key, label], i (key + i)}
 					{#if keyFromLabel(key)}
 						<button onclick={() => press(key)} onmousedown={keepFocus} title="{label} ({key})"><kbd>{key}</kbd>{label}</button>
@@ -752,7 +808,6 @@
 {#if app.paletteOpen}<CommandPalette />{/if}
 {#if app.helpOpen}<HelpOverlay />{/if}
 {#if app.tourOpen}<Tour />{/if}
-{#if app.activityOpen}<ActivityPanel />{/if}
 {#if app.menu}<ActionMenu menu={app.menu} />{/if}
 <AgentRequests />
 {#if app.dialog?.kind === 'forbidden'}
@@ -905,6 +960,19 @@
 		color: var(--text-muted);
 		font-size: 12px;
 	}
+	.environment .all-contexts {
+		display: block;
+		margin-top: 6px;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent-strong);
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.environment .all-contexts:hover {
+		text-decoration: underline;
+	}
 	/* The context's color, as a strip over the header. */
 	.shell.tinted header {
 		box-shadow: inset 0 3px 0 var(--context-color);
@@ -1015,15 +1083,15 @@
 		transition: transform 0.12s;
 	}
 	.mode.locked .track {
-		background: var(--ok);
+		background: var(--accent);
 	}
 	.mode.locked .knob {
 		transform: translateX(12px);
 	}
 	.mode.locked {
 		border-color: transparent;
-		background: color-mix(in srgb, var(--ok) 14%, var(--surface-1));
-		color: var(--ok);
+		background: color-mix(in srgb, var(--accent) 14%, var(--surface-1));
+		color: var(--accent-strong);
 	}
 	.mode:hover:not(:disabled) {
 		border-color: var(--accent);
@@ -1057,11 +1125,17 @@
 	}
 	/* The page, and the workspace below or beside it. */
 	.area {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		flex: 1;
 		min-width: 0;
 		min-height: 0;
+	}
+	main.waiting {
+		opacity: 0.45;
+		filter: saturate(0.6);
+		transition: opacity 0.2s;
 	}
 	.area.right {
 		flex-direction: row;
@@ -1126,13 +1200,6 @@
 		color: var(--bad);
 		font-size: 13px;
 		overflow-wrap: anywhere;
-	}
-	.connect .hint {
-		padding: 8px 12px;
-		border-radius: 8px;
-		background: color-mix(in srgb, var(--warn) 10%, transparent);
-		color: var(--text);
-		font-size: 13px;
 	}
 	.connect .small {
 		margin-top: 18px;
@@ -1257,11 +1324,19 @@
 			display: none;
 		}
 	}
-	/* A narrow window keeps the sidebar as a rail of icons; the labels are in the tooltips. */
-	@media (min-width: 721px) and (max-width: 1100px) {
+	/* A small laptop window keeps the labels in a narrower sidebar. */
+	@media (min-width: 901px) and (max-width: 1100px) {
+		.shell {
+			grid-template-columns: 184px minmax(0, 1fr);
+		}
+	}
+	/* Below that the sidebar is a rail of icons; the labels are in the tooltips. */
+	@media (min-width: 721px) and (max-width: 900px) {
 		.shell {
 			grid-template-columns: 56px minmax(0, 1fr);
 		}
+	}
+	@media (min-width: 721px) and (max-width: 1100px) {
 		.mode {
 			font-size: 0;
 			gap: 0;

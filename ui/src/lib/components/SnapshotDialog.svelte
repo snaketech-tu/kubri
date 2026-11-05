@@ -75,7 +75,7 @@
 			<ul class="contents">
 				<li>
 					Every type you may list{scope === 'namespace' ? ' in the namespace, with nodes, storage and cluster roles' : ''}, with the
-					columns of the lists, so Pulses, XRay, the graph and the sanitizer work on it
+					columns of the lists, so the Overview, Topology and Checks work on it
 				</li>
 				<li>Events, and the last 500 log lines of up to 300 containers</li>
 				<li>Secrets with their keys but without values; Helm releases without their values and manifests</li>

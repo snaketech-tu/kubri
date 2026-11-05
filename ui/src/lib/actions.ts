@@ -9,13 +9,15 @@ import {
 	type Plugin,
 	type PluginRun,
 	type PortForwardRequest,
-	type ResourceInfo
+	type ResourceInfo,
+	type ResourceRef
 } from './api';
 import { suggest } from './commands';
 import { errorMessage } from './format';
 import { expandVariables, focusVariables } from './k9s';
 import { AUTO_PORT_FORWARDS_KEY, annotatedForwards, suggestedLocalPort } from './pods';
-import { app } from './state.svelte';
+import type { Cause } from './causes';
+import { app, findResource } from './state.svelte';
 
 /** Kinds `kubectl rollout restart` supports. */
 export function canRestart(resource: ResourceInfo) {
@@ -273,4 +275,107 @@ export function runHotkey(hotkey: Hotkey) {
 	const focus = app.focus?.() ?? null;
 	const command = expandVariables(hotkey.command, focusVariables(focus, contextInfo()), focus?.columns ?? []);
 	if (!runCommand(command)) app.toast(`Hotkey ${hotkey.name}: nothing matches “${command}”`, 'bad');
+}
+
+/** Kinds that own pods through a pod template, by the kind an owner reference names. */
+const WORKLOADS: Record<string, ResourceRef> = {
+	Deployment: { group: 'apps', version: 'v1', plural: 'deployments' },
+	StatefulSet: { group: 'apps', version: 'v1', plural: 'statefulsets' },
+	DaemonSet: { group: 'apps', version: 'v1', plural: 'daemonsets' },
+	ReplicaSet: { group: 'apps', version: 'v1', plural: 'replicasets' },
+	Job: { group: 'batch', version: 'v1', plural: 'jobs' },
+	CronJob: { group: 'batch', version: 'v1', plural: 'cronjobs' }
+};
+
+function controllerOf(object: KubeObject) {
+	const owners = object.metadata.ownerReferences ?? [];
+	return owners.find((o) => o.controller) ?? owners[0] ?? null;
+}
+
+/**
+ * The workload whose template made the pod: the Deployment above its ReplicaSet, the CronJob
+ * above its Job, or the pod itself when nothing owns it. Changing it outlasts the pod.
+ */
+export async function workloadOf(target: ObjectRef, pod: KubeObject): Promise<ObjectRef> {
+	const step = async (at: ObjectRef, object: KubeObject): Promise<ObjectRef> => {
+		const owner = controllerOf(object);
+		const resource = owner && WORKLOADS[owner.kind];
+		if (!owner || !resource) return at;
+		const next: ObjectRef = { ...target, resource, name: owner.name };
+		if (owner.kind !== 'ReplicaSet' && owner.kind !== 'Job') return next;
+		try {
+			return await step(next, await backend.getObject(next));
+		} catch {
+			return next;
+		}
+	};
+	return step(target, pod);
+}
+
+/** Opens Set image… on the workload that owns the pod. */
+export async function setImageOf(target: ObjectRef, pod: KubeObject) {
+	const at = await workloadOf(target, pod);
+	const resource = findResource(app.resources, at.resource);
+	if (resource) app.dialog = { kind: 'image', resource, target: at };
+}
+
+/** Opens Raise memory limit… on the workload that owns the pod. */
+export async function raiseMemoryOf(target: ObjectRef, container: string) {
+	try {
+		const fix = await backend.memoryFix(target, container);
+		const resource = fix.workload && findResource(app.resources, fix.workload.resource);
+		if (!fix.workload || !resource) {
+			app.toast('Nothing owns this pod that Kubri can change; raise the limit where the pod is defined', 'bad');
+			return;
+		}
+		app.dialog = { kind: 'memory', resource, target: fix.workload, fix };
+	} catch (err) {
+		app.toast(errorMessage(err), 'bad');
+	}
+}
+
+/**
+ * Opens the requests of a workload's container for the cause's resource: the workload that owns
+ * `pod`, or the one `workload` names, such as an autoscaler's target.
+ */
+export async function changeRequestsOf(cause: Cause, target: ObjectRef, pod: KubeObject | null, workload?: ObjectRef) {
+	const name = cause.resource ?? 'cpu';
+	try {
+		const at = workload ?? (pod ? await workloadOf(target, pod) : target);
+		const resource = findResource(app.resources, at.resource);
+		// Requests are changed through the pod template, which only these kinds have.
+		if (!resource || !['deployments', 'statefulsets', 'daemonsets'].includes(at.resource.plural)) {
+			app.toast('Nothing owns this pod that Kubri can change; set the requests where the pod is defined', 'bad');
+			return;
+		}
+		const object = await backend.getObject(at);
+		const containers: { name: string; resources?: { requests?: Record<string, string>; limits?: Record<string, string> } }[] =
+			(object.spec as { template?: { spec?: { containers?: [] } } } | undefined)?.template?.spec?.containers ?? [];
+		const container = containers.find((c) => c.resources?.requests?.[name]) ?? containers[0];
+		if (!container) return;
+		const request = container.resources?.requests?.[name] ?? null;
+		const limit = container.resources?.limits?.[name] ?? null;
+		app.dialog = {
+			kind: 'resources',
+			resource,
+			target: at,
+			container: container.name,
+			name,
+			request: request ?? '',
+			limit: limit ?? '',
+			current: { request, limit },
+			note: `${cause.title}.`
+		};
+	} catch (err) {
+		app.toast(errorMessage(err), 'bad');
+	}
+}
+
+/** Starts a Secret or ConfigMap a container needs, with its key, on the Create page. */
+export function createMissing(missing: NonNullable<Cause['missing']>, namespace: string | null) {
+	const plural = missing.kind === 'Secret' ? 'secrets' : 'configmaps';
+	const resource = findResource(app.resources, { group: '', version: 'v1', plural });
+	if (!resource) return;
+	const keys = missing.keys.length ? missing.keys : [missing.kind === 'Secret' ? 'password' : 'key'];
+	app.showCreate(resource, { name: missing.name, namespace: namespace ?? undefined, data: Object.fromEntries(keys.map((k) => [k, 'change-me'])) });
 }

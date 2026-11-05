@@ -154,6 +154,11 @@ export function isFaulty(columns: Column[], row: Row): boolean {
 	return cells.some((c) => c.tone === 'bad' || (c.tone === 'warn' && !done));
 }
 
+/** Whether rows of the kind can need attention: it has a state, readiness or health, or is Events. */
+export function hasHealth(columns: Column[], plural: string): boolean {
+	return plural === 'events' || columns.some((c) => /^(status|phase|state|ready|available|conditions|health)$/i.test(c.name));
+}
+
 /** The table as CSV, the way k9s saves it with Ctrl+S. */
 export function toCsv(header: string[], lines: string[][]): string {
 	const field = (value: string) => (/[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);

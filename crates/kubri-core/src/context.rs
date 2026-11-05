@@ -12,6 +12,8 @@ const SERVICE_ACCOUNT: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
 pub struct ContextInfo {
     pub name: String,
     pub cluster: Option<String>,
+    /// The API server's address, as the kubeconfig names it.
+    pub server: Option<String>,
     pub user: Option<String>,
     pub namespace: Option<String>,
     /// The kubeconfig's `current-context`.
@@ -96,9 +98,15 @@ pub(crate) fn list_contexts(
         .iter()
         .map(|named| {
             let ctx = named.context.as_ref();
+            let cluster = ctx.map(|c| c.cluster.clone()).filter(|c| !c.is_empty());
+            let server = cluster.as_ref().and_then(|name| {
+                let found = kubeconfig.clusters.iter().find(|c| &c.name == name)?;
+                found.cluster.as_ref()?.server.clone()
+            });
             ContextInfo {
                 name: named.name.clone(),
-                cluster: ctx.map(|c| c.cluster.clone()).filter(|c| !c.is_empty()),
+                cluster,
+                server,
                 user: ctx.and_then(|c| c.user.clone()),
                 namespace: ctx.and_then(|c| c.namespace.clone()),
                 is_default: Some(named.name.as_str()) == default,
@@ -179,6 +187,7 @@ contexts:
         assert_eq!(contexts[1].name, "prod");
         assert!(contexts[1].is_default);
         assert_eq!(contexts[1].cluster.as_deref(), Some("prod-cluster"));
+        assert_eq!(contexts[1].server.as_deref(), Some("https://prod.example.com"));
         assert_eq!(contexts[1].namespace.as_deref(), Some("web"));
     }
 }

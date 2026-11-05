@@ -771,6 +771,9 @@
 						{:else}
 							<p>No Helm releases{namespace ? ` in ${namespace}` : ''}.</p>
 							<p class="muted">Kubri reads the release records Helm 3 and 4 keep in Secrets or ConfigMaps.</p>
+							{#if helm && !app.readOnly && !app.cluster?.snapshot}
+								<p class="install"><button class="btn" onclick={() => (changing = 'install')}>Install chart…</button></p>
+							{/if}
 						{/if}
 					</div>
 				{:else if !error}
@@ -1033,6 +1036,16 @@
 	}
 	.empty p {
 		margin: 4px 0;
+	}
+	.empty .install {
+		margin-top: 14px;
+	}
+	.install .btn {
+		padding: 7px 14px;
+		border-color: var(--accent);
+		background: var(--accent);
+		color: var(--on-accent);
+		font-size: 13px;
 	}
 	@media (max-width: 720px) {
 		section {

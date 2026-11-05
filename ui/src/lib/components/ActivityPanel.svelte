@@ -2,7 +2,7 @@
 	import { age } from '../format';
 	import { app } from '../state.svelte';
 
-	let box = $state<HTMLDivElement>();
+	let box = $state<HTMLElement>();
 	let now = $state(Date.now());
 
 	$effect(() => {
@@ -23,18 +23,19 @@
 		app.activityOpen = false;
 	}
 
+	// The page beside the panel keeps its keys; while the focus is in the panel, its keys stay here.
 	function onkeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
 			e.preventDefault();
 			close();
 		}
+		if (e.key !== 'Tab') e.stopPropagation();
 	}
 </script>
 
-<svelte:window {onkeydown} />
-
-<div class="backdrop" onclick={close} role="presentation"></div>
-<div class="panel" role="dialog" aria-modal="true" aria-label="Activity in this session" tabindex="-1" bind:this={box}>
+<!-- A side panel, not a dialog: the list stays in view and usable next to it. -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<aside class="panel" aria-label="Activity in this session" tabindex="-1" bind:this={box} {onkeydown}>
 	<header>
 		<h2>Activity <span class="n">{app.activity.length}</span></h2>
 		<button onclick={close} aria-label="Close">×</button>
@@ -60,30 +61,22 @@
 	{:else}
 		<p class="empty">Nothing yet. Changes you make, such as scaling or deleting, are listed here.</p>
 	{/if}
-</div>
+</aside>
 
 <style>
-	.backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 50;
-		background: rgb(0 0 0 / 35%);
-	}
 	.panel {
-		position: fixed;
-		top: 50%;
-		left: 50%;
-		z-index: 51;
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 30;
 		display: flex;
 		flex-direction: column;
-		width: min(620px, calc(100vw - 32px));
-		max-height: 80vh;
-		padding: 18px 22px;
-		transform: translate(-50%, -50%);
-		border: 1px solid var(--border);
-		border-radius: 12px;
+		width: min(400px, 100%);
+		padding: 16px 20px;
+		border-left: 1px solid var(--border);
 		background: var(--surface-1);
-		box-shadow: var(--shadow);
+		box-shadow: -8px 0 24px rgb(16 24 40 / 10%);
 	}
 	.panel:focus {
 		outline: none;

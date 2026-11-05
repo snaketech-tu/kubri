@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { backend, type KubeObject, type NodeFit, type ObjectRef } from '../api';
+	import { changeRequestsOf, createMissing, raiseMemoryOf, setImageOf } from '../actions';
+	import { containerCause, pendingCause } from '../causes';
 	import { errorMessage } from '../format';
 	import { registryOf } from '../pods';
 	import { app, findResource } from '../state.svelte';
@@ -105,18 +107,18 @@
 	async function raiseMemory(container: string) {
 		raising = true;
 		try {
-			const fix = await backend.memoryFix(target, container);
-			const resource = fix.workload && findResource(app.resources, fix.workload.resource);
-			if (!fix.workload || !resource) {
-				app.toast('Nothing owns this pod that Kubri can change; raise the limit where the pod is defined', 'bad');
-				return;
-			}
-			app.dialog = { kind: 'memory', resource, target: fix.workload, fix };
-		} catch (err) {
-			app.toast(errorMessage(err), 'bad');
+			await raiseMemoryOf(target, container);
 		} finally {
 			raising = false;
 		}
+	}
+
+	/** Why a pending pod waits, in plain words. */
+	const waiting = $derived(pendingCause(object));
+
+	function showEvents() {
+		const resource = findResource(app.resources, target.resource);
+		if (resource) app.showDetails(resource, target, 'events');
 	}
 
 	let fits = $state<NodeFit[] | null>(null);
@@ -140,8 +142,12 @@
 {#if object.kind === 'Pod' && (problems.length || pending.length)}
 	<div class="summary" aria-label="Pod problems">
 		{#each problems as p (p.container)}
+			{@const cause = containerCause(object, p.container)}
 			<section class="problem bad">
-				<h3><Icon name="critical" />{p.oom && p.reason !== 'OOMKilled' ? `${p.reason} · OOMKilled` : p.reason} <span>in {p.container}</span></h3>
+				<h3>
+					<Icon name="critical" /><span class="title">{cause?.title ?? `${p.reason} in ${p.container}`}</span>
+					<span class="raw">{p.oom && p.reason !== 'OOMKilled' ? `${p.reason} · OOMKilled` : p.reason}</span>
+				</h3>
 				<p>
 					{p.restarts}
 					{p.restarts === 1 ? 'restart' : 'restarts'}{p.exitCode !== null
@@ -173,6 +179,17 @@
 					<p class="muted">The container used more memory than its limit allows and was killed.</p>
 				{/if}
 				<div class="buttons">
+					{#if p.pull && writable}
+						<button class="primary" onclick={() => setImageOf(target, object)}>Set image…</button>
+					{/if}
+					{#if cause?.fix === 'createConfig' && cause.missing && writable}
+						<button class="primary" onclick={() => createMissing(cause.missing!, target.namespace)}>
+							Create {cause.missing.kind} {cause.missing.name}…
+						</button>
+					{/if}
+					{#if p.pull || cause?.fix === 'createConfig' || cause?.fix === 'events'}
+						<button onclick={showEvents}>Show events</button>
+					{/if}
 					{#if p.oom && writable}
 						<button class="primary" onclick={() => raiseMemory(p.container)} disabled={raising}>Raise memory limit…</button>
 					{/if}
@@ -197,7 +214,7 @@
 		{/each}
 		{#if pending.length && !problems.length}
 			<section class="problem warn">
-				<h3><Icon name="pending" />Waiting to start</h3>
+				<h3><Icon name="pending" /><span class="title">{waiting?.title ?? 'Waiting to start'}</span></h3>
 				{#each pending as c (c.type)}
 					<p><strong>{c.reason ?? c.type}</strong> · {c.message}</p>
 				{/each}
@@ -216,9 +233,17 @@
 							{/each}
 						</ul>
 						<p class="muted small">Kubri checks the node's state, taints, node selector, node affinity, CPU, memory and pod count. Pod affinity, topology spread and volumes are left to the scheduler.</p>
-					{:else}
+					{/if}
+					{#if (waiting?.fix === 'requests' && writable) || !fits}
 						<div class="buttons">
-							<button onclick={checkNodes} disabled={checking}>{checking ? 'Checking…' : 'Why not each node?'}</button>
+							{#if waiting?.fix === 'requests' && writable}
+								<button class="primary" onclick={() => changeRequestsOf(waiting, target, object)}>
+									{waiting.resource === 'memory' ? 'Change memory request…' : 'Change CPU request…'}
+								</button>
+							{/if}
+							{#if !fits}
+								<button onclick={checkNodes} disabled={checking}>{checking ? 'Checking…' : 'Why not each node?'}</button>
+							{/if}
 						</div>
 					{/if}
 				{/if}
@@ -250,7 +275,8 @@
 	h3 {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		flex-wrap: wrap;
+		gap: 4px 8px;
 		margin: 0;
 		font-size: 13.5px;
 	}
@@ -260,9 +286,23 @@
 	.warn h3 {
 		color: var(--warn);
 	}
-	h3 span {
-		font-weight: 400;
+	h3 :global(svg) {
+		flex: none;
+	}
+	h3 .title {
+		flex: 1 1 200px;
+		min-width: 0;
+		color: var(--text);
+		overflow-wrap: anywhere;
+	}
+	h3 .raw {
+		padding: 1px 6px;
+		border-radius: 4px;
+		background: var(--surface-2);
 		color: var(--text-muted);
+		font-family: var(--mono);
+		font-size: 11px;
+		font-weight: 400;
 	}
 	p {
 		margin: 8px 0 0;

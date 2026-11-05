@@ -51,6 +51,7 @@ export const tauriBackend: Backend = {
 	addKubeconfigFiles: (paths) => invoke('add_kubeconfig_files', { paths }),
 	removeKubeconfigFile: (path) => invoke('remove_kubeconfig_file', { path }),
 	switchContext: (name) => invoke('switch_context', { name }),
+	cancelSwitch: () => invoke('cancel_switch'),
 	takeSnapshot: (namespace) => invoke('take_snapshot', { namespace }),
 	openSnapshot: async (file) =>
 		invoke('open_snapshot', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-name': encodeURIComponent(file.name) } }),

@@ -5,6 +5,7 @@ import { creating } from './create.svelte';
 import type { TemplateParams } from './create';
 import type { ChangesFilter } from './changes';
 import { dock } from './dock.svelte';
+import { reach } from './reach.svelte';
 import {
 	backend,
 	type AccessCheck,
@@ -40,6 +41,7 @@ import {
 } from './api';
 import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
+import { readOnlyReason } from './guard';
 import { applyZoom, storedZoom } from './appearance';
 import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } from './releases';
 import { loadPins, savePins, samePin, toggled as togglePinIn, type Pin } from './pins';
@@ -49,6 +51,8 @@ import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu, MenuAction } from './menu';
 import { applyScheme, applyTheme, resolveColor, storeSkin, storedScheme, storedSkin, type Scheme } from './skin';
+import { xrayResources } from './xray';
+import type { ToolId } from './nav';
 
 export const ALL_NAMESPACES = '';
 
@@ -184,7 +188,9 @@ export const PAGES = [
 	'fleet',
 	'search',
 	'changes',
-	'config'
+	'config',
+	'tools',
+	'kinds'
 ] as const;
 
 export type Page = (typeof PAGES)[number];
@@ -285,15 +291,25 @@ class AppState {
 		this.details = null;
 	}
 	connecting = $state<string | null>(null);
+	/** When the connect under way began, for the time it shows. */
+	connectingSince = $state(0);
+	/** Counts connects, so that one cancelled or overtaken is ignored when it ends. */
+	#connectAttempt = 0;
+	/** A cancel on its way to the backend, which the next connect waits for so it is not cancelled too. */
+	#cancelling: Promise<void> | null = null;
 	error = $state<string | null>(null);
 
 	page = $state<Page>('pulses');
+	/** How many rows the list shows, null without a list. */
+	listRows = $state<number | null>(null);
 	/** What the search page searches for, as typed. */
 	searchQuery = $state('');
 	/** What the What changed page shows; replaced as a whole when opened from elsewhere. */
 	changesFilter = $state<ChangesFilter>({});
-	/** The kind the XRay page starts its trees from. */
+	/** The kind the Topology trees start from. */
 	xrayResource = $state<ResourceInfo | null>(null);
+	/** What the All kinds page starts filtered by, as `:kinds cert` asks. */
+	kindsFilter = $state('');
 	#details = $state<Details | null>(null);
 	get details() {
 		return this.#details;
@@ -446,8 +462,8 @@ class AppState {
 		this.paletteOpen ||
 			this.helpOpen ||
 			this.tourOpen ||
-			this.activityOpen ||
 			this.contextMenuOpen ||
+			this.connecting !== null ||
 			this.kubeconfigFilesOpen ||
 			this.menu !== null ||
 			this.dialog !== null ||
@@ -657,14 +673,7 @@ class AppState {
 	/** Says why an action that changes the cluster did nothing, and how to allow it where that is possible. */
 	explainReadOnly(action: string) {
 		const what = action.replace(/…$/, '');
-		const why = this.k9s?.readOnly
-			? 'k9s readOnly is set for this context'
-			: this.contextSettings.readOnly
-				? 'Read-only is on; switch it off in the header to make changes'
-				: this.guard.canUnlock
-					? 'this context is locked; unlock it with Read-only in the header'
-					: (this.guard.reason ?? 'Kubri does not change this cluster');
-		this.toast(`${what} is not available: ${why}`, 'bad');
+		this.toast(`${what} is not available: ${readOnlyReason(this.guard, this.contextSettings.readOnly, this.k9s?.readOnly ?? false)}`, 'bad');
 	}
 
 	/** The header's lock button: read-only on and off, or a locked context unlocked and locked. */
@@ -889,20 +898,43 @@ class AppState {
 			this.toast('Finish the current action before switching contexts', 'bad');
 			return;
 		}
-		// While connecting, the list is replaced by a notice and forgets its filter and cursor.
+		// The view stays, dimmed, while connecting; it keeps its place for when it comes back.
 		this.savePlace();
+		const attempt = ++this.#connectAttempt;
 		this.connecting = name;
+		this.connectingSince = Date.now();
 		this.error = null;
 		this.connectFailure = null;
 		try {
-			await this.connected(await backend.switchContext(name));
+			await this.#cancelling;
+			const cluster = await backend.switchContext(name);
+			if (attempt !== this.#connectAttempt) return;
+			reach.connected(name, cluster.server);
+			await this.connected(cluster);
 			this.refreshWarm();
 		} catch (err) {
-			this.error = `Could not connect to ${name}: ${errorMessage(err)}`;
+			if (attempt !== this.#connectAttempt) return;
+			const server = this.contexts.find((c) => c.name === name)?.server ?? null;
+			reach.failed(name, errorMessage(err), server);
+			// The connecting card says what failed and what to try.
 			this.connectFailure = { context: name, error: errorMessage(err) };
 		} finally {
-			this.connecting = null;
+			if (attempt === this.#connectAttempt) this.connecting = null;
 		}
+	}
+
+	/** Stops waiting for the context being connected to, and stays where Kubri was. */
+	cancelConnect() {
+		const name = this.connecting;
+		if (name === null || !this.contexts.some((c) => c.name === name)) return;
+		this.#connectAttempt++;
+		this.connecting = null;
+		const cancelling = backend.cancelSwitch().catch(() => {});
+		this.#cancelling = cancelling;
+		void cancelling.then(() => {
+			if (this.#cancelling === cancelling) this.#cancelling = null;
+		});
+		this.toast(this.cluster ? `Stopped connecting to ${name}; still on ${this.contextName(this.cluster.context)}` : `Stopped connecting to ${name}`);
 	}
 
 	/** Shows a resource list, optionally switching namespace, like k9s `:pods kube-system`. */
@@ -1100,6 +1132,12 @@ class AppState {
 			case 'rightsizing':
 				this.showRightSizing();
 				break;
+			case 'tools':
+				this.showTools();
+				break;
+			case 'kinds':
+				this.showKinds(action.filter);
+				break;
 			case 'fleet':
 				this.showFleet();
 				break;
@@ -1269,6 +1307,46 @@ class AppState {
 		this.details = null;
 	}
 
+	/** Every tool beyond the lists, on one page. */
+	showTools() {
+		if (drafts.block(() => this.showTools())) return;
+		this.page = 'tools';
+		this.details = null;
+	}
+
+	/** Opens a tool of the sidebar or the Tools page. */
+	showTool(id: ToolId) {
+		switch (id) {
+			case 'xray': {
+				const resource = this.xrayResource ?? xrayResources(this.resources)[0];
+				if (resource) this.showXray(resource);
+				break;
+			}
+			case 'changes':
+				return this.showChanges();
+			case 'helm':
+				return this.showHelm();
+			case 'portforwards':
+				return this.showPortForwards();
+			case 'rbac':
+				return this.showRbac();
+			case 'sanitizer':
+				return this.showSanitizer();
+			case 'rightsizing':
+				return this.showRightSizing();
+			case 'benchmarks':
+				return this.showBenchmarks();
+		}
+	}
+
+	/** Every kind the cluster serves, to find one by name. */
+	showKinds(filter = '') {
+		if (drafts.block(() => this.showKinds(filter))) return;
+		this.page = 'kinds';
+		this.details = null;
+		this.kindsFilter = filter;
+	}
+
 	/** Containers whose requests or limits are far from what they use. */
 	showRightSizing() {
 		if (drafts.block(() => this.showRightSizing())) return;
@@ -1276,7 +1354,7 @@ class AppState {
 		this.details = null;
 	}
 
-	/** The cluster overview, optionally switching namespace like `:pulses kube-system`. */
+	/** The Overview, optionally switching namespace like `:pulses kube-system`. */
 	showPulses(namespace?: string) {
 		if (drafts.block(() => this.showPulses(namespace))) return;
 		this.page = 'pulses';

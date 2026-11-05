@@ -12,13 +12,14 @@
 	import { isNodes, isPods, isServices } from '../pods';
 	import { ALL_NAMESPACES, app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
-	import { filterRows, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
+	import { filterRows, hasHealth, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
 	import { navPlace } from '../nav';
-	import { columnsFor, defaultColumns, isShown, kindKey, ordered, pathsOf } from '../columns';
+	import { columnRank, columnsFor, columnWidth, defaultColumns, isShown, kindKey, ordered, overflowing, pathsOf } from '../columns';
 	import ActionBar from './ActionBar.svelte';
 	import ColumnChooser from './ColumnChooser.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
+	import { describeCron } from '../cron';
 
 	let {
 		resource,
@@ -33,6 +34,10 @@
 	/** Bumped by Retry; the watch then starts again and keeps the rows it had. */
 	let retry = $state(0);
 	let wide = $state(false);
+	/** The width the table has, to leave out the columns that matter least when it is narrow. */
+	let room = $state(0);
+	/** The mark column's width, where the name sticks when the list scrolls sideways. */
+	let checkWidth = $state(0);
 	/** Only rows that need a look, like k9s Ctrl+Z. */
 	let faults = $state(false);
 	/** Only running pods. */
@@ -40,6 +45,15 @@
 	let sort = $state<SortState>({ column: -1, descending: false });
 	let sortedByUser = false;
 	let cursorKey = $state<string | null>(null);
+	/**
+	 * Whether the user put the cursor somewhere. Until then the keys still work on the first row,
+	 * as in k9s, but the action bar offers nothing for a row nobody chose.
+	 */
+	let picked = $state(false);
+	function pick(key: string) {
+		cursorKey = key;
+		picked = true;
+	}
 	/** Where Ctrl+Space marks a range from. */
 	let anchorKey = $state<string | null>(null);
 	let now = $state(Date.now());
@@ -149,6 +163,8 @@
 	const statusIndex = $derived(table.columns.findIndex((c) => /^(status|phase)$/i.test(c.name)));
 	const isRunning = (r: Row) => statusIndex !== -1 && r.cells[statusIndex] === 'Running';
 	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r)));
+	/** Kinds with a state, readiness or health; Secrets or Ingresses have nothing to need attention. */
+	const healthy = $derived(hasHealth(table.columns, resource.plural));
 	const running = $derived(isPods(resource) ? owned.filter(isRunning) : []);
 	/** With Ctrl+Z, only the rows that need a look. */
 	const scoped = $derived(faults ? faulty : runningOnly ? running : owned);
@@ -170,6 +186,12 @@
 		all: filterRows(owned, filter).length,
 		attention: filterRows(faulty, filter).length,
 		running: filterRows(running, filter).length
+	});
+
+	// The footer offers no keys for rows when there are none.
+	$effect(() => {
+		app.listRows = rows.length;
+		return () => (app.listRows = null);
 	});
 
 	// The palette offers the actions of the row under the cursor.
@@ -297,7 +319,7 @@
 		const row = table.rows.find(
 			(r) => r.name === wanted.name && (wanted.namespace === null || r.namespace === wanted.namespace)
 		);
-		if (row) cursorKey = row.key;
+		if (row) pick(row.key);
 		else app.toast(`${wanted.name} is not in the list`, 'bad');
 		app.cursorRequest = null;
 	});
@@ -316,7 +338,7 @@
 	function move(delta: number) {
 		if (!rows.length) return;
 		const next = Math.max(0, Math.min(rows.length - 1, cursor + delta));
-		cursorKey = rows[next].key;
+		pick(rows[next].key);
 	}
 
 	function toggleMark(row: Row) {
@@ -384,6 +406,12 @@
 				const value = row.cells[column.index];
 				if (value === null || value === undefined) return '';
 				if (column.label === 'Cluster-IP' && value === 'None') return 'Headless';
+				if (column.label === 'Schedule' && resource.kind === 'CronJob') return describeCron(String(value));
+				// Yes and No read better than True and False for switches such as Suspend. Condition
+				// columns (Ready True) keep the word Kubernetes uses, and their color.
+				if (typeof value === 'boolean' || (column.label === 'Suspend' && /^(true|false)$/i.test(String(value)))) {
+					return String(value).toLowerCase() === 'true' ? 'Yes' : 'No';
+				}
 				// Times in custom columns, like a certificate's expiry, read as ages.
 				if (column.custom && typeof value === 'string' && TIMESTAMP.test(value)) return relative(value, now);
 				return String(value);
@@ -438,7 +466,7 @@
 
 	function open(row: Row | undefined, tab: DetailsTab = 'describe', extra: DetailsExtra = {}) {
 		if (!row) return false;
-		cursorKey = row.key;
+		pick(row.key);
 		app.showDetails(resource, target(row), tab, extra);
 		return true;
 	}
@@ -446,7 +474,7 @@
 	/** Enter: what belongs to the row, or else its description. */
 	async function enter(row: Row | undefined) {
 		if (!row) return;
-		cursorKey = row.key;
+		pick(row.key);
 		if (isServices(resource) && cell(row, 'Selector') !== null && /^(|<none>)$/.test(cell(row, 'Selector') ?? '')) {
 			open(row);
 			return;
@@ -512,7 +540,7 @@
 			enter: () => void enter(row),
 			chosen: chosen.map(target),
 			namespace,
-			plugins: () => (cursorKey = row.key),
+			plugins: () => pick(row.key),
 			extraDanger: cleanUp
 		};
 	}
@@ -569,7 +597,7 @@
 
 	/** The row menu, from a right click or the row's ⋯ button. Marked rows go together. */
 	function openMenu(row: Row, x: number, y: number, align: 'left' | 'right' = 'left', column?: DisplayColumn) {
-		cursorKey = row.key;
+		pick(row.key);
 		const marked = chosenRows();
 		const actions = selection.has(row.key) && marked.length > 1 ? markedActions(marked) : actionsFor(row, [row]);
 		// The cell's copy actions join the Copy group, after what people do most: view, connect, change.
@@ -629,6 +657,10 @@
 						exportCsv();
 						return true;
 					case 'z':
+						if (!healthy && !faults) {
+							app.toast(`${place.label} have no state to tell which need attention`);
+							return true;
+						}
 						showTab(faults ? 'all' : 'attention');
 						return true;
 					// k9s pages with these; the browser's find would miss the rows not drawn anyway.
@@ -751,6 +783,30 @@
 	}
 
 	const hiddenColumns = $derived(table.columns.filter((c) => c.priority > 0).length);
+
+	const shownLabel = (c: DisplayColumn) => c.label.replace(/^Memory/, 'Mem');
+	const isNameColumn = (c: DisplayColumn) => c.kind === 'cell' && c.name;
+	/**
+	 * The columns drawn: those that fit the width, the least important left out first. All columns
+	 * (w) draws every one and scrolls sideways, with the names kept in view.
+	 */
+	const fitted = $derived.by(() => {
+		if (wide || !room) return { drawn: columns, left: [] as string[], nameMax: null };
+		// The mark and menu columns at both ends.
+		const space = room - (checkWidth || 34) - 42;
+		// A long name is cut short before other columns go; its whole name is in the tooltip.
+		const nameMax = Math.max(200, Math.round(space * 0.4));
+		const sample = rows.slice(0, 200);
+		const fit = columns.map((c) => {
+			const rank = columnRank(c.label, c.kind, isNameColumn(c));
+			const texts = sample.map((r) => cellText(r, c));
+			const width = columnWidth(shownLabel(c), texts, { mono: isNameColumn(c), icon: rank === Infinity && !isNameColumn(c), max: isNameColumn(c) ? nameMax : undefined });
+			return { label: c.label, rank, width };
+		});
+		const left = overflowing(fit, space);
+		return { drawn: columns.filter((c) => !left.includes(c.label)), left, nameMax };
+	});
+	const drawn = $derived(fitted.drawn);
 </script>
 
 <svelte:window {onkeydown} />
@@ -758,7 +814,7 @@
 <section>
 	<header>
 		<nav class="crumbs" aria-label="Breadcrumb">
-			<button onclick={() => app.showPulses()} title="Cluster overview">{app.contextName(app.cluster?.context ?? '')}</button>
+			<button onclick={() => app.showPulses()} title="Overview">{app.contextName(app.cluster?.context ?? '')}</button>
 			<Icon name="next" size={12} />
 			<span>{!resource.namespaced ? 'cluster-wide' : app.namespace === ALL_NAMESPACES ? 'all namespaces' : app.namespace}</span>
 			<Icon name="next" size={12} />
@@ -795,9 +851,15 @@
 				{/if}
 			</div>
 			<div class="tools">
-				{#if hiddenColumns}
-					<button class="toggle" class:on={wide} aria-pressed={wide} onclick={() => (wide = !wide)} title="Show all columns (w)">
-						Wide
+				{#if hiddenColumns || fitted.left.length || wide}
+					<button
+						class="toggle"
+						class:on={wide}
+						aria-pressed={wide}
+						onclick={() => (wide = !wide)}
+						title={wide ? 'Back to the columns that fit (w)' : 'Every column, scrolling sideways when they do not fit (w)'}
+					>
+						All columns
 					</button>
 				{/if}
 				<div class="chooser">
@@ -864,9 +926,11 @@
 			<button role="tab" aria-selected={!faults && !runningOnly} onclick={() => showTab('all')}>
 				All <span class="n">{counts.all}</span>
 			</button>
-			<button role="tab" aria-selected={faults} onclick={() => showTab('attention')} title="Only rows that need a look (Ctrl+Z)">
-				Needs attention <span class="n" class:alert={counts.attention}>{counts.attention}</span>
-			</button>
+			{#if healthy || faults}
+				<button role="tab" aria-selected={faults} onclick={() => showTab('attention')} title="Only rows that need a look (Ctrl+Z)">
+					Needs attention <span class="n" class:alert={counts.attention}>{counts.attention}</span>
+				</button>
+			{/if}
 			{#if isPods(resource)}
 				<button role="tab" aria-selected={runningOnly} onclick={() => showTab('running')}>
 					Running <span class="n">{counts.running}</span>
@@ -878,8 +942,13 @@
 			{#if selection.size}
 				{@const marked = chosenRows()}
 				<ActionBar actions={markedActions(marked)} marked>{marked.length} marked</ActionBar>
-			{:else if current}
+			{:else if current && app.details}
+				<!-- The inspector holds the actions while it is open: one place, not two. -->
+				<ActionBar actions={[]}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
+			{:else if current && picked}
 				<ActionBar actions={actionsFor(current, [current])}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
+			{:else if current}
+				<ActionBar actions={[]}><span class="choose">Click a row or press <kbd>↓</kbd> to act on it</span></ActionBar>
 			{/if}
 		</div>
 
@@ -887,20 +956,22 @@
 			class="table-wrap"
 			bind:this={scroller}
 			bind:clientHeight={viewHeight}
+			bind:clientWidth={room}
 			onscroll={() => (scrollTop = scroller?.scrollTop ?? 0)}
 		>
-			<table class:stale={table.stale} aria-rowcount={windowed ? rows.length + 1 : undefined}>
+			<table class:stale={table.stale} aria-rowcount={windowed ? rows.length + 1 : undefined} style:--check-width="{checkWidth}px">
 				<thead>
 					<tr>
-						<th class="check"></th>
-						{#each columns as column (column.label + column.index)}
+						<th class="check" bind:offsetWidth={checkWidth}></th>
+						{#each drawn as column (column.label + column.index)}
 							<th
 								class:numeric={column.kind === 'metric'}
+								class:name={isNameColumn(column)}
 								class:sorted={sort.column === column.index}
 								aria-sort={sort.column === column.index ? (sort.descending ? 'descending' : 'ascending') : 'none'}
 							>
 								<button class="sort" onclick={() => sortBy(column.index)}>
-									{column.label.replace(/^Memory/, 'Mem')}
+									{shownLabel(column)}
 									<span class="arrow" aria-hidden="true">
 										{sort.column === column.index ? (sort.descending ? '↓' : '↑') : '↕'}
 									</span>
@@ -912,7 +983,7 @@
 				</thead>
 				<tbody>
 					{#if first > 0}
-						<tr class="spacer" aria-hidden="true" style:height="{first * rowHeight}px"><td colspan={columns.length + 2}></td></tr>
+						<tr class="spacer" aria-hidden="true" style:height="{first * rowHeight}px"><td colspan={drawn.length + 2}></td></tr>
 					{/if}
 					{#each shown as row, j (row.key)}
 						{@const i = first + j}
@@ -921,11 +992,15 @@
 							aria-rowindex={windowed ? i + 2 : undefined}
 							class:cursor={i === cursor}
 							class:checked={selection.has(row.key)}
-							onclick={() => (cursorKey = row.key)}
+							onclick={() => pick(row.key)}
 							ondblclick={() => enter(row)}
 							oncontextmenu={(e) => {
 								e.preventDefault();
 								openMenu(row, e.clientX, e.clientY);
+							}}
+							onmousedown={(e) => {
+								// A double click opens the row; it should not also select a word. Dragging still selects.
+								if (e.detail > 1) e.preventDefault();
 							}}
 						>
 							<td class="check">
@@ -939,7 +1014,7 @@
 									}}
 								/>
 							</td>
-							{#each columns as column (column.label + column.index)}
+							{#each drawn as column (column.label + column.index)}
 								{@const raw = cellText(row, column)}
 								{@const text = column.kind === 'cell' && !column.name && NOTHING.test(raw) ? '—' : raw}
 								{@const color = tone(row, column, raw)}
@@ -953,8 +1028,12 @@
 									}}
 									class={color}
 									class:wrap={column.kind === 'cell' && column.label === 'Message'}
-									title={hint}
+									title={hint ??
+										(column.kind === 'cell' && column.label === 'Schedule' && resource.kind === 'CronJob'
+											? String(row.cells[column.index] ?? '')
+											: undefined)}
 									class:name={column.kind === 'cell' && column.name}
+									style:max-width={isNameColumn(column) && fitted.nameMax ? `${fitted.nameMax}px` : null}
 									class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
 									class:numeric={column.kind === 'metric'}
 								>
@@ -998,7 +1077,7 @@
 					{/each}
 					{#if last < rows.length}
 						<tr class="spacer" aria-hidden="true" style:height="{(rows.length - last) * rowHeight}px"
-							><td colspan={columns.length + 2}></td></tr
+							><td colspan={drawn.length + 2}></td></tr
 						>
 					{/if}
 				</tbody>
@@ -1017,17 +1096,41 @@
 									? `No ${scope.title}.`
 									: `No ${resource.kind} objects${ns ? ` in ${ns}` : ''}.`}
 				</p>
+				{#if !filter && !faults && !runningOnly && !scope && resource.verbs.includes('create') && !app.readOnly && !app.cluster?.snapshot}
+					<p class="empty-action">
+						<button onclick={() => app.showCreate(resource)}>Create {resource.kind}…</button>
+					</p>
+				{/if}
 			{/if}
 		</div>
 		<div class="foot">
 			<span>{rows.length} of {owned.length} {place.label.toLowerCase()}</span>
 			{#if table.stale}<span class="updating">— updating…</span>{/if}
-			{#if metricsKind}<span>— not measured</span>{/if}
+			<span class="end">
+				{#if metricsKind}<span>— not measured</span>{/if}
+				{#if fitted.left.length}
+					<span class="left-out" title={fitted.left.join(', ')}>
+						{fitted.left.length === 1 ? `${fitted.left[0]} hidden to fit` : `${fitted.left.length} columns hidden to fit`}
+						<button onclick={() => (wide = true)}>Show all <kbd>w</kbd></button>
+					</span>
+				{/if}
+			</span>
 		</div>
 	</div>
 </section>
 
 <style>
+	.choose {
+		font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+		font-size: 13px;
+	}
+	.choose kbd {
+		padding: 0 4px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		font-family: var(--mono);
+		font-size: 11px;
+	}
 	table.stale tbody {
 		opacity: 0.55;
 	}
@@ -1391,6 +1494,36 @@
 	}
 	tbody tr.cursor {
 		background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
+	}
+	/* The mark and the name stay in view when the list scrolls sideways, so each row keeps its name. */
+	.check,
+	th.name,
+	td.name {
+		position: sticky;
+		z-index: 1;
+		background: var(--surface-1);
+	}
+	.check {
+		left: 0;
+	}
+	th.name,
+	td.name {
+		left: var(--check-width, 34px);
+	}
+	th.check,
+	th.name {
+		z-index: 2;
+	}
+	tbody tr.row:hover :is(td.check, td.name) {
+		background: color-mix(in srgb, var(--surface-2) 55%, var(--surface-1));
+	}
+	tbody tr.checked :is(td.check, td.name) {
+		background: color-mix(in srgb, var(--accent) 7%, var(--surface-1));
+	}
+	tbody tr.cursor :is(td.check, td.name) {
+		background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
+	}
+	tbody tr.cursor td.check {
 		box-shadow: inset 3px 0 0 var(--accent);
 	}
 	.open {
@@ -1409,7 +1542,7 @@
 		color: var(--accent-strong);
 		text-decoration: underline;
 	}
-	.name {
+	td.name {
 		font-family: var(--mono);
 		font-size: 12.5px;
 	}
@@ -1448,6 +1581,50 @@
 	.bad {
 		color: var(--bad);
 	}
+	.end {
+		display: inline-flex;
+		flex-wrap: wrap;
+		gap: 4px 16px;
+		margin-left: auto;
+	}
+	.left-out {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.left-out button {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent-strong);
+		font-size: 11.5px;
+		font-weight: 600;
+	}
+	.left-out kbd {
+		padding: 0 4px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		color: var(--text-muted);
+		font-family: var(--mono);
+		font-size: 10.5px;
+		font-weight: 400;
+	}
+	.empty-action {
+		margin: -16px 0 0;
+		text-align: center;
+	}
+	.empty-action button {
+		padding: 7px 14px;
+		border: 1px solid var(--accent);
+		border-radius: 7px;
+		background: var(--accent);
+		color: var(--on-accent);
+		font-size: 13px;
+		font-weight: 600;
+	}
 	.empty {
 		padding: 28px;
 		text-align: center;
@@ -1455,8 +1632,8 @@
 	}
 	.foot {
 		display: flex;
-		justify-content: space-between;
-		gap: 12px;
+		flex-wrap: wrap;
+		gap: 4px 12px;
 		padding: 8px 16px;
 		border-top: 1px solid var(--border-subtle);
 		font-size: 11.5px;

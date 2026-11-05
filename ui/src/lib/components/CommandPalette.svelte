@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { backend, type SearchHit } from '../api';
-	import { suggest, type Suggestion } from '../commands';
+	import { namesAction, suggest, type Suggestion } from '../commands';
 	import type { RecentObject } from '../search';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { stepZoom } from '../appearance';
@@ -103,11 +103,16 @@
 		return [...forRow, ...appCommands].filter(matches).slice(0, 6);
 	});
 
+	// A verb such as `restart` or `scale` asks for the action, so it comes before kinds that
+	// merely start with the same letters.
+	const named = $derived(doings.filter((s) => namesAction(s.label, term, app.resources)));
+
 	const suggestions = $derived(
 		input.trim()
 			? [
+					...named,
 					...suggest(input, app.resources, app.contexts, app.namespaces, app.paletteConfig),
-					...doings,
+					...doings.filter((s) => !named.includes(s)),
 					...(lookup ? objects : []),
 					...(/^(search|find|grep)\b/i.test(term)
 						? []
@@ -194,7 +199,7 @@
 			aria-controls="palette-suggestions"
 			aria-autocomplete="list"
 			aria-activedescendant={suggestions.length ? `palette-option-${active}` : undefined}
-			placeholder="pods, deploy kube-system, po app=web, ctx, ns default, skin…"
+			placeholder="A kind, object or action: pods, deploy kube-system, ns default, restart…"
 			spellcheck="false"
 			autocomplete="off"
 		/>
@@ -261,12 +266,19 @@
 	}
 	.prompt input {
 		flex: 1;
+		min-width: 0;
+		text-overflow: ellipsis;
 		padding: 0;
 		border: none;
 		background: none;
 		box-shadow: none;
 		font-family: var(--mono);
 		font-size: 16px;
+	}
+	/* The hint reads as a sentence, not as typed text. */
+	.prompt input::placeholder {
+		font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+		font-size: 14.5px;
 	}
 	ul {
 		margin: 0;
