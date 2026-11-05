@@ -121,6 +121,28 @@ describe('logs and shell', () => {
 		await page.getByRole('textbox', { name: 'Terminal input' }).focus();
 		await page.keyboard.type('echo e2e-$((40+2))\n');
 		await h.until(async () => (await rows.innerText()).includes('e2e-42'), { message: 'the output of echo' });
+		assert.ok(!(await rows.innerText()).includes('kubri-shell'), 'the shell process id stays hidden');
+	});
+
+	check('ends a shell when it is closed', async () => {
+		const pod = webPod();
+		const running = () => h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'ps', '-o', 'args').includes('sleep 4242');
+		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods', filter: 'web' });
+		await page.keyboard.press('s');
+		const rows = page.locator('.xterm-rows');
+		await h.until(async () => /[#$] $/m.test((await rows.innerText()).trimEnd() + ' '), { message: 'a prompt' });
+		await page.getByRole('textbox', { name: 'Terminal input' }).focus();
+		// In a child shell: busybox runs a plain sleep inside the shell itself.
+		await page.keyboard.type("sh -c 'sleep 4242; true'\n");
+		await h.until(async () => running(), { message: 'sleep running in the container' });
+		// Esc twice gives the keys back to Kubri, a third closes the inspector and the shell.
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Escape');
+		const input = page.getByRole('textbox', { name: 'Terminal input' });
+		await h.until(async () => !(await input.evaluate((el) => el === document.activeElement)), { message: 'the keys back' });
+		await page.keyboard.press('Escape');
+		await page.getByRole('complementary', { name: 'Pod inspector' }).waitFor({ state: 'hidden' });
+		await h.until(async () => !running(), { message: 'the closed shell to end in the container' });
 	});
 });
 

@@ -22,7 +22,7 @@ Press <kbd>l</kbd> on a pod, a workload or a Service, or <kbd>p</kbd> for the pr
 
 ## The workspace
 
-Logs and shells in the inspector stop when you open something else. To keep them, use **Move to the workspace** (the arrow at the top right of the inspector) or **Logs in workspace** and **Shell in workspace** in an object's menu. They open as tabs in a workspace below the page and keep running while you browse.
+Logs and shells in the inspector stop when you open something else. A shell that stops ends in the container too, with what runs in it, as when you close a terminal window. To keep them, use **Move to the workspace** (the arrow at the top right of the inspector) or **Logs in workspace** and **Shell in workspace** in an object's menu. They open as tabs in a workspace below the page and keep running while you browse.
 
 - Tabs: one per log or shell. Opening the same log again shows its tab; every shell gets its own. A middle click closes a tab.
 - **Side by side** shows two tabs at once, such as two pods' logs or a log and a shell. The next tab you pick replaces the one you used last.

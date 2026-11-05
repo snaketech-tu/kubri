@@ -1,0 +1,18 @@
+Kubri is starting in {{ .Release.Namespace }}.
+{{ if .Values.ingress.enabled }}
+Open {{ include "kubri.publicUrl" . }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kubri.fullname" . }} 7878:{{ .Values.service.port }}
+and open http://localhost:7878
+{{- end }}
+{{ if eq .Values.auth "oidc" }}
+People sign in with {{ .Values.oidc.name | default .Values.oidc.issuer }} and act with their own permissions
+({{ .Values.team.credentials }}). The provider must allow this redirect URI:
+  {{ include "kubri.publicUrl" . | default "<where people open Kubri>" }}/api/auth/callback
+{{- if eq .Values.auditLog "-" }}
+Every change is in the audit log: kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "kubri.fullname" . }} | grep '"action"'
+{{- end }}
+{{- else }}
+The password:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "kubri.passwordSecret" . }} -o jsonpath='{.data.password}' | base64 -d
+{{- end }}

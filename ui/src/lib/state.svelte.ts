@@ -43,6 +43,7 @@ import { suggest, type Action, type ConfigSection, type PaletteConfig } from './
 import { errorMessage } from './format';
 import { plural, t } from './i18n';
 import { coreText } from './i18n/errors';
+import { feedbackLink } from './feedback';
 import { readOnlyReason } from './guard';
 import { applyZoom, storedZoom } from './appearance';
 import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } from './releases';
@@ -1182,6 +1183,9 @@ class AppState {
 				break;
 			case 'help':
 				this.helpOpen = true;
+				break;
+			case 'feedback':
+				backend.openUrl(feedbackLink(action.kind, backend.desktop)).catch((err) => this.toast(errorMessage(err), 'bad'));
 				break;
 			case 'call':
 				action.run();

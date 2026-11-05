@@ -3,9 +3,11 @@
 	import logo from '../assets/logo.svg';
 	import { session } from '../session.svelte';
 	import Phrase from './Phrase.svelte';
+	import { coreText } from '../i18n/errors';
+	import { errorMessage } from '../format';
 
 	let password = $state('');
-	let error = $state<string | null>(null);
+	let error = $state<string | null>(signInError());
 	let busy = $state(false);
 	let input = $state<HTMLInputElement>();
 
@@ -13,14 +15,30 @@
 		if (!busy) input?.focus();
 	});
 
+	/** Why signing in with the provider failed: the server sends the browser back with it. */
+	function signInError(): string | null {
+		const url = new URL(location.href);
+		const message = url.searchParams.get('sign-in-error');
+		if (message !== null) {
+			url.searchParams.delete('sign-in-error');
+			history.replaceState(history.state, '', url);
+		}
+		return message;
+	}
+
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
+		if (password === '') {
+			error = t('Enter the password.');
+			input?.focus();
+			return;
+		}
 		busy = true;
 		error = null;
 		try {
 			await session.signIn(password);
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			error = errorMessage(err);
 			password = '';
 		} finally {
 			busy = false;
@@ -29,33 +47,43 @@
 </script>
 
 <div class="page">
-	<form onsubmit={submit}>
-		<img src={logo} alt="" width="44" height="44" />
-		<h1>{t('Sign in to Kubri')}</h1>
-		<!-- Lets password managers file the password under a name. -->
-		<input type="text" name="username" autocomplete="username" value="kubri" hidden />
-		<label>
-			<span>{t('Password')}</span>
-			<input
-				bind:this={input}
-				bind:value={password}
-				type="password"
-				name="password"
-				autocomplete="current-password"
-				disabled={busy}
-				aria-invalid={error !== null}
-				aria-describedby={error ? 'sign-in-error' : undefined}
-			/>
-		</label>
-		{#if error}<p class="error" id="sign-in-error" role="alert">{error}</p>{/if}
-		<button type="submit" disabled={busy || password === ''}>{busy ? t('Signing in…') : t('Sign in')}</button>
-		<p class="hint">
-			<Phrase
-				text={t('The password is set with {variable} when kubri-server starts. If none was set, the server made one up and printed it in its log.')}
-				code={{ variable: 'KUBRI_PASSWORD' }}
-			/>
-		</p>
-	</form>
+	{#if session.method === 'oidc'}
+		<div class="card">
+			<img src={logo} alt="" width="44" height="44" />
+			<h1>{t('Sign in to Kubri')}</h1>
+			<p class="intro">{t('This Kubri is shared by a team. You use it with your own permissions in the clusters.')}</p>
+			{#if error}<p class="error" role="alert">{coreText(error)}</p>{/if}
+			<a class="button" href="/api/auth/login">{session.provider ? t('Sign in with {provider}', { provider: session.provider }) : t('Sign in with your provider')}</a>
+		</div>
+	{:else}
+		<form onsubmit={submit}>
+			<img src={logo} alt="" width="44" height="44" />
+			<h1>{t('Sign in to Kubri')}</h1>
+			<!-- Lets password managers file the password under a name. -->
+			<input type="text" name="username" autocomplete="username" value="kubri" hidden />
+			<label>
+				<span>{t('Password')}</span>
+				<input
+					bind:this={input}
+					bind:value={password}
+					type="password"
+					name="password"
+					autocomplete="current-password"
+					disabled={busy}
+					aria-invalid={error !== null}
+					aria-describedby={error ? 'sign-in-error' : undefined}
+				/>
+			</label>
+			{#if error}<p class="error" id="sign-in-error" role="alert">{error}</p>{/if}
+			<button type="submit" disabled={busy}>{busy ? t('Signing in…') : t('Sign in')}</button>
+			<p class="hint">
+				<Phrase
+					text={t('The password is set with {variable} when kubri-server starts. If none was set, the server made one up and printed it in its log.')}
+					code={{ variable: 'KUBRI_PASSWORD' }}
+				/>
+			</p>
+		</form>
+	{/if}
 </div>
 
 <style>
@@ -65,7 +93,8 @@
 		min-height: 100vh;
 		padding: 24px;
 	}
-	form {
+	form,
+	.card {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
@@ -104,15 +133,26 @@
 		font-size: 13px;
 		color: var(--bad);
 	}
-	button {
+	.intro {
+		margin: -4px 0 4px;
+		font-size: 13.5px;
+		line-height: 1.5;
+		text-align: center;
+		color: var(--text-muted);
+	}
+	button,
+	.button {
 		padding: 8px 12px;
 		border: none;
 		border-radius: 8px;
 		background: var(--accent);
 		color: var(--on-accent);
 		font-weight: 600;
+		text-align: center;
+		text-decoration: none;
 	}
-	button:hover:not(:disabled) {
+	button:hover:not(:disabled),
+	.button:hover {
 		background: var(--accent-strong);
 	}
 	button:disabled {

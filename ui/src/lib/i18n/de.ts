@@ -2451,6 +2451,25 @@ const de: Record<string, string> = {
 	'Binds service account {0}, which does not exist': 'Bindet den Service-Account {0}, den es nicht gibt',
 	'Cordoned, so no new pods are scheduled': 'Abgesperrt, daher kommen keine neuen Pods hierher',
 	'{0} use is at {1}% of what is allocatable': '{0}-Nutzung liegt bei {1}% dessen, was zuteilbar ist',
+
+	// Team and feedback
+	'Report a problem on GitHub, with your Kubri version filled in': 'Ein Problem auf GitHub melden, mit deiner Kubri-Version schon eingetragen',
+	'Suggest an idea on GitHub': 'Eine Idee auf GitHub vorschlagen',
+	'Whose changes': 'Wessen Änderungen',
+	'This window': 'Dieses Fenster',
+	'Team': 'Team',
+	'Changes everyone made through this Kubri, newest first.': 'Änderungen, die alle über dieses Kubri gemacht haben, die neuesten zuerst.',
+	'Changes you made through this Kubri, from any window, newest first. People in the activity groups see everyone’s.': 'Änderungen, die du über dieses Kubri gemacht hast, aus jedem Fenster, die neuesten zuerst. Wer in den Aktivitätsgruppen ist, sieht die aller.',
+	'No changes yet since the server started.': 'Noch keine Änderungen, seit der Server läuft.',
+	'Report a problem or suggest an idea on GitHub, with your version filled in': 'Ein Problem melden oder eine Idee vorschlagen, auf GitHub und mit deiner Version schon eingetragen',
+	'Something wrong or missing?': 'Etwas falsch oder fehlt etwas?',
+	'Enter the password.': 'Gib das Passwort ein.',
+	'This Kubri is shared by a team. You use it with your own permissions in the clusters.': 'Dieses Kubri teilt sich ein Team. Du nutzt es mit deinen eigenen Rechten in den Clustern.',
+	'Sign in with {provider}': 'Mit {provider} anmelden',
+	'Sign in with your provider': 'Mit deinem Anbieter anmelden',
+	'Report a problem': 'Problem melden',
+	'Suggest an idea': 'Idee vorschlagen',
+	'Signed in as {name}': 'Angemeldet als {name}',
 };
 
 export default de;

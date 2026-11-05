@@ -9,13 +9,14 @@ Kubri is a Kubernetes GUI for desktop and browser that covers what k9s does, by 
 | Path | What it is |
 | --- | --- |
 | `crates/kubri-core` | All cluster access (kube-rs). `Kubri` in `src/lib.rs` owns the merged kubeconfig and the connection; features add `impl Kubri` blocks in their own module. Built-in views for custom resources live in `views/`. |
-| `crates/kubri-server` | Web mode: axum REST + WebSocket API (`api.rs`), sign-in (`auth.rs`), Host/Origin guard (`guard.rs`), serves `ui/build`. |
+| `crates/kubri-server` | Web mode: axum REST + WebSocket API (`api.rs`), sign-in (`auth.rs`, OpenID Connect in `oidc.rs`), a Kubri per signed-in person (`team.rs`), audit log (`audit.rs`), Host/Origin guard (`guard.rs`), serves `ui/build`. |
 | `crates/kubri-mcp` | MCP server (stdio and HTTP) on top of the core. |
 | `crates/kubri-cli` | `lint` and `snapshot` commands without a window; both `kubri` and `kubri-server` run them when they are the first argument. `actions/lint` is the GitHub Action around it. |
 | `ui/src-tauri` | Desktop app (crate `kubri-desktop`, binary `kubri`): Tauri commands in `src/lib.rs` call the core directly. |
 | `ui` | SvelteKit + TypeScript (Svelte 5 runes), static SPA shared by both apps. |
 | `ui/src/lib/api` | The `Backend` interface (`types.ts`) with two implementations: `http.ts` (web) and `tauri.ts` (desktop). |
 | `docs/` | User documentation, linked from the README. |
+| `deploy/` | Manifest and Helm chart (`deploy/helm/kubri`) for running kubri-server in a cluster. |
 | `packaging/`, `.github/workflows/release.yml` | Installers, package-manager templates, updater `latest.json`. |
 | `bench/speed`, `scripts/` | Speed benchmark against k3s; Playwright UI checks and README screenshots. |
 | `site/`, `scripts/demo/` | The website, and the demo snapshot `ui/static/demo.kubri` with the recorder for the live demo (`ui/src/lib/api/replay.ts`); `.github/workflows/pages.yml` publishes both. |
@@ -68,6 +69,7 @@ cargo run --release -p kubri-server    # root, after `pnpm build`: production UI
 
 - **Actions** on objects come from one list, `objectActions` in `ui/src/lib/objects.ts`. The action bar, row menu, details panel, command palette and keys all read it. Add an action there, not in a single view. The menu model is `MenuAction` in `ui/src/lib/menu.ts`; side effects live in `ui/src/lib/actions.ts`.
 - **Changes to a cluster** go through the core and call `ensure_writable()` (read-only contexts, `--read-only`, k9s `readOnly`, snapshots, AI-agent rules) and, where an RBAC check fits, `ensure_may()`. Never enforce a guard rail only in the UI.
+- **Team mode** (`docs/TEAMS.md`): `Kubri::for_person` makes a Kubri that acts with a signed-in person's own credentials. Anything that would run on the server or use its credentials (adding contexts, plugins, local terminals, agents) refuses with `ensure_not_team()`. A new route that changes something needs an entry in the action table in `crates/kubri-server/src/audit.rs`, so it reaches the audit log.
 - **Kubeconfig loading** (`crates/kubri-core/src/kubeconfig.rs`) deliberately mirrors client-go's loader, validation and transport, with kubectl's error messages: a context must work in Kubri exactly when it works in kubectl. Check client-go before changing behavior there.
 - **k9s compatibility**: keys, aliases, hotkeys, plugins and skins follow k9s (`crates/kubri-core/src/k9s.rs`, `ui/src/lib/k9s.ts`, `docs/K9S.md`). Do not break an existing k9s key.
 - **Errors**: core functions return `kubri_core::Result` with `Error` from `error.rs`. Messages reach users as they are: lowercase, no trailing period, saying what to do where possible ("not connected to a cluster, select a context first").
@@ -92,4 +94,4 @@ cargo run --release -p kubri-server    # root, after `pnpm build`: production UI
 
 ## Releases
 
-See `docs/RELEASING.md`. In short: set the version in `Cargo.toml` (`[workspace.package]`), `ui/package.json` and `ui/src-tauri/tauri.conf.json`, run `cargo check` so `Cargo.lock` follows, add a `CHANGELOG.md` entry, write `.github/release-notes.md`, merge to `main`, then run the Release workflow on `main` with `publish` (`gh workflow run release.yml --ref main -f publish=true`, or the Actions API). It refuses a version that is already released, builds the installers and the image into a draft, and publishes it, which creates the tag, once everything is attached.
+See `docs/RELEASING.md`. In short: set the version in `Cargo.toml` (`[workspace.package]`), `ui/package.json`, `ui/src-tauri/tauri.conf.json` and `deploy/helm/kubri/Chart.yaml` (`version` and `appVersion`), run `cargo check` so `Cargo.lock` follows, add a `CHANGELOG.md` entry, write `.github/release-notes.md`, merge to `main`, then run the Release workflow on `main` with `publish` (`gh workflow run release.yml --ref main -f publish=true`, or the Actions API). It refuses a version that is already released, builds the installers and the image into a draft, and publishes it, which creates the tag, once everything is attached.

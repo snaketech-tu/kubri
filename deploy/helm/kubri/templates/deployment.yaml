@@ -1,0 +1,167 @@
+{{- $oidc := eq .Values.auth "oidc" }}
+{{- $clientSecret := or .Values.oidc.clientSecret .Values.oidc.existingSecret }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubri.fullname" . }}
+  labels:
+    {{- include "kubri.labels" . | nindent 4 }}
+spec:
+  # Sign-ins, each person's connection and port-forwards live in the pod, so run one.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "kubri.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubri.selector" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ toJson .Values | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "kubri.serviceAccount" . }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kubri
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 7878
+          env:
+            {{- if $oidc }}
+            - name: KUBRI_OIDC_ISSUER
+              value: {{ .Values.oidc.issuer | quote }}
+            - name: KUBRI_OIDC_CLIENT_ID
+              value: {{ .Values.oidc.clientId | quote }}
+            {{- if $clientSecret }}
+            - name: KUBRI_OIDC_CLIENT_SECRET_FILE
+              value: /etc/kubri/oidc/client-secret
+            {{- end }}
+            {{- with .Values.oidc.name }}
+            - name: KUBRI_OIDC_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.oidc.scopes }}
+            - name: KUBRI_OIDC_SCOPES
+              value: {{ . | quote }}
+            {{- end }}
+            - name: KUBRI_OIDC_USERNAME_CLAIM
+              value: {{ .Values.oidc.usernameClaim | quote }}
+            - name: KUBRI_OIDC_USERNAME_PREFIX
+              value: {{ .Values.oidc.usernamePrefix | quote }}
+            - name: KUBRI_OIDC_GROUPS_CLAIM
+              value: {{ .Values.oidc.groupsClaim | quote }}
+            - name: KUBRI_OIDC_GROUPS_PREFIX
+              value: {{ .Values.oidc.groupsPrefix | quote }}
+            {{- with .Values.oidc.allowedGroups }}
+            - name: KUBRI_OIDC_ALLOWED_GROUPS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- if .Values.oidc.caConfigMap }}
+            - name: KUBRI_OIDC_CA_FILE
+              value: /etc/kubri/oidc-ca/ca.crt
+            {{- end }}
+            - name: KUBRI_TEAM_CREDENTIALS
+              value: {{ .Values.team.credentials | quote }}
+            {{- with .Values.team.activityGroups }}
+            - name: KUBRI_ACTIVITY_GROUPS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with include "kubri.publicUrl" . }}
+            - name: KUBRI_PUBLIC_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- else }}
+            - name: KUBRI_PASSWORD_FILE
+              value: /etc/kubri/password/password
+            {{- end }}
+            {{- with .Values.auditLog }}
+            - name: KUBRI_AUDIT_LOG
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.readOnly }}
+            - name: KUBRI_READ_ONLY
+              value: "true"
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            {{- if not $oidc }}
+            - name: password
+              mountPath: /etc/kubri/password
+              readOnly: true
+            {{- else if $clientSecret }}
+            - name: oidc
+              mountPath: /etc/kubri/oidc
+              readOnly: true
+            {{- end }}
+            {{- if and $oidc .Values.oidc.caConfigMap }}
+            - name: oidc-ca
+              mountPath: /etc/kubri/oidc-ca
+              readOnly: true
+            {{- end }}
+            - name: home
+              mountPath: /home/kubri
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /api/session
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /api/session
+              port: http
+            periodSeconds: 30
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      volumes:
+        {{- if not $oidc }}
+        - name: password
+          secret:
+            secretName: {{ include "kubri.passwordSecret" . }}
+        {{- else if $clientSecret }}
+        - name: oidc
+          secret:
+            secretName: {{ include "kubri.oidcSecret" . }}
+        {{- end }}
+        {{- if and $oidc .Values.oidc.caConfigMap }}
+        - name: oidc-ca
+          configMap:
+            name: {{ .Values.oidc.caConfigMap }}
+        {{- end }}
+        # helm and kubectl keep caches in the home directory; Kubri writes kubeconfigs and
+        # passed-on tokens to /tmp.
+        - name: home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

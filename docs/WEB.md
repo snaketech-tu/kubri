@@ -4,7 +4,7 @@
 
 Whoever can use Kubri can do everything its kubeconfig or service account allows, open shells in containers, open ports on the machine the server runs on, and run your k9s plugins there, with values from the browser such as `$FILTER` and the columns of a row. Give it a password, serve it over HTTPS when it leaves your computer, and give it only the access its users need. Without `KUBRI_LOCAL_TERMINAL=true`, nobody can run commands of their own on the server: there is no [local terminal](TERMINAL.md#in-the-web-app), and contexts added in the browser cannot run a command to sign in or read certificate and token files there.
 
-One kubri-server is one Kubri, shared by everyone who uses it: switching the context switches it for everyone, and everyone sees and can stop the same port-forwards and benchmarks. For people who work on different clusters at the same time, run one server each.
+With a password, one kubri-server is one Kubri, shared by everyone who uses it: switching the context switches it for everyone, and everyone sees and can stop the same port-forwards and benchmarks. For a team, let people sign in with OpenID Connect instead: each person then gets a Kubri of their own that acts with their own Kubernetes permissions, as [A Kubri for your team](TEAMS.md) describes.
 
 The address bar shows where you are, such as `#/lab/resources/deployments.v1.apps?ns=shop`. Reloading the page opens the same view, and the browser's Back goes back through what you looked at, like <kbd>[</kbd>, until it leaves Kubri from the first view. You can bookmark an address or send it to someone who uses the same server. Opening an address for another context never switches contexts, since that would switch them for everyone; Kubri says which context it is for instead.
 
@@ -21,7 +21,7 @@ Open <http://127.0.0.1:7878>. On localhost Kubri asks for no password, and it tu
 
 ## Signing in
 
-Kubri asks for a password as soon as it listens on anything other than localhost, such as `0.0.0.0:7878`. Set one with `KUBRI_PASSWORD`, or put it in a file and point `KUBRI_PASSWORD_FILE` at it (for Docker and Kubernetes secrets). Without one, Kubri makes up a password at every start and prints it:
+Kubri asks for a password as soon as it listens on anything other than localhost, such as `0.0.0.0:7878`. To let people sign in with their own accounts at Keycloak, Dex, Entra ID, Google or another OpenID Connect provider instead, see [A Kubri for your team](TEAMS.md). Set one with `KUBRI_PASSWORD`, or put it in a file and point `KUBRI_PASSWORD_FILE` at it (for Docker and Kubernetes secrets). Without one, Kubri makes up a password at every start and prints it:
 
 ```text
 WARN kubri_server: no password set, so Kubri made one up: 6RkzQ1vYp0dXmTq3LbNw8sJe  (set KUBRI_PASSWORD or KUBRI_PASSWORD_FILE to choose your own)
@@ -39,6 +39,7 @@ Signing in lasts a week (`KUBRI_SESSION_HOURS`), until you sign out, or until th
 | `KUBRI_READ_ONLY` | `--read-only` | `true` never changes the cluster: no edits, deletes, scaling, shells or dangerous plugins, whatever the k9s settings say. Lists, logs and port-forwards still work. The desktop app takes it too. |
 | | `--mcp` | Serves MCP over stdin and stdout for an AI agent instead of the web UI, read-only. See [AI agents](AGENTS.md). |
 | `KUBRI_LOCAL_TERMINAL` | `--local-terminal` | `true` allows the [local terminal](TERMINAL.md#in-the-web-app). It runs on the server, as the user the server runs as, so everyone who can sign in can run commands there. It also lets them [add contexts](CLUSTERS.md#adding-clusters) that sign in by running a command, like `aws`, or that name certificate and token files on the server. Off by default. |
+| `KUBRI_AUDIT_LOG` | `--audit-log` | Write every change made through Kubri to this file as JSON lines, or to standard output with `-`. See [The audit log](TEAMS.md#the-audit-log). |
 | `KUBRI_CONFIG_DIR` | | The folder for Kubri's settings, the agents' token and their call log. Mount a volume there to keep them. |
 | `KUBRI_SESSION_HOURS` | `--session-hours` | How long signing in lasts, from 1 hour to 87600 (ten years). Default 168 (a week). |
 | `KUBRI_UI_DIR` | `--ui-dir` | The built UI. Default `ui/build`; the Docker image sets it. |
@@ -98,6 +99,8 @@ kubectl -n kubri port-forward svc/kubri 7878:80
 
 Then open <http://localhost:7878>. What Kubri may do is what the service account may do: bind the `edit` role instead of `view` to change things, open shells and see Secrets and Helm releases, or `cluster-admin` for everything. Keep one replica, since sign-ins and port-forwards live in the pod.
 
+The Helm chart in [`deploy/helm/kubri`](../deploy/helm/kubri) sets up the same with a password (`auth=password`, with `rbac.clusterRole` for the service account's role), or with OpenID Connect for a team (`auth=oidc`, see [Install it with Helm](TEAMS.md#install-it-with-helm)).
+
 ## Behind a reverse proxy
 
 To reach Kubri under a domain name, put it behind a proxy or an ingress that serves HTTPS, so passwords and sessions are not sent in the clear. Kubri marks its session cookie as HTTPS-only when the proxy sends `X-Forwarded-Proto: https`.
@@ -117,3 +120,19 @@ location / {
 ```
 
 If the proxy signs people in itself (oauth2-proxy, an identity-aware proxy), you can start Kubri with `KUBRI_NO_AUTH=true` and list the proxy's host name in `KUBRI_ALLOWED_HOSTS`. Make sure Kubri can then only be reached through the proxy.
+
+## Security
+
+What someone who signs in can do depends on how they sign in:
+
+- **With a password**, or with `KUBRI_NO_AUTH` behind a proxy, everyone acts with the credentials of Kubri's kubeconfig or service account. Give those only the access everyone who signs in may have, or start Kubri with `KUBRI_READ_ONLY=true`.
+- **With OpenID Connect**, each person acts with their own Kubernetes permissions. Adding contexts, k9s plugins, the local terminal and AI agents are off, since they would run on the server or act with its credentials. See [A Kubri for your team](TEAMS.md).
+
+Either way:
+
+- Serve Kubri over HTTPS when it leaves your computer, so passwords, tokens and sessions are not sent in the clear.
+- The session cookie cannot be read by scripts and is not sent with requests from other sites. Kubri also compares each request's `Host` and `Origin` and turns away other websites, and its pages cannot be shown in a frame on another site.
+- Nobody can run commands of their own on the server or read its files unless `KUBRI_LOCAL_TERMINAL=true`, which only a Kubri with a password allows. k9s plugins do run on the server with a password, with values from the browser.
+- **From URL** on the Create page does not fetch from the cloud's metadata addresses, which hand out the server's credentials on many clouds.
+- `KUBRI_AUDIT_LOG` writes down every change made through Kubri, who made it and whether it worked.
+- Sign-ins live in the server's memory. Restarting it signs everyone out.

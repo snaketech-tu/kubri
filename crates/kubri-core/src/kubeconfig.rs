@@ -528,7 +528,7 @@ users:
     /// Builds the client the way `Kubri::switch_context` does.
     async fn client(user: &str) -> Result<Client> {
         Ok(Client::try_from(
-            crate::client_config(&kubeconfig(user), "x").await?,
+            crate::client_config(&kubeconfig(user), "x", None).await?,
         )?)
     }
 
