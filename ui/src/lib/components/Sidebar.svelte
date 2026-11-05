@@ -70,6 +70,19 @@
 	<div class="list">
 		<div class="scroll" bind:this={scroller} onscroll={measure}>
 			<div class="items" bind:this={items}>
+				{#if app.pinsHere.length}
+					<h3 class="first">{t('Pinned')}</h3>
+					{#each app.pinsHere as pin (`${pin.group}/${pin.plural}/${pin.namespace ?? ''}/${pin.name}`)}
+						<div class="pin">
+							<button onclick={() => app.openPin(pin)} title={pin.name ? `${pin.kind} ${pin.namespace ? `${pin.namespace}/` : ''}${pin.name}` : t('{kind} list', { kind: pin.kind })}>
+								<Icon name="bookmark" size={16} />
+								<span class="label">{pin.name || pluralKind(pin.kind, pin.plural)}</span>
+							</button>
+							<button class="unpin" onclick={() => app.togglePin(pin)} title={t('Unpin')} aria-label={t('Unpin {name}', { name: pin.name || pin.kind })}>×</button>
+						</div>
+					{/each}
+					<hr />
+				{/if}
 				<button class:active={app.page === 'pulses'} aria-current={here(app.page === 'pulses')} onclick={() => app.showPulses()} title="{t('Health, warnings and use of this cluster')} (:pulses)">
 					<Icon name="overview" />
 					<span class="label">{t('Overview')}</span>
@@ -142,18 +155,6 @@
 					<span class="hint">:kinds</span>
 				</button>
 
-				{#if app.pinsHere.length}
-					<h3>{t('Pinned')}</h3>
-					{#each app.pinsHere as pin (`${pin.group}/${pin.plural}/${pin.namespace ?? ''}/${pin.name}`)}
-						<div class="pin">
-							<button onclick={() => app.openPin(pin)} title={pin.name ? `${pin.kind} ${pin.namespace ? `${pin.namespace}/` : ''}${pin.name}` : t('{kind} list', { kind: pin.kind })}>
-								<Icon name="bookmark" size={16} />
-								<span class="label">{pin.name || pluralKind(pin.kind, pin.plural)}</span>
-							</button>
-							<button class="unpin" onclick={() => app.togglePin(pin)} title={t('Unpin')} aria-label={t('Unpin {name}', { name: pin.name || pin.kind })}>×</button>
-						</div>
-					{/each}
-				{/if}
 				{#if recents.length}
 					<h3>{t('Recent')}</h3>
 					{#each recents as recent (`${recent.group}/${recent.plural}/${recent.namespace ?? ''}/${recent.name}`)}
@@ -282,6 +283,14 @@
 	}
 	.shade.on {
 		opacity: 1;
+	}
+	h3.first {
+		margin-top: 8px;
+	}
+	hr {
+		margin: 8px 12px;
+		border: none;
+		border-top: 1px solid var(--border);
 	}
 	h3 {
 		margin: 16px 12px 6px;
