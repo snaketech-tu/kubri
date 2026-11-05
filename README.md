@@ -31,8 +31,8 @@
 </p>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/pods-dark.png">
-  <img src="docs/assets/screenshots/pods-light.png" alt="Kubri listing the pods of a namespace, with CPU and memory against their requests">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/kubri-tour-dark.gif">
+  <img src="docs/assets/kubri-tour-light.gif" alt="A short tour of Kubri: the cluster overview, the command palette going to the Deployments of a namespace, a Deployment's pods, their JSON logs as a table of fields, a shell in a pod, and switching to another context">
 </picture>
 
 ## ✨ Why Kubri
@@ -172,6 +172,11 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
 <a id="screenshots"></a>
 
 ## 📸 Screenshots
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/pods-dark.png">
+  <img src="docs/assets/screenshots/pods-light.png" alt="Kubri listing the pods of a namespace, with CPU and memory against their requests">
+</picture>
 
 <table>
   <tr>

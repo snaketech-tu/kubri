@@ -293,7 +293,7 @@
 		{/each}
 	</div>
 	<p class="feedback">
-		{#if VERSION}Kubri {VERSION} ·{/if}
+		Kubri {VERSION} ·
 		Something wrong or missing?
 		<a href={feedbackLink('bug', backend.desktop)} target="_blank" rel="noreferrer">{FEEDBACK.bug}</a>
 		·

@@ -3,10 +3,12 @@
  * which Kubri, and where it runs, without anyone having to look it up.
  */
 
+import { version } from '../../package.json';
+
 const NEW_ISSUE = 'https://github.com/snaketech-tu/kubri/issues/new';
 
 /** Kubri's version, from `ui/package.json` when the UI was built. */
-export const VERSION: string = typeof __KUBRI_VERSION__ === 'string' ? __KUBRI_VERSION__ : '';
+export const VERSION: string = version;
 
 export type FeedbackKind = 'bug' | 'idea';
 

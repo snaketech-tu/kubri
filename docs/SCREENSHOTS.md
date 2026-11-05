@@ -30,4 +30,22 @@ The existing structured-log and other feature screenshots are preserved; previou
 
 All API requests and WebSockets are intercepted inside the isolated browser context. Screenshots are captured through the real application controls. The script mocks startup port-forward restoration and read-only POST queries, rejects cluster mutation attempts and fails on browser JavaScript errors.
 
-Version labels come from `ui/package.json`; regenerate the screenshots after a version or branding change. Keep both `pods-light.png` and `pods-dark.png`, as the README chooses its main image using the reader's color preference.
+Version labels come from `ui/package.json`; regenerate the screenshots after a version or branding change. Keep both `pods-light.png` and `pods-dark.png`, as the README chooses between them by the reader's color preference.
+
+## The tour at the top
+
+`docs/assets/kubri-tour-light.gif` and `kubri-tour-dark.gif` are a short tour, about 25 seconds, recorded from a real kubri-server: the overview, `:deploy shop`, the pods of `api`, its logs as a table of fields, a shell and a context switch. `scripts/record-tour.cjs` records them against a cluster with the demo shop (`scripts/demo/shop.yaml`, see [the demo](../scripts/demo/README.md)) and a kubeconfig with two contexts for it, `lab` and `staging`:
+
+```sh
+kubectl apply -f scripts/demo/shop.yaml           # against a cluster you may change
+kubectl config view --raw --flatten > /tmp/tour.yaml
+export KUBECONFIG=/tmp/tour.yaml
+kubectl config rename-context "$(kubectl config current-context)" lab
+kubectl config set-context lab --namespace=shop
+kubectl config view --raw -o json | jq '.contexts += [.contexts[0] | .name = "staging"]' > /tmp/tour.json && mv /tmp/tour.json /tmp/tour.yaml
+KUBRI_ADDR=127.0.0.1:7891 cargo run --release -p kubri-server &   # after `pnpm build` in ui/
+node scripts/record-tour.cjs <path-to-playwright-module> http://127.0.0.1:7891 light
+node scripts/record-tour.cjs <path-to-playwright-module> http://127.0.0.1:7891 dark
+```
+
+It needs `ffmpeg`. Record again after a version or design change, like the screenshots; each GIF should stay under about 3 MB.

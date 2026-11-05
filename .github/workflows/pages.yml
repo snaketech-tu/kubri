@@ -84,7 +84,8 @@ jobs:
           cp -r ui/build _site/demo
           cp "$RUNNER_TEMP/demo-recording.json" _site/demo/
           cp docs/assets/kubri-logo.svg docs/assets/kubri-logo-dark.svg docs/assets/kubri-link.svg _site/assets/
-          cp docs/assets/screenshots/{pods-light,pods-dark,overview,logs,xray,palette}.png _site/assets/
+          cp docs/assets/screenshots/{overview,logs,xray,palette}.png _site/assets/
+          cp docs/assets/kubri-tour-light.gif docs/assets/kubri-tour-dark.gif _site/assets/
           du -sh _site
       - uses: actions/upload-pages-artifact@v3
         with:
