@@ -1,0 +1,15 @@
+[package]
+name = "kubri-cli"
+description = "Kubri on the command line: the sanitizer for CI and snapshots without a window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kubri-core.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

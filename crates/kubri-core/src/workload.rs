@@ -364,6 +364,60 @@ pub(crate) fn rolled_back(mut deployment: Value, replicaset: &Value) -> Result<V
     Ok(deployment)
 }
 
+/// The StatefulSet or DaemonSet that controls a ControllerRevision: its kind and name.
+pub(crate) fn revision_owner(revision: &Value) -> Result<(String, String)> {
+    revision
+        .pointer("/metadata/ownerReferences")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|o| {
+            matches!(
+                o.get("kind").and_then(Value::as_str),
+                Some("StatefulSet" | "DaemonSet")
+            ) && o.get("controller") == Some(&json!(true))
+        })
+        .and_then(|o| {
+            Some((
+                o.get("kind")?.as_str()?.to_owned(),
+                o.get("name")?.as_str()?.to_owned(),
+            ))
+        })
+        .ok_or_else(|| {
+            Error::Unsupported(format!(
+                "ControllerRevision {} belongs to no StatefulSet or DaemonSet",
+                text(revision, "/metadata/name")
+            ))
+        })
+}
+
+/// The patch that rolls a StatefulSet or DaemonSet back to a ControllerRevision, like
+/// `kubectl rollout undo --to-revision`: the revision's saved data, which replaces the pod
+/// template. Fails when the object already runs that template.
+pub(crate) fn revision_patch(owner: &Value, revision: &Value) -> Result<Value> {
+    let data = revision
+        .get("data")
+        .filter(|d| d.pointer("/spec/template").is_some())
+        .cloned()
+        .ok_or_else(|| Error::Unsupported("the ControllerRevision holds no pod template".into()))?;
+    let mut saved = data.pointer("/spec/template").cloned().unwrap_or_default();
+    if let Some(template) = saved.as_object_mut() {
+        template.remove("$patch");
+    }
+    if owner.pointer("/spec/template") == Some(&saved) {
+        return Err(Error::Unsupported(format!(
+            "{} {} already runs the template of revision {}",
+            text(owner, "/kind"),
+            text(owner, "/metadata/name"),
+            revision
+                .get("revision")
+                .and_then(Value::as_i64)
+                .unwrap_or_default()
+        )));
+    }
+    Ok(data)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -690,5 +744,50 @@ mod tests {
                 .contains("paused")
         );
         assert!(deployment_of(&json!({ "metadata": { "name": "lonely" } })).is_err());
+    }
+
+    #[test]
+    fn rollbacks_of_statefulsets_patch_in_the_saved_template() {
+        let template = |image: &str| {
+            json!({
+                "metadata": { "labels": { "app": "db" } },
+                "spec": { "containers": [{ "name": "db", "image": image }] }
+            })
+        };
+        let owner = json!({
+            "kind": "StatefulSet",
+            "metadata": { "name": "db" },
+            "spec": { "template": template("db:2") }
+        });
+        let mut saved = template("db:1");
+        saved["$patch"] = "replace".into();
+        let revision = json!({
+            "metadata": { "name": "db-6b7f", "ownerReferences": [
+                { "kind": "StatefulSet", "name": "db", "controller": true }
+            ] },
+            "revision": 1,
+            "data": { "spec": { "template": saved } }
+        });
+        assert_eq!(
+            revision_owner(&revision).unwrap(),
+            ("StatefulSet".to_owned(), "db".to_owned())
+        );
+        let patch = revision_patch(&owner, &revision).unwrap();
+        assert_eq!(patch["spec"]["template"]["$patch"], "replace");
+        assert_eq!(
+            patch["spec"]["template"]["spec"]["containers"][0]["image"],
+            "db:1"
+        );
+
+        let mut same = owner.clone();
+        same["spec"]["template"] = template("db:1");
+        assert!(
+            revision_patch(&same, &revision)
+                .unwrap_err()
+                .to_string()
+                .contains("already runs the template of revision 1")
+        );
+        assert!(revision_owner(&json!({ "metadata": { "name": "lonely" } })).is_err());
+        assert!(revision_patch(&owner, &json!({ "revision": 2, "data": {} })).is_err());
     }
 }

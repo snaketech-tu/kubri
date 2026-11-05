@@ -571,7 +571,11 @@
 			case 'image':
 				return kubectlCommand(ctx, dialog.target, { op: 'image', images: changedImages() });
 			case 'rollback':
-				return kubectlCommand(ctx, dialog.target, { op: 'rollback' });
+				return kubectlCommand(ctx, dialog.target, {
+					op: 'rollback',
+					owner: dialog.owner ? `${dialog.owner.plural}.apps/${dialog.owner.name}` : null,
+					revision: dialog.revision ? String(dialog.revision) : null
+				});
 			case 'memory':
 				return kubectlCommand(ctx, dialog.target, { op: 'memory', container: dialog.fix.container, memory: memory.trim() });
 			case 'resources': {
@@ -671,7 +675,7 @@
 			case 'image':
 				return 'Set image';
 			case 'rollback':
-				return 'Roll back Deployment';
+				return `Roll back ${dialog.owner?.kind ?? 'Deployment'}`;
 			case 'memory':
 				return 'Raise memory limit';
 			case 'resources':
@@ -1095,10 +1099,17 @@
 			{/if}
 		{/if}
 	{:else if dialog.kind === 'rollback'}
-		<p>
-			Roll the Deployment of <strong>{name(dialog.target)}</strong> back to this ReplicaSet? Its pods get the
-			template of {dialog.target.name}, as kubectl rollout undo does.
-		</p>
+		{#if dialog.owner && dialog.owner.kind !== 'Deployment'}
+			<p>
+				Roll {dialog.owner.kind} <strong>{dialog.owner.name}</strong> back to revision {dialog.revision}? Its pods get the template saved in
+				{dialog.target.name} and are replaced one by one, as kubectl rollout undo does.
+			</p>
+		{:else}
+			<p>
+				Roll the Deployment of <strong>{name(dialog.target)}</strong> back to this ReplicaSet? Its pods get the
+				template of {dialog.target.name}, as kubectl rollout undo does.
+			</p>
+		{/if}
 	{:else if dialog.kind === 'memory'}
 		<p>
 			<strong>{dialog.fix.container}</strong> ran out of memory{dialog.fix.limit ? ` at its limit of ${dialog.fix.limit}` : ''}. Set a higher

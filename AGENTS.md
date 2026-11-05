@@ -11,6 +11,7 @@ Kubri is a Kubernetes GUI for desktop and browser that covers what k9s does, by 
 | `crates/kubri-core` | All cluster access (kube-rs). `Kubri` in `src/lib.rs` owns the merged kubeconfig and the connection; features add `impl Kubri` blocks in their own module. Built-in views for custom resources live in `views/`. |
 | `crates/kubri-server` | Web mode: axum REST + WebSocket API (`api.rs`), sign-in (`auth.rs`, OpenID Connect in `oidc.rs`), a Kubri per signed-in person (`team.rs`), audit log (`audit.rs`), Host/Origin guard (`guard.rs`), serves `ui/build`. |
 | `crates/kubri-mcp` | MCP server (stdio and HTTP) on top of the core. |
+| `crates/kubri-cli` | `lint` and `snapshot` commands without a window; both `kubri` and `kubri-server` run them when they are the first argument. `actions/lint` is the GitHub Action around it. |
 | `ui/src-tauri` | Desktop app (crate `kubri-desktop`, binary `kubri`): Tauri commands in `src/lib.rs` call the core directly. |
 | `ui` | SvelteKit + TypeScript (Svelte 5 runes), static SPA shared by both apps. |
 | `ui/src/lib/api` | The `Backend` interface (`types.ts`) with two implementations: `http.ts` (web) and `tauri.ts` (desktop). |
@@ -60,7 +61,8 @@ cargo run --release -p kubri-server    # root, after `pnpm build`: production UI
 - Rust: unit tests in a `mod tests` at the bottom of the module. `kubri_core::testing::client` is a fake API server that answers and records requests; prefer it over a real cluster.
 - UI: `ui/src/lib/*.test.ts` next to the module they test. Keep logic in plain `.ts` modules so it can be tested without rendering components.
 - Browser check against the production UI with fixtures: `pnpm build && pnpm preview --port 4189` in `ui/`, then `node scripts/check-ui.cjs <path-to-playwright-module>`.
-- Real cluster: k3s with `--disable=traefik --write-kubeconfig-mode=644`, kubeconfig at `/etc/rancher/k3s/k3s.yaml` (see the `speed` job in `ci.yml`). Use it for anything that only shows against a cluster: logs, exec, port-forward, watches, RBAC.
+- Real cluster: k3s with `--disable=traefik --write-kubeconfig-mode=644`, kubeconfig at `/etc/rancher/k3s/k3s.yaml` (see the `e2e` job in `ci.yml`). Use it for anything that only shows against a cluster: logs, exec, port-forward, watches, RBAC.
+- End-to-end: `scripts/e2e/` drives the web app against k3s (`node --test scripts/e2e/kubri.test.cjs`, see its README) and starts the desktop app (`desktop.cjs`). CI runs both. Add a test there when you change a flow that only shows against a cluster.
 
 ## Conventions
 

@@ -96,7 +96,7 @@
 	});
 
 	/** When the mouse's back button last went back, which some browsers also take as their Back. */
-	let mouseBackAt = 0;
+	let mouseBackAt = -Infinity;
 
 	// The browser's Back goes back in Kubri, as `[` does, and leaves Kubri only from its first view.
 	$effect(() => {

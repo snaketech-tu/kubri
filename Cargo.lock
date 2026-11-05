@@ -2430,6 +2430,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "kubri-cli"
+version = "1.6.2"
+dependencies = [
+ "clap",
+ "kubri-core",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "kubri-core"
 version = "1.6.2"
 dependencies = [
@@ -2468,6 +2479,7 @@ dependencies = [
  "dirs",
  "futures",
  "keyring",
+ "kubri-cli",
  "kubri-core",
  "kubri-mcp",
  "open",
@@ -2480,6 +2492,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2512,6 +2525,7 @@ dependencies = [
  "jiff",
  "jsonwebtoken",
  "kube",
+ "kubri-cli",
  "kubri-core",
  "kubri-mcp",
  "reqwest",

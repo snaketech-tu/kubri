@@ -151,11 +151,14 @@ export function setImages(target: ObjectRef, images: ContainerImage[]) {
 	);
 }
 
-/** Rolls the Deployment of a ReplicaSet back to it, like k9s Ctrl+L. */
+/**
+ * Rolls the Deployment of a ReplicaSet back to it, like k9s Ctrl+L, or the StatefulSet or
+ * DaemonSet of a ControllerRevision.
+ */
 export async function rollback(target: ObjectRef) {
 	try {
-		const deployment = await backend.rollback(target);
-		app.toast(`Rolled Deployment ${deployment} back to ${target.name}`);
+		const owner = await backend.rollback(target);
+		app.toast(`Rolled ${owner} back to ${target.name}`);
 		return true;
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');

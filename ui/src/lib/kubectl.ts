@@ -24,7 +24,7 @@ export type KubectlOp =
 	| { op: 'image'; images?: ContainerImage[] }
 	| { op: 'labels'; labels?: Record<string, string | null>; annotations?: Record<string, string | null> }
 	| { op: 'delete'; targets?: ObjectRef[]; options?: DeleteOptions }
-	| { op: 'rollback'; deployment?: string | null; revision?: string | null };
+	| { op: 'rollback'; deployment?: string | null; revision?: string | null; owner?: string | null };
 
 /** Quotes a word for a POSIX shell only where it needs it. */
 export function shellQuote(word: string): string {
@@ -143,7 +143,7 @@ export function kubectlCommand(context: string | null | undefined, target: Objec
 				.join('\n');
 		}
 		case 'rollback':
-			return run('rollout', 'undo', `deployments.apps/${op.deployment ?? 'DEPLOYMENT'}`, `--to-revision=${op.revision ?? 'REVISION'}`);
+			return run('rollout', 'undo', op.owner ?? `deployments.apps/${op.deployment ?? 'DEPLOYMENT'}`, `--to-revision=${op.revision ?? 'REVISION'}`);
 	}
 }
 

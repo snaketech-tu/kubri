@@ -2,36 +2,44 @@
 	import { backend, type ObjectRef, type ResourceInfo } from '../api';
 	import { errorMessage } from '../format';
 	import { age } from '../format';
-	import { imageChanges, revisionsOf, type Revision } from '../rollout';
+	import { controllerRevisionsOf, imageChanges, revisionsOf, type Revision } from '../rollout';
 	import { app, findResource } from '../state.svelte';
 
+	/** A Deployment, StatefulSet or DaemonSet. */
 	let { target, now }: { target: ObjectRef; now: number } = $props();
 
 	const MAX = 10;
+	const KINDS: Record<string, string> = { deployments: 'Deployment', statefulsets: 'StatefulSet', daemonsets: 'DaemonSet' };
+	const kind = $derived(KINDS[target.resource.plural] ?? 'Deployment');
 	let revisions = $state<Revision[] | { error: string } | 'loading'>('loading');
-	const replicaSets = $derived<ResourceInfo | undefined>(findResource(app.resources, { group: 'apps', version: 'v1', plural: 'replicasets' }));
+	// A Deployment keeps its revisions in ReplicaSets, StatefulSets and DaemonSets in ControllerRevisions.
+	const holders = $derived<ResourceInfo | undefined>(
+		findResource(app.resources, { group: 'apps', version: 'v1', plural: kind === 'Deployment' ? 'replicasets' : 'controllerrevisions' })
+	);
 	const rollbackAllowed = $derived(!app.guard.readOnly);
 
 	$effect(() => {
-		const dep = target;
-		const rsResource = replicaSets;
+		const owner = target;
+		const holderResource = holders;
+		const ofDeployment = kind === 'Deployment';
 		revisions = 'loading';
-		if (!rsResource) return;
+		if (!holderResource) return;
 		let current = true;
 		let stop: () => void = () => {};
 		(async () => {
 			try {
-				const deployment = await backend.getObject(dep);
-				const uid = deployment.metadata.uid;
+				const object = await backend.getObject(owner);
+				const uid = object.metadata.uid;
 				const names = await new Promise<string[]>((resolve, reject) => {
-					stop = backend.watchTable(rsResource, dep.namespace, null, (event) => {
+					stop = backend.watchTable(holderResource, owner.namespace, null, (event) => {
 						if (event.type === 'reset') resolve(event.rows.filter((r) => r.owners.some((o) => o.uid === uid)).map((r) => r.name));
 						else if (event.type === 'error') reject(new Error(event.message));
 					});
 				});
 				stop();
-				const objects = await Promise.all(names.map((name) => backend.getObject({ ...dep, resource: rsResource, name })));
-				if (current) revisions = revisionsOf(deployment, objects).slice(0, MAX);
+				const objects = await Promise.all(names.map((name) => backend.getObject({ ...owner, resource: holderResource, name })));
+				const all = ofDeployment ? revisionsOf(object, objects) : controllerRevisionsOf(object, objects);
+				if (current) revisions = all.slice(0, MAX);
 			} catch (err) {
 				if (current) revisions = { error: errorMessage(err) };
 			}
@@ -43,8 +51,14 @@
 	});
 
 	function rollBack(revision: Revision) {
-		if (!replicaSets) return;
-		app.dialog = { kind: 'rollback', resource: replicaSets, target: { ...target, resource: replicaSets, name: revision.name } };
+		if (!holders) return;
+		app.dialog = {
+			kind: 'rollback',
+			resource: holders,
+			target: { ...target, resource: holders, name: revision.name },
+			owner: { kind, plural: target.resource.plural, name: target.name },
+			revision: revision.revision
+		};
 	}
 </script>
 

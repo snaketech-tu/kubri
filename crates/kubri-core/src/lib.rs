@@ -854,13 +854,16 @@ impl Kubri {
     }
 
     pub async fn contexts(&self) -> Result<ContextList> {
+        let cluster = self.cluster().await;
         let contexts = match &*self.kubeconfig.read().await {
             Ok(kubeconfig) => context::list_contexts(kubeconfig, &added::names()),
+            // A snapshot opened at start needs no kubeconfig: it shows with no context to switch to.
+            Err(_) if cluster.as_ref().is_some_and(|c| c.snapshot.is_some()) => Vec::new(),
             Err(err) => return Err(Error::NoKubeconfig(err.clone())),
         };
         Ok(ContextList {
             contexts,
-            cluster: self.cluster().await,
+            cluster,
             warm: self.warm_contexts().await,
         })
     }
@@ -1125,7 +1128,11 @@ impl Kubri {
         let client = snapshot::client(snapshot, &namespace);
         let session = Session::new(info.clone(), client, resources);
         self.restart_recorder(&session).await;
-        *self.session.write().await = Some(Arc::new(session));
+        let left = self.session.write().await.replace(Arc::new(session));
+        // The live connection stays warm, so switching back from the snapshot is quick.
+        if let Some(left) = left {
+            self.keep_warm(left).await;
+        }
         tracing::info!(context = info.context, "opened a snapshot");
         Ok(info)
     }
@@ -1628,14 +1635,22 @@ impl Kubri {
         Ok(())
     }
 
-    /// Rolls the Deployment of a ReplicaSet back to the ReplicaSet's pod template, like
-    /// `kubectl rollout undo --to-revision`. Returns the Deployment's name.
+    /// Rolls the Deployment of a ReplicaSet back to the ReplicaSet's pod template, or the
+    /// StatefulSet or DaemonSet of a ControllerRevision back to the revision's, like
+    /// `kubectl rollout undo --to-revision`. Returns the kind and name of what was rolled back,
+    /// like `Deployment web`.
     pub async fn rollback(&self, target: &ObjectRef) -> Result<String> {
         self.ensure_writable().await?;
         let session = self.object_session(target).await?;
         let info = session.info_for(&target.resource)?;
-        if (info.reference.group.as_str(), info.kind.as_str()) != ("apps", "ReplicaSet") {
-            return Err(Error::Unsupported("rollbacks start from a ReplicaSet".into()));
+        match (info.reference.group.as_str(), info.kind.as_str()) {
+            ("apps", "ReplicaSet") => {}
+            ("apps", "ControllerRevision") => return self.rollback_to_revision(&session, target).await,
+            _ => {
+                return Err(Error::Unsupported(
+                    "rollbacks start from a ReplicaSet or a ControllerRevision".into(),
+                ));
+            }
         }
         let replicaset = serde_json::to_value(
             session
@@ -1659,7 +1674,35 @@ impl Kubri {
         let updated: DynamicObject = serde_json::from_value(workload::rolled_back(deployment, &replicaset)?)?;
         // Fails with a conflict if the Deployment changed since it was read.
         api.replace(&name, &PostParams::default(), &updated).await?;
-        Ok(name)
+        Ok(format!("Deployment {name}"))
+    }
+
+    /// Patches the pod template saved in a ControllerRevision into its StatefulSet or DaemonSet.
+    async fn rollback_to_revision(&self, session: &Session, target: &ObjectRef) -> Result<String> {
+        let revision = serde_json::to_value(
+            session
+                .api(&target.resource, target.namespace.as_deref())?
+                .get(&target.name)
+                .await?,
+        )?;
+        let (kind, name) = workload::revision_owner(&revision)?;
+        let owners = session
+            .resolve("apps/v1", &kind)
+            .ok_or_else(|| Error::UnknownResource(format!("apps/v1/{kind}")))?;
+        let owner_ref = ObjectRef {
+            context: None,
+            resource: owners.clone(),
+            namespace: target.namespace.clone(),
+            name: name.clone(),
+        };
+        session.ensure_may("patch", &owner_ref, "").await?;
+        let api = session.api(&owners, target.namespace.as_deref())?;
+        let mut owner = serde_json::to_value(api.get(&name).await?)?;
+        owner["kind"] = kind.clone().into();
+        let patch = workload::revision_patch(&owner, &revision)?;
+        api.patch(&name, &PatchParams::default(), &Patch::Strategic(patch))
+            .await?;
+        Ok(format!("{kind} {name}"))
     }
 
     /// Events about the object with `uid`, newest first.
@@ -2196,10 +2239,28 @@ impl Kubri {
     /// Cordons a node and evicts its pods, like `kubectl drain`. Pods the options do not
     /// allow to evict stop the drain before anything is evicted; see [`DrainReport::failed`].
     pub async fn drain(&self, node: &str, options: DrainOptions) -> Result<DrainReport> {
-        self.cordon(node, true).await?;
+        self.ensure_writable().await?;
         let session = self.session().await?;
         let pods: Api<Pod> = Api::all(session.client.clone());
         let on_node = ListParams::default().fields(&format!("spec.nodeName={node}"));
+        // Evicting needs `create pods/eviction` in each namespace with pods to evict. Checked
+        // before cordoning, so a drain that cannot finish does not start.
+        if let Some(pods_resource) = session.resolve("v1", "Pod") {
+            let namespaces: std::collections::BTreeSet<String> = pods
+                .list(&on_node)
+                .await?
+                .items
+                .iter()
+                .filter(|pod| matches!(node::plan(pod, &options), node::Plan::Evict))
+                .filter_map(|pod| pod.metadata.namespace.clone())
+                .collect();
+            for namespace in namespaces {
+                let check =
+                    AccessCheck::new("create", &pods_resource, Some(&namespace)).on_subresource("eviction");
+                session.ensure_allowed(check).await?;
+            }
+        }
+        self.cordon(node, true).await?;
         let mut report = DrainReport::default();
         let mut evict = Vec::new();
         for pod in pods.list(&on_node).await?.items {
@@ -2976,6 +3037,47 @@ contexts: [{name: eks, context: {cluster: c, user: u}}]
     }
 
     #[tokio::test]
+    async fn drain_checks_evictions_before_cordoning() {
+        let (client, requests) = testing::client(|req| {
+            let path = req.uri.split('?').next().unwrap_or_default();
+            match path {
+                "/api/v1/pods" => (
+                    200,
+                    list(
+                        "Pod",
+                        serde_json::json!([{
+                            "metadata": { "name": "web-1-a", "namespace": "shop",
+                                          "ownerReferences": [{ "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                                                                "name": "web-1", "uid": "rs", "controller": true }] },
+                            "spec": { "nodeName": "worker", "containers": [{ "name": "app", "image": "web:1" }] },
+                            "status": { "phase": "Running" }
+                        }]),
+                    ),
+                ),
+                "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews" => (
+                    201,
+                    serde_json::json!({
+                        "apiVersion": "authorization.k8s.io/v1", "kind": "SelfSubjectAccessReview",
+                        "metadata": {}, "spec": {}, "status": { "allowed": false }
+                    })
+                    .to_string(),
+                ),
+                _ => (404, testing::status(404, "not found")),
+            }
+        });
+        let kubri = connected(client).await;
+        let err = kubri.drain("worker", DrainOptions::default()).await.unwrap_err();
+        assert!(
+            err.to_string().contains("`create` on `pods/eviction` in `shop`"),
+            "{err}"
+        );
+        assert!(
+            !requests.lock().unwrap().iter().any(|r| r.method == "PATCH"),
+            "the node must not be cordoned"
+        );
+    }
+
+    #[tokio::test]
     async fn rejects_objects_bound_to_a_different_context() {
         let (client, requests) = testing::client(|_| panic!("stale target must not reach the cluster"));
         let kubri = connected(client).await;
@@ -3147,6 +3249,24 @@ contexts: [{name: eks, context: {cluster: c, user: u}}]
     }
 
     #[tokio::test]
+    async fn opening_a_snapshot_keeps_the_live_connection_warm() {
+        let (client, _) = testing::client(|_| (404, testing::status(404, "not found")));
+        let kubri = connected(client).await;
+        let file = serde_json::json!({
+            "format": "kubri-snapshot", "version": 1,
+            "info": { "context": "prod", "server": "https://prod", "kubernetes": "v1.33.5",
+                      "namespace": "shop", "taken": 1_793_000_000_000_i64, "kubri": "1.6.2",
+                      "objects": 0, "logs": 0, "leftOut": [] },
+            "resources": [], "lists": {}, "logs": {}
+        });
+        kubri
+            .open_snapshot(file.to_string().as_bytes(), None)
+            .await
+            .unwrap();
+        assert_eq!(kubri.warm_contexts().await, ["test"]);
+    }
+
+    #[tokio::test]
     async fn a_snapshot_is_read_only_and_says_what_it_is() {
         let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
         let file = serde_json::json!({
@@ -3176,6 +3296,29 @@ contexts: [{name: eks, context: {cluster: c, user: u}}]
         // A file that does not open leaves the snapshot open.
         assert_eq!(
             kubri.cluster().await.map(|c| c.context).as_deref(),
+            Some("prod (snapshot)")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_snapshot_opens_without_a_kubeconfig() {
+        let kubri = Kubri::with_kubeconfig(Err("there is no kubeconfig at ~/.kube/config".into()));
+        assert!(matches!(kubri.contexts().await, Err(Error::NoKubeconfig(_))));
+        let file = serde_json::json!({
+            "format": "kubri-snapshot", "version": 1,
+            "info": { "context": "prod", "server": "https://prod", "kubernetes": "v1.33.5",
+                      "namespace": "shop", "taken": 1_793_000_000_000_i64, "kubri": "1.6.2",
+                      "objects": 0, "logs": 0, "leftOut": [] },
+            "resources": [], "lists": {}, "logs": {}
+        });
+        kubri
+            .open_snapshot(file.to_string().as_bytes(), None)
+            .await
+            .unwrap();
+        let list = kubri.contexts().await.unwrap();
+        assert!(list.contexts.is_empty());
+        assert_eq!(
+            list.cluster.map(|c| c.context).as_deref(),
             Some("prod (snapshot)")
         );
     }

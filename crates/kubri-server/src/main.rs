@@ -30,7 +30,11 @@ use auth::Auth;
 use team::{Credentials, Team};
 
 #[derive(Parser)]
-#[command(version, about)]
+#[command(
+    version,
+    about,
+    after_help = "Commands without the web UI:\n  kubri-server lint      Check a namespace or the cluster for problems, for CI\n  kubri-server snapshot  Save a namespace or the cluster to a snapshot file\nRun them with --help for their options."
+)]
 struct Args {
     /// Address to listen on.
     #[arg(long, env = "KUBRI_ADDR", default_value = "127.0.0.1:7878")]
@@ -155,12 +159,18 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
-    // Over stdio, stdout belongs to the protocol.
+    let raw: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    // `kubri-server lint …` and `kubri-server snapshot …` run without the web UI.
+    let command = kubri_cli::requested(&raw);
+    let args = (!command).then(Args::parse);
+    // Over stdio, stdout belongs to the protocol. A command only says what went wrong.
+    let filter = if command {
+        "warn,kube_client=error"
+    } else {
+        "kubri_server=info,kubri_core=info"
+    };
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| "kubri_server=info,kubri_core=info".into()),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| filter.into()))
         .with_writer(std::io::stderr)
         .init();
 
@@ -174,6 +184,9 @@ fn main() -> ExitCode {
         None => {}
     }
 
+    let Some(args) = args else {
+        return ExitCode::from(kubri_cli::run(raw));
+    };
     match tokio::runtime::Runtime::new() {
         Ok(runtime) if args.mcp => runtime.block_on(serve_mcp()),
         Ok(runtime) => runtime.block_on(serve(args)),
