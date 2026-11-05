@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import de from './de';
 import { CHECK_FORMATS, coreText, CORE_TEXTS, ERROR_FORMATS, NOTICE_FORMATS } from './errors';
-import { plural, systemLanguage, t, useLanguage } from '.';
+import { parts, plural, systemLanguage, t, useLanguage } from '.';
 
 const SRC = new URL('../..', import.meta.url).pathname;
 
@@ -109,6 +109,12 @@ describe('i18n', () => {
 		expect(notices).toEqual(NOTICE_FORMATS.slice(0, notices.length));
 		expect(rust).toContain('format!("{} and {} more"');
 		expect(notices.length + 1).toBe(NOTICE_FORMATS.length);
+	});
+
+	it('cuts a text at its names, for values in bold', () => {
+		expect(parts('Restart {name} now?')).toEqual([{ text: 'Restart ' }, { name: 'name' }, { text: ' now?' }]);
+		expect(parts('{n} of {total}')).toEqual([{ name: 'n' }, { text: ' of ' }, { name: 'total' }]);
+		expect(parts('No names')).toEqual([{ text: 'No names' }]);
 	});
 
 	it('translates errors from the core, values and all', () => {

@@ -91,3 +91,20 @@ export function t(text: string, values?: Record<string, string | number>): strin
 export function plural(count: number, one: string, other: string, values: Record<string, string | number> = {}): string {
 	return t(count === 1 ? one : other, { n: count, ...values });
 }
+
+/** A piece of a text with `{name}`s in it: words as they are, or the name of a value. */
+export type Part = { text: string } | { name: string };
+
+/**
+ * `text` cut at its `{name}`s, for texts whose values are shown in bold or as code: translate the
+ * text with `t()` first, then put each value in where its name is.
+ */
+export function parts(text: string): Part[] {
+	return text
+		.split(/(\{\w+\})/)
+		.filter(Boolean)
+		.map((piece) => {
+			const name = /^\{(\w+)\}$/.exec(piece)?.[1];
+			return name === undefined ? { text: piece } : { name };
+		});
+}
