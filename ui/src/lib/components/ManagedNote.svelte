@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { Manager, ObjectRef } from '../api';
 	import { managerNote, managerOf } from '../gitops';
 	import { app } from '../state.svelte';
@@ -29,7 +30,7 @@
 		<Icon name={manager.reverts ? 'warning' : 'pending'} size={14} />
 		<span>
 			{managerNote(manager)}
-			{#if !compact}<button class="link" onclick={open}>Open {manager.kind}</button>{/if}
+			{#if !compact}<button class="link" onclick={open}>{t('Open {kind}', { kind: manager.kind })}</button>{/if}
 		</span>
 	</div>
 {/if}

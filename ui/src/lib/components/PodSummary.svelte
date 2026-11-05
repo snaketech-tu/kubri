@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import { backend, type KubeObject, type NodeFit, type ObjectRef } from '../api';
 	import { changeRequestsOf, createMissing, raiseMemoryOf, setImageOf } from '../actions';
 	import { containerCause, pendingCause } from '../causes';
@@ -140,7 +141,7 @@
 </script>
 
 {#if object.kind === 'Pod' && (problems.length || pending.length)}
-	<div class="summary" aria-label="Pod problems">
+	<div class="summary" aria-label={t('Pod problems')}>
 		{#each problems as p (p.container)}
 			{@const cause = containerCause(object, p.container)}
 			<section class="problem bad">
@@ -149,64 +150,68 @@
 					<span class="raw">{p.oom && p.reason !== 'OOMKilled' ? `${p.reason} · OOMKilled` : p.reason}</span>
 				</h3>
 				<p>
-					{p.restarts}
-					{p.restarts === 1 ? 'restart' : 'restarts'}{p.exitCode !== null
-						? ` · last exit code ${p.exitCode}`
-						: ''}{p.message ? ` · ${p.message}` : ''}
+					{[
+						plural(p.restarts, '{n} restart', '{n} restarts'),
+						p.exitCode !== null ? t('last exit code {code}', { code: p.exitCode }) : '',
+						p.message ?? ''
+					]
+						.filter(Boolean)
+						.join(' · ')}
 				</p>
 				{#if p.pull}
 					{@const image = imageOf(p)}
 					<dl class="facts">
-						<dt>Image</dt>
+						<dt>{t('Image')}</dt>
 						<dd><code>{image}</code></dd>
-						<dt>Registry</dt>
+						<dt>{t('Registry')}</dt>
 						<dd><code>{registryOf(image)}</code></dd>
-						<dt>Pull secrets</dt>
+						<dt>{t('Pull secrets')}</dt>
 						<dd>
 							{#each secrets as s (s.name)}
-								<code>{s.name}</code>{#if s.exists === false}<span class="missing"> does not exist</span>{/if}{' '}
+								<code>{s.name}</code>{#if s.exists === false}<span class="missing"> {t('does not exist')}</span>{/if}{' '}
 							{:else}
-								None named in the pod{object.spec?.serviceAccountName ? `; the service account ${object.spec.serviceAccountName} may add some` : ''}.
+								{object.spec?.serviceAccountName
+									? t('None named in the pod; the service account {name} may add some.', { name: object.spec.serviceAccountName })
+									: t('None named in the pod.')}
 							{/each}
 						</dd>
 					</dl>
 					<p class="muted">
-						Check that the image and tag exist, that the registry can be reached from the nodes, and for a private registry,
-						that a pull secret for it exists in this namespace.
+						{t('Check that the image and tag exist, that the registry can be reached from the nodes, and for a private registry, that a pull secret for it exists in this namespace.')}
 					</p>
 				{/if}
 				{#if p.oom}
-					<p class="muted">The container used more memory than its limit allows and was killed.</p>
+					<p class="muted">{t('The container used more memory than its limit allows and was killed.')}</p>
 				{/if}
 				<div class="buttons">
 					{#if p.pull && writable}
-						<button class="primary" onclick={() => setImageOf(target, object)}>Set image…</button>
+						<button class="primary" onclick={() => setImageOf(target, object)}>{t('Set image…')}</button>
 					{/if}
 					{#if cause?.fix === 'createConfig' && cause.missing && writable}
 						<button class="primary" onclick={() => createMissing(cause.missing!, target.namespace)}>
-							Create {cause.missing.kind} {cause.missing.name}…
+							{t('Create {kind} {name}…', { kind: cause.missing.kind, name: cause.missing.name })}
 						</button>
 					{/if}
 					{#if p.pull || cause?.fix === 'createConfig' || cause?.fix === 'events'}
-						<button onclick={showEvents}>Show events</button>
+						<button onclick={showEvents}>{t('Show events')}</button>
 					{/if}
 					{#if p.oom && writable}
-						<button class="primary" onclick={() => raiseMemory(p.container)} disabled={raising}>Raise memory limit…</button>
+						<button class="primary" onclick={() => raiseMemory(p.container)} disabled={raising}>{t('Raise memory limit…')}</button>
 					{/if}
 					{#if onlogs}
 						{#if p.hasPrevious}
 							<button class:primary={!p.oom} onclick={() => onlogs(p.container, true)}>
-								<Icon name="terminal" size={16} /> Read previous container logs
+								<Icon name="terminal" size={16} /> {t('Read previous container logs')}
 							</button>
 						{/if}
-						{#if !p.pull}<button onclick={() => onlogs(p.container, false)}>Current logs</button>{/if}
+						{#if !p.pull}<button onclick={() => onlogs(p.container, false)}>{t('Current logs')}</button>{/if}
 					{/if}
 					{#if p.hasPrevious && !p.init && !p.pull && writable}
 						<button
 							onclick={() => (app.dialog = { kind: 'debug', on: 'pod', target, way: 'copy', container: p.container })}
-							title="A copy of the pod in which {p.container} sleeps, to look around in it"
+							title={t('A copy of the pod in which {container} sleeps, to look around in it', { container: p.container })}
 						>
-							Debug copy…
+							{t('Debug copy…')}
 						</button>
 					{/if}
 				</div>
@@ -220,19 +225,19 @@
 				{/each}
 				{#if unscheduled}
 					{#if fits}
-						<ul class="nodes" aria-label="Nodes">
+						<ul class="nodes" aria-label={t('Nodes')}>
 							{#each fits as f (f.node)}
 								<li>
 									<strong>{f.node}</strong>
 									{#if f.reasons.length}
 										{f.reasons.join('; ')}
 									{:else}
-										<span class="muted">Kubri finds nothing against this node; see the scheduler's message above.</span>
+										<span class="muted">{t('Kubri finds nothing against this node; see the scheduler\'s message above.')}</span>
 									{/if}
 								</li>
 							{/each}
 						</ul>
-						<p class="muted small">Kubri checks the node's state, taints, node selector, node affinity, CPU, memory and pod count. Pod affinity, topology spread and volumes are left to the scheduler.</p>
+						<p class="muted small">{t('Kubri checks the node\'s state, taints, node selector, node affinity, CPU, memory and pod count. Pod affinity, topology spread and volumes are left to the scheduler.')}</p>
 					{/if}
 					{#if (waiting?.fix === 'requests' && writable) || !fits}
 						<div class="buttons">

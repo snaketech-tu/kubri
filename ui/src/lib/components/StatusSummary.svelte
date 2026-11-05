@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import type { KubeObject, ObjectRef } from '../api';
 	import { certificateStatus } from '../certs';
 	import { relative } from '../format';
@@ -24,7 +25,7 @@
 		const kinds = app.resources.filter((r) => r.group === m.group && r.kind === m.kind);
 		const resource = kinds.find((r) => r.version === m.version) ?? kinds[0];
 		if (!resource) {
-			app.toast(`The cluster does not serve ${m.kind}`, 'bad');
+			app.toast(t('The cluster does not serve {kind}', { kind: m.kind }), 'bad');
 			return;
 		}
 		const ref = { group: resource.group, version: resource.version, plural: resource.plural };
@@ -33,7 +34,7 @@
 </script>
 
 {#if status}
-	<div class="summary" aria-label="Status">
+	<div class="summary" aria-label={t('Status')}>
 		<section class="card {status.health ?? ''}">
 			<h3>
 				{#if status.health}<HealthIcon health={status.health} size={11} />{/if}
@@ -49,7 +50,7 @@
 				</dl>
 			{/if}
 			{#if managed.length}
-				<h4>Manages {managed.length} {managed.length === 1 ? 'object' : 'objects'}</h4>
+				<h4>{plural(managed.length, 'Manages {n} object', 'Manages {n} objects')}</h4>
 				<table>
 					<tbody>
 						{#each all ? managed : managed.slice(0, SHOWN) as m (`${m.group}/${m.kind}/${m.namespace}/${m.name}`)}
@@ -65,7 +66,7 @@
 					</tbody>
 				</table>
 				{#if managed.length > SHOWN && !all}
-					<button class="link more" onclick={() => (all = true)}>Show all {managed.length}</button>
+					<button class="link more" onclick={() => (all = true)}>{t('Show all {n}', { n: managed.length })}</button>
 				{/if}
 			{/if}
 		</section>

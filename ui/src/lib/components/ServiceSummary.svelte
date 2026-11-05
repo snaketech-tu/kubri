@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import { backend, type KubeObject, type ObjectRef, type ServiceCheck } from '../api';
 	import { app, findResource } from '../state.svelte';
 	import Icon from './Icon.svelte';
+	import Phrase from './Phrase.svelte';
 
 	let { object, target }: { object: KubeObject; target: ObjectRef } = $props();
 
@@ -10,9 +12,9 @@
 	// Checked again when the Service changes, such as after its selector is fixed.
 	$effect(() => {
 		void object.metadata?.resourceVersion;
-		const t = target;
+		const ref = target;
 		let stale = false;
-		backend.serviceCheck(t).then(
+		backend.serviceCheck(ref).then(
 			(c) => !stale && (check = c),
 			() => !stale && (check = null)
 		);
@@ -37,13 +39,18 @@
 </script>
 
 {#if check && problem}
-	<div class="summary" aria-label="Service problems">
+	<div class="summary" aria-label={t('Service problems')}>
 		<section class="problem {check.pods.length && !ready.length ? 'warn' : 'bad'}">
 			{#if !check.pods.length}
-				<h3><Icon name="critical" />No pod matches the selector</h3>
-				<p>The Service selects <code>{selector}</code>, and no pod in {target.namespace} has all of these labels.</p>
+				<h3><Icon name="critical" />{t('No pod matches the selector')}</h3>
+				<p>
+					<Phrase
+						text={t('The Service selects {selector}, and no pod in {namespace} has all of these labels.', { namespace: target.namespace ?? '' })}
+						code={{ selector }}
+					/>
+				</p>
 				{#if check.near.length}
-					<p>Pods that nearly match:</p>
+					<p>{t('Pods that nearly match:')}</p>
 					<ul>
 						{#each check.near as n (n.name)}
 							<li><button class="link" onclick={() => openPod(n.name)}>{n.name}</button>: {n.differences.join('; ')}</li>
@@ -51,25 +58,32 @@
 					</ul>
 				{/if}
 			{:else if !ready.length}
-				<h3><Icon name="pending" />No matching pod is ready</h3>
+				<h3><Icon name="pending" />{t('No matching pod is ready')}</h3>
 				<p>
-					{check.pods.length}
-					{check.pods.length === 1 ? 'pod matches' : 'pods match'} <code>{selector}</code>, but none passes its readiness check, so
-					the Service sends traffic nowhere. Look at the pods' readiness probes and events.
+					<Phrase
+						text={plural(
+							check.pods.length,
+							'{n} pod matches {selector}, but none passes its readiness check, so the Service sends traffic nowhere. Look at the readiness probes and events of the pods.',
+							'{n} pods match {selector}, but none passes its readiness check, so the Service sends traffic nowhere. Look at the readiness probes and events of the pods.'
+						)}
+						code={{ selector }}
+					/>
 				</p>
 				<ul>
 					{#each check.pods.slice(0, 10) as p (p.name)}
-						<li><button class="link" onclick={() => openPod(p.name)}>{p.name}</button>: not ready</li>
+						<li><button class="link" onclick={() => openPod(p.name)}>{p.name}</button>{t(': not ready')}</li>
 					{/each}
 				</ul>
 			{/if}
 			{#if ports.length}
-				<h3 class:second={!ready.length}><Icon name="warning" />Target ports the pods do not have</h3>
+				<h3 class:second={!ready.length}><Icon name="warning" />{t('Target ports the pods do not have')}</h3>
 				<ul>
 					{#each ports.slice(0, 10) as p (p.name)}
 						<li>
-							<button class="link" onclick={() => openPod(p.name)}>{p.name}</button> has no container port named
-							{p.missingPorts.map((m) => m.split(' → ')[1]).join(', ')} (Service port {p.missingPorts.map((m) => m.split(' → ')[0]).join(', ')})
+							<button class="link" onclick={() => openPod(p.name)}>{p.name}</button>{t(': no container port named {names} (Service port {ports})', {
+								names: p.missingPorts.map((m) => m.split(' → ')[1]).join(', '),
+								ports: p.missingPorts.map((m) => m.split(' → ')[0]).join(', ')
+							})}
 						</li>
 					{/each}
 				</ul>
@@ -122,7 +136,7 @@
 		padding-left: 18px;
 		line-height: 1.6;
 	}
-	code {
+	p :global(code) {
 		font-family: var(--mono);
 		font-size: 12px;
 	}

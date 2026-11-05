@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { KubeObject, ObjectRef } from '../api';
 	import { changeRequestsOf, createMissing, raiseMemoryOf, setImageOf } from '../actions';
 	import type { Cause } from '../causes';
@@ -42,17 +43,17 @@
 	const label = $derived.by(() => {
 		switch (fix) {
 			case 'image':
-				return 'Set image…';
+				return t('Set image…');
 			case 'memory':
-				return 'Raise memory limit…';
+				return t('Raise memory limit…');
 			case 'requests':
-				return cause.resource === 'memory' ? 'Change memory request…' : 'Change CPU request…';
+				return cause.resource === 'memory' ? t('Change memory request…') : t('Change CPU request…');
 			case 'previousLogs':
-				return 'Read previous logs';
+				return t('Read previous logs');
 			case 'createConfig':
-				return `Create ${cause.missing?.kind ?? 'it'} ${cause.missing?.name ?? ''}…`;
+				return cause.missing ? t('Create {kind} {name}…', { kind: cause.missing.kind, name: cause.missing.name }) : t('Create it…');
 			case 'events':
-				return 'Show events';
+				return t('Show events');
 			default:
 				return null;
 		}
@@ -88,7 +89,7 @@
 	{#if label || (events && fix !== 'events')}
 		<div class="buttons">
 			{#if label}<button class="primary" onclick={run} disabled={busy}>{label}</button>{/if}
-			{#if events && fix !== 'events'}<button onclick={showEvents}>Show events</button>{/if}
+			{#if events && fix !== 'events'}<button onclick={showEvents}>{t('Show events')}</button>{/if}
 		</div>
 	{/if}
 </section>
