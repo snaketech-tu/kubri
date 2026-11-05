@@ -9,7 +9,7 @@
 - **Favorite port-forwards with one click.** Favorites are listed under **Port-forwards** in the sidebar: one click starts a forward, another stops it. **Keep as a favorite** in the port-forward dialog keeps one as you start it. Starting on connect is now a choice per favorite; favorites kept before 1.9 still start on connect. See [Port-forwards that stay](docs/CREATE.md#port-forwards-that-stay).
 - **Production namespaces.** In a context that is not production, namespaces can be marked as production, from the namespace menu or the context settings. They get the same care as a production context: a banner, typing the name before deleting, and no changes by AI agents. See [Settings](docs/SETTINGS.md#per-context).
 - **Other label names for logs.** When the log collector names labels differently, such as `exported_namespace`, a label template on the Integrations page tells Kubri, for Logs in Grafana and the Loki log history. A template is kept once and picked per context. See [Other label names](docs/INTEGRATIONS.md#other-label-names).
-- Pinned places come first in the sidebar. The Integrations page gives the tools found, the tools missing and the settings each their own place, also in narrow windows.
+- Pinned places come first in the sidebar. The Port-forwards page has bigger rows, and each favorite is a card with **Open** while it runs. The Integrations page gives the tools found, the tools missing and the settings each their own place, also in narrow windows.
 
 ## 1.8.0 — 2026-11-05
 

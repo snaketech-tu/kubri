@@ -179,19 +179,35 @@
 						{#each app.favoritesHere as f (favoriteLabel(f))}
 							{@const on = !!app.runningFavorite(f)}
 							{@const busy = app.switchingFavorites.includes(f)}
-							<li>
-								<span class="dot" class:on title={on ? t('Running') : t('Stopped')}></span>
-								<span class="mono">{f.address || '127.0.0.1'}:{f.localPort}</span>
-								<span class="mono muted">→ {f.target.resource.plural}/{f.target.name}:{f.remotePort}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</span>
+							{@const running = app.runningFavorite(f)}
+							<li class:on>
+								<span class="dot" title={on ? t('Running') : t('Stopped')}></span>
+								<div class="what">
+									<div class="name">
+										<strong>{f.target.name}</strong>
+										<span class="muted">{f.target.resource.plural}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</span>
+									</div>
+									<div class="mono route">
+										{#if running}
+											<a href={url(running)} target="_blank" rel="noreferrer" title={t('Open in the browser (o)')}>{f.address || '127.0.0.1'}:{f.localPort}</a>
+										{:else}
+											{f.address || '127.0.0.1'}:{f.localPort}
+										{/if}
+										<span class="muted">→ {f.remotePort}</span>
+									</div>
+								</div>
 								<span class="buttons">
 									<label class="check" title={t('Start it whenever Kubri connects to this context')}>
 										<input type="checkbox" checked={f.startOnConnect} onchange={(e) => app.setStartOnConnect(f, e.currentTarget.checked)} />
 										{t('Start on connect')}
 									</label>
-									<button class="btn small" class:danger={on} onclick={() => app.switchFavorite(f)} disabled={busy}>
+									{#if running}
+										<button class="btn" onclick={() => open(running)}>{t('Open')}</button>
+									{/if}
+									<button class="btn" class:danger={on} onclick={() => app.switchFavorite(f)} disabled={busy}>
 										{busy ? (on ? t('Stopping…') : t('Starting…')) : on ? t('Stop') : t('Start')}
 									</button>
-									<button class="btn small" onclick={() => app.removeFavorite(f)} title={t('Forget this favorite')}>{t('Remove')}</button>
+									<button class="btn" onclick={() => app.removeFavorite(f)} title={t('Forget this favorite')}>{t('Remove')}</button>
 								</span>
 							</li>
 						{/each}
@@ -221,11 +237,11 @@
 		overflow: hidden;
 	}
 	.favorites {
-		padding: 8px 16px 16px;
+		padding: 12px 16px 18px;
 		border-top: 1px solid var(--border-subtle);
 	}
 	.favorites h3 {
-		margin: 8px 0;
+		margin: 6px 0 10px;
 		font-size: 11px;
 		font-weight: 600;
 		letter-spacing: 0.06em;
@@ -234,19 +250,46 @@
 	}
 	.favorites ul {
 		display: grid;
-		gap: 6px;
+		gap: 8px;
 		margin: 0;
 		padding: 0;
 		list-style: none;
-		font-size: 13px;
+		font-size: 14px;
 	}
 	.favorites li {
 		display: flex;
-		align-items: center;
-		gap: 12px;
-	}
-	.favorites li {
 		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px 14px;
+		padding: 12px 14px;
+		border: 1px solid var(--border-subtle);
+		border-radius: 8px;
+		background: var(--surface-1);
+	}
+	.favorites li.on {
+		border-color: color-mix(in srgb, var(--ok) 35%, var(--border-subtle));
+		background: color-mix(in srgb, var(--ok) 5%, var(--surface-1));
+	}
+	.favorites .what {
+		display: grid;
+		gap: 3px;
+		min-width: 0;
+	}
+	.favorites .name {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		min-width: 0;
+	}
+	.favorites .name strong {
+		font-size: 15px;
+		font-weight: 600;
+	}
+	.favorites .name .muted {
+		font-size: 12.5px;
+	}
+	.favorites .route {
+		font-size: 13px;
 	}
 	.favorites .buttons {
 		display: flex;
@@ -256,12 +299,12 @@
 	}
 	.favorites .dot {
 		flex: none;
-		width: 8px;
-		height: 8px;
-		border: 1.5px solid var(--text-muted);
+		width: 10px;
+		height: 10px;
+		border: 2px solid var(--text-muted);
 		border-radius: 50%;
 	}
-	.favorites .dot.on {
+	.favorites li.on .dot {
 		border-color: var(--ok);
 		background: var(--ok);
 	}
@@ -284,13 +327,13 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 13px;
+		font-size: 14px;
 	}
 	th {
 		position: sticky;
 		top: 0;
 		z-index: 1;
-		padding: 9px 10px;
+		padding: 11px 12px;
 		background: var(--surface-1);
 		border-bottom: 1px solid var(--border);
 		text-align: left;
@@ -304,10 +347,10 @@
 		padding-left: 16px;
 	}
 	td {
-		padding: 11px 10px;
+		padding: 15px 12px;
 		border-bottom: 1px solid var(--border-subtle);
 		white-space: nowrap;
-		vertical-align: top;
+		vertical-align: middle;
 	}
 	tbody tr:hover {
 		background: color-mix(in srgb, var(--surface-2) 55%, transparent);
@@ -318,7 +361,7 @@
 	}
 	.mono {
 		font-family: var(--mono);
-		font-size: 12.5px;
+		font-size: 13px;
 	}
 	a {
 		color: var(--accent-strong);

@@ -6,7 +6,7 @@
 - **Port-forwards stay open**, and favorites start or stop with one click from the sidebar.
 - **Production namespaces:** mark single namespaces as production for the same care as a production context.
 - **Other label names for logs**, such as `exported_namespace`, saved as templates for every context.
-- Pinned places come first in the sidebar, and the Integrations page has a clearer layout.
+- Pinned places come first in the sidebar, the Port-forwards page has bigger entries, and the Integrations page has a clearer layout.
 
 ## Install
 
