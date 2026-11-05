@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { ALL_NAMESPACES, app } from '../state.svelte';
+	import { t } from '../i18n';
 	import { plainOptions } from '../select';
 	import Select from './Select.svelte';
 
@@ -11,11 +12,11 @@
 	);
 </script>
 
-<label class="picker" title="Namespace (:ns, 0 for all)">
-	<span class="label">Namespace</span>
+<label class="picker" title={t('Namespace (:ns, 0 for all)')}>
+	<span class="label">{t('Namespace')}</span>
 	<Select
 		bind:value={app.namespace}
-		options={[{ value: ALL_NAMESPACES, label: 'All namespaces' }, ...plainOptions(options)]}
+		options={[{ value: ALL_NAMESPACES, label: t('All namespaces') }, ...plainOptions(options)]}
 		disabled={app.page === 'resources' && !app.selected?.namespaced}
 		searchable
 		quiet

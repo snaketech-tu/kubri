@@ -1,3 +1,6 @@
+import { t } from './i18n';
+import { coreText } from './i18n/errors';
+
 /** Formats an age the way kubectl does: 42s, 5m, 3h, 12d. */
 export function age(timestamp: string | null | undefined, now: number): string {
 	if (!timestamp) return '';
@@ -16,7 +19,7 @@ export function age(timestamp: string | null | undefined, now: number): string {
 export function relative(timestamp: string | null | undefined, now: number): string {
 	if (!timestamp || Number.isNaN(Date.parse(timestamp))) return '';
 	const at = Date.parse(timestamp);
-	return at > now ? `in ${age(new Date(now).toISOString(), at)}` : `${age(timestamp, now) || '0s'} ago`;
+	return at > now ? t('in {age}', { age: age(new Date(now).toISOString(), at) }) : t('{age} ago', { age: age(timestamp, now) || '0s' });
 }
 
 /** CPU in millicores, like `kubectl top`: 250m, 1.5. */
@@ -38,8 +41,9 @@ export function memory(bytes: number): string {
 	return `${value.toFixed(digits)}${units[unit]}`;
 }
 
+/** What went wrong, for people: an error from the core in the UI's language where Kubri knows it. */
 export function errorMessage(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
+	return coreText(err instanceof Error ? err.message : String(err));
 }
 
 /**

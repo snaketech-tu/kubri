@@ -1,3 +1,5 @@
+import { t } from './i18n';
+import { coreText } from './i18n/errors';
 import type { Guard } from './api';
 
 /**
@@ -6,12 +8,12 @@ import type { Guard } from './api';
  * blamed on k9s, and a switch the user can flip says where it is.
  */
 export function readOnlyReason(guard: Guard, readOnlySetting: boolean, k9sReadOnly: boolean): string {
-	if (guard.readOnly && guard.fixed && guard.reason) return `Kubri is read-only because ${guard.reason}`;
-	if (readOnlySetting) return 'Read-only is on; switch it off in the header to make changes';
-	if (guard.readOnly && guard.canUnlock) return 'this context is locked; unlock it with Read-only in the header';
-	if (guard.readOnly && guard.reason) return `Kubri is read-only because ${guard.reason}`;
-	if (k9sReadOnly) return 'Kubri is read-only because readOnly is set in the k9s configuration';
-	return 'Kubri does not change this cluster';
+	if (guard.readOnly && guard.fixed && guard.reason) return t('Kubri is read-only because {reason}', { reason: coreText(guard.reason) });
+	if (readOnlySetting) return t('Read-only is on; switch it off in the header to make changes');
+	if (guard.readOnly && guard.canUnlock) return t('this context is locked; unlock it with Read-only in the header');
+	if (guard.readOnly && guard.reason) return t('Kubri is read-only because {reason}', { reason: coreText(guard.reason) });
+	if (k9sReadOnly) return t('Kubri is read-only because {reason}', { reason: t('readOnly is set in the k9s configuration') });
+	return t('Kubri does not change this cluster');
 }
 
 /** The read-only switch in the header can do nothing: a snapshot, `--read-only` or k9s `readOnly`. */

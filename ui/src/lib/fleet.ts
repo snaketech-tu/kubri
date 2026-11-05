@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import type { FleetCluster, Health, KindPulse } from './api';
 
 /** How a context is doing on the fleet page, and the words for it. */
@@ -33,7 +34,7 @@ export function workloads(kinds: KindPulse[]): KindPulse | null {
 /** Failing nodes count most, then failing workloads and pods; warnings only make it a warning. */
 export function fleetState(cluster: FleetCluster | null): FleetState {
 	if (!cluster) return { health: null, summary: 'Checking…' };
-	if (!cluster.version) return { health: 'failed', summary: 'Unreachable', unreachable: true };
+	if (!cluster.version) return { health: 'failed', summary: t('Unreachable'), unreachable: true };
 	const nodes = cluster.kinds.find((k) => k.kind === 'Node');
 	const pods = cluster.kinds.find((k) => k.kind === 'Pod');
 	const work = workloads(cluster.kinds);

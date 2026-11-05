@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { app } from '../state.svelte';
+	import { t } from '../i18n';
 	import Icon from './Icon.svelte';
 	import { relative } from '../format';
 	import { switcherOrder } from '../places';
@@ -60,8 +61,8 @@
 		class="current"
 		onclick={toggle}
 		title={app.cluster && !app.connecting
-			? `${app.cluster.server} · ${app.cluster.version}\nSwitch context (Ctrl+Shift+C)`
-			: 'Switch context (Ctrl+Shift+C)'}
+			? `${app.cluster.server} · ${app.cluster.version}\n${t('Switch context')} (Ctrl+Shift+C)`
+			: `${t('Switch context')} (Ctrl+Shift+C)`}
 		aria-haspopup="listbox"
 		aria-expanded={app.contextMenuOpen}
 	>
@@ -72,9 +73,9 @@
 			style:--dot={app.cluster && !app.connecting ? app.contextSettings.color || null : null}
 		></span>
 		<span class="label">
-			<span class="meta">{app.connecting ? (app.contexts.some((c) => c.name === app.connecting) ? 'Connecting…' : 'Opening…') : app.snapshot ? 'Snapshot' : 'Context'}</span>
+			<span class="meta">{app.connecting ? (app.contexts.some((c) => c.name === app.connecting) ? t('Connecting…') : t('Opening…')) : app.snapshot ? t('Snapshot') : t('Context')}</span>
 			<span class="name">
-				{app.connecting ? app.contextName(app.connecting) : app.cluster ? app.contextName(app.cluster.context) : 'No context'}
+				{app.connecting ? app.contextName(app.connecting) : app.cluster ? app.contextName(app.cluster.context) : t('No context')}
 			</span>
 		</span>
 		<span class="chevron"><Icon name="chevron" size={16} /></span>
@@ -84,8 +85,8 @@
 		<div class="backdrop" onclick={() => (app.contextMenuOpen = false)} role="presentation"></div>
 		<div class="menu" role="listbox">
 			<div class="search">
-				<input bind:this={input} bind:value={query} {onkeydown} aria-label="Search contexts" placeholder="Search contexts…" />
-				<button class="reload" onclick={() => app.reloadContexts()} title="Reload kubeconfig">↻</button>
+				<input bind:this={input} bind:value={query} {onkeydown} aria-label={t('Search contexts')} placeholder={t('Search contexts…')} />
+				<button class="reload" onclick={() => app.reloadContexts()} title={t('Reload kubeconfig')}>↻</button>
 			</div>
 			<ul>
 				{#each filtered as ctx (ctx.name)}
@@ -101,14 +102,14 @@
 							<span class="name">
 								{#if settings.color}<span class="swatch" style:background={settings.color}></span>{/if}
 								{app.contextName(ctx.name)}
-								{#if settings.production}<span class="badge production">production</span>
+								{#if settings.production}<span class="badge production">{t('production')}</span>
 								{:else if settings.label}<span class="badge">{settings.label}</span>{/if}
-								{#if ctx.name === app.previousContext && ctx.name !== app.cluster?.context}<span class="badge">previous</span>{/if}
-								{#if app.warm.includes(ctx.name)}<span class="warm" title="Still connected: switching back is instant"></span>{/if}
+								{#if ctx.name === app.previousContext && ctx.name !== app.cluster?.context}<span class="badge">{t('previous')}</span>{/if}
+								{#if app.warm.includes(ctx.name)}<span class="warm" title={t('Still connected: switching back is instant')}></span>{/if}
 							</span>
 							<span class="meta">
 								{settings.displayName ? `${ctx.name} · ` : ''}{ctx.cluster ?? ''}{ctx.namespace ? ` · ns ${ctx.namespace}` : ''}
-								{#if ctx.isDefault}<span class="badge">default</span>{/if}
+								{#if ctx.isDefault}<span class="badge">{t('default')}</span>{/if}
 							</span>
 							{#if known && !known.reachable && ctx.name !== app.cluster?.context}
 								<span class="reach" title={known.error ?? ''}>
@@ -118,7 +119,7 @@
 						</button>
 					</li>
 				{:else}
-					<li class="empty">No matching contexts</li>
+					<li class="empty">{t('No matching contexts')}</li>
 				{/each}
 			</ul>
 			<div class="footer">
@@ -128,7 +129,7 @@
 						app.showSnapshot();
 					}}
 				>
-					<Icon name="camera" size={15} /> Snapshots…
+					<Icon name="camera" size={15} /> {t('Snapshots…')}
 				</button>
 				<button
 					onclick={() => {
@@ -136,7 +137,7 @@
 						app.kubeconfigFilesOpen = true;
 					}}
 				>
-					<Icon name="config" size={15} /> Kubeconfig files…
+					<Icon name="config" size={15} /> {t('Kubeconfig files…')}
 				</button>
 			</div>
 		</div>

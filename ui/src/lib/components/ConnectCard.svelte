@@ -4,6 +4,7 @@
 	import { relative } from '../format';
 	import { reach } from '../reach.svelte';
 	import { app } from '../state.svelte';
+	import { t } from '../i18n';
 	import Icon from './Icon.svelte';
 
 	let { inline = false }: { inline?: boolean } = $props();
@@ -31,9 +32,11 @@
 	const detail = $derived.by(() => {
 		if (!failure) return '';
 		if (silent) {
-			return `${host ? `No answer from ${host}` : 'No answer'} within ${WAIT_SECONDS} seconds. Check that you are on the cluster's network or VPN, and that the cluster is running.`;
+			return host
+				? t("No answer from {host} within {seconds} seconds. Check that you are on the cluster's network or VPN, and that the cluster is running.", { host, seconds: WAIT_SECONDS })
+				: t("No answer within {seconds} seconds. Check that you are on the cluster's network or VPN, and that the cluster is running.", { seconds: WAIT_SECONDS });
 		}
-		return connectHint(failure.error) ?? 'The cluster turned the connection down.';
+		return connectHint(failure.error) ?? t('The cluster turned the connection down.');
 	});
 
 	function retry() {
@@ -64,19 +67,19 @@
 	<div class="connect-card" class:inline role="status" aria-live="polite">
 		<div class="head">
 			<span class="spinner" aria-hidden="true"></span>
-			<h2>{isContext ? `Connecting to ${app.contextName(name)}` : `Opening ${name}`}</h2>
-			{#if isContext}<span class="time" title="Kubri gives up after {WAIT_SECONDS} seconds">{seconds} s</span>{/if}
+			<h2>{isContext ? t('Connecting to {name}', { name: app.contextName(name) }) : t('Opening {name}', { name })}</h2>
+			{#if isContext}<span class="time" title={t('Kubri gives up after {seconds} seconds', { seconds: WAIT_SECONDS })}>{seconds} s</span>{/if}
 		</div>
 		{#if isContext}
 			{#if host}<p class="muted">{host}</p>{/if}
 			{#if known && !known.reachable}
 				<p class="warn">
 					<Icon name="warning" size={15} />
-					{known.summary} when last tried, {relative(new Date(known.at).toISOString(), now)}{known.error ? `: ${known.error}` : ''}
+					{t('{summary} when last tried, {when}', { summary: known.summary, when: relative(new Date(known.at).toISOString(), now) })}{known.error ? `: ${known.error}` : ''}
 				</p>
 			{/if}
 			<div class="buttons">
-				<button onclick={() => app.cancelConnect()}>Cancel <kbd>esc</kbd></button>
+				<button onclick={() => app.cancelConnect()}>{t('Cancel')} <kbd>esc</kbd></button>
 			</div>
 		{/if}
 	</div>
@@ -84,20 +87,20 @@
 	<div class="connect-card failed" class:inline role="alert">
 		<div class="head">
 			<Icon name="critical" size={18} />
-			<h2>{silent ? `${app.contextName(failure.context)} does not answer` : `Could not connect to ${app.contextName(failure.context)}`}</h2>
+			<h2>{silent ? t('{name} does not answer', { name: app.contextName(failure.context) }) : t('Could not connect to {name}', { name: app.contextName(failure.context) })}</h2>
 			{#if !inline}
-				<button class="close" onclick={() => (app.connectFailure = null)} aria-label="Dismiss">×</button>
+				<button class="close" onclick={() => (app.connectFailure = null)} aria-label={t('Dismiss')}>×</button>
 			{/if}
 		</div>
 		<p>{detail}</p>
 		<p class="raw">{connectError(failure.error)}</p>
 		{#if app.cluster && !inline}
-			<p class="muted">Kubri stayed on {app.contextName(app.cluster.context)}.</p>
+			<p class="muted">{t('Kubri stayed on {name}.', { name: app.contextName(app.cluster.context) })}</p>
 		{/if}
 		<div class="buttons">
-			<button class="primary" onclick={retry}>Try again</button>
-			{#if app.contexts.length > 1}<button onclick={checkClusters}>Check on the Clusters page</button>{/if}
-			{#if !app.cluster}<button onclick={chooseAnother}>Choose another context</button>{/if}
+			<button class="primary" onclick={retry}>{t('Try again')}</button>
+			{#if app.contexts.length > 1}<button onclick={checkClusters}>{t('Check on the Clusters page')}</button>{/if}
+			{#if !app.cluster}<button onclick={chooseAnother}>{t('Choose another context')}</button>{/if}
 		</div>
 	</div>
 {/if}
