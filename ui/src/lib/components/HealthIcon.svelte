@@ -1,10 +1,11 @@
 <script lang="ts">
 	import type { Health } from '../api';
+	import { t } from '../i18n';
 
 	let { health, size = 10 }: { health: Health; size?: number } = $props();
 
 	// The shape says the same as the color, for color-blind readers.
-	const LABELS: Record<Health, string> = { ok: 'OK', warning: 'Warning', failed: 'Failed' };
+	const LABELS: Record<Health, string> = { ok: 'OK', warning: t('Warning'), failed: t('Failed') };
 </script>
 
 <svg class={health} width={size} height={size} viewBox="0 0 10 10" role="img" aria-label={LABELS[health]}>

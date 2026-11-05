@@ -35,7 +35,7 @@
 				{@const known = reach.of[ctx.name]}
 				{@const settings = app.contextSettingsOf(ctx.name)}
 				<li>
-					<button class="context" onclick={() => app.switchContext(ctx.name)} title={known?.error ? `Switch to ${ctx.name}. Last error: ${known.error}` : `Switch to ${ctx.name}`}>
+					<button class="context" onclick={() => app.switchContext(ctx.name)} title={known?.error ? t('Switch to {name}. Last error: {error}', { name: ctx.name, error: known.error }) : t('Switch to {name}', { name: ctx.name })}>
 						<span class="dot {tone(known)}" aria-hidden="true"></span>
 						<span class="text">
 							<span class="name">

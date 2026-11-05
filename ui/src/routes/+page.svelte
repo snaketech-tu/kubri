@@ -6,6 +6,7 @@
 	import { coreText } from '#lib/i18n/errors.js';
 	import { stepZoom, zoomKey } from '#lib/appearance.js';
 	import Icon from '#lib/components/Icon.svelte';
+	import Phrase from '#lib/components/Phrase.svelte';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { untrack } from 'svelte';
 	import { forControl } from '#lib/keys.js';
@@ -701,7 +702,7 @@
 							<ResourceView resource={app.selected} namespace={app.namespace} scope={app.scope} />
 						{/key}
 					{:else}
-						<div class="placeholder">{t('Choose a resource or press')} <kbd>:</kbd>.</div>
+						<div class="placeholder"><Phrase text={t('Choose a resource or press {key}.')} kbd={{ key: ':' }} /></div>
 					{/if}
 				{:else}
 					{#if app.kubeconfigProblem !== null && !app.contexts.length && !app.connecting}
@@ -783,9 +784,9 @@
 				{app.connectingText
 					? app.connectingText
 					: app.snapshot
-						? `Snapshot · ${app.snapshot.file ?? app.snapshot.context}`
+						? t('Snapshot · {name}', { name: app.snapshot.file ?? app.snapshot.context })
 						: app.cluster
-							? `Live · ${app.contextName(app.cluster.context)}`
+							? t('Live · {name}', { name: app.contextName(app.cluster.context) })
 							: t('Not connected')}
 			</span>
 			{#if app.release}
@@ -1315,7 +1316,8 @@
 		background: var(--surface-2);
 		color: var(--text);
 	}
-	kbd {
+	kbd,
+	.placeholder :global(kbd) {
 		margin-right: 5px;
 		padding: 0 5px;
 		border: 1px solid var(--border);

@@ -188,7 +188,7 @@
 					bind:value={groupBy}
 					options={[
 						{ value: 'namespace', label: 'Namespace' },
-						{ value: 'app', label: 'Application' },
+						{ value: 'app', label: t('Application') },
 						{ value: 'node', label: 'Node' }
 					]}
 					compact

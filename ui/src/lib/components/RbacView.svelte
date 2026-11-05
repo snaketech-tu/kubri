@@ -163,7 +163,7 @@
 			<div class="list" bind:this={list} role="listbox" aria-label={t('Subjects')}>
 				<button class="item me" class:active={selectedKey === ME} onclick={() => (selectedKey = ME)} role="option" aria-selected={selectedKey === ME}>
 					<span class="name">{t('You')}</span>
-					<span class="muted">{me ? `rules in ${me.namespace}` : meError ? 'unknown' : '…'}</span>
+					<span class="muted">{me ? t('rules in {namespace}', { namespace: me.namespace }) : meError ? t('unknown') : '…'}</span>
 				</button>
 				{#each KINDS as [kind, title] (kind)}
 					{@const items = visible.filter((s) => s.kind === kind)}

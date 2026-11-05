@@ -714,7 +714,7 @@
 			crumbs={[t('Helm')]}
 			title={t('Helm releases')}
 			count={releases ? visible.length : null}
-			subtitle={namespace ? `In ${namespace}` : 'All namespaces'}
+			subtitle={namespace ? t('In {namespace}', { namespace }) : t('All namespaces')}
 		>
 			{#snippet tools()}
 				<button class="btn" onclick={() => reloads++} title={t('Read the releases again')}>{t('Reload')}</button>

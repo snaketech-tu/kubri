@@ -194,7 +194,7 @@
 				{t('Before these actions run, Kubri asks the API server for a dry run and shows what would change. YAML edits always show it.')}
 			</p>
 			<div class="diff-settings">
-				{#each [['scale', 'Scale'], ['restart', 'Restart'], ['image', 'Set image'], ['labels', 'Labels & annotations']] as const as [key, label] (key)}
+				{#each [['scale', t('Scale')], ['restart', t('Restart')], ['image', t('Set image')], ['labels', t('Labels & annotations')]] as const as [key, label] (key)}
 					<label>
 						<input
 							type="checkbox"

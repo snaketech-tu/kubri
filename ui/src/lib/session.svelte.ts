@@ -1,4 +1,5 @@
 import { isTauri } from '@tauri-apps/api/core';
+import { t } from './i18n';
 
 /** Whether kubri-server asks for a password, and whether this browser has signed in. */
 interface SessionState {
@@ -43,7 +44,7 @@ class Session {
 		try {
 			await post('/login', { password });
 		} catch (err) {
-			throw err instanceof TypeError ? new Error('Could not reach kubri-server') : err;
+			throw err instanceof TypeError ? new Error(t('Could not reach kubri-server')) : err;
 		}
 		this.signedIn = true;
 	}

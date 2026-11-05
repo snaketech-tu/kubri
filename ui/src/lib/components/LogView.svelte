@@ -686,7 +686,7 @@
 								{:else}
 									<td colspan={columns.length}
 										>{line.text}{#if row.count > 1}<span class="times">× {row.count}</span>{/if}{#if row.more.length}<span
-											class="times">+{row.more.length} {row.more.length === 1 ? 'line' : 'lines'}</span
+											class="times">{plural(row.more.length, '+{n} line', '+{n} lines')}</span
 										>{/if}</td
 									>
 								{/if}
@@ -758,7 +758,7 @@
 		{/if}
 	</div>
 	<div class="foot">
-		<span>{shownCount} {shownCount === 1 ? 'line' : 'lines'}{shownCount !== total ? ` of ${total}` : ''}</span>
+		<span>{shownCount !== total ? plural(total, '{shown} of {n} line', '{shown} of {n} lines', { shown: shownCount }) : plural(shownCount, '{n} line', '{n} lines')}</span>
 		<span
 			>{loki ? t('Loki history') : previous ? t('Previous instance') : t('Current instance')} · {app.snapshot ? t('snapshot') : status === 'streaming' ? t('live') : status === 'ended' ? t('ended') : t('connecting')}</span
 		>

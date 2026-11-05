@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { t } from '../i18n';
+	import { plural, t } from '../i18n';
 	import { duration, ticks } from '../bench';
+	import Phrase from './Phrase.svelte';
 
 	let { buckets, total }: { buckets: { from: number; to: number; count: number }[]; total: number } = $props();
 
@@ -73,8 +74,8 @@
 			style:left="{Math.min(width - 170, Math.max(0, PAD.left + hover * slot + slot / 2 - 85))}px"
 			style:top="{Math.max(0, y(b.count) - 52)}px"
 		>
-			<strong>{b.count.toLocaleString('en-US')}</strong>
-			{b.count === 1 ? 'response' : 'responses'} · {total ? Math.round((100 * b.count) / total) : 0}%
+			<Phrase text={plural(b.count, '{count} response', '{count} responses')} strong={{ count: b.count.toLocaleString('en-US') }} />
+			· {total ? Math.round((100 * b.count) / total) : 0}%
 			<div class="muted">{duration(b.from)} – {duration(b.to)}</div>
 		</div>
 	{/if}

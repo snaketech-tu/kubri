@@ -86,7 +86,7 @@
 				onchange={(e) => {
 					const value = e.currentTarget.value.trim();
 					if (/^#[0-9a-f]{6}$/i.test(value)) save({ color: value.toLowerCase() });
-					else if (value) app.toast('Colors look like #326ce5', 'bad');
+					else if (value) app.toast(t('Colors look like #326ce5'), 'bad');
 				}}
 				spellcheck="false"
 			/>
@@ -98,7 +98,7 @@
 			<Select
 				value={current.namespace}
 				options={[
-					{ value: '', label: 'All namespaces' },
+					{ value: '', label: t('All namespaces') },
 					...plainOptions(current.namespace && !namespaces.includes(current.namespace) ? [...namespaces, current.namespace] : namespaces)
 				]}
 				onchange={(value) => value !== current.namespace && save({ namespace: value })}

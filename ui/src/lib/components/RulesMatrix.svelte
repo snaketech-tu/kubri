@@ -29,7 +29,7 @@
 						<td class="mono muted" class:wild={row.group === '*'}>{row.url ? 'URL' : row.group}</td>
 						{#each VERBS as verb (verb)}
 							{@const yes = allows(row, verb)}
-							<td class="verb" class:yes aria-label="{verb}: {yes ? 'allowed' : 'not allowed'}">{yes ? '✓' : '·'}</td>
+							<td class="verb" class:yes aria-label="{verb}: {yes ? t('allowed') : t('not allowed')}">{yes ? '✓' : '·'}</td>
 						{/each}
 						<td class="mono other" class:wild={row.verbs.has('*')}>{row.verbs.has('*') ? t('all verbs') : row.extras.join(', ')}</td>
 					</tr>

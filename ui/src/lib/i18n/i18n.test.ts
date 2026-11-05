@@ -141,6 +141,9 @@ describe('i18n', () => {
 		expect(coreText('This context is set read-only in Kubri. A local terminal would get around that, so it stays closed.')).toBe(
 			'Dieser Kontext ist in Kubri schreibgeschützt. Ein lokales Terminal würde das umgehen, deshalb bleibt es zu.'
 		);
+		expect(coreText('not enough memory: the pod requests 2Gi, 512Mi is free')).toBe('nicht genug Speicher: der Pod fordert 2Gi an, frei ist 512Mi');
+		expect(coreText('node selector wants disk=ssd, the node has no disk label')).toBe('der Node-Selector will disk=ssd, der Node hat kein Label disk');
+		expect(coreText('node selector wants disk=ssd, the node has disk=hdd')).toBe('der Node-Selector will disk=ssd, der Node hat disk=hdd');
 	});
 
 	it('only takes texts written out, so the test above sees them', () => {

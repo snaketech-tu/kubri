@@ -1,11 +1,12 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
+	import { t } from '../i18n';
 
 	let {
 		value = $bindable(''),
 		input = $bindable(),
 		label,
-		placeholder = 'Filter…',
+		placeholder = t('Filter…'),
 		key = '/'
 	}: {
 		value?: string;

@@ -36,7 +36,7 @@
 	{:else if !found}
 		<p class="muted">{t('Looking for dashboards…')}</p>
 	{:else if !found.links.length}
-		<p class="muted">{empty}{found.note ? ` Grafana's own list: ${found.note}` : ''}</p>
+		<p class="muted">{empty}{#if found.note} {t("Grafana's own list: {note}", { note: found.note })}{/if}</p>
 	{:else}
 		{#if found.note}<p class="muted">{t('Kubri could not read Grafana\'s dashboards: {note}', { note: found.note })}</p>{/if}
 		<ul>
@@ -45,7 +45,7 @@
 					<button
 						class="link"
 						onclick={() => openDashboard(link)}
-						title={link.filled.length ? `Open in Grafana with ${link.filled.join(', ')} set` : t('Open in Grafana')}
+						title={link.filled.length ? t('Open in Grafana with {values} set', { values: link.filled.join(', ') }) : t('Open in Grafana')}
 					>
 						<Icon name="popout" size={13} />
 						{link.title}

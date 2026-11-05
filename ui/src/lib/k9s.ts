@@ -2,6 +2,7 @@
 // turning a skin into Kubri's colors.
 
 import type { Cell, ContextInfo, ObjectRef, Plugin, ResourceInfo, ResourceRef } from './api';
+import { t } from './i18n';
 
 export interface Shortcut {
 	/** A lowercase letter, a digit or F1 to F12. */
@@ -136,13 +137,13 @@ export function inputError(plugin: Plugin, values: Record<string, string>): stri
 		const label = input.label || input.name;
 		const value = (values[input.name] ?? input.default).trim();
 		if (!value) {
-			if (input.required) return `${label} is required`;
+			if (input.required) return t('{label} is required', { label });
 		} else if (input.type === 'number' && (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(value))) {
-			return `${label} must be a number`;
+			return t('{label} must be a number', { label });
 		} else if (input.type === 'bool' && value !== 'true' && value !== 'false') {
-			return `${label} must be true or false`;
+			return t('{label} must be true or false', { label });
 		} else if (input.type === 'dropdown' && !input.options.includes(value)) {
-			return `${label} must be one of ${input.options.join(', ')}`;
+			return t('{label} must be one of {options}', { label, options: input.options.join(', ') });
 		}
 	}
 	return null;

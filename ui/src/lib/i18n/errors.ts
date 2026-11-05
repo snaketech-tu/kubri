@@ -56,8 +56,8 @@ export const CORE_TEXTS = [
 ];
 
 /**
- * Texts of the core's charts and local terminal, with the file each comes from; `{0}` and `{1}` for
- * values. A test checks that each still appears there.
+ * Texts of the core's charts, local terminal, right-sizing and node checks, with the file each
+ * comes from; `{0}` and `{1}` for values. A test checks that each still appears there.
  */
 export const SOURCE_TEXTS: Record<string, string[]> = {
 	'prometheus.rs': ['CPU', 'Memory', 'Network', 'Container restarts', 'Requests', 'Received', 'Sent', 'Request', 'Limit'],
@@ -71,6 +71,19 @@ export const SOURCE_TEXTS: Record<string, string[]> = {
 		'{0}. A local terminal would get around that, so it stays closed.'
 	],
 	'rightsizing.rs': ['Prometheus at {0}, last 7 days', 'metrics-server, now'],
+	// Why a pod does not fit on a node. The selector's "no label" first, as the other would match it too.
+	'fixes.rs': [
+		'the pod is bound to node {0}',
+		'the node is not ready',
+		'the node is cordoned',
+		'taint {0}:{1} is not tolerated',
+		'node selector wants {0}, the node has no {1} label',
+		'node selector wants {0}, the node has {1}',
+		'required node affinity is not met: {0}',
+		'not enough CPU: the pod requests {0}, {1} is free',
+		'not enough memory: the pod requests {0}, {1} is free',
+		'the node runs as many pods as it may'
+	],
 	'local_terminal.rs': ["kubectl {0} is more than one minor version away from the cluster's {1}; some commands may not work"]
 };
 

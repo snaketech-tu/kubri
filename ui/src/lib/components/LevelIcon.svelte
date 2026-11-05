@@ -1,10 +1,11 @@
 <script lang="ts">
 	import type { Level } from '../api';
+	import { t } from '../i18n';
 
 	let { level, size = 10 }: { level: Level; size?: number } = $props();
 
 	// The shape says the same as the color, like HealthIcon: diamond, triangle, ring.
-	const LABELS: Record<Level, string> = { info: 'Info', warning: 'Warning', error: 'Error' };
+	const LABELS: Record<Level, string> = { info: t('Info'), warning: t('Warning'), error: t('Error') };
 </script>
 
 <svg class={level} width={size} height={size} viewBox="0 0 10 10" role="img" aria-label={LABELS[level]}>

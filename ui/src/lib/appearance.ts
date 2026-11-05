@@ -1,4 +1,5 @@
 import { isTauri } from '@tauri-apps/api/core';
+import { plural, t } from './i18n';
 import type { SkinTheme } from './k9s';
 
 /** The zoom levels Ctrl+ and Ctrl− step through, as browsers offer them. */
@@ -75,14 +76,16 @@ export function skinWarning(theme: SkinTheme | null | undefined): string | null 
 	const bg = theme.vars['--bg'] ?? OWN[theme.scheme]['--bg'];
 	const text = theme.vars['--text'] ?? OWN[theme.scheme]['--text'];
 	const ratio = contrast(text, bg);
-	if (ratio < 4.5) return `Text has a contrast of ${ratio.toFixed(1)}:1 on the background, below the 4.5:1 that reads easily`;
+	if (ratio < 4.5) return t('Text has a contrast of {ratio}:1 on the background, below the 4.5:1 that reads easily', { ratio: ratio.toFixed(1) });
 	const faint = (['--accent', '--ok', '--warn', '--bad'] as const).filter((name) => {
 		const color = theme.vars[name];
 		return color && contrast(color, bg) < 3;
 	});
 	if (faint.length) {
-		const names = faint.map((n) => ({ '--accent': 'links', '--ok': 'ok', '--warn': 'warning', '--bad': 'error' })[n]);
-		return `The ${names.join(', ')} ${faint.length === 1 ? 'color is' : 'colors are'} hard to see on the background`;
+		const names = faint.map((n) => ({ '--accent': t('links'), '--ok': t('ok'), '--warn': t('warning'), '--bad': t('error') })[n]);
+		return plural(faint.length, 'The {names} color is hard to see on the background', 'The {names} colors are hard to see on the background', {
+			names: names.join(', ')
+		});
 	}
 	return null;
 }

@@ -66,19 +66,19 @@
 <div class="terminal" style:--terminal-bg={TERMINAL_BACKGROUND}>
 	<div class="toolbar">
 		{#if containers.length > 1}
-			<Select bind:value={container} options={[{ value: '', label: 'Default container' }, ...plainOptions(containers)]} title={t('Container')} compact />
+			<Select bind:value={container} options={[{ value: '', label: t('Default container') }, ...plainOptions(containers)]} title={t('Container')} compact />
 		{/if}
 		<Select
 			bind:value={mode}
 			options={[
-				{ value: 'shell', label: 'Shell' },
-				{ value: 'attach', label: 'Attach' }
+				{ value: 'shell', label: t('Shell') },
+				{ value: 'attach', label: t('Attach') }
 			]}
 			title={t('Run a new shell, or connect to the container\'s main process')}
 			compact
 		/>
 		<span class="status" class:open={status === 'open'} class:exited={status === 'exited'}>
-			{status === 'open' ? `Connected to ${connectedTo}` : status === 'exited' ? t('Ended') : t('Connecting…')}
+			{status === 'open' ? t('Connected to {name}', { name: connectedTo }) : status === 'exited' ? t('Ended') : t('Connecting…')}
 		</span>
 		<span class="spacer"></span>
 		<button onclick={() => restarts++}>{status === 'exited' ? t('Reconnect') : t('Restart')}</button>

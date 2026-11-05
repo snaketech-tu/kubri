@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { ALL_NAMESPACES, app } from '../state.svelte';
+	import { t } from '../i18n';
 	import Icon from './Icon.svelte';
 
 	/** A breadcrumb step; one with `onclick` leads back to that place. */
@@ -33,14 +34,14 @@
 	/** Every page's path starts in the context, as the header shows it. */
 	const trail = $derived.by((): Crumb[] => {
 		if (prefix === 'none' || !app.cluster) return crumbs;
-		const start: Crumb[] = [{ label: app.contextName(app.cluster.context), onclick: () => app.showPulses(), title: 'Overview' }];
-		if (prefix === 'namespace') start.push(app.namespace === ALL_NAMESPACES ? 'all namespaces' : app.namespace);
+		const start: Crumb[] = [{ label: app.contextName(app.cluster.context), onclick: () => app.showPulses(), title: t('Overview') }];
+		if (prefix === 'namespace') start.push(app.namespace === ALL_NAMESPACES ? t('all namespaces') : app.namespace);
 		return [...start, ...crumbs];
 	});
 </script>
 
 <header>
-	<nav class="crumbs" aria-label="Breadcrumb">
+	<nav class="crumbs" aria-label={t('Breadcrumb')}>
 		{#each trail as crumb, i (i)}
 			{#if i}<Icon name="next" size={12} />{/if}
 			{#if typeof crumb === 'string'}

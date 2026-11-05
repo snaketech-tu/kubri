@@ -154,7 +154,7 @@
 	<div class="buttons">
 		<button type="button" class="secondary" onclick={() => onclose([])} disabled={busy}>{t('Cancel')}</button>
 		<button type="button" class="primary" onclick={add} disabled={busy || !chosen.length}>
-			{busy ? t('Adding…') : chosen.length > 1 ? `Add ${chosen.length} contexts` : t('Add context')}
+			{busy ? t('Adding…') : chosen.length > 1 ? t('Add {n} contexts', { n: chosen.length }) : t('Add context')}
 		</button>
 	</div>
 </dialog>

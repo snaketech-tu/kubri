@@ -141,7 +141,7 @@
 								class="name open"
 								onclick={() => open(name)}
 								disabled={!!app.connecting}
-								title={app.cluster?.context === name ? t('Show its overview') : `Connect to ${name}`}
+								title={app.cluster?.context === name ? t('Show its overview') : t('Connect to {name}', { name })}
 							>
 								{app.contextName(name)}
 							</button>

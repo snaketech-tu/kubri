@@ -51,26 +51,26 @@ export function relatedOf(object: { kind?: string; spec?: unknown }): Related[] 
 		if (name && !found.has(`${kind}/${name}`)) found.set(`${kind}/${name}`, { kind, apiVersion, name, how });
 	};
 	for (const v of spec.volumes ?? []) {
-		add('ConfigMap', 'v1', v.configMap?.name, 'volume');
-		add('Secret', 'v1', v.secret?.secretName, 'volume');
-		add('PersistentVolumeClaim', 'v1', v.persistentVolumeClaim?.claimName, 'volume');
+		add('ConfigMap', 'v1', v.configMap?.name, t('volume'));
+		add('Secret', 'v1', v.secret?.secretName, t('volume'));
+		add('PersistentVolumeClaim', 'v1', v.persistentVolumeClaim?.claimName, t('volume'));
 		for (const s of v.projected?.sources ?? []) {
-			add('ConfigMap', 'v1', s.configMap?.name, 'volume');
-			add('Secret', 'v1', s.secret?.name, 'volume');
+			add('ConfigMap', 'v1', s.configMap?.name, t('volume'));
+			add('Secret', 'v1', s.secret?.name, t('volume'));
 		}
 	}
 	for (const c of [...(spec.containers ?? []), ...(spec.initContainers ?? [])]) {
 		for (const e of c.envFrom ?? []) {
-			add('ConfigMap', 'v1', e.configMapRef?.name, 'environment');
-			add('Secret', 'v1', e.secretRef?.name, 'environment');
+			add('ConfigMap', 'v1', e.configMapRef?.name, t('environment'));
+			add('Secret', 'v1', e.secretRef?.name, t('environment'));
 		}
 		for (const e of c.env ?? []) {
-			add('ConfigMap', 'v1', e.valueFrom?.configMapKeyRef?.name, 'environment');
-			add('Secret', 'v1', e.valueFrom?.secretKeyRef?.name, 'environment');
+			add('ConfigMap', 'v1', e.valueFrom?.configMapKeyRef?.name, t('environment'));
+			add('Secret', 'v1', e.valueFrom?.secretKeyRef?.name, t('environment'));
 		}
 	}
 	if (spec.serviceAccountName && spec.serviceAccountName !== 'default') {
-		add('ServiceAccount', 'v1', spec.serviceAccountName, 'service account');
+		add('ServiceAccount', 'v1', spec.serviceAccountName, t('service account'));
 	}
 	return [...found.values()];
 }

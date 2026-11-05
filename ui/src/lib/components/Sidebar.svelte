@@ -65,7 +65,7 @@
 	<div class="brand">
 		<img src={logo} alt="" width="28" height="28" />
 		<span>kubri</span>
-		<span class="version" aria-label={`Version ${version}`}>v{version}</span>
+		<span class="version" aria-label={t('Version {version}', { version })}>v{version}</span>
 	</div>
 	<div class="list">
 		<div class="scroll" bind:this={scroller} onscroll={measure}>

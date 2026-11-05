@@ -37,7 +37,7 @@
 	}
 </script>
 
-<div class="diff" role="region" aria-label="Changes">
+<div class="diff" role="region" aria-label={t('Changes')}>
 	<div class="summary">
 		{#if added || removed}
 			<span class="added">+{added}</span> <span class="removed">−{removed}</span>

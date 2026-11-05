@@ -795,18 +795,19 @@ class AppState {
 			try {
 				list = await backend.contexts();
 			} catch (err) {
-				const message = errorMessage(err);
+				// The core's own words: errorMessage would translate them.
+				const message = err instanceof Error ? err.message : String(err);
 				const prefix = 'no kubeconfig loaded: ';
 				if (!message.startsWith(prefix)) throw err;
 				this.contexts = [];
-				const problem = message.slice(prefix.length);
+				const problem = coreText(message.slice(prefix.length));
 				this.kubeconfigProblem = problem.charAt(0).toUpperCase() + problem.slice(1);
 				return;
 			}
 			const { contexts, cluster, warm } = list;
 			this.contexts = contexts;
 			this.warm = warm ?? [];
-			this.kubeconfigProblem = contexts.length ? null : 'Your kubeconfig has no contexts.';
+			this.kubeconfigProblem = contexts.length ? null : t('Your kubeconfig has no contexts.');
 			if (cluster) {
 				await this.connected(cluster);
 			} else {
@@ -838,8 +839,8 @@ class AppState {
 		this.connecting === null
 			? null
 			: this.contexts.some((c) => c.name === this.connecting)
-				? `Connecting to ${this.connecting}…`
-				: `Opening ${this.connecting}…`
+				? t('Connecting to {name}…', { name: this.connecting })
+				: t('Opening {name}…', { name: this.connecting })
 	);
 
 	/** The snapshot open instead of a live cluster. */
@@ -879,7 +880,7 @@ class AppState {
 		try {
 			await this.connected(await backend.openSnapshot(file));
 		} catch (err) {
-			this.error = `Could not open ${file.name}: ${errorMessage(err)}`;
+			this.error = t('Could not open {name}: {error}', { name: file.name, error: errorMessage(err) });
 		} finally {
 			this.connecting = null;
 		}
@@ -1488,9 +1489,9 @@ class AppState {
 		if (name) {
 			try {
 				theme = skinTheme(await backend.k9sSkin(name), resolveColor);
-				if (!theme) error = `The skin ${name} sets no colors Kubri can use.`;
+				if (!theme) error = t('The skin {name} sets no colors Kubri can use.', { name });
 			} catch (err) {
-				error = `Could not load the skin ${name}: ${errorMessage(err)}`;
+				error = t('Could not load the skin {name}: {error}', { name, error: errorMessage(err) });
 			}
 		}
 		// A later choice may have finished first.
@@ -1586,7 +1587,7 @@ class AppState {
 		this.k9s = null;
 		access.reset(cluster.context);
 		this.#guardRequest++;
-		this.applyGuard({ readOnly: true, reason: 'Kubri is still checking whether it may change this cluster', canUnlock: false, unlockedFor: null });
+		this.applyGuard({ readOnly: true, reason: t('Kubri is still checking whether it may change this cluster'), canUnlock: false, unlockedFor: null });
 		this.refreshGuard();
 		this.askLocalTerminal();
 		this.resources = resources;
@@ -1739,7 +1740,7 @@ export function isForwardOf(favorite: FavoriteForward, forward: PortForwardInfo)
 }
 
 export function favoriteLabel(f: FavoriteForward) {
-	return `${f.target.resource.plural}/${f.target.name}:${f.remotePort} on port ${f.localPort}`;
+	return t('{target} on port {port}', { target: `${f.target.resource.plural}/${f.target.name}:${f.remotePort}`, port: f.localPort });
 }
 
 export function sameResource(a: ResourceRef, b: ResourceRef) {

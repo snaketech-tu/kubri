@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { plural, t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import { backend, type KubeObject, type NodeFit, type ObjectRef } from '../api';
 	import { changeRequestsOf, createMissing, raiseMemoryOf, setImageOf } from '../actions';
 	import { containerCause, pendingCause } from '../causes';
@@ -146,7 +147,7 @@
 			{@const cause = containerCause(object, p.container)}
 			<section class="problem bad">
 				<h3>
-					<Icon name="critical" /><span class="title">{cause?.title ?? `${p.reason} in ${p.container}`}</span>
+					<Icon name="critical" /><span class="title">{cause?.title ?? t('{reason} in {container}', { reason: p.reason, container: p.container })}</span>
 					<span class="raw">{p.oom && p.reason !== 'OOMKilled' ? `${p.reason} · OOMKilled` : p.reason}</span>
 				</h3>
 				<p>
@@ -219,7 +220,7 @@
 		{/each}
 		{#if pending.length && !problems.length}
 			<section class="problem warn">
-				<h3><Icon name="pending" /><span class="title">{waiting?.title ?? 'Waiting to start'}</span></h3>
+				<h3><Icon name="pending" /><span class="title">{waiting?.title ?? t('Waiting to start')}</span></h3>
 				{#each pending as c (c.type)}
 					<p><strong>{c.reason ?? c.type}</strong> · {c.message}</p>
 				{/each}
@@ -230,7 +231,7 @@
 								<li>
 									<strong>{f.node}</strong>
 									{#if f.reasons.length}
-										{f.reasons.join('; ')}
+										{f.reasons.map(coreText).join('; ')}
 									{:else}
 										<span class="muted">{t('Kubri finds nothing against this node; see the scheduler\'s message above.')}</span>
 									{/if}
@@ -243,11 +244,11 @@
 						<div class="buttons">
 							{#if waiting?.fix === 'requests' && writable}
 								<button class="primary" onclick={() => changeRequestsOf(waiting, target, object)}>
-									{waiting.resource === 'memory' ? 'Change memory request…' : 'Change CPU request…'}
+									{waiting.resource === 'memory' ? t('Change memory request…') : t('Change CPU request…')}
 								</button>
 							{/if}
 							{#if !fits}
-								<button onclick={checkNodes} disabled={checking}>{checking ? 'Checking…' : 'Why not each node?'}</button>
+								<button onclick={checkNodes} disabled={checking}>{checking ? t('Checking…') : t('Why not each node?')}</button>
 							{/if}
 						</div>
 					{/if}

@@ -130,7 +130,7 @@
 							<span class="path mono" title={file.path}>{file.path}</span>
 							<span class="badge">{file.chosen ? t('Loaded in Kubri') : t('Your kubeconfig')}</span>
 							{#if file.chosen && desktop}
-								<button type="button" class="remove" onclick={() => remove(file)} disabled={busy} aria-label={`Stop reading ${file.path}`}>
+								<button type="button" class="remove" onclick={() => remove(file)} disabled={busy} aria-label={t('Stop reading {path}', { path: file.path })}>
 									{t('Remove')}
 								</button>
 							{/if}

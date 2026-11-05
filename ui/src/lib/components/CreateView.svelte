@@ -252,8 +252,8 @@
 					<Select
 						bind:value={kind}
 						options={[
-							...common.map((r) => ({ value: key(r), label: r.kind, group: 'Common' })),
-							...others.map((r) => ({ value: key(r), label: `${r.kind}${r.group ? ` (${r.group})` : ''}`, group: 'All kinds' }))
+							...common.map((r) => ({ value: key(r), label: r.kind, group: t('Common') })),
+							...others.map((r) => ({ value: key(r), label: `${r.kind}${r.group ? ` (${r.group})` : ''}`, group: t('All kinds') }))
 						]}
 						placeholder={t('Choose a kind…')}
 						aria-label={t('Add a kind\'s template')}
@@ -379,7 +379,7 @@
 				{#if blocked}<span class="note">{blocked}</span>{/if}
 				<button class="secondary" onclick={back} disabled={busy}>{t('Back to editing')} <kbd>Esc</kbd></button>
 				<button class="primary" onclick={apply} disabled={busy || !!blocked}>
-					{busy ? t('Applying…') : changes ? `Apply ${changes} ${changes === 1 ? 'change' : 'changes'}` : t('Apply')}
+					{busy ? t('Applying…') : changes ? plural(changes, 'Apply {n} change', 'Apply {n} changes') : t('Apply')}
 				</button>
 			{/if}
 		</div>

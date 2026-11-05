@@ -106,7 +106,7 @@
 					onchange={(e) => {
 						const port = Number(e.currentTarget.value);
 						if (port >= 1024 && port <= 65535) update({ port });
-						else app.toast('Pick a port from 1024 to 65535', 'bad');
+						else app.toast(t('Pick a port from 1024 to 65535'), 'bad');
 					}}
 				/>
 			</label>
@@ -175,7 +175,7 @@
 							<td><code>{call.tool}</code> <span class="muted small">{call.transport}</span></td>
 							<td class="args"><code>{callArguments(call.arguments)}</code></td>
 							<td>{call.context ? app.contextName(call.context) : '–'}</td>
-							<td class:bad={call.error}>{call.error ?? `ok, ${call.millis} ms`}</td>
+							<td class:bad={call.error}>{call.error ?? t('ok, {ms} ms', { ms: call.millis })}</td>
 						</tr>
 					{/each}
 				</tbody>

@@ -1,4 +1,5 @@
 import type { LogLevel, LogSource } from './api';
+import { plural } from './i18n';
 import { logMatcher } from './pods';
 
 /** A line in the log view: a log line, a stream error, a marker from Kubri or a mark drawn with `m`. */
@@ -267,7 +268,7 @@ export function rowText(
 		out.push(text(line) + (row.count > 1 ? `  (× ${row.count})` : ''));
 		if (!row.more.length) continue;
 		if (options.open.has(line.id)) out.push(...row.more.map(text));
-		else out.push(`    … ${row.more.length} more ${row.more.length === 1 ? 'line' : 'lines'}`);
+		else out.push(`    ${plural(row.more.length, '… {n} more line', '… {n} more lines')}`);
 	}
 	return out;
 }

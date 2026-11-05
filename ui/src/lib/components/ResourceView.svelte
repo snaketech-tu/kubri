@@ -322,7 +322,7 @@
 			(r) => r.name === wanted.name && (wanted.namespace === null || r.namespace === wanted.namespace)
 		);
 		if (row) pick(row.key);
-		else app.toast(`${wanted.name} is not in the list`, 'bad');
+		else app.toast(t('{name} is not in the list', { name: wanted.name }), 'bad');
 		app.cursorRequest = null;
 	});
 
@@ -492,7 +492,7 @@
 	function sanitize() {
 		const done = completedPods(table.columns, rows);
 		if (!done.length) {
-			app.toast('No successfully completed pods in this view');
+			app.toast(t('No successfully completed pods in this view'));
 			return;
 		}
 		const statuses = Object.fromEntries(
