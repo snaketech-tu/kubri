@@ -1,5 +1,8 @@
 //! Interactive shells in containers and attaching to a container's main process.
 
+use std::sync::{Arc, OnceLock};
+use std::time::Duration;
+
 use futures::StreamExt;
 use futures::channel::mpsc as futures_mpsc;
 use futures::stream::{self, BoxStream};
@@ -12,12 +15,18 @@ use tokio::sync::mpsc;
 
 use crate::{Error, Result};
 
-/// Starts bash if the image has it and sh otherwise, like k9s.
+/// Starts bash if the image has it and sh otherwise, like k9s. First it says its process id, in
+/// an escape sequence that Kubri takes out of the output, so that closing the session can end it.
 const DEFAULT_SHELL: [&str; 3] = [
     "/bin/sh",
     "-c",
-    "export TERM=xterm-256color; command -v bash >/dev/null 2>&1 && exec bash || exec sh",
+    "printf '\\033]7777;kubri-shell=%s\\007' $$; export TERM=xterm-256color; \
+     command -v bash >/dev/null 2>&1 && exec bash || exec sh",
 ];
+/// How the shell's process id starts in its first output; a BEL ends it.
+const SHELL_ID: &[u8] = b"\x1b]7777;kubri-shell=";
+/// How long ending a closed shell may take.
+const HANGUP_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_CONTAINER_ANNOTATION: &str = "kubectl.kubernetes.io/default-container";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -130,12 +139,21 @@ pub(crate) async fn open(api: Api<Pod>, pod: &Pod, options: TerminalOptions) -> 
         )));
     }
 
+    let mut hangup = None;
     let (mut process, tty) = match options.mode {
         TerminalMode::Shell => {
             let params = AttachParams::interactive_tty().container(&container);
             let command: Vec<String> = match &options.command {
                 Some(command) if !command.is_empty() => command.clone(),
-                _ => DEFAULT_SHELL.iter().map(|s| s.to_string()).collect(),
+                _ => {
+                    hangup = Some(Hangup {
+                        api: api.clone(),
+                        pod: name.to_string(),
+                        container: container.clone(),
+                        pid: Arc::default(),
+                    });
+                    DEFAULT_SHELL.iter().map(|s| s.to_string()).collect()
+                }
             };
             (api.exec(name, command, &params).await?, true)
         }
@@ -162,7 +180,7 @@ pub(crate) async fn open(api: Api<Pod>, pod: &Pod, options: TerminalOptions) -> 
     Ok(Terminal {
         container,
         input,
-        output: output(process, tty),
+        output: output(process, tty, hangup),
     })
 }
 
@@ -216,20 +234,57 @@ fn attach_flags(pod: &Pod, container: &str) -> (bool, bool) {
     (stdin.unwrap_or(false), tty.unwrap_or(false))
 }
 
+/// Ends a shell that still runs when its session is closed. Kubernetes keeps the process of a
+/// terminal session running when the connection goes away, so without this every shell closed in
+/// Kubri would stay behind in the container, like a `kubectl exec` that was killed.
+struct Hangup {
+    api: Api<Pod>,
+    pod: String,
+    container: String,
+    /// The shell's process id, once it said it.
+    pid: Arc<OnceLock<u32>>,
+}
+
+impl Hangup {
+    /// Sends the shell SIGHUP, as closing a terminal window does: the shell ends and takes what
+    /// runs in it along.
+    async fn run(self) {
+        let Some(pid) = self.pid.get().copied() else {
+            return;
+        };
+        let params = AttachParams::default().container(&self.container).stdout(false);
+        let command = [
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            format!("kill -HUP {pid}"),
+        ];
+        let hangup = async {
+            if let Ok(process) = self.api.exec(&self.pod, command, &params).await {
+                let _ = process.join().await;
+            }
+        };
+        if tokio::time::timeout(HANGUP_TIMEOUT, hangup).await.is_err() {
+            tracing::debug!(pod = %self.pod, pid, "the closed shell did not end in time");
+        }
+    }
+}
+
 /// Reads the process output until it exits or the stream is dropped.
-fn output(mut process: AttachedProcess, tty: bool) -> BoxStream<'static, TerminalOutput> {
+fn output(
+    mut process: AttachedProcess,
+    tty: bool,
+    hangup: Option<Hangup>,
+) -> BoxStream<'static, TerminalOutput> {
     let (tx, rx) = mpsc::channel(64);
     let stdout = process.stdout();
     let stderr = process.stderr();
     let status = process.take_status();
+    let pid = hangup.as_ref().map(|h| Arc::clone(&h.pid));
     tokio::spawn(async move {
         let pump = async {
-            let readers = stdout
-                .map(|r| Box::new(r) as Box<dyn AsyncRead + Send + Unpin>)
-                .into_iter()
-                .chain(stderr.map(|r| Box::new(r) as Box<dyn AsyncRead + Send + Unpin>))
-                .map(|r| pump(r, tty, tx.clone()));
-            futures::future::join_all(readers).await;
+            let stdout = stdout.map(|r| pump(Box::new(r), tty, pid.map(ShellId::new), tx.clone()));
+            let stderr = stderr.map(|r| pump(Box::new(r), tty, None, tx.clone()));
+            futures::future::join_all(stdout.into_iter().chain(stderr)).await;
             let message = match status {
                 Some(status) => status.await.and_then(|s| exit_message(&s)),
                 None => None,
@@ -238,7 +293,12 @@ fn output(mut process: AttachedProcess, tty: bool) -> BoxStream<'static, Termina
         };
         tokio::select! {
             _ = pump => {}
-            _ = tx.closed() => {}
+            // Closed while the process still runs.
+            _ = tx.closed() => {
+                if let Some(hangup) = hangup {
+                    hangup.run().await;
+                }
+            }
         }
         // Dropping the process aborts the connection.
         drop(process);
@@ -250,17 +310,86 @@ fn output(mut process: AttachedProcess, tty: bool) -> BoxStream<'static, Termina
     .boxed()
 }
 
-async fn pump(mut reader: Box<dyn AsyncRead + Send + Unpin>, tty: bool, tx: mpsc::Sender<TerminalOutput>) {
+async fn pump(
+    mut reader: Box<dyn AsyncRead + Send + Unpin>,
+    tty: bool,
+    mut shell_id: Option<ShellId>,
+    tx: mpsc::Sender<TerminalOutput>,
+) {
     let mut buf = vec![0; 16 * 1024];
     loop {
-        let data = match reader.read(&mut buf).await {
+        let mut data = match reader.read(&mut buf).await {
             Ok(0) | Err(_) => return,
             Ok(n) if tty => buf[..n].to_vec(),
             // Without a TTY nothing turns \n into \r\n for the terminal emulator.
             Ok(n) => crlf(&buf[..n]),
         };
+        if let Some(id) = &mut shell_id {
+            data = id.take(&data);
+            if id.done {
+                shell_id = None;
+            }
+            if data.is_empty() {
+                continue;
+            }
+        }
         if tx.send(TerminalOutput::Data { data }).await.is_err() {
             return;
+        }
+    }
+}
+
+/// Takes the process id that [`DEFAULT_SHELL`] says first out of its output.
+struct ShellId {
+    pid: Arc<OnceLock<u32>>,
+    /// The start of the output, while it may still be the process id.
+    held: Vec<u8>,
+    done: bool,
+}
+
+impl ShellId {
+    fn new(pid: Arc<OnceLock<u32>>) -> Self {
+        Self {
+            pid,
+            held: Vec::new(),
+            done: false,
+        }
+    }
+
+    /// The part of `data` to show. Holds back what may be the start of the process id, and
+    /// gives everything back as it was when the output starts with something else.
+    fn take(&mut self, data: &[u8]) -> Vec<u8> {
+        if self.done {
+            return data.to_vec();
+        }
+        self.held.extend_from_slice(data);
+        let held = &self.held;
+        let prefix = held.len().min(SHELL_ID.len());
+        if held[..prefix] != SHELL_ID[..prefix] {
+            self.done = true;
+            return std::mem::take(&mut self.held);
+        }
+        if held.len() <= SHELL_ID.len() {
+            return Vec::new();
+        }
+        let rest = &held[SHELL_ID.len()..];
+        match rest.iter().position(|&b| b == 0x07) {
+            Some(end) => {
+                if let Some(pid) = std::str::from_utf8(&rest[..end])
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                {
+                    let _ = self.pid.set(pid);
+                }
+                self.done = true;
+                rest[end + 1..].to_vec()
+            }
+            // A process id has at most ten digits; this is something else.
+            None if rest.len() > 10 => {
+                self.done = true;
+                std::mem::take(&mut self.held)
+            }
+            None => Vec::new(),
         }
     }
 }
@@ -366,5 +495,37 @@ mod tests {
             exit_message(&failed).as_deref(),
             Some("exec: \"/bin/sh\": not found")
         );
+    }
+
+    /// Feeds `chunks` through a [`ShellId`] and returns what shows and the process id.
+    fn shell_id(chunks: &[&[u8]]) -> (Vec<u8>, Option<u32>) {
+        let pid = Arc::new(OnceLock::new());
+        let mut id = ShellId::new(Arc::clone(&pid));
+        let shown = chunks.iter().flat_map(|c| id.take(c)).collect();
+        (shown, pid.get().copied())
+    }
+
+    #[test]
+    fn the_shell_says_its_process_id_and_it_does_not_show() {
+        let (shown, pid) = shell_id(&[b"\x1b]7777;kubri-shell=4711\x07/ # "]);
+        assert_eq!((shown.as_slice(), pid), (&b"/ # "[..], Some(4711)));
+        // Split anywhere, also inside the escape sequence.
+        let (shown, pid) = shell_id(&[b"\x1b]77", b"77;kubri-shell=47", b"11\x07", b"$ "]);
+        assert_eq!((shown.as_slice(), pid), (&b"$ "[..], Some(4711)));
+        // Only the first output can be the process id.
+        let (shown, _) = shell_id(&[b"\x1b]7777;kubri-shell=1\x07", b"\x1b]7777;kubri-shell=2\x07"]);
+        assert_eq!(shown, b"\x1b]7777;kubri-shell=2\x07");
+    }
+
+    #[test]
+    fn other_output_shows_as_it_is() {
+        let (shown, pid) = shell_id(&[b"\x1b]0;title\x07", b"$ "]);
+        assert_eq!((shown.as_slice(), pid), (&b"\x1b]0;title\x07$ "[..], None));
+        let (shown, pid) = shell_id(&[b"sh: printf: not found\r\n"]);
+        assert_eq!((shown.as_slice(), pid), (&b"sh: printf: not found\r\n"[..], None));
+        // A sequence that never ends is given back.
+        let long = b"\x1b]7777;kubri-shell=123456789012345";
+        let (shown, pid) = shell_id(&[long]);
+        assert_eq!((shown.as_slice(), pid), (&long[..], None));
     }
 }
