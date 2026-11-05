@@ -43,6 +43,8 @@ export type Action =
 	| { type: 'config'; section?: ConfigSection }
 	| { type: 'skin'; name: string | null }
 	| { type: 'help' }
+	/** A new GitHub issue: a problem or an idea, with the version filled in. */
+	| { type: 'feedback'; kind: 'bug' | 'idea' }
 	/** Runs something of the app itself, from the palette. */
 	| { type: 'call'; run: () => void };
 
@@ -51,6 +53,11 @@ export interface Suggestion {
 	detail: string;
 	action: Action;
 }
+
+const feedback: Suggestion[] = [
+	{ label: 'feedback', detail: 'Report a problem on GitHub, with your Kubri version filled in', action: { type: 'feedback', kind: 'bug' } },
+	{ label: 'feedback idea', detail: 'Suggest an idea on GitHub', action: { type: 'feedback', kind: 'idea' } }
+];
 
 const CONTEXT_COMMANDS = ['ctx', 'context', 'contexts'];
 const NAMESPACE_COMMANDS = ['ns', 'namespace', 'namespaces'];
@@ -263,6 +270,8 @@ function builtins(
 	if (cmd === '?' || cmd === 'help') {
 		return [{ label: 'help', detail: 'Keyboard shortcuts', action: { type: 'help' } }];
 	}
+
+	if (cmd === 'feedback') return arg && 'idea'.startsWith(arg) ? [feedback[1], feedback[0]] : feedback;
 
 	const portForwards: Suggestion = {
 		label: 'pf',
@@ -488,6 +497,7 @@ function builtins(
 	if (cmd.length > 1 && GRAPH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(graph());
 	if (cmd.length > 1 && CHANGES_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(changes(), changes({ hours: 1 }));
 	if (cmd.length > 2 && SNAPSHOT_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(snapshot());
+	if (cmd.length > 2 && 'feedback'.startsWith(cmd) && cmd !== 'feedback') extra.push(...feedback);
 	if (cmd.length > 1 && 'config'.startsWith(cmd) && cmd !== 'config') {
 		extra.push(...builtins('config', resources, contexts, namespaces, config).slice(0, 1));
 	}

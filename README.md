@@ -249,7 +249,7 @@ Kubri reads your k9s configuration and uses the same keys, so you can start righ
 | <kbd>Ctrl</kbd>+<kbd>D</kbd> | Delete |
 | <kbd>?</kbd> | All keys |
 
-[Using your k9s configuration](docs/K9S.md) lists what Kubri covers and what it does not.
+[Coming from k9s](docs/FROM-K9S.md) covers the first few minutes: what carries over, what works a little differently, and what there is besides. [Using your k9s configuration](docs/K9S.md) lists what Kubri covers and what it does not.
 
 ## 🔑 Your kubeconfig
 
@@ -283,7 +283,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
       <ul>
         <li><a href="docs/SETTINGS.md">Settings and guard rails</a>: context colors, production and read-only contexts, permissions</li>
         <li><a href="docs/INTEGRATIONS.md">Integrations</a>: Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager and right-sizing</li>
-        <li><a href="docs/VIEWS.md">Views for custom resources</a> and <a href="docs/K9S.md">your k9s configuration</a></li>
+        <li><a href="docs/FROM-K9S.md">Coming from k9s</a>, <a href="docs/K9S.md">your k9s configuration</a> and <a href="docs/VIEWS.md">views for custom resources</a></li>
         <li><a href="docs/AGENTS.md">AI agents (MCP)</a> and <a href="docs/EXPLAIN.md">Explain</a></li>
         <li><a href="docs/WEB.md">In the browser</a>: settings, sign-in, Docker, Kubernetes and reverse proxies</li>
         <li><a href="docs/SPEED.md">Speed</a>: how fast Kubri is with 10,000 pods, and how to measure it yourself</li>

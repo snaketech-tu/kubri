@@ -1,0 +1,27 @@
+name: Suggest an idea
+description: Something Kubri could do, or do better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would like to do
+      description: What you are trying to get done, and where Kubri gets in the way or falls short. The problem helps more than a finished solution.
+      placeholder: When a rollout gets stuck, I want to see which pods hold it up without opening each one.
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How it could work
+      description: An idea of how it could look or which keys it could use, if you have one.
+  - type: input
+    id: version
+    attributes:
+      label: Kubri version
+      placeholder: "1.7.0"
+  - type: input
+    id: where
+    attributes:
+      label: Where Kubri runs
+      placeholder: Browser (Firefox on Linux), kubri-server in Docker

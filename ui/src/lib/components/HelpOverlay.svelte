@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { kubriUses, parseShortcut, pluginApplies, shortcutLabel } from '../k9s';
+	import { backend } from '../api';
+	import { FEEDBACK, feedbackLink, VERSION } from '../feedback';
 	import { app } from '../state.svelte';
 
 	const builtin: [string, [string, string][]][] = [
@@ -93,7 +95,8 @@
 				[':config', 'Settings, with k9s aliases, hotkeys, plugins and skins'],
 				[':skin name', 'Switch skin; :skin kubri for the built-in colors'],
 				['Ctrl+ +  /  −  /  0', 'Zoom in, out, back to 100% (:appearance for colors)'],
-				['?', 'This help']
+				['?', 'This help'],
+				[':feedback [idea]', 'Report a problem or suggest an idea on GitHub, with your version filled in']
 			]
 		],
 		[
@@ -289,6 +292,13 @@
 			<p class="none">Nothing matches "{filter}".</p>
 		{/each}
 	</div>
+	<p class="feedback">
+		{#if VERSION}Kubri {VERSION} ·{/if}
+		Something wrong or missing?
+		<a href={feedbackLink('bug', backend.desktop)} target="_blank" rel="noreferrer">{FEEDBACK.bug}</a>
+		·
+		<a href={feedbackLink('idea', backend.desktop)} target="_blank" rel="noreferrer">{FEEDBACK.idea}</a>
+	</p>
 </div>
 
 <style>
@@ -313,6 +323,16 @@
 	.none {
 		color: var(--text-muted);
 		font-size: 13px;
+	}
+	.feedback {
+		margin: 10px 0 0;
+		padding-top: 10px;
+		border-top: 1px solid var(--border-subtle);
+		color: var(--text-muted);
+		font-size: 12.5px;
+	}
+	.feedback a {
+		color: var(--accent);
 	}
 	.backdrop {
 		position: fixed;
