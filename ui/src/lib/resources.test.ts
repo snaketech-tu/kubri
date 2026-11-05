@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Capacity, KubeObject, NodeRoom } from './api';
-import { budget, fieldProblems, formatAmount, initRequests, parseQuantity, podLimits, podTotals, resourceChanges, rowsOf, step } from './resources';
+import { applyFill, budget, fieldProblems, formatAmount, initRequests, parseQuantity, podLimits, podTotals, resourceChanges, rowsOf, step } from './resources';
 
 const GI = 1024 ** 3;
 const MI = 1024 ** 2;
@@ -187,5 +187,21 @@ describe('budget', () => {
 			'The quota team allows 2.0Gi of requests.memory; this needs 3.0Gi',
 			'The quota team needs a limit on cpu for every container'
 		]);
+	});
+});
+
+describe('fill', () => {
+	it('prefills advice and starts at the first', () => {
+		const rows = rowsOf(web);
+		const field = applyFill(rows, [
+			{ container: 'sidecar', name: 'memory', request: '32Mi', limit: null },
+			{ container: null, name: 'cpu', request: '80m', limit: '300m' }
+		]);
+		expect(field).toBe('sidecar/requests/memory');
+		expect(rows[1].requests.memory).toBe('32Mi');
+		// Without a container: the first that requests CPU.
+		expect(rows[0].requests.cpu).toBe('80m');
+		expect(rows[0].limits.cpu).toBe('300m');
+		expect(applyFill(rowsOf(web))).toBe('web/requests/cpu');
 	});
 });

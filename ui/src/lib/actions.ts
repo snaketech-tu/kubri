@@ -345,10 +345,10 @@ export async function raiseMemoryOf(target: ObjectRef, container: string) {
 const SIZED = ['deployments', 'statefulsets', 'daemonsets'];
 
 /**
- * Opens Resources… on `target`, or for a pod on the workload that owns it. `focus` prefills one
- * container's CPU or memory.
+ * Opens Requests & limits… on `target`, or for a pod on the workload that owns it, with `fill`
+ * prefilled.
  */
-export async function resourcesOf(target: ObjectRef, pod?: KubeObject | null, extra: Pick<Extract<Dialog, { kind: 'resources' }>, 'focus' | 'note'> = {}) {
+export async function resourcesOf(target: ObjectRef, pod?: KubeObject | null, extra: Pick<Extract<Dialog, { kind: 'resources' }>, 'fill' | 'note'> = {}) {
 	try {
 		let at = target;
 		if (!target.resource.group && target.resource.plural === 'pods') at = await workloadOf(target, pod ?? (await backend.getObject(target)));
@@ -369,7 +369,7 @@ export async function resourcesOf(target: ObjectRef, pod?: KubeObject | null, ex
  */
 export async function changeRequestsOf(cause: Cause, target: ObjectRef, pod: KubeObject | null, workload?: ObjectRef) {
 	await resourcesOf(workload ?? target, workload ? null : pod, {
-		focus: { container: null, name: cause.resource ?? 'cpu', request: null, limit: null },
+		fill: [{ container: null, name: cause.resource ?? 'cpu', request: null, limit: null }],
 		note: `${cause.title}.`
 	});
 }

@@ -2498,6 +2498,8 @@ const de: Record<string, string> = {
 	'More than 90% of the memory on these nodes would be requested': 'Mehr als 90 % des Speichers auf diesen Nodes wären angefordert',
 	'The quota {name} needs a limit on {resource} for every container': 'Die Quota {name} verlangt für jeden Container ein Limit auf {resource}',
 	'The quota {name} allows {hard} of {resource}; this needs {used}': 'Die Quota {name} erlaubt {hard} von {resource}; das hier braucht {used}',
+	'The suggestion for {n} more container of it is filled in too.': 'Der Vorschlag für {n} weiteren Container davon ist auch eingetragen.',
+	'The suggestions for {n} more containers of it are filled in too.': 'Die Vorschläge für {n} weitere Container davon sind auch eingetragen.',
 };
 
 export default de;

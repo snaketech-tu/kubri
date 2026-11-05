@@ -113,6 +113,27 @@ export function initRequests(object: KubeObject): Amounts {
 	return most;
 }
 
+/** A value to prefill: for `container`, or without one the first container that requests `name`. */
+export interface Fill {
+	container: string | null;
+	name: Measure;
+	request: string | null;
+	limit: string | null;
+}
+
+/** Puts `fill` into the rows; returns the field to start in, as `container/part/measure`. */
+export function applyFill(rows: ResourceRow[], fill: Fill[] = []): string | null {
+	let first: string | null = null;
+	for (const f of fill) {
+		const row = rows.find((r) => r.container === f.container) ?? rows.find((r) => r.was.requests[f.name]) ?? rows[0];
+		if (!row) continue;
+		if (f.request) row.requests[f.name] = f.request;
+		if (f.limit) row.limits[f.name] = f.limit;
+		first ??= `${row.container}/${!f.request && f.limit ? 'limits' : 'requests'}/${f.name}`;
+	}
+	return first ?? (rows[0] ? `${rows[0].container}/requests/cpu` : null);
+}
+
 /** The containers whose requests or limits change: an emptied field removes the value. */
 export function resourceChanges(rows: ResourceRow[]): ContainerResources[] {
 	const out: ContainerResources[] = [];

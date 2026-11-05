@@ -44,7 +44,7 @@
 	import { plural, t } from '../i18n';
 	import Phrase from './Phrase.svelte';
 	import ResourcesEditor from './ResourcesEditor.svelte';
-	import { fieldProblems, initRequests, resourceChanges, rowsOf, type ResourceRow } from '../resources';
+	import { applyFill, fieldProblems, initRequests, resourceChanges, rowsOf, type ResourceRow } from '../resources';
 
 	let { dialog }: { dialog: Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' | 'snapshot' | 'grafana' }> } = $props();
 
@@ -183,21 +183,12 @@
 
 	$effect(() => {
 		if (dialog.kind === 'resources') {
-			const { target, focus } = dialog;
+			const { target, fill } = dialog;
 			backend
 				.getObject(target)
 				.then((obj) => {
 					const rows = rowsOf(obj);
-					let field = rows[0] ? `${rows[0].container}/requests/${focus?.name ?? 'cpu'}` : null;
-					if (focus) {
-						const row =
-							rows.find((r) => r.container === focus.container) ?? rows.find((r) => r.was.requests[focus.name]) ?? rows[0];
-						if (row) {
-							if (focus.request) row.requests[focus.name] = focus.request;
-							if (focus.limit) row.limits[focus.name] = focus.limit;
-							field = `${row.container}/requests/${focus.name}`;
-						}
-					}
+					const field = applyFill(rows, fill);
 					sizeInit = initRequests(obj);
 					sizeRows = rows;
 					void tick().then(() => {

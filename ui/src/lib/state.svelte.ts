@@ -1,3 +1,4 @@
+import type { Fill } from './resources';
 import { tick } from 'svelte';
 import { drafts } from './navigation.svelte';
 import { access } from './access.svelte';
@@ -219,15 +220,14 @@ export type Dialog =
 	/** A Flux or Argo CD action; `autoSync` turns Argo CD's auto-sync off or on, as it is now. */
 	| { kind: 'gitops'; resource: ResourceInfo; target: ObjectRef; action: GitOpsAction | 'autoSync' }
 	/**
-	 * The requests and limits of a workload's containers, with the room on its nodes. `focus`
-	 * prefills one container's CPU or memory, as right-sizing advice suggests it; without a
-	 * container, the first that requests it.
+	 * The requests and limits of a workload's containers, with the room on its nodes. `fill`
+	 * prefills values, as right-sizing advice suggests them; the cursor starts at the first.
 	 */
 	| {
 			kind: 'resources';
 			resource: ResourceInfo;
 			target: ObjectRef;
-			focus?: { container: string | null; name: 'cpu' | 'memory'; request: string | null; limit: string | null };
+			fill?: Fill[];
 			/** Why, as the advice says it. */
 			note?: string;
 	  }
