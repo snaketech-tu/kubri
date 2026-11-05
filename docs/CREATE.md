@@ -72,3 +72,6 @@ An empty list of a kind you may create offers **Create** right there, and an emp
 - A forward to a Service or workload moves to another ready pod when its pod goes away, as after a restart or rollout. A forward straight to a pod keeps using that pod's name.
 - **Favorite** (<kbd>s</kbd> on the port-forwards page) keeps a running forward in its context's settings, on the same local port. Each time Kubri connects to that context, it starts its favorites that are not running yet. The page also lists the favorites that are not running, to start or remove.
 - <kbd>o</kbd> opens a forward in the browser, and <kbd>c</kbd> copies its URL.
+- Quiet connections stay open: Kubri pings the cluster every 20 seconds, so load balancers and proxies in front of the API server do not drop them as idle.
+- A client that stops sending after its request, as some HTTP and database clients do, still gets the whole answer. The cluster's port-forward cannot tell the pod that the client is done, so Kubri keeps the connection until the pod closes it, or until the pod has sent nothing for 15 seconds.
+- Each row says how its last connection ended: closed by the pod, closed by the client, or the error, in red.

@@ -1708,6 +1708,8 @@ const de: Record<string, string> = {
 		'Nutzt {used}, fordert {request} an. Nicht jeder Container hat ein Limit, darum gibt es keine Obergrenze.',
 	'CPU request': 'CPU-Request',
 	'Memory request': 'Speicher-Request',
+	'Last connection closed by the pod, {when}': 'Letzte Verbindung vom Pod geschlossen, {when}',
+	'Last connection closed by the client, {when}': 'Letzte Verbindung vom Client geschlossen, {when}',
 	'Appearance': 'Darstellung',
 	'Updates': 'Updates',
 	'Views': 'Views',
