@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { parts, plural, t } from '../i18n';
 	import { tick } from 'svelte';
 	import { stringify } from 'yaml';
 	import { backend, type ApplyItem, type HelmRelease, type HelmReleaseDetails } from '../api';
@@ -25,16 +26,17 @@
 	import PageHeader from './PageHeader.svelte';
 	import SearchField from './SearchField.svelte';
 	import Select from './Select.svelte';
+	import Phrase from './Phrase.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
 	type Tab = 'overview' | 'values' | 'manifest' | 'history' | 'compare' | 'drift';
 	const TABS: [Tab, string, string][] = [
-		['overview', 'Overview', 'n'],
-		['values', 'Values', 'v'],
-		['manifest', 'Manifest', 'm'],
-		['history', 'History', 'h'],
-		['compare', 'Compare', 'c'],
-		['drift', 'Drift', 'x']
+		['overview', t('Overview'), 'n'],
+		['values', t('Values'), 'v'],
+		['manifest', t('Manifest'), 'm'],
+		['history', t('History'), 'h'],
+		['compare', t('Compare'), 'c'],
+		['drift', t('Drift'), 'x']
 	];
 	const REFRESH_MS = 30_000;
 
@@ -237,16 +239,16 @@
 		cursorKey = releaseKey(release);
 		const actions: MenuAction[] = TABS.map(([to, label, key]) => ({
 			group: 'View',
-			label: to === 'overview' ? 'Open' : label,
+			label: to === 'overview' ? t('Open') : label,
 			keys: [key],
 			hint: to === 'overview' ? 'enter' : undefined,
 			run: () => open(release, to)
 		}));
 		if (helm) {
 			actions.push(
-				{ group: 'Change', label: 'Upgrade…', keys: ['u'], run: () => upgrade(release) },
-				{ group: 'Change', label: 'Roll back…', keys: ['r'], run: () => void rollback(release) },
-				{ group: 'Delete', label: 'Uninstall…', keys: ['ctrl+d'], danger: true, run: () => uninstall(release) }
+				{ group: 'Change', label: t('Upgrade…'), keys: ['u'], run: () => upgrade(release) },
+				{ group: 'Change', label: t('Roll back…'), keys: ['r'], run: () => void rollback(release) },
+				{ group: 'Delete', label: t('Uninstall…'), keys: ['ctrl+d'], danger: true, run: () => uninstall(release) }
 			);
 		}
 		app.menu = { actions, x: e.clientX, y: e.clientY };
@@ -283,7 +285,7 @@
 			target = previousRevision(revisions, release.revision) ?? undefined;
 		}
 		if (!target || target === release.revision) {
-			app.toast(`${release.name} has no earlier revision to roll back to`, 'bad');
+			app.toast(t('{name} has no earlier revision to roll back to', { name: release.name }), 'bad');
 			return;
 		}
 		app.dialog = { kind: 'helmRollback', release, revision: target, done: reload };
@@ -453,11 +455,11 @@
 		{#if shown && revision === null}
 			<HelmChangeView release={shown} oncancel={() => (changing = null)} ondone={changed} />
 		{:else}
-			<p class="muted pad">Loading…</p>
+			<p class="muted pad">{t('Loading…')}</p>
 		{/if}
 	{:else if opened}
 		<PageHeader
-			crumbs={[{ label: 'Helm', onclick: back, title: 'Back to releases (Esc)' }, opened.name]}
+			crumbs={[{ label: 'Helm', onclick: back, title: t('Back to releases (Esc)') }, opened.name]}
 			title={opened.name}
 			mono
 			subtitle="Release in {opened.namespace}{shown ? ` · ${chartLabel(shown)}` : ''}"
@@ -466,77 +468,79 @@
 			{#snippet tools()}
 				{#if history.length > 1}
 					<label class="revision">
-						Revision
+						{t('Revision')}
 						<Select value={revision ?? history[0]?.revision} options={revisionOptions(history)} onchange={viewRevision} compact />
 					</label>
 				{/if}
-				<button class="btn" onclick={() => upgrade(latest)} disabled={!helm || !latest} title={helm ? 'Upgrade with changed values or another chart version (u)' : 'Needs the helm command'}>
-					Upgrade
+				<button class="btn" onclick={() => upgrade(latest)} disabled={!helm || !latest} title={helm ? t('Upgrade with changed values or another chart version (u)') : t('Needs the helm command')}>
+					{t('Upgrade')}
 				</button>
 				<button
 					class="btn"
 					onclick={() => rollback(latest, revision ?? undefined)}
 					disabled={!helm || !latest || (revision === null && history.length < 2)}
-					title={helm ? (revision === null ? 'Roll back to the previous revision (r)' : `Roll back to revision ${revision}`) : 'Needs the helm command'}
+					title={helm ? (revision === null ? t('Roll back to the previous revision (r)') : t('Roll back to revision {revision}', { revision })) : t('Needs the helm command')}
 				>
-					Roll back{revision !== null ? ` to ${revision}` : ''}
+					{revision !== null ? t('Roll back to {revision}', { revision }) : t('Roll back')}
 				</button>
-				<button class="btn danger" onclick={() => uninstall(latest)} disabled={!helm || !latest} title={helm ? 'Uninstall (Ctrl+D)' : 'Needs the helm command'}>
-					Uninstall
+				<button class="btn danger" onclick={() => uninstall(latest)} disabled={!helm || !latest} title={helm ? t('Uninstall (Ctrl+D)') : t('Needs the helm command')}>
+					{t('Uninstall')}
 				</button>
 			{/snippet}
 		</PageHeader>
 
 		{#if revision !== null}
 			<div class="notice warn" role="status">
-				Showing revision {revision}, not the deployed one.
-				<button class="link" onclick={() => (revision = null)}>Show the latest</button>
+				{t('Showing revision {revision}, not the deployed one.', { revision })}
+				<button class="link" onclick={() => (revision = null)}>{t('Show the latest')}</button>
 			</div>
 		{/if}
 		{#if helm === null}
-			<div class="notice warn">Install the <code>helm</code> command where Kubri runs to upgrade, roll back or uninstall releases.</div>
+			<div class="notice warn">
+				<Phrase text={t('Install the {helm} command where Kubri runs to upgrade, roll back or uninstall releases.')} code={{ helm: 'helm' }} />
+			</div>
 		{/if}
 		{#if detailsError}
 			<div class="notice" role="alert">{detailsError}</div>
 		{/if}
 
 		<div class="card">
-			<div class="tabs" role="tablist" aria-label="Release">
+			<div class="tabs" role="tablist" aria-label={t('Release')}>
 				{#each TABS as [id, label, key] (id)}
 					<button role="tab" aria-selected={tab === id} onclick={() => (tab = id)}>{label} <kbd>{key}</kbd></button>
 				{/each}
 				<span class="spacer"></span>
 				{#if tab === 'values'}
-					<div class="segmented" role="group" aria-label="Values">
-						<button aria-pressed={!allValues} onclick={() => (allValues = false)}>Given</button>
-						<button aria-pressed={allValues} onclick={() => (allValues = true)}>With chart defaults</button>
+					<div class="segmented" role="group" aria-label={t('Values')}>
+						<button aria-pressed={!allValues} onclick={() => (allValues = false)}>{t('Given')}</button>
+						<button aria-pressed={allValues} onclick={() => (allValues = true)}>{t('With chart defaults')}</button>
 					</div>
 				{/if}
 			</div>
 			<div class="pane" class:fill={tab === 'values' || tab === 'manifest'} bind:this={scroller}>
 				{#if !shown}
-					{#if !detailsError}<p class="muted pad">Loading…</p>{/if}
+					{#if !detailsError}<p class="muted pad">{t('Loading…')}</p>{/if}
 				{:else if tab === 'overview'}
 					<dl class="facts">
-						<dt>Status</dt>
+						<dt>{t('Status')}</dt>
 						<dd>{@render status(shown.status)}</dd>
-						<dt>Revision</dt>
+						<dt>{t('Revision')}</dt>
 						<dd>{shown.revision}</dd>
-						<dt>Chart</dt>
+						<dt>{t('Chart')}</dt>
 						<dd class="mono">{chartLabel(shown)}</dd>
-						<dt>App version</dt>
+						<dt>{t('App version')}</dt>
 						<dd class="mono">{shown.appVersion || '—'}</dd>
-						<dt>Updated</dt>
+						<dt>{t('Updated')}</dt>
 						<dd>
-							{#if shown.updated}{age(shown.updated, app.snapshot?.taken ?? now)} ago <span class="muted">· {new Date(shown.updated).toLocaleString()}</span>{:else}—{/if}
+							{#if shown.updated}{t('{age} ago', { age: age(shown.updated, app.snapshot?.taken ?? now) })} <span class="muted">· {new Date(shown.updated).toLocaleString()}</span>{:else}—{/if}
 						</dd>
 						{#if shown.description}
-							<dt>Description</dt>
+							<dt>{t('Description')}</dt>
 							<dd>{shown.description}</dd>
 						{/if}
 					</dl>
 
-					<h3>Objects <span class="count">{objects.length}</span></h3>
+					<h3>{t('Objects')} <span class="count">{objects.length}</span></h3>
 					{#if objects.length}
 						<ul class="objects">
 							{#each objects as o, i (i)}
@@ -546,21 +550,21 @@
 									{#if resource}
 										<button class="link mono" onclick={() => openObject(o)}>{o.name}</button>
 									{:else}
-										<span class="mono" title="The cluster does not serve this kind">{o.name}</span>
+										<span class="mono" title={t('The cluster does not serve this kind')}>{o.name}</span>
 									{/if}
-									{#if o.namespace && o.namespace !== opened.namespace}<span class="muted">in {o.namespace}</span>{/if}
+									{#if o.namespace && o.namespace !== opened.namespace}<span class="muted">{t('in {namespace}', { namespace: o.namespace })}</span>{/if}
 								</li>
 							{/each}
 						</ul>
 					{:else}
-						<p class="muted">The manifest creates no objects.</p>
+						<p class="muted">{t('The manifest creates no objects.')}</p>
 					{/if}
 
-					<h3>Notes</h3>
+					<h3>{t('Notes')}</h3>
 					{#if shown.notes.trim()}
 						<pre class="notes">{shown.notes.trim()}</pre>
 					{:else}
-						<p class="muted">The chart has no notes.</p>
+						<p class="muted">{t('The chart has no notes.')}</p>
 					{/if}
 				{:else if tab === 'values'}
 					{#if valuesText}
@@ -568,9 +572,9 @@
 					{:else}
 						<div class="pad">
 							<p class="muted">
-								{allValues ? 'The chart has no values.' : 'No values were given at install or upgrade, so the chart defaults apply.'}
+								{allValues ? t('The chart has no values.') : t('No values were given at install or upgrade, so the chart defaults apply.')}
 							</p>
-							{#if !allValues}<button class="link" onclick={() => (allValues = true)}>Show the chart defaults</button>{/if}
+							{#if !allValues}<button class="link" onclick={() => (allValues = true)}>{t('Show the chart defaults')}</button>{/if}
 						</div>
 					{/if}
 				{:else if tab === 'manifest'}
@@ -578,11 +582,11 @@
 				{:else if tab === 'compare'}
 					<div class="pad">
 						{#if history.length < 2}
-							<p class="muted">The release has one revision, so there is nothing to compare it with.</p>
+							<p class="muted">{t('The release has one revision, so there is nothing to compare it with.')}</p>
 						{:else}
 							<div class="compare-head">
 								<label class="revision">
-									Changes from revision
+									{t('Changes from revision')}
 									<Select
 										value={compareTo ?? undefined}
 										options={revisionOptions(history.filter((h) => h.revision !== shown.revision))}
@@ -592,10 +596,10 @@
 										}}
 										compact
 									/>
-									to revision {shown.revision}
+									{t('to revision {revision}', { revision: shown.revision })}
 								</label>
 								{#if compareTo !== null && canRollBack(compareTo)}
-									<button class="btn small" onclick={() => rollback(latest, compareTo ?? undefined)}>Roll back to {compareTo}</button>
+									<button class="btn small" onclick={() => rollback(latest, compareTo ?? undefined)}>{t('Roll back to {compareTo}', { compareTo })}</button>
 								{/if}
 							</div>
 							{#if compareError}
@@ -607,27 +611,30 @@
 									after={{ values: shown.values, manifest: shown.manifest }}
 								/>
 							{:else}
-								<p class="muted">Loading…</p>
+								<p class="muted">{t('Loading…')}</p>
 							{/if}
 						{/if}
 					</div>
 				{:else if tab === 'drift'}
 					<div class="pad">
 						{#if revision !== null}
-							<p class="muted">Drift compares the cluster with the deployed revision.</p>
-							<button class="link" onclick={() => (revision = null)}>Show the latest</button>
+							<p class="muted">{t('Drift compares the cluster with the deployed revision.')}</p>
+							<button class="link" onclick={() => (revision = null)}>{t('Show the latest')}</button>
 						{:else if !drift || (!drift.items && !drift.error)}
-							<p class="muted">Comparing the live objects with the release…</p>
+							<p class="muted">{t('Comparing the live objects with the release…')}</p>
 						{:else if drift.error}
 							<p role="alert">{drift.error}</p>
 						{:else if !drifted.length}
 							<p>
-								<HealthIcon health="ok" /> The {drift.items?.length} objects in the cluster match the release.
+								<HealthIcon health="ok" />
+								{plural(drift.items?.length ?? 0, 'The {n} object in the cluster matches the release.', 'The {n} objects in the cluster match the release.')}
 							</p>
-							<p class="muted">Checked with a server-side dry run of the release manifest, like <code>kubectl diff --server-side</code>.</p>
+							<p class="muted">
+								<Phrase text={t('Checked with a server-side dry run of the release manifest, like {command}.')} code={{ command: 'kubectl diff --server-side' }} />
+							</p>
 						{:else}
 							<p>
-								{drifted.length} of {drift.items?.length} objects differ from the release. An upgrade or a rollback puts them back.
+								{t('{n} of {total} objects differ from the release. An upgrade or a rollback puts them back.', { n: drifted.length, total: drift.items?.length ?? 0 })}
 							</p>
 							{#each drifted as item (item.index)}
 								<div class="drift">
@@ -636,10 +643,10 @@
 										<span class="mono">{item.name}</span>
 										<span class="muted">
 											{item.outcome === 'changed'
-												? 'changed in the cluster'
+												? t('changed in the cluster')
 												: item.outcome === 'created' || item.outcome === 'unchecked'
-													? 'missing from the cluster'
-													: 'could not be checked'}
+													? t('missing from the cluster')
+													: t('could not be checked')}
 										</span>
 									</div>
 									{#if item.outcome === 'failed'}
@@ -648,25 +655,25 @@
 										<DiffView
 											before={item.before}
 											after={item.after}
-											changed="lines between the cluster and the release"
+											changed={t('lines between the cluster and the release')}
 											maxHeight="360px"
 										/>
 									{/if}
 								</div>
 							{/each}
 						{/if}
-						<p><button class="link" onclick={() => (drift = null)}>Check again</button></p>
+						<p><button class="link" onclick={() => (drift = null)}>{t('Check again')}</button></p>
 					</div>
 				{:else}
 					<table>
 						<thead>
 							<tr>
-								<th class="numeric">Rev</th>
-								<th>Status</th>
-								<th>Chart</th>
-								<th>App version</th>
-								<th>Updated</th>
-								<th>Description</th>
+								<th class="numeric">{t('Rev')}</th>
+								<th>{t('Status')}</th>
+								<th>{t('Chart')}</th>
+								<th>{t('App version')}</th>
+								<th>{t('Updated')}</th>
+								<th>{t('Description')}</th>
 								<th></th>
 							</tr>
 						</thead>
@@ -686,12 +693,12 @@
 									<td class="wrap">{h.description}</td>
 									<td>
 										<div class="actions">
-											<button class="btn small" onclick={() => viewRevision(h.revision)}>View</button>
+											<button class="btn small" onclick={() => viewRevision(h.revision)}>{t('View')}</button>
 											{#if h.revision !== shown.revision}
-												<button class="btn small" onclick={() => compare(h.revision)}>Compare</button>
+												<button class="btn small" onclick={() => compare(h.revision)}>{t('Compare')}</button>
 											{/if}
 											{#if canRollBack(h.revision)}
-												<button class="btn small" onclick={() => rollback(latest, h.revision)}>Roll back</button>
+												<button class="btn small" onclick={() => rollback(latest, h.revision)}>{t('Roll back')}</button>
 											{/if}
 										</div>
 									</td>
@@ -704,15 +711,15 @@
 		</div>
 	{:else}
 		<PageHeader
-			crumbs={['Helm']}
-			title="Helm releases"
+			crumbs={[t('Helm')]}
+			title={t('Helm releases')}
 			count={releases ? visible.length : null}
 			subtitle={namespace ? `In ${namespace}` : 'All namespaces'}
 		>
 			{#snippet tools()}
-				<button class="btn" onclick={() => reloads++} title="Read the releases again">Reload</button>
-				<button class="btn" onclick={() => (changing = 'install')} disabled={!helm} title={helm ? 'Install a chart (i)' : 'Needs the helm command, see the note below'}>
-					Install chart
+				<button class="btn" onclick={() => reloads++} title={t('Read the releases again')}>{t('Reload')}</button>
+				<button class="btn" onclick={() => (changing = 'install')} disabled={!helm} title={helm ? t('Install a chart (i)') : t('Needs the helm command, see the note below')}>
+					{t('Install chart')}
 				</button>
 			{/snippet}
 		</PageHeader>
@@ -722,27 +729,28 @@
 		{/if}
 		{#if helm === null}
 			<div class="notice warn">
-				Installing, upgrading and rolling back need the <code>helm</code> command, and Kubri did not find it on its PATH.
-				Install Helm (<a href="https://helm.sh/docs/intro/install/" target="_blank" rel="noreferrer">helm.sh/docs/intro/install</a>) where Kubri runs, then reload.
+				{#each parts(t('Installing, upgrading and rolling back need the {helm} command, and Kubri did not find it on its PATH. Install Helm ({link}) where Kubri runs, then reload.')) as part, i (i)}{#if 'text' in part}{part.text}{:else if part.name === 'helm'}<code
+							>helm</code
+						>{:else}<a href="https://helm.sh/docs/intro/install/" target="_blank" rel="noreferrer">helm.sh/docs/intro/install</a>{/if}{/each}
 			</div>
 		{/if}
 
 		<div class="card">
 			<div class="toolbar">
-				<SearchField bind:value={filter} bind:input={filterInput} label="Filter releases" placeholder="Filter by name, namespace, chart or status" />
+				<SearchField bind:value={filter} bind:input={filterInput} label={t('Filter releases')} placeholder={t('Filter by name, namespace, chart or status')} />
 			</div>
 			<div class="pane" bind:this={scroller}>
 				{#if releases && visible.length}
 					<table>
 						<thead>
 							<tr>
-								<th>Name</th>
-								{#if !namespace}<th>Namespace</th>{/if}
-								<th class="numeric">Rev</th>
-								<th>Status</th>
-								<th>Chart</th>
-								<th>App version</th>
-								<th>Updated</th>
+								<th>{t('Name')}</th>
+								{#if !namespace}<th>{t('Namespace')}</th>{/if}
+								<th class="numeric">{t('Rev')}</th>
+								<th>{t('Status')}</th>
+								<th>{t('Chart')}</th>
+								<th>{t('App version')}</th>
+								<th>{t('Updated')}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -767,17 +775,17 @@
 				{:else if releases}
 					<div class="empty" role="status">
 						{#if filter}
-							<p>No release matches the filter.</p>
+							<p>{t('No release matches the filter.')}</p>
 						{:else}
-							<p>No Helm releases{namespace ? ` in ${namespace}` : ''}.</p>
-							<p class="muted">Kubri reads the release records Helm 3 and 4 keep in Secrets or ConfigMaps.</p>
+							<p>{namespace ? t('No Helm releases in {namespace}.', { namespace }) : t('No Helm releases.')}</p>
+							<p class="muted">{t('Kubri reads the release records Helm 3 and 4 keep in Secrets or ConfigMaps.')}</p>
 							{#if helm && !app.readOnly && !app.cluster?.snapshot}
-								<p class="install"><button class="btn" onclick={() => (changing = 'install')}>Install chart…</button></p>
+								<p class="install"><button class="btn" onclick={() => (changing = 'install')}>{t('Install chart…')}</button></p>
 							{/if}
 						{/if}
 					</div>
 				{:else if !error}
-					<p class="muted pad">Loading…</p>
+					<p class="muted pad">{t('Loading…')}</p>
 				{/if}
 			</div>
 		</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { backend, type FleetCluster, type KindPulse } from '../api';
 	import { connectError, eachLimited, fleetState, serverHost, workloads } from '../fleet';
 	import { cpu, errorMessage, memory, relative } from '../format';
@@ -94,7 +95,7 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Clusters']} prefix="none"
+		crumbs={[t('Clusters')]} prefix="none"
 		title="Clusters"
 		count={contexts.length}
 		subtitle="Every context in your kubeconfig, checked side by side without connecting to it"

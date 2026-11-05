@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { tick } from 'svelte';
 	import { backend, type Grant, type Permissions, type Rbac, type SubjectInfo } from '../api';
 	import { errorMessage } from '../format';
@@ -128,7 +129,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Access']}
+		crumbs={[t('Access')]}
 		title="Access"
 		count={rbac ? rbac.subjects.length : null}
 		subtitle="Who may do what, from the role bindings {namespace ? `in ${namespace}` : 'in all namespaces'}"

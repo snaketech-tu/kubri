@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { backend, type RightSizing, type SizeAdvice } from '../api';
 	import { cpu, errorMessage, memory } from '../format';
 	import { app, findResource } from '../state.svelte';
@@ -76,7 +77,7 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Right-sizing']}
+		crumbs={[t('Right-sizing')]}
 		title="Right-sizing"
 		count={found?.advice.length}
 		subtitle="Containers that request much more or less than they use, or run close to their limit{namespace ? `, in ${namespace}` : ''}"

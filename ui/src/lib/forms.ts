@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { splitWords } from './create';
 
 /** A path into an object: keys, and indexes into lists. */
@@ -43,25 +44,25 @@ export interface FormField {
 	hint?: string;
 }
 
-const name: FormField = { label: 'Name', path: ['metadata', 'name'], kind: 'text' };
+const name: FormField = { label: t('Name'), path: ['metadata', 'name'], kind: 'text' };
 const pod = (base: Path): FormField[] => [
-	{ label: 'Image', path: [...base, 'containers', 0, 'image'], kind: 'text', placeholder: 'nginx:1.27' },
+	{ label: t('Image'), path: [...base, 'containers', 0, 'image'], kind: 'text', placeholder: 'nginx:1.27' },
 	{
-		label: 'Command',
+		label: t('Command'),
 		path: [...base, 'containers', 0, 'command'],
 		kind: 'command',
 		placeholder: 'sh -c "echo hello"',
-		hint: 'Instead of the image’s own command; empty runs the image as it is.'
+		hint: t('Instead of the image’s own command; empty runs the image as it is.')
 	},
-	{ label: 'Port', path: [...base, 'containers', 0, 'ports', 0, 'containerPort'], kind: 'number' },
+	{ label: t('Port'), path: [...base, 'containers', 0, 'ports', 0, 'containerPort'], kind: 'number' },
 	{
-		label: 'CPU request',
+		label: t('CPU request'),
 		path: [...base, 'containers', 0, 'resources', 'requests', 'cpu'],
 		kind: 'text',
 		placeholder: '100m'
 	},
 	{
-		label: 'Memory limit',
+		label: t('Memory limit'),
 		path: [...base, 'containers', 0, 'resources', 'limits', 'memory'],
 		kind: 'text',
 		placeholder: '256Mi'
@@ -72,53 +73,53 @@ const pod = (base: Path): FormField[] => [
 export const FORMS: Record<string, FormField[]> = {
 	Deployment: [
 		name,
-		{ label: 'Replicas', path: ['spec', 'replicas'], kind: 'number' },
+		{ label: t('Replicas'), path: ['spec', 'replicas'], kind: 'number' },
 		...pod(['spec', 'template', 'spec'])
 	],
 	Service: [
 		name,
-		{ label: 'Type', path: ['spec', 'type'], kind: 'select', options: ['ClusterIP', 'NodePort', 'LoadBalancer'] },
+		{ label: t('Type'), path: ['spec', 'type'], kind: 'select', options: ['ClusterIP', 'NodePort', 'LoadBalancer'] },
 		{
-			label: 'Selector',
+			label: t('Selector'),
 			path: ['spec', 'selector'],
 			kind: 'map',
-			hint: 'The labels of the pods that get the traffic.'
+			hint: t('The labels of the pods that get the traffic.')
 		},
-		{ label: 'Port', path: ['spec', 'ports', 0, 'port'], kind: 'number' },
+		{ label: t('Port'), path: ['spec', 'ports', 0, 'port'], kind: 'number' },
 		{
-			label: 'Target port',
+			label: t('Target port'),
 			path: ['spec', 'ports', 0, 'targetPort'],
 			kind: 'text',
-			hint: 'A number, or the name of a container port.'
+			hint: t('A number, or the name of a container port.')
 		}
 	],
 	Job: [
 		name,
-		{ label: 'Retries', path: ['spec', 'backoffLimit'], kind: 'number' },
+		{ label: t('Retries'), path: ['spec', 'backoffLimit'], kind: 'number' },
 		...pod(['spec', 'template', 'spec']).filter((f) => f.label !== 'Port')
 	],
 	CronJob: [
 		name,
 		{
-			label: 'Schedule',
+			label: t('Schedule'),
 			path: ['spec', 'schedule'],
 			kind: 'text',
 			placeholder: '0 3 * * *',
-			hint: 'Cron syntax: minute, hour, day, month, weekday.'
+			hint: t('Cron syntax: minute, hour, day, month, weekday.')
 		},
-		{ label: 'Suspended', path: ['spec', 'suspend'], kind: 'select', options: ['false', 'true'] },
+		{ label: t('Suspended'), path: ['spec', 'suspend'], kind: 'select', options: ['false', 'true'] },
 		...pod(['spec', 'jobTemplate', 'spec', 'template', 'spec']).filter((f) => f.label !== 'Port')
 	],
-	ConfigMap: [name, { label: 'Data', path: ['data'], kind: 'map' }],
+	ConfigMap: [name, { label: t('Data'), path: ['data'], kind: 'map' }],
 	Secret: [
 		name,
 		{
-			label: 'Type',
+			label: t('Type'),
 			path: ['type'],
 			kind: 'select',
 			options: ['Opaque', 'kubernetes.io/basic-auth', 'kubernetes.io/tls', 'kubernetes.io/dockerconfigjson']
 		},
-		{ label: 'Values', path: ['stringData'], kind: 'map', hint: 'Plain text; the API server stores it base64-encoded.' }
+		{ label: t('Values'), path: ['stringData'], kind: 'map', hint: t('Plain text; the API server stores it base64-encoded.') }
 	]
 };
 

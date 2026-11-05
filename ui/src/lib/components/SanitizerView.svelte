@@ -6,6 +6,7 @@
 </script>
 
 <script lang="ts">
+	import { t } from '../i18n';
 	import { tick, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { backend } from '../api';
@@ -229,7 +230,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Checks']}
+		crumbs={[t('Checks')]}
 		title="Checks"
 		subtitle="Common mistakes and risky settings, {namespace ? `in ${namespace}` : 'in all namespaces'}"
 	>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { forControl } from '../keys';
 	import { tick, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -201,7 +202,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Topology']}
+		crumbs={[t('Topology')]}
 		title="Topology"
 		count={loaded ? roots.length : null}
 		subtitle="{pluralKind(resource.kind, resource.plural)} and what they own and use, {namespace ? `in ${namespace}` : 'in all namespaces'}"

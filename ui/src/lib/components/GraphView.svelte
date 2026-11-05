@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { backend, type Graph, type GraphNode, type PathStep, type RequestPath } from '../api';
 	import { errorMessage } from '../format';
 	import { BOX, fit, layoutGraph, matches, neighborhood, type GroupBy } from '../graph';
@@ -156,7 +157,7 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Topology']}
+		crumbs={[t('Topology')]}
 		title="Topology"
 		count={graph?.nodes.length}
 		subtitle="How the objects {namespace ? `in ${namespace}` : 'in all namespaces'} connect, from Ingresses to the nodes their pods run on"

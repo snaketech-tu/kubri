@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { tick } from 'svelte';
 	import { backend, type BenchInfo } from '../api';
 	import { bytes, duration, failureShare, pathOf, progress, rate, responses, statusTone } from '../bench';
@@ -114,7 +115,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Benchmarks']}
+		crumbs={[t('Benchmarks')]}
 		title="Benchmarks"
 		count={runs.length}
 		subtitle="HTTP load tests against port-forwards. Start one from a port-forward with b."

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { untrack } from 'svelte';
 	import { backend, type SearchHit, type SearchResult } from '../api';
 	import { age, errorMessage } from '../format';
@@ -91,7 +92,7 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Search']} prefix="none"
+		crumbs={[t('Search')]} prefix="none"
 		title={saved?.name ?? 'Search'}
 		count={found?.hits.length}
 		subtitle="Objects by name, label and field, in this cluster or in several"

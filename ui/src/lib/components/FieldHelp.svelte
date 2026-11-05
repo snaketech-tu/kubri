@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { fieldAt, fieldsAt, resolve, typeName, type FieldPath, type KindSchema } from '../schema';
 
 	let { schema, path }: { schema: KindSchema; path: FieldPath } = $props();
@@ -19,7 +20,7 @@
 	const choices = $derived(resolved?.enum?.map(String) ?? []);
 </script>
 
-<section class="help" aria-label="Field help" aria-live="polite">
+<section class="help" aria-label={t('Field help')} aria-live="polite">
 	<div class="head">
 		<code class="path">{where}</code>
 		<span class="type">{typeName(schema, node)}</span>
@@ -27,17 +28,17 @@
 	{#if resolved?.description}
 		<p>{resolved.description}</p>
 	{:else}
-		<p class="muted">The schema has no description for this field.</p>
+		<p class="muted">{t('The schema has no description for this field.')}</p>
 	{/if}
 	{#if choices.length}
-		<p class="muted">One of {#each choices as choice, i (choice)}{i ? ', ' : ''}<code>{choice}</code>{/each}.</p>
+		<p class="muted">{t('One of')} {#each choices as choice, i (choice)}{i ? ', ' : ''}<code>{choice}</code>{/each}.</p>
 	{/if}
 	{#if fields.length}
 		<ul>
 			{#each fields as field (field.name)}
 				<li title={field.description}>
 					<code>{field.name}</code>
-					<span class="type">{field.type}</span>{#if field.required}<span class="required">required</span>{/if}
+					<span class="type">{field.type}</span>{#if field.required}<span class="required">{t('required')}</span>{/if}
 				</li>
 			{/each}
 		</ul>

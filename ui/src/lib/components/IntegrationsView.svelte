@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { Integration, IntegrationSettings } from '../api';
 	import { openTool } from '../integrations';
 	import { app } from '../state.svelte';
@@ -103,7 +104,7 @@
 </script>
 
 <section class="page">
-	<PageHeader crumbs={['Integrations']} prefix="context" title="Integrations" subtitle="Tools the cluster runs, found without setup">
+	<PageHeader crumbs={[t('Integrations')]} prefix="context" title="Integrations" subtitle="Tools the cluster runs, found without setup">
 		{#snippet tools()}
 			<button class="btn" onclick={check} disabled={checking}>{checking ? 'Looking…' : 'Look again'}</button>
 		{/snippet}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { ResourceInfo } from '../api';
 	import { forControl } from '../keys';
 	import { kindGroups, pluralKind } from '../nav';
@@ -66,7 +67,7 @@
 <svelte:window {onkeydown} />
 
 <section class="page">
-	<PageHeader crumbs={['All kinds']} prefix="context" title="All kinds" count={total} subtitle="Every kind the cluster serves, by API group. Pick one to open its list.">
+	<PageHeader crumbs={[t('All kinds')]} prefix="context" title="All kinds" count={total} subtitle="Every kind the cluster serves, by API group. Pick one to open its list.">
 		{#snippet tools()}
 			<SearchField bind:value={filter} bind:input label="Find a kind" placeholder="Kind, short name or group…" />
 		{/snippet}

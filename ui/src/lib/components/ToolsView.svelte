@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { TOOLS } from '../nav';
 	import { app } from '../state.svelte';
 	import Icon from './Icon.svelte';
@@ -14,7 +15,7 @@
 </script>
 
 <section class="page">
-	<PageHeader crumbs={['Tools']} prefix="context" title="Tools" subtitle="Everything beyond the lists. Each tool also opens from the command palette." />
+	<PageHeader crumbs={[t('Tools')]} prefix="context" title="Tools" subtitle="Everything beyond the lists. Each tool also opens from the command palette." />
 	<ul class="tiles">
 		{#each TOOLS as tool (tool.id)}
 			<li>

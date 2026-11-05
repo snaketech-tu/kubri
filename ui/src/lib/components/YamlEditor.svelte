@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { autocompletion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 	import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 	import { yaml } from '@codemirror/lang-yaml';
@@ -87,7 +88,7 @@
 			.filter((field) => !present.has(field.name))
 			.map((field) => ({
 			label: field.name,
-			detail: field.required ? `${field.type}, required` : field.type,
+			detail: field.required ? t('{type}, required', { type: field.type }) : field.type,
 			info: field.description || undefined,
 			type: 'property',
 			apply: `${field.name}: `,

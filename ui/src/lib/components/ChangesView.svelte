@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import { untrack } from 'svelte';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { backend, type HistoryDetail, type HistoryEntry, type HistoryPage, type HistoryQuery } from '../api';
@@ -43,7 +45,7 @@
 		namespace,
 		kind: object?.kind,
 		name: object?.name,
-		changes: CHANGE_GROUPS.filter((g) => groups.has(g.label)).flatMap((g) => g.kinds),
+		changes: CHANGE_GROUPS.filter((g) => groups.has(g.kinds[0])).flatMap((g) => g.kinds),
 		text: typed.trim() || undefined,
 		limit: 200
 	}));
@@ -126,18 +128,23 @@
 		app.showChanges({ namespace: filter.namespace });
 	}
 
-	const title = $derived(object ? `${object.name}` : 'What changed');
-	const where = $derived(object ? `this ${object.kind ?? 'object'}` : namespace ? `namespace ${namespace}` : 'all namespaces');
+	const title = $derived(object ? `${object.name}` : t('What changed'));
+	const subtitle = $derived.by(() => {
+		const context = app.cluster?.context ?? t('this context');
+		if (object) return t('Changes to this {kind} that Kubri recorded in {context} while it was running', { kind: object.kind ?? t('object'), context });
+		if (namespace) return t('Changes in namespace {namespace} that Kubri recorded in {context} while it was running', { namespace, context });
+		return t('Changes in all namespaces that Kubri recorded in {context} while it was running', { context });
+	});
 	const crumbs = $derived(
-		object ? [{ label: 'What changed', onclick: showAll, title: 'All changes in the namespace' }, object.kind ?? 'Object'] : ['What changed']
+		object ? [{ label: t('What changed'), onclick: showAll, title: t('All changes in the namespace') }, object.kind ?? t('Object')] : [t('What changed')]
 	);
 </script>
 
 <section class="page">
-	<PageHeader {crumbs} {title} mono={!!object} count={page ? entries.length : null} subtitle="Changes Kubri recorded in {app.cluster?.context ?? 'this context'}, {where}, while it was running">
+	<PageHeader {crumbs} {title} mono={!!object} count={page ? entries.length : null} {subtitle}>
 		{#snippet tools()}
 			{#if object}
-				<button class="btn" onclick={showAll}>All changes</button>
+				<button class="btn" onclick={showAll}>{t('All changes')}</button>
 			{/if}
 		{/snippet}
 	</PageHeader>
@@ -145,48 +152,48 @@
 	{#if page && !page.recorder.recording}
 		<div class="banner" role="status">
 			<Icon name="pending" size={14} />
-			<span>Not recording now: {page.recorder.reason ?? 'unknown reason'}.</span>
-			{#if page.recorder.reason?.includes('turned off')}
-				<button class="link" onclick={() => app.showConfig('changes')}>Settings</button>
+			<span>{t('Not recording now: {reason}.', { reason: page.recorder.reason ? coreText(page.recorder.reason) : t('unknown reason') })}</span>
+			{#if page.recorder.reason === 'Recording is turned off in the settings'}
+				<button class="link" onclick={() => app.showConfig('changes')}>{t('Settings')}</button>
 			{/if}
 		</div>
 	{/if}
 	{#if page?.recorder.skipped.length}
 		<details class="skipped">
-			<summary><Icon name="warning" size={14} /> {page.recorder.skipped.length} {page.recorder.skipped.length === 1 ? 'kind is' : 'kinds are'} not recorded</summary>
+			<summary><Icon name="warning" size={14} /> {plural(page.recorder.skipped.length, '{n} kind is not recorded', '{n} kinds are not recorded')}</summary>
 			<ul>
 				{#each page.recorder.skipped as s (s)}<li>{s}</li>{/each}
 			</ul>
 		</details>
 	{/if}
 	{#if error}
-		<div class="notice" role="alert">Could not read the changes: {error}</div>
+		<div class="notice" role="alert">{t('Could not read the changes: {error}', { error })}</div>
 	{/if}
 
 	<div class="card">
 		<div class="toolbar">
 			<label>
-				<span>Range</span>
+				<span>{t('Range')}</span>
 				<Select
 					bind:value={hours}
 					options={[
 						...RANGES.map((r) => ({ value: r.hours, label: r.label })),
 						...(RANGES.some((r) => r.hours === hours)
 							? []
-							: [{ value: hours, label: `Last ${hours < 1 ? `${Math.round(hours * 60)} minutes` : `${hours} hours`}` }])
+							: [{ value: hours, label: hours < 1 ? t('Last {n} minutes', { n: Math.round(hours * 60) }) : t('Last {n} hours', { n: hours }) }])
 					]}
-					aria-label="Range"
+					aria-label={t('Range')}
 					compact
 				/>
 			</label>
-			<SearchField bind:value={text} label="Find in the changes" placeholder="Name, kind or what changed…" key="" />
-			<div class="groups" role="group" aria-label="Kinds of change">
-				{#each CHANGE_GROUPS as g (g.label)}
+			<SearchField bind:value={text} label={t('Find in the changes')} placeholder={t('Name, kind or what changed…')} key="" />
+			<div class="groups" role="group" aria-label={t('Kinds of change')}>
+				{#each CHANGE_GROUPS as g (g.kinds[0])}
 					<button
 						class="chip"
-						class:on={groups.has(g.label)}
-						aria-pressed={groups.has(g.label)}
-						onclick={() => (groups.has(g.label) ? groups.delete(g.label) : groups.add(g.label))}>{g.label}</button
+						class:on={groups.has(g.kinds[0])}
+						aria-pressed={groups.has(g.kinds[0])}
+						onclick={() => (groups.has(g.kinds[0]) ? groups.delete(g.kinds[0]) : groups.add(g.kinds[0]))}>{g.label}</button
 					>
 				{/each}
 			</div>
@@ -194,11 +201,11 @@
 
 		<div class="list">
 			{#if !page && !error}
-				<p class="muted pad">Reading the changes…</p>
+				<p class="muted pad">{t('Reading the changes…')}</p>
 			{:else if page && !entries.length && !items.length}
 				<p class="muted pad">
-					No changes recorded {hours ? `in the ${RANGES.find((r) => r.hours === hours)?.label.toLowerCase() ?? `last ${hours} hours`}` : 'yet'}.
-					{#if page.recorder.recording && page.recorder.since}Kubri has been recording since {when(page.recorder.since, now)}.{/if}
+					{hours ? t('No changes recorded in this range.') : t('No changes recorded yet.')}
+					{#if page.recorder.recording && page.recorder.since}{t('Kubri has been recording since {when}.', { when: when(page.recorder.since, now) })}{/if}
 				</p>
 			{:else}
 				<ol>
@@ -209,11 +216,11 @@
 							<li class="gap">
 								<Icon name="pending" size={13} />
 								{#if item.from === null}
-									Kubri was not watching before {when(item.to ?? now, now)}
+									{t('Kubri was not watching before {when}', { when: when(item.to ?? now, now) })}
 								{:else if item.to === null}
-									Kubri has not been watching since {when(item.from, now)}
+									{t('Kubri has not been watching since {when}', { when: when(item.from, now) })}
 								{:else}
-									Kubri was not watching from {when(item.from, now)} to {when(item.to, now)}
+									{t('Kubri was not watching from {from} to {to}', { from: when(item.from, now), to: when(item.to, now) })}
 								{/if}
 							</li>
 						{:else}
@@ -227,27 +234,27 @@
 										{#if e.change === 'deleted'}
 											<span class="name">{e.name}</span>
 										{:else}
-											<button class="name" onclick={() => open(e)} title="Open {e.kind} {e.name}">{e.name}</button>
+											<button class="name" onclick={() => open(e)} title={t('Open {kind} {name}', { kind: e.kind, name: e.name })}>{e.name}</button>
 										{/if}
 										<span class="muted">{e.kind}{e.namespace && !namespace ? ` · ${e.namespace}` : ''}</span>
 									</span>
 									<span class="summary">{e.summary}</span>
 									{#if e.hasDiff}
-										<button class="btn small" aria-expanded={details.has(e.id)} onclick={() => toggle(e)}>{details.has(e.id) ? 'Hide diff' : 'Diff'}</button>
+										<button class="btn small" aria-expanded={details.has(e.id)} onclick={() => toggle(e)}>{details.has(e.id) ? t('Hide diff') : t('Diff')}</button>
 									{/if}
 								</div>
 								{#if e.unwatched}
-									<p class="note">Happened while Kubri was not watching; found when it started again at {clock(e.at)}.</p>
+									<p class="note">{t('Happened while Kubri was not watching; found when it started again at {time}.', { time: clock(e.at) })}</p>
 								{/if}
 								{#if details.has(e.id)}
 									<div class="diff">
 										{#if detail}
-											<DiffView before={detail.before} after={detail.after} changed="lines changed" unchanged="Only fields Kubri does not keep changed." />
+											<DiffView before={detail.before} after={detail.after} changed={t('lines changed')} unchanged={t('Only fields Kubri does not keep changed.')} />
 											{#if e.kind === 'Secret' || e.kind === 'ConfigMap'}
-												<p class="note">Values are never kept: each shows its size and a fingerprint that changes with it.</p>
+												<p class="note">{t('Values are never kept: each shows its size and a fingerprint that changes with it.')}</p>
 											{/if}
 										{:else}
-											<p class="muted">Reading…</p>
+											<p class="muted">{t('Reading…')}</p>
 										{/if}
 									</div>
 								{/if}
@@ -256,7 +263,7 @@
 					{/each}
 				</ol>
 				{#if more}
-					<button class="btn more" onclick={showOlder}>Show older</button>
+					<button class="btn more" onclick={showOlder}>{t('Show older')}</button>
 				{/if}
 			{/if}
 		</div>

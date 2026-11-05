@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { stopPortForward } from '../actions';
@@ -130,7 +131,7 @@
 
 <section>
 	<PageHeader
-		crumbs={['Port-forwards']}
+		crumbs={[t('Port-forwards')]}
 		title="Port-forwards"
 		count={forwards.length}
 		subtitle="Local ports tunneled to pods. They keep running while you work elsewhere in Kubri, and move to another pod when theirs goes away."

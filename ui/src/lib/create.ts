@@ -1,5 +1,6 @@
 import { parseAllDocuments, stringify } from 'yaml';
 import type { ResourceInfo } from './api';
+import { t } from './i18n';
 import { resolve, type KindSchema, type SchemaNode } from './schema';
 
 /** What a template or a short form like `:new deploy web --image nginx` fills in. */
@@ -378,7 +379,7 @@ export function parseObjects(text: string): { objects: unknown[]; error: string 
 		const problem = doc.errors[0];
 		if (problem) {
 			const line = problem.linePos?.[0]?.line;
-			return { objects: [], error: line ? `Line ${line}: ${problem.message.split('\n')[0]}` : problem.message };
+			return { objects: [], error: line ? t('Line {line}: {problem}', { line, problem: problem.message.split('\n')[0] }) : problem.message };
 		}
 		const value = doc.toJS();
 		if (value == null) continue;
