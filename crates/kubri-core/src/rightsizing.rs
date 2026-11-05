@@ -430,7 +430,7 @@ impl Kubri {
         requests: &BTreeMap<String, String>,
         limits: &BTreeMap<String, String>,
     ) -> Result<()> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(target.namespace.as_deref()).await?;
         let session = self.object_session(target).await?;
         session.ensure_may("patch", target, "").await?;
         let patch = resources_patch(container, requests, limits)?;

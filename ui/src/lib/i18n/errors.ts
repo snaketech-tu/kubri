@@ -46,6 +46,7 @@ export const CORE_TEXTS = [
 	'readOnly is set in the k9s configuration',
 	'this context is set read-only in Kubri',
 	'AI agents never change a production context',
+	'AI agents never change a production namespace',
 	"AI agents may not change this context; allow it in Kubri's settings",
 	'this context is locked; AI agents cannot unlock it',
 	'this context is locked; unlock it to make changes',

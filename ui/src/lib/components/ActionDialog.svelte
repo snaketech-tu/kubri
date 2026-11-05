@@ -765,14 +765,28 @@
 			(dialog.kind === 'drain' && !report) ||
 			(dialog.kind === 'plugin' && dialog.plugin.dangerous)
 	);
+	/** The action reaches a production context, or a namespace marked as production. */
+	const production = $derived.by(() => {
+		if (app.production) return true;
+		const namespaces: (string | null | undefined)[] = [];
+		if (dialog.kind === 'delete') {
+			for (const target of dialog.targets) {
+				// Deleting a namespace takes everything in it.
+				namespaces.push(!dialog.resource.group && dialog.resource.plural === 'namespaces' ? target.name : target.namespace);
+			}
+		} else if (dialog.kind === 'helmUninstall' || dialog.kind === 'helmRollback') namespaces.push(dialog.release.namespace);
+		else if (dialog.kind === 'plugin') namespaces.push(dialog.variables.NAMESPACE);
+		else if ('target' in dialog) namespaces.push(dialog.target.namespace);
+		return namespaces.some((ns) => app.productionIn(ns));
+	});
 	/**
-	 * What to type before a destructive action: on a production context the object's name (the
+	 * What to type before a destructive action: on a production context or namespace the object's name (the
 	 * context's for several objects or a plugin), elsewhere "confirm" for bulk deletes. Null when
 	 * the button is enough.
 	 */
 	const confirmWord = $derived.by(() => {
 		if (!danger) return null;
-		if (app.production) {
+		if (production) {
 			if (dialog.kind === 'delete') return dialog.targets.length === 1 ? dialog.targets[0].name : (context ?? 'confirm');
 			if (dialog.kind === 'helmUninstall') return dialog.release.name;
 			if (dialog.kind === 'drain') return dialog.target.name;
@@ -1276,7 +1290,7 @@
 	{#if needsConfirmation}
 		<label class="confirmation">
 			<span>
-				{#if app.production}<strong class="production">{t('Production.')}</strong>{/if}
+				{#if production}<strong class="production">{t('Production.')}</strong>{/if}
 				<Phrase text={t('Type {word} to continue')} code={{ word: confirmWord ?? '' }} />
 			</span>
 			<input bind:value={confirmation} bind:this={confirmInput} autocomplete="off" spellcheck="false" />

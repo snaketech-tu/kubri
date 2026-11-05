@@ -2470,6 +2470,19 @@ const de: Record<string, string> = {
 	'Report a problem': 'Problem melden',
 	'Suggest an idea': 'Idee vorschlagen',
 	'Signed in as {name}': 'Angemeldet als {name}',
+	'Production namespaces': 'Produktions-Namespaces',
+	'None, e.g. payments, checkout': 'Keine, z. B. payments, checkout',
+	'Like a production context, only there: a banner, typed names before deleting, and no changes by AI agents.': 'Wie ein Produktionskontext, nur dort: ein Banner, Namen eintippen vor dem Löschen und keine Änderungen durch KI-Agenten.',
+	'Never in its production namespaces.': 'Nie in seinen Produktions-Namespaces.',
+	'{namespace} is a production namespace': '{namespace} ist ein Produktions-Namespace',
+	'{namespace} is a production namespace. The review shows exactly what will change before anything does.': '{namespace} ist ein Produktions-Namespace. Die Prüfung zeigt genau, was sich ändern wird, bevor sich etwas ändert.',
+	'{name} · production': '{name} · Produktion',
+	'Unmark as production': 'Nicht mehr als Produktion markieren',
+	'Mark as production': 'Als Produktion markieren',
+	'{name} is now a production namespace': '{name} ist jetzt ein Produktions-Namespace',
+	'{name} is no longer a production namespace': '{name} ist kein Produktions-Namespace mehr',
+	'Production namespace': 'Produktions-Namespace',
+	'AI agents never change a production namespace': 'KI-Agenten ändern nie einen Produktions-Namespace',
 };
 
 export default de;

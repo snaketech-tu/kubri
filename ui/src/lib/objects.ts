@@ -280,6 +280,13 @@ export function objectActions(subject: Subject, options: ActionOptions, writable
 	if (resource.group === 'apps' && resource.plural === 'deployments') {
 		add('Go to', 'ReplicaSets', ['z'], () => void showReplicaSets(target));
 	}
+	if (isNamespaces(resource) && app.cluster && !app.production) {
+		// A setting in Kubri, not a change to the cluster: offered also when changes are off.
+		const marked = app.productionIn(target.name);
+		add('Change', marked ? t('Unmark as production') : t('Mark as production'), [], () => void app.setProductionNamespace(target.name, !marked), {
+			id: 'production'
+		});
+	}
 	if (isNamespaces(resource)) {
 		add('Go to', t('Switch to {name}', { name: target.name }), ['u'], () => {
 			app.namespace = target.name;
