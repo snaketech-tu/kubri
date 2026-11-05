@@ -14,7 +14,9 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 			// A single-page app, shared by the Tauri desktop app and kubri-server.
-			adapter: adapter({ fallback: 'index.html' })
+			adapter: adapter({ fallback: 'index.html' }),
+			// The live demo is served under a path, like /kubri/demo on GitHub Pages; both apps at /.
+			paths: { base: (process.env.KUBRI_BASE_PATH ?? '') as '' | `/${string}` }
 		})
 	],
 	clearScreen: false,

@@ -53,7 +53,7 @@ Added contexts have **Remove** on their card. Contexts from your own kubeconfig 
 - helm and k9s plugins get them in `KUBECONFIG` too.
 - **Remove** stops reading a loaded file. Your own files, from `KUBECONFIG` or `~/.kube/config`, are listed but stay.
 
-With no kubeconfig at all, or one without contexts, the start page says so and offers **Load kubeconfig file…**. When connecting to a context fails, it says what to try for the usual causes, such as a server that does not answer or credentials the cluster turned down. In the browser, Kubri cannot open files on the server for you; use **Add contexts from a file…** in the same dialog, which copies the contexts as described above.
+With no kubeconfig at all, or one without contexts, the start page says so and offers **Load kubeconfig file…**, or a cluster of your own or the demo (see [No cluster yet](#no-cluster-yet)). When connecting to a context fails, it says what to try for the usual causes, such as a server that does not answer or credentials the cluster turned down. In the browser, Kubri cannot open files on the server for you; use **Add contexts from a file…** in the same dialog, which copies the contexts as described above.
 
 ### Example: many kubeconfig files spread over `~/.kube`
 
@@ -93,6 +93,17 @@ For the example above that gives `~/.kube/config:~/.kube/clusters/prod/eks.yaml:
 Without the shell, the same works with **Choose files…** in **Kubeconfig files…**: select several files of a folder at once, then do the same for the next folder. Kubri remembers them, but a new file has to be loaded too.
 
 In the browser, [kubri-server in Docker](WEB.md#many-kubeconfig-files-in-docker) can mount the whole folder and finds the files in it by itself, without the function.
+
+## No cluster yet
+
+Without a kubeconfig Kubri can use, the start page offers these ways on:
+
+- **Load kubeconfig file…** in the desktop app, or **Add contexts from a file…** in the browser, as described above.
+- **Start a cluster…** makes a small Kubernetes cluster on this computer with [kind](https://kind.sigs.k8s.io/) or [k3d](https://k3d.io/), whichever is installed. Both run the cluster in Docker containers, so Docker has to be running. Kubri runs `kind create cluster --name kubri --wait 2m` or `k3d cluster create kubri --wait`, shows its output as it goes, and connects to the new context, `kind-kubri` or `k3d-kubri`, once it is ready. The tool adds the context to your kubeconfig. To remove the cluster again, run `kind delete cluster --name kubri` or `k3d cluster delete kubri`. In the browser this is offered only when the server allows the local terminal, as the cluster would run on the server.
+- **Open the demo** opens a snapshot of a small shop that comes with Kubri: Deployments, a StatefulSet, a CronJob, an Ingress, a Helm release, a pod in a crash loop, one that cannot pull its image, logs and events. Like every [snapshot](SNAPSHOTS.md), it is read-only.
+- **Try again** reads the kubeconfig files again, for when you made one meanwhile.
+
+The demo also runs in the browser, with nothing to install: [snaketech-tu.github.io/kubri/demo](https://snaketech-tu.github.io/kubri/demo/).
 
 ## Limiting namespaces
 

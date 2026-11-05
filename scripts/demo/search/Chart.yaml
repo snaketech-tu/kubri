@@ -1,0 +1,6 @@
+apiVersion: v2
+name: search
+description: Product search for the demo shop
+type: application
+version: 0.3.0
+appVersion: "3.1.0"

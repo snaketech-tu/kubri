@@ -119,6 +119,7 @@ export const httpBackend: Backend = {
 		}
 		return response.json();
 	},
+	closeSnapshot: () => request('DELETE', '/snapshot'),
 	resources: () => request('GET', '/resources'),
 	refreshResources: () => request('POST', '/resources/refresh'),
 	preview: (target, change) => request('POST', '/object/preview', { target, change }),
@@ -272,6 +273,8 @@ export const httpBackend: Backend = {
 	k9sSkin: (name) => request('GET', `/k9s/skins/${encodeURIComponent(name)}`),
 	runPlugin: (run) => request('POST', '/plugins/run', run),
 	openPlugin: (run, onEvent) => terminalSocket('/plugins/terminal', run, onEvent),
+	localClusters: () => request('GET', '/local-cluster'),
+	createLocalCluster: (req, onEvent) => terminalSocket('/local-cluster/create', req, onEvent),
 	localTerminalInfo: () => request('GET', '/terminal/local'),
 	openLocalTerminal: (options, onEvent) => terminalSocket('/terminal/local/open', options, onEvent),
 	desktop: false,
