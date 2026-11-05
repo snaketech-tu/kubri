@@ -599,6 +599,14 @@
 					{app.readOnly ? t('changes are off') : t('changes go live; deleting asks you to type the name')}
 				</span>
 			</div>
+		{:else if app.cluster && app.productionNamespace}
+			<div class="production-banner" role="note">
+				<Icon name="warning" size={15} />
+				<span>
+					<strong>{t('Production namespace')}</strong> · {app.namespace} ·
+					{app.readOnly ? t('changes are off') : t('changes go live; deleting asks you to type the name')}
+				</span>
+			</div>
 		{/if}
 		{#if app.snapshot}
 			{@const snapshot = app.snapshot}

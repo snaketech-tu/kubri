@@ -36,7 +36,7 @@ Resources can be named as with kubectl: `pods`, `po`, `deploy`, `deployments.app
 
 ## What agents may not do
 
-- **Change a cluster, by default.** A context allows changes only when **AI agents may change it** is on in its settings. Production contexts never allow it, nor do read-only ones, locked ones, or any context when Kubri runs with `--read-only` or the k9s `readOnly` setting. These rules are enforced in Kubri's core, not only by hiding the tools.
+- **Change a cluster, by default.** A context allows changes only when **AI agents may change it** is on in its settings. Production contexts never allow it, nor do read-only ones, locked ones, or any context when Kubri runs with `--read-only` or the k9s `readOnly` setting. Namespaces marked as production are never changed either. These rules are enforced in Kubri's core, not only by hiding the tools.
 - **Change anything without you.** Each change waits for **Allow** in the Kubri window, which shows what will happen and the equivalent `kubectl` command. With no window open, or no answer within two minutes, the change is refused.
 - **Read Secret values.** Agents see a Secret's keys and sizes. **Agents may read Secret values** in the settings lifts this.
 - **Do more than you may.** Every call goes to the cluster with your credentials, so RBAC applies as it does to you.

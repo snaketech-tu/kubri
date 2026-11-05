@@ -129,6 +129,7 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 	label: '',
 	color: '',
 	production: false,
+	productionNamespaces: [],
 	readOnly: false,
 	locked: false,
 	namespace: '',
@@ -512,6 +513,27 @@ class AppState {
 	environment = $derived(this.contextSettings.label);
 	/** Marked as production by the user: a banner, and typed names before destructive actions. */
 	production = $derived(this.contextSettings.production);
+	/** The namespace picked is marked as production, in a context that is not. */
+	productionNamespace = $derived(
+		!this.contextSettings.production && !!this.namespace && (this.contextSettings.productionNamespaces ?? []).includes(this.namespace)
+	);
+
+	/** Whether changes in `namespace` get production's care: the context, or the namespace, is marked. */
+	productionIn(namespace: string | null | undefined): boolean {
+		return this.production || (!!namespace && (this.contextSettings.productionNamespaces ?? []).includes(namespace));
+	}
+
+	/** Marks a namespace of the connected context as production, or not. */
+	async setProductionNamespace(namespace: string, production: boolean) {
+		const context = this.cluster?.context;
+		if (!context) return;
+		const settings = this.contextSettingsOf(context);
+		const list = (settings.productionNamespaces ?? []).filter((n) => n !== namespace);
+		if (production) list.push(namespace);
+		if (await this.setContextSettings(context, { ...settings, productionNamespaces: list.sort() })) {
+			this.toast(production ? t('{name} is now a production namespace', { name: namespace }) : t('{name} is no longer a production namespace', { name: namespace }));
+		}
+	}
 	/** k9s `readOnly`, read-only or locked in Kubri: nothing that changes the cluster is offered. */
 	readOnly = $derived((this.k9s?.readOnly ?? false) || this.guard.readOnly);
 	/** Light or dark picked in Kubri; null follows the system. Skins pick their own. */

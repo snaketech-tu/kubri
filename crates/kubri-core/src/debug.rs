@@ -334,7 +334,13 @@ fn generated_name(created: &Pod) -> String {
 impl Kubri {
     /// Starts a debug container and says where to connect to it.
     pub async fn debug(&self, request: DebugRequest) -> Result<DebugSession> {
-        self.ensure_writable().await?;
+        let namespace = match &request {
+            DebugRequest::Ephemeral { target, .. } | DebugRequest::Copy { target, .. } => {
+                target.namespace.as_deref()
+            }
+            DebugRequest::Node { namespace, .. } => namespace.as_deref(),
+        };
+        self.ensure_writable_in(namespace).await?;
         let session = self.session().await?;
         let context = Some(session.info.context.clone());
         let image = |image: &Option<String>| {

@@ -444,7 +444,7 @@ impl Kubri {
     /// Sets the requests and limits of containers in a workload's pod template, in one patch,
     /// so its pods are replaced once.
     pub async fn set_resources(&self, target: &ObjectRef, containers: &[ContainerResources]) -> Result<()> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(target.namespace.as_deref()).await?;
         let session = self.object_session(target).await?;
         session.ensure_may("patch", target, "").await?;
         let patch = resources_patch(containers)?;

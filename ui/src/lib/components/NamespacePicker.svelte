@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { ALL_NAMESPACES, app } from '../state.svelte';
 	import { t } from '../i18n';
-	import { plainOptions } from '../select';
 	import Select from './Select.svelte';
 
 	// Keep the current and default namespace selectable even if listing namespaces is forbidden.
@@ -16,7 +15,10 @@
 	<span class="label">{t('Namespace')}</span>
 	<Select
 		bind:value={app.namespace}
-		options={[{ value: ALL_NAMESPACES, label: t('All namespaces') }, ...plainOptions(options)]}
+		options={[
+			{ value: ALL_NAMESPACES, label: t('All namespaces') },
+			...options.map((ns) => ({ value: ns, label: app.productionIn(ns) && !app.production ? t('{name} · production', { name: ns }) : ns }))
+		]}
 		disabled={app.page === 'resources' && !app.selected?.namespaced}
 		searchable
 		quiet

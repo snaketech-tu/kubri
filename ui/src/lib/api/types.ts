@@ -80,6 +80,8 @@ export interface ContextSettings {
 	color: string;
 	/** Destructive actions ask to type the name; a banner says where you are. */
 	production: boolean;
+	/** Namespaces treated like a production context: typed names, a banner, no AI agent changes. */
+	productionNamespaces: string[];
 	readOnly: boolean;
 	/** Starts read-only; unlocking lasts 15 minutes. */
 	locked: boolean;
