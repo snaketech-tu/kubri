@@ -1,9 +1,19 @@
 import { isTauri } from '@tauri-apps/api/core';
 
-/** Whether kubri-server asks for a password, and whether this browser has signed in. */
+/** Someone signed in to a Kubri shared by a team, as the clusters know them. */
+export interface Person {
+	name: string;
+	groups: string[];
+}
+
+/** Whether kubri-server asks people to sign in and how, and whether this browser has. */
 interface SessionState {
 	required: boolean;
 	signedIn: boolean;
+	method?: 'password' | 'oidc';
+	/** The OpenID Connect provider's name, for the sign-in button. */
+	provider?: string;
+	person?: Person;
 }
 
 async function post(path: string, body?: unknown) {
@@ -23,6 +33,10 @@ class Session {
 	checked = $state(isTauri());
 	required = $state(false);
 	signedIn = $state(true);
+	method = $state<'password' | 'oidc' | null>(null);
+	provider = $state<string | null>(null);
+	/** Who signed in, on a Kubri shared by a team. */
+	person = $state<Person | null>(null);
 
 	async check() {
 		if (isTauri()) return;
@@ -32,6 +46,9 @@ class Session {
 				const state: SessionState = await response.json();
 				this.required = state.required;
 				this.signedIn = state.signedIn;
+				this.method = state.method ?? null;
+				this.provider = state.provider ?? null;
+				this.person = state.person ?? null;
 			}
 		} catch {
 			// The app shows that the server cannot be reached.
@@ -51,6 +68,7 @@ class Session {
 	async signOut() {
 		await post('/logout').catch(() => {});
 		this.signedIn = false;
+		this.person = null;
 	}
 
 	#rechecking: Promise<void> | null = null;

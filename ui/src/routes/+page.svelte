@@ -578,7 +578,7 @@
 				?
 			</button>
 			{#if session.required}
-				<button class="sign-out" onclick={signOut}>Sign out</button>
+				<button class="sign-out" onclick={signOut} title={session.person ? `Signed in as ${session.person.name}` : undefined}>Sign out</button>
 			{/if}
 		</header>
 

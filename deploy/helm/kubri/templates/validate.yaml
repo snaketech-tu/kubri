@@ -1,0 +1,11 @@
+{{- if not (has .Values.auth (list "oidc" "password")) }}
+{{- fail "auth must be oidc or password" }}
+{{- end }}
+{{- if eq .Values.auth "oidc" }}
+{{- if or (not .Values.oidc.issuer) (not .Values.oidc.clientId) }}
+{{- fail "auth: oidc needs oidc.issuer and oidc.clientId" }}
+{{- end }}
+{{- if not (has .Values.team.credentials (list "impersonate" "token")) }}
+{{- fail "team.credentials must be impersonate or token" }}
+{{- end }}
+{{- end }}

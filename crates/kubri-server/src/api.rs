@@ -1226,13 +1226,24 @@ async fn local_terminal_info(State(kubri): State<Arc<Kubri>>) -> Json<kubri_core
 
 /// A shell on this server, when it was started to allow it: the client sends
 /// [`kubri_core::LocalTerminalOptions`] first, then it works like a container shell.
-async fn local_terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Response {
+async fn local_terminal(
+    State(kubri): State<Arc<Kubri>>,
+    recorder: Option<Extension<Recorder>>,
+    ws: WebSocketUpgrade,
+) -> Response {
     ws.on_upgrade(move |mut socket| async move {
         let opened = match first_message::<kubri_core::LocalTerminalOptions>(&mut socket).await {
-            Ok(options) => kubri
-                .open_local_terminal(&options)
-                .await
-                .map_err(|e| e.to_string()),
+            Ok(options) => {
+                let opened = kubri
+                    .open_local_terminal(&options)
+                    .await
+                    .map_err(|e| e.to_string());
+                if let Some(Extension(recorder)) = &recorder {
+                    let result = opened.as_ref().map(|_| ()).map_err(Clone::clone);
+                    recorder.record("local terminal", None, result).await;
+                }
+                opened
+            }
             Err(err) => Err(err),
         };
         run_terminal(socket, opened).await;

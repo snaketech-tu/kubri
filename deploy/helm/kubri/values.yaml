@@ -1,0 +1,101 @@
+# Kubri in the browser. See docs/TEAMS.md for a Kubri shared by a team, and docs/WEB.md for
+# everything else about the web app.
+
+image:
+  repository: ghcr.io/snaketech-tu/kubri
+  # The chart's appVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# How people sign in:
+# - `oidc`: with an OpenID Connect provider (Keycloak, Dex, Entra ID, Google, ...). Every
+#   person acts with their own Kubernetes permissions, and every change is in the audit log.
+# - `password`: with one password everyone shares. Everyone acts as Kubri's service account.
+auth: password
+
+password:
+  # A secret with the password under the key `password`. When empty, the chart makes one with
+  # a random password: `kubectl get secret <release>-kubri-password -o jsonpath='{.data.password}' | base64 -d`.
+  existingSecret: ""
+
+oidc:
+  # The issuer URL, exactly as the provider names itself, such as https://dex.example.com.
+  issuer: ""
+  clientId: ""
+  # The client secret, or a secret holding it under the key `client-secret`.
+  clientSecret: ""
+  existingSecret: ""
+  # The provider's name on the sign-in button. The issuer's host name when empty.
+  name: ""
+  # Separated by spaces. When empty: `openid email profile`, plus `groups` and
+  # `offline_access` where the provider has them.
+  scopes: ""
+  usernameClaim: email
+  # Put before user and group names, such as `oidc:`, to match the cluster's RoleBindings.
+  usernamePrefix: ""
+  groupsClaim: groups
+  groupsPrefix: ""
+  # Only members of these groups may sign in. Everyone the provider knows may when empty.
+  allowedGroups: []
+  # A ConfigMap with the provider's certificate authority under `ca.crt`, if the system
+  # does not trust it.
+  caConfigMap: ""
+
+team:
+  # How people's requests reach the cluster, with `auth: oidc`:
+  # - `impersonate`: with Kubri's service account, impersonating each person. The chart lets
+  #   the service account impersonate users and groups, and nothing else.
+  # - `token`: with each person's own ID token. The cluster's API server must accept tokens
+  #   of the same issuer and client (its --oidc-* flags or structured authentication).
+  credentials: impersonate
+  # Groups whose members see everyone's changes on the Activity panel.
+  activityGroups: []
+
+# Where people reach Kubri, such as https://kubri.example.com, for the provider to send them
+# back to. Taken from the ingress when empty, or from each request without one.
+publicUrl: ""
+
+# Every change made through Kubri, as JSON lines: `-` for the container's log, or a file.
+auditLog: "-"
+
+# Never change anything in the cluster.
+readOnly: false
+
+rbac:
+  create: true
+  # With `auth: password`, the ClusterRole bound to Kubri's service account: `view` reads
+  # everything but Secrets, `edit` also changes things and opens shells.
+  clusterRole: view
+
+serviceAccount:
+  create: true
+  # The release's full name when empty.
+  name: ""
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: kubri.example.com
+  # A secret with the TLS certificate for the host; without one, the ingress serves HTTP.
+  tlsSecret: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+# More environment variables, such as KUBRI_SESSION_HOURS.
+extraEnv: []
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

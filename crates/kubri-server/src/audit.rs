@@ -196,7 +196,10 @@ impl Recorder {
     ) -> Entry {
         let person = self.caller.person.as_ref();
         Entry {
-            time: jiff::Timestamp::now().to_string(),
+            time: jiff::Timestamp::now()
+                .round(jiff::Unit::Millisecond)
+                .unwrap_or_else(|_| jiff::Timestamp::now())
+                .to_string(),
             person: person.map(|p| p.name.clone()),
             groups: person.map(|p| p.groups.clone()).unwrap_or_default(),
             client: self.client.clone(),
@@ -248,7 +251,21 @@ pub async fn record(State(audit): State<Audit>, mut request: Request, next: Next
     };
     let detail = detail(&json);
     let response = next.run(Request::from_parts(parts, Body::from(bytes))).await;
-    let (response, result) = outcome(response).await;
+    let favorites = action == "port-forward favorites";
+    if response.status().is_success() && !favorites {
+        audit.log.write(recorder.entry(action, context, target, detail, Ok(())));
+        return response;
+    }
+    let (response, body) = read(response).await;
+    // The app starts the favorite port-forwards on every connect; most of the time there are none.
+    if favorites && body.as_ref() == b"[]" {
+        return response;
+    }
+    let result = if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(error_message(response.status(), &body))
+    };
     if let Err(err) = &result {
         tracing::info!(action, error = err, "change failed");
     }
@@ -258,8 +275,8 @@ pub async fn record(State(audit): State<Audit>, mut request: Request, next: Next
     response
 }
 
-/// The changes a route makes, by method and path. Sockets that open a shell or plugin are
-/// written down by their handlers, which know the target.
+/// The changes a route makes, by method and path. Sockets that open a shell, a plugin or a
+/// local terminal are written down by their handlers, which know the target and the outcome.
 fn action(method: &Method, path: &str) -> Option<&'static str> {
     Some(match (method.as_str(), path) {
         ("PUT", "/object") => "edit",
@@ -292,7 +309,6 @@ fn action(method: &Method, path: &str) -> Option<&'static str> {
         ("PUT", "/explain/key") => "change settings",
         ("PUT", p) if p.starts_with("/settings/") => "change settings",
         ("POST" | "DELETE", "/contexts/added") => "change contexts",
-        ("GET", "/terminal/local/open") => "local terminal",
         _ => return None,
     })
 }
@@ -315,11 +331,7 @@ fn target(json: &Value, action: &str) -> Option<Target> {
         });
     }
     let name = text(json, "name")?;
-    let resource = match action {
-        "cordon" | "drain" => Some("nodes".to_owned()),
-        a if a.starts_with("helm") => Some("helm releases".to_owned()),
-        _ => None,
-    };
+    let resource = matches!(action, "cordon" | "drain").then(|| "nodes".to_owned());
     Some(Target {
         resource,
         namespace: text(json, "namespace"),
@@ -335,22 +347,28 @@ fn detail(json: &Value) -> Option<Value> {
     (!found.is_empty()).then_some(Value::Object(found))
 }
 
-/// The response again, and the error it carries when it is not a success.
-async fn outcome(response: Response) -> (Response, Result<(), String>) {
-    let status = response.status();
-    if status.is_success() {
-        return (response, Ok(()));
-    }
+/// The response again, and its body: an error, or the favorite port-forwards started. Both
+/// are small.
+async fn read(response: Response) -> (Response, axum::body::Bytes) {
     let (parts, body) = response.into_parts();
-    let bytes = to_bytes(body, 1024 * 1024).await.unwrap_or_default();
-    let message = serde_json::from_slice::<Value>(&bytes)
+    match to_bytes(body, 1024 * 1024).await {
+        Ok(bytes) => (Response::from_parts(parts, Body::from(bytes.clone())), bytes),
+        Err(_) => (
+            (StatusCode::BAD_GATEWAY, "the answer was too large").into_response(),
+            Default::default(),
+        ),
+    }
+}
+
+/// The message of an error answer: `{"error": "..."}`, or its text.
+fn error_message(status: StatusCode, body: &[u8]) -> String {
+    serde_json::from_slice::<Value>(body)
         .ok()
         .and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_owned))
         .unwrap_or_else(|| {
-            let text = String::from_utf8_lossy(&bytes).trim().to_owned();
+            let text = String::from_utf8_lossy(body).trim().to_owned();
             if text.is_empty() { status.to_string() } else { text }
-        });
-    (Response::from_parts(parts, Body::from(bytes)), Err(message))
+        })
 }
 
 #[derive(Serialize)]

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: kubri
+description: Kubri in the browser, for one person or a whole team signing in with OpenID Connect
+type: application
+# Kept at the Kubri version; see docs/RELEASING.md.
+version: 1.7.0
+appVersion: "1.7.0"
+home: https://github.com/snaketech-tu/kubri
+sources:
+  - https://github.com/snaketech-tu/kubri
+icon: https://raw.githubusercontent.com/snaketech-tu/kubri/main/ui/src/lib/assets/logo.svg
+keywords: [kubernetes, gui, dashboard, k9s]
