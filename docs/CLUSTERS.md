@@ -2,6 +2,14 @@
 
 Kubri connects to one context at a time, the one in the top bar. The pages here look at several of them.
 
+## Starting where you left off
+
+Kubri starts in the context you used last, on the page, kind and namespace you left there. It also remembers this for the ten contexts you used most recently, so switching to one you used yesterday lands where you were. Filters and the row under the cursor are not kept across restarts.
+
+When the kubeconfig's current context changed since you last used Kubri, for example after `kubectl config use-context`, Kubri starts in that one instead, as it is the newer choice. Kubri never changes the kubeconfig itself, so kubectl in other terminals is not affected. A web address that names a context opens that context, and a k9s `defaultView` still wins over the remembered page.
+
+When the context used last does not answer, the card says that Kubri started there and offers **Connect to** the kubeconfig's current context instead. To always start in the kubeconfig's current context, pick it under **Settings**, **On start**. Both are kept per computer and browser, in the app's own storage.
+
 ## Switching back is instant
 
 When you switch to another context, Kubri keeps the one you left connected in the background, with the resource types and permissions it already found. Switching back then takes a quick check that the cluster still answers instead of a new connection. If the check fails, for example because a token expired, Kubri connects afresh and shows the error that gives. The resource types are looked up again right after a switch back, so a CRD installed meanwhile appears in the sidebar.
