@@ -336,6 +336,10 @@ cd ui && pnpm check && pnpm test
 
 </details>
 
+## 💬 Feedback
+
+Something wrong or missing? [Report a problem](https://github.com/snaketech-tu/kubri/issues/new?template=bug.yml) or [suggest an idea](https://github.com/snaketech-tu/kubri/issues/new?template=idea.yml). From inside Kubri, the links at the bottom of the help (<kbd>?</kbd>) or `:feedback` open the same forms with your version and system filled in.
+
 ## 📄 License
 
 Kubri is licensed under the [Apache License 2.0](LICENSE).
