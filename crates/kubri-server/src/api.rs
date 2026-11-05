@@ -7,7 +7,7 @@ use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, delete, get, post, put};
-use axum::{Json, Router};
+use axum::{Extension, Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::Graph;
 use kubri_core::{
@@ -27,6 +27,8 @@ use kubri_core::{RenderedView, ViewSet};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::audit::{self, Recorder};
 
 pub fn router(kubri: Arc<Kubri>) -> Router {
     Router::new()
@@ -1150,13 +1152,26 @@ enum TerminalControl {
 /// A terminal session. The client sends a [`TerminalRequest`] first, then keystrokes as
 /// binary frames and `{"type":"resize"}` as text. The server answers `{"type":"ready"}`,
 /// then output as binary frames, and `{"type":"exit"}` when the process ends.
-async fn terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Response {
+async fn terminal(
+    State(kubri): State<Arc<Kubri>>,
+    recorder: Option<Extension<Recorder>>,
+    ws: WebSocketUpgrade,
+) -> Response {
     ws.on_upgrade(move |mut socket| async move {
         let opened = match first_message::<TerminalRequest>(&mut socket).await {
-            Ok(req) => kubri
-                .open_terminal(&req.target, req.options)
-                .await
-                .map_err(|e| e.to_string()),
+            Ok(req) => {
+                let opened = kubri
+                    .open_terminal(&req.target, req.options)
+                    .await
+                    .map_err(|e| e.to_string());
+                if let Some(Extension(recorder)) = &recorder {
+                    let result = opened.as_ref().map(|_| ()).map_err(Clone::clone);
+                    recorder
+                        .record("shell", Some(audit::Target::of(&req.target)), result)
+                        .await;
+                }
+                opened
+            }
             Err(err) => Err(err),
         };
         run_terminal(socket, opened).await;
@@ -1178,10 +1193,24 @@ async fn run_plugin(State(kubri): State<Arc<Kubri>>, Json(run): Json<PluginRun>)
 
 /// A plugin in a terminal: the client sends a [`PluginRun`] first, then it works like
 /// [`terminal`].
-async fn plugin_terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Response {
+async fn plugin_terminal(
+    State(kubri): State<Arc<Kubri>>,
+    recorder: Option<Extension<Recorder>>,
+    ws: WebSocketUpgrade,
+) -> Response {
     ws.on_upgrade(move |mut socket| async move {
         let opened = match first_message::<PluginRun>(&mut socket).await {
-            Ok(run) => kubri.open_plugin(&run).await.map_err(|e| e.to_string()),
+            Ok(run) => {
+                let opened = kubri.open_plugin(&run).await.map_err(|e| e.to_string());
+                if let Some(Extension(recorder)) = &recorder {
+                    let result = opened.as_ref().map(|_| ()).map_err(Clone::clone);
+                    let action = format!("plugin {}", run.plugin);
+                    recorder
+                        .record(&action, run.target.as_ref().map(audit::Target::of), result)
+                        .await;
+                }
+                opened
+            }
             Err(err) => Err(err),
         };
         run_terminal(socket, opened).await;
@@ -1195,13 +1224,24 @@ async fn local_terminal_info(State(kubri): State<Arc<Kubri>>) -> Json<kubri_core
 
 /// A shell on this server, when it was started to allow it: the client sends
 /// [`kubri_core::LocalTerminalOptions`] first, then it works like a container shell.
-async fn local_terminal(State(kubri): State<Arc<Kubri>>, ws: WebSocketUpgrade) -> Response {
+async fn local_terminal(
+    State(kubri): State<Arc<Kubri>>,
+    recorder: Option<Extension<Recorder>>,
+    ws: WebSocketUpgrade,
+) -> Response {
     ws.on_upgrade(move |mut socket| async move {
         let opened = match first_message::<kubri_core::LocalTerminalOptions>(&mut socket).await {
-            Ok(options) => kubri
-                .open_local_terminal(&options)
-                .await
-                .map_err(|e| e.to_string()),
+            Ok(options) => {
+                let opened = kubri
+                    .open_local_terminal(&options)
+                    .await
+                    .map_err(|e| e.to_string());
+                if let Some(Extension(recorder)) = &recorder {
+                    let result = opened.as_ref().map(|_| ()).map_err(Clone::clone);
+                    recorder.record("local terminal", None, result).await;
+                }
+                opened
+            }
             Err(err) => Err(err),
         };
         run_terminal(socket, opened).await;

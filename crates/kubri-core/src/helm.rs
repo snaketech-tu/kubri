@@ -13,6 +13,7 @@ use kube::{Api, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::team::HelmAccess;
 use crate::typed::scoped;
 use crate::{Error, Result};
 
@@ -371,20 +372,22 @@ pub(crate) async fn cli_version() -> Option<String> {
 }
 
 /// Runs `helm` against the connected context and returns what it printed.
-async fn run(args: &[&str], context: &str) -> Result<String> {
-    run_with(args, context, None).await
+async fn run(access: &HelmAccess, args: &[&str], context: &str) -> Result<String> {
+    run_with(access, args, context, None).await
 }
 
 /// Like [`run`], writing `stdin` to helm, which reads values given as `--values=-` from it.
-async fn run_with(args: &[&str], context: &str, stdin: Option<&str>) -> Result<String> {
+async fn run_with(access: &HelmAccess, args: &[&str], context: &str, stdin: Option<&str>) -> Result<String> {
     use tokio::io::AsyncWriteExt;
     let mut command = tokio::process::Command::new("helm");
     command
         .args(args)
         // One argument, so a context name starting with a dash cannot pass for a flag.
         .arg(format!("--kube-context={context}"))
+        // Who helm acts as, on a server shared by a team.
+        .args(&access.args)
         // The user's kubeconfig files and the contexts added in Kubri.
-        .env("KUBECONFIG", crate::kubeconfig::env_value())
+        .env("KUBECONFIG", &access.kubeconfig)
         .stdin(if stdin.is_some() {
             std::process::Stdio::piped()
         } else {
@@ -620,7 +623,12 @@ impl RawChart {
 
 /// Installs or upgrades a release with `helm install` or `helm upgrade`, or with `dry_run`
 /// shows what that would render.
-pub(crate) async fn change(client: Client, context: &str, change: &HelmChange) -> Result<HelmOutcome> {
+pub(crate) async fn change(
+    client: Client,
+    access: &HelmAccess,
+    context: &str,
+    change: &HelmChange,
+) -> Result<HelmOutcome> {
     validate_name(&change.namespace)?;
     validate_name(&change.name)?;
     let mut _stored_chart = None;
@@ -639,7 +647,7 @@ pub(crate) async fn change(client: Client, context: &str, change: &HelmChange) -
             chart.write(&dir.0)?;
             let path = dir.0.to_string_lossy().into_owned();
             if chart.has_dependencies() {
-                run(&["dependency", "build", &path], context).await.map_err(|e| {
+                run(access, &["dependency", "build", &path], context).await.map_err(|e| {
                     Error::Unsupported(format!(
                         "the chart's subcharts are not stored with the release and could not be fetched again ({e}); give the chart's repository instead"
                     ))
@@ -671,7 +679,7 @@ pub(crate) async fn change(client: Client, context: &str, change: &HelmChange) -
         args.push("--dry-run=server".into());
     }
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = run_with(&args, context, Some(&change.values)).await?;
+    let output = run_with(access, &args, context, Some(&change.values)).await?;
     // Helm may print warnings before the release.
     let json = output.find('{').map(|at| &output[at..]).unwrap_or(&output);
     let rendered: Rendered = serde_json::from_str(json)
@@ -686,11 +694,11 @@ pub(crate) async fn change(client: Client, context: &str, change: &HelmChange) -
 }
 
 /// A chart's default values, like `helm show values`.
-pub(crate) async fn show_values(context: &str, chart: &HelmChartRef) -> Result<String> {
+pub(crate) async fn show_values(access: &HelmAccess, context: &str, chart: &HelmChartRef) -> Result<String> {
     let mut args = vec!["show".to_owned(), "values".to_owned()];
     args.extend(chart.args()?);
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    run(&args, context).await
+    run(access, &args, context).await
 }
 
 /// A chart found on Artifact Hub.
@@ -755,12 +763,13 @@ fn hub_charts(json: &str) -> Result<Vec<HubChart>> {
 }
 
 /// Searches Artifact Hub for charts, like `helm search hub`.
-pub(crate) async fn search_hub(context: &str, query: &str) -> Result<Vec<HubChart>> {
+pub(crate) async fn search_hub(access: &HelmAccess, context: &str, query: &str) -> Result<Vec<HubChart>> {
     let query = query.trim();
     if query.is_empty() || query.starts_with('-') {
         return Err(Error::Unsupported(format!("`{query}` is not a search")));
     }
     let output = run(
+        access,
         &[
             "search",
             "hub",
@@ -775,11 +784,18 @@ pub(crate) async fn search_hub(context: &str, query: &str) -> Result<Vec<HubChar
     hub_charts(&output)
 }
 
-pub(crate) async fn rollback(context: &str, namespace: &str, name: &str, revision: u32) -> Result<String> {
+pub(crate) async fn rollback(
+    access: &HelmAccess,
+    context: &str,
+    namespace: &str,
+    name: &str,
+    revision: u32,
+) -> Result<String> {
     validate_name(namespace)?;
     validate_name(name)?;
     let revision = revision.to_string();
     run(
+        access,
         &[
             "rollback",
             name,
@@ -794,10 +810,16 @@ pub(crate) async fn rollback(context: &str, namespace: &str, name: &str, revisio
     .await
 }
 
-pub(crate) async fn uninstall(context: &str, namespace: &str, name: &str) -> Result<String> {
+pub(crate) async fn uninstall(
+    access: &HelmAccess,
+    context: &str,
+    namespace: &str,
+    name: &str,
+) -> Result<String> {
     validate_name(namespace)?;
     validate_name(name)?;
     run(
+        access,
         &["uninstall", name, "--namespace", namespace, "--timeout", "5m"],
         context,
     )

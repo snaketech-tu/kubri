@@ -1,0 +1,48 @@
+{{- if .Values.rbac.create }}
+{{- if eq .Values.auth "password" }}
+# Everyone who knows the password acts as this service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kubri.fullname" . }}
+  labels:
+    {{- include "kubri.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.rbac.clusterRole }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kubri.serviceAccount" . }}
+    namespace: {{ .Release.Namespace }}
+{{- else if eq .Values.team.credentials "impersonate" }}
+# Kubri acts for each person who signs in, with that person's permissions. It may do nothing
+# else itself. Anyone who controls this service account can act as anyone, so keep the pod
+# and its namespace as safe as a cluster admin's credentials.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "kubri.fullname" . }}-impersonate
+  labels:
+    {{- include "kubri.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [users, groups]
+    verbs: [impersonate]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kubri.fullname" . }}-impersonate
+  labels:
+    {{- include "kubri.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kubri.fullname" . }}-impersonate
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kubri.serviceAccount" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}
