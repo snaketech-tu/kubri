@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import { copyLines } from '../actions';
 	import type { EventInfo, KubeObject, Reference } from '../api';
 	import { age } from '../format';
@@ -92,83 +93,84 @@
 		const version = apiVersion?.split('/').pop();
 		const resource = kinds.find((r) => r.version === version) ?? kinds[0];
 		if (resource) app.openAt(resource, resource.namespaced ? namespace : null, name);
-		else app.toast(`The cluster does not serve ${kind}`, 'bad');
+		else app.toast(t('The cluster does not serve {kind}', { kind }), 'bad');
 	}
 
 	/** What the object names in its spec: ConfigMaps, Secrets, claims, the service account. */
 	const related = $derived(relatedOf(object));
 
-	/** A line of the facts, and where clicking its value goes. */
-	type Fact = [label: string, value: string, go?: () => void];
+	/** A line of the facts, where clicking its value goes, and what that button says. */
+	type Fact = [label: string, value: string, go?: () => void, title?: string];
 
 	const facts = $derived.by(() => {
 		const f: Fact[] = [];
 		const ns = meta.namespace ?? null;
 		if (ns) {
 			f.push([
-				'Namespace',
+				t('Namespace'),
 				ns,
 				() => {
 					app.namespace = ns;
-					app.toast(`Namespace ${ns}`);
-				}
+					app.toast(t('Namespace {ns}', { ns }));
+				},
+				t('Show only namespace {ns}', { ns })
 			]);
 		}
-		f.push(['Created', `${age(meta.creationTimestamp, now)} ago · ${meta.creationTimestamp ?? ''}`]);
-		if (meta.deletionTimestamp) f.push(['Deleting since', meta.deletionTimestamp]);
+		f.push([t('Created'), `${t('{age} ago', { age: age(meta.creationTimestamp, now) })} · ${meta.creationTimestamp ?? ''}`]);
+		if (meta.deletionTimestamp) f.push([t('Deleting since'), meta.deletionTimestamp]);
 		const owners = meta.ownerReferences ?? [];
 		if (owners.length === 1) {
 			const [o] = owners;
-			f.push(['Controlled by', `${o.kind}/${o.name}`, () => showObject(o.kind, o.apiVersion, ns, o.name)]);
+			f.push([t('Controlled by'), `${o.kind}/${o.name}`, () => showObject(o.kind, o.apiVersion, ns, o.name)]);
 		} else if (owners.length) {
-			f.push(['Controlled by', owners.map((o) => `${o.kind}/${o.name}`).join(', ')]);
+			f.push([t('Controlled by'), owners.map((o) => `${o.kind}/${o.name}`).join(', ')]);
 		}
 		if (object.kind === 'Pod') {
-			if (spec.nodeName) f.push(['Node', spec.nodeName, () => showObject('Node', 'v1', null, spec.nodeName)]);
-			if (status.podIP) f.push(['Pod IP', status.podIP]);
+			if (spec.nodeName) f.push([t('Node'), spec.nodeName, () => showObject('Node', 'v1', null, spec.nodeName)]);
+			if (status.podIP) f.push([t('Pod IP'), status.podIP]);
 			// "Running" next to a crash loop only misleads; the container state says it better.
 			const waiting = [...(status.initContainerStatuses ?? []), ...(status.containerStatuses ?? [])].some(
 				(c: any) => c.state?.waiting?.reason
 			);
-			if (status.phase && !waiting) f.push(['Phase', status.phase]);
-			if (status.qosClass) f.push(['QoS class', status.qosClass]);
+			if (status.phase && !waiting) f.push([t('Phase'), status.phase]);
+			if (status.qosClass) f.push([t('QoS class'), status.qosClass]);
 			const account = spec.serviceAccountName;
-			if (account) f.push(['Service account', account, () => showObject('ServiceAccount', 'v1', ns, account)]);
+			if (account) f.push([t('Service account'), account, () => showObject('ServiceAccount', 'v1', ns, account)]);
 		}
 		if (typeof spec.replicas === 'number') {
-			const parts = [`${spec.replicas} desired`];
-			for (const key of ['readyReplicas', 'updatedReplicas', 'availableReplicas']) {
-				if (typeof status[key] === 'number') parts.push(`${status[key]} ${key.replace('Replicas', '')}`);
-			}
-			f.push(['Replicas', parts.join(' · ')]);
+			const parts = [t('{n} desired', { n: spec.replicas })];
+			if (typeof status.readyReplicas === 'number') parts.push(t('{n} ready', { n: status.readyReplicas }));
+			if (typeof status.updatedReplicas === 'number') parts.push(t('{n} updated', { n: status.updatedReplicas }));
+			if (typeof status.availableReplicas === 'number') parts.push(t('{n} available', { n: status.availableReplicas }));
+			f.push([t('Replicas'), parts.join(' · ')]);
 		}
-		if (spec.strategy?.type) f.push(['Strategy', spec.strategy.type]);
+		if (spec.strategy?.type) f.push([t('Strategy'), spec.strategy.type]);
 		const templated: any[] = spec.template?.spec?.containers ?? [];
 		if (object.kind !== 'Pod' && templated.length) {
-			f.push(['Containers', templated.map((c) => `${c.name}: ${c.image}`).join('\n')]);
+			f.push([t('Containers'), templated.map((c) => `${c.name}: ${c.image}`).join('\n')]);
 		}
 		if (spec.selector?.matchLabels) {
-			f.push(['Selector', Object.entries(spec.selector.matchLabels).map(([k, v]) => `${k}=${v}`).join(', ')]);
+			f.push([t('Selector'), Object.entries(spec.selector.matchLabels).map(([k, v]) => `${k}=${v}`).join(', ')]);
 		}
 		if (object.kind === 'Service') {
-			if (spec.type) f.push(['Type', spec.type]);
-			if (spec.clusterIP) f.push(['Cluster IP', spec.clusterIP]);
+			if (spec.type) f.push([t('Type'), spec.type]);
+			if (spec.clusterIP) f.push([t('Cluster IP'), spec.clusterIP]);
 			if (Array.isArray(spec.ports)) {
 				f.push([
-					'Ports',
+					t('Ports'),
 					spec.ports.map((p: any) => `${p.name ? p.name + ' ' : ''}${p.port}→${p.targetPort}/${p.protocol ?? 'TCP'}`).join(', ')
 				]);
 			}
 		}
 		if (object.kind === 'Node' && status.nodeInfo) {
-			f.push(['Kubelet', status.nodeInfo.kubeletVersion]);
-			f.push(['OS', `${status.nodeInfo.osImage} (${status.nodeInfo.architecture})`]);
-			f.push(['Runtime', status.nodeInfo.containerRuntimeVersion]);
+			f.push([t('Kubelet'), status.nodeInfo.kubeletVersion]);
+			f.push([t('OS'), `${status.nodeInfo.osImage} (${status.nodeInfo.architecture})`]);
+			f.push([t('Runtime'), status.nodeInfo.containerRuntimeVersion]);
 		}
 		const roleRef = (object as any).roleRef;
 		if (roleRef?.kind) {
 			const apiVersion = roleRef.apiGroup ? `${roleRef.apiGroup}/v1` : undefined;
-			f.push(['Role', `${roleRef.kind}/${roleRef.name}`, () => showObject(roleRef.kind, apiVersion, ns, roleRef.name)]);
+			f.push([t('Role'), `${roleRef.kind}/${roleRef.name}`, () => showObject(roleRef.kind, apiVersion, ns, roleRef.name)]);
 		}
 		const aggregation = (object as any).aggregationRule?.clusterRoleSelectors;
 		if (Array.isArray(aggregation)) {
@@ -177,11 +179,11 @@
 					.map(([k, v]) => `${k}=${v}`)
 					.join(',')
 			);
-			f.push(['Aggregates roles labeled', selectors.join(' or ')]);
+			f.push([t('Aggregates roles labeled'), selectors.join(t(' or '))]);
 		}
 		if (object.kind === 'ConfigMap' || object.kind === 'Secret') {
 			const data = { ...((object.data as object) ?? {}), ...((object.binaryData as object) ?? {}) };
-			f.push(['Keys', Object.keys(data).join(', ') || '(none)']);
+			f.push([t('Keys'), Object.keys(data).join(', ') || t('(none)')]);
 		}
 		return f;
 	});
@@ -206,13 +208,13 @@
 </script>
 
 <div class="describe">
-	<h3 class="first">At a glance</h3>
+	<h3 class="first">{t('At a glance')}</h3>
 	<dl class="facts">
-		{#each facts as [label, value, go] (label)}
+		{#each facts as [label, value, go, title] (label)}
 			<dt>{label}</dt>
 			<dd>
 				{#if go}
-					<button class="link" onclick={go} title={label === 'Namespace' ? `Show only namespace ${value}` : `Show ${value}`}>{value}</button>
+					<button class="link" onclick={go} title={title ?? t('Show {name}', { name: value })}>{value}</button>
 				{:else}
 					{value}
 				{/if}
@@ -221,15 +223,15 @@
 	</dl>
 
 	<h3 class="with-tool">
-		What happened
+		{t('What happened')}
 		{#if onevents && events.length > LATEST}
-			<button onclick={onevents}>All {events.length} events</button>
+			<button onclick={onevents}>{t('All {n} events', { n: events.length })}</button>
 		{/if}
 	</h3>
 	<EventTimeline {events} {now} limit={onevents ? LATEST : Infinity} />
 
 	{#if labels.length}
-		<h3>Labels</h3>
+		<h3>{t('Labels')}</h3>
 		<div class="chips">
 			{#each labels as [k, v] (k)}
 				<span class="chip"><span class="k">{k}</span>={v}</span>
@@ -238,7 +240,7 @@
 	{/if}
 
 	{#if annotations.length}
-		<h3>Annotations</h3>
+		<h3>{t('Annotations')}</h3>
 		<dl class="facts small">
 			{#each annotations as [k, v] (k)}
 				<dt title={k}>{k}</dt>
@@ -248,12 +250,12 @@
 	{/if}
 
 	{#if related.length}
-		<h3>Related</h3>
+		<h3>{t('Related')}</h3>
 		<dl class="facts small">
 			{#each related as r (r.kind + r.name)}
 				<dt>{r.kind}</dt>
 				<dd>
-					<button class="link" onclick={() => showObject(r.kind, r.apiVersion, meta.namespace ?? null, r.name)} title="Show {r.name}">{r.name}</button>
+					<button class="link" onclick={() => showObject(r.kind, r.apiVersion, meta.namespace ?? null, r.name)} title={t('Show {name}', { name: r.name })}>{r.name}</button>
 					<span class="muted">{r.how}</span>
 				</dd>
 			{/each}
@@ -261,22 +263,22 @@
 	{/if}
 
 	{#if containers.length}
-		<h3>Containers</h3>
+		<h3>{t('Containers')}</h3>
 		<table>
-			<thead><tr><th>Name</th><th>Image</th><th>Ready</th><th>Restarts</th><th>State</th><th></th></tr></thead>
+			<thead><tr><th>{t('Name')}</th><th>{t('Image')}</th><th>{t('Ready')}</th><th>{t('Restarts')}</th><th>{t('State')}</th><th></th></tr></thead>
 			<tbody>
 				{#each containers as c (c.name)}
 					<tr>
-						<td class="mono">{c.name}{#if c.init}<span class="tag">init</span>{/if}</td>
+						<td class="mono">{c.name}{#if c.init}<span class="tag">{t('init')}</span>{/if}</td>
 						<td class="mono wrap">{c.image}</td>
-						<td class={c.ready ? 'ok' : 'warn'}>{c.ready ? 'yes' : 'no'}</td>
+						<td class={c.ready ? 'ok' : 'warn'}>{c.ready ? t('yes') : t('no')}</td>
 						<td class={c.restarts > 0 ? 'warn' : ''}>{c.restarts}</td>
 						<td>{c.state}</td>
 						<td class="actions">
 							{#if oncontainer}
-								<button onclick={() => oncontainer(c.name, 'logs')} title="Logs of {c.name}">Logs</button>
+								<button onclick={() => oncontainer(c.name, 'logs')} title={t('Logs of {name}', { name: c.name })}>{t('Logs')}</button>
 								{#if shell && !c.init}
-									<button onclick={() => oncontainer(c.name, 'shell')} title="Shell in {c.name}">Shell</button>
+									<button onclick={() => oncontainer(c.name, 'shell')} title={t('Shell in {name}', { name: c.name })}>{t('Shell')}</button>
 								{/if}
 							{/if}
 						</td>
@@ -288,9 +290,9 @@
 
 	{#if object.kind === 'Secret'}
 		<h3 class="with-tool">
-			Data
+			{t('Data')}
 			{#if secretData.length && ondecode}
-				<button onclick={ondecode} title="Show or hide the values (x)">{decoded ? 'Hide values' : 'Show values'}</button>
+				<button onclick={ondecode} title={t('Show or hide the values (x)')}>{decoded ? t('Hide values') : t('Show values')}</button>
 			{/if}
 		</h3>
 		{#if secretData.length}
@@ -299,54 +301,54 @@
 					<dt title={d.key}>{d.key}</dt>
 					<dd>
 						{#if !decoded}
-							<span class="muted">{d.bytes} {d.bytes === 1 ? 'byte' : 'bytes'}</span>
+							<span class="muted">{plural(d.bytes, '{n} byte', '{n} bytes')}</span>
 						{:else if d.text === null}
-							<span class="muted">binary, {d.bytes} {d.bytes === 1 ? 'byte' : 'bytes'}</span>
+							<span class="muted">{plural(d.bytes, 'binary, {n} byte', 'binary, {n} bytes')}</span>
 						{:else}
 							<span class="value">{d.text}</span>
-							<button class="copy" onclick={() => copyLines([d.text ?? ''], ['value', 'values'])} title="Copy the value">Copy</button>
+							<button class="copy" onclick={() => copyLines([d.text ?? ''])} title={t('Copy the value')}>{t('Copy')}</button>
 						{/if}
 					</dd>
 				{/each}
 			</dl>
 		{:else}
-			<p class="muted">No data.</p>
+			<p class="muted">{t('No data.')}</p>
 		{/if}
 	{/if}
 
 	{#if usedBy !== undefined}
-		<h3>Used by</h3>
+		<h3>{t('Used by')}</h3>
 		{#if usedBy === 'loading'}
-			<p class="muted">Looking for what uses it…</p>
+			<p class="muted">{t('Looking for what uses it…')}</p>
 		{:else if 'error' in usedBy}
 			<p class="bad">{usedBy.error}</p>
 		{:else if usedBy.length}
 			<table>
-				<thead><tr><th>Kind</th><th>Name</th><th>Namespace</th></tr></thead>
+				<thead><tr><th>{t('Kind')}</th><th>{t('Name')}</th><th>{t('Namespace')}</th></tr></thead>
 				<tbody>
 					{#each usedBy as ref (ref.kind + ref.namespace + ref.name)}
 						<tr>
 							<td>{ref.kind}{#if ref.how}<span class="muted"> · {ref.how}</span>{/if}</td>
-							<td class="mono"><button class="link" onclick={() => showUser(ref)} title="Show it in its list">{ref.name}</button></td>
+							<td class="mono"><button class="link" onclick={() => showUser(ref)} title={t('Show it in its list')}>{ref.name}</button></td>
 							<td class="muted">{ref.namespace ?? ''}</td>
 						</tr>
 					{/each}
 				</tbody>
 			</table>
 		{:else}
-			<p class="muted">Nothing uses it.</p>
+			<p class="muted">{t('Nothing uses it.')}</p>
 		{/if}
 	{/if}
 
 	{#if isRole}
-		<h3>Rules</h3>
+		<h3>{t('Rules')}</h3>
 		<RulesMatrix rules={rulesOf(object)} />
 	{/if}
 
 	{#if subjects.length}
-		<h3>Subjects</h3>
+		<h3>{t('Subjects')}</h3>
 		<table>
-			<thead><tr><th>Kind</th><th>Name</th><th>Namespace</th></tr></thead>
+			<thead><tr><th>{t('Kind')}</th><th>{t('Name')}</th><th>{t('Namespace')}</th></tr></thead>
 			<tbody>
 				{#each subjects as s, i (i)}
 					<tr>
@@ -360,9 +362,9 @@
 	{/if}
 
 	{#if conditions.length}
-		<h3>Conditions</h3>
+		<h3>{t('Conditions')}</h3>
 		<table>
-			<thead><tr><th>Type</th><th>Status</th><th>Reason</th><th>Age</th><th>Message</th></tr></thead>
+			<thead><tr><th>{t('Type')}</th><th>{t('Status')}</th><th>{t('Reason')}</th><th>{t('Age')}</th><th>{t('Message')}</th></tr></thead>
 			<tbody>
 				{#each conditions as c (c.type)}
 					<tr>

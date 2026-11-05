@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import { untrack } from 'svelte';
 	import { parse, stringify } from 'yaml';
 	import { backend, type HelmChange, type HelmChartRef, type HelmOutcome, type HelmReleaseDetails, type HubChart } from '../api';
@@ -7,6 +8,7 @@
 	import { forControl } from '../keys';
 	import { app } from '../state.svelte';
 	import HelmCompare from './HelmCompare.svelte';
+	import Phrase from './Phrase.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import YamlEditor from './YamlEditor.svelte';
 
@@ -62,7 +64,7 @@
 		try {
 			return { text, parsed: parse(text) ?? {} };
 		} catch (err) {
-			error = `The values are not valid YAML: ${errorMessage(err)}`;
+			error = t('The values are not valid YAML: {error}', { error: errorMessage(err) });
 			return null;
 		}
 	}
@@ -87,7 +89,7 @@
 		try {
 			found = await backend.helmSearch(query.trim());
 		} catch (err) {
-			error = `Artifact Hub could not be searched: ${errorMessage(err)}`;
+			error = t('Artifact Hub could not be searched: {error}', { error: errorMessage(err) });
 			found = null;
 		} finally {
 			searching = false;
@@ -106,10 +108,10 @@
 	async function loadDefaults() {
 		const ref = chartRef();
 		if (!ref?.chart) {
-			error = 'Name the chart first.';
+			error = t('Name the chart first.');
 			return;
 		}
-		busy = 'Reading the chart…';
+		busy = t('Reading the chart…');
 		error = null;
 		try {
 			const text = await backend.helmChartValues(ref);
@@ -127,15 +129,15 @@
 		const read = readValues();
 		if (!read) return;
 		if (!name.trim() || !namespace.trim()) {
-			error = 'Give the release a name and a namespace.';
+			error = t('Give the release a name and a namespace.');
 			return;
 		}
 		const ref = chartRef();
 		if (ref && !ref.chart) {
-			error = 'Name the chart: a name with its repository URL, repo/chart for a repository helm knows, or oci://…';
+			error = t('Name the chart: a name with its repository URL, repo/chart for a repository helm knows, or oci://…');
 			return;
 		}
-		busy = install ? 'Rendering the chart…' : 'Rendering the upgrade…';
+		busy = install ? t('Rendering the chart…') : t('Rendering the upgrade…');
 		try {
 			const outcome = await backend.helmChange(change(true, read.text));
 			review = { outcome, values: read.parsed, key: inputs(read.text) };
@@ -151,16 +153,18 @@
 		if (!review) return;
 		const text = editor?.text() ?? values;
 		if (inputs(text) !== review.key) {
-			error = 'Something changed since the review. Review again.';
+			error = t('Something changed since the review. Review again.');
 			review = null;
 			return;
 		}
-		busy = install ? 'Installing…' : 'Upgrading…';
+		busy = install ? t('Installing…') : t('Upgrading…');
 		error = null;
 		try {
 			const outcome = await backend.helmChange(change(false, text));
 			app.toast(
-				install ? `Installed ${outcome.name}, revision ${outcome.revision}` : `Upgraded ${outcome.name} to revision ${outcome.revision}`,
+				install
+					? t('Installed {name}, revision {revision}', { name: outcome.name, revision: outcome.revision })
+					: t('Upgraded {name} to revision {revision}', { name: outcome.name, revision: outcome.revision }),
 				'ok'
 			);
 			ondone({ namespace: outcome.namespace, name: outcome.name });
@@ -171,7 +175,13 @@
 		}
 	}
 
-	const blocked = $derived(app.readOnly ? 'Kubri is read-only for this context' : null);
+	/** What the review says the change gives, with `{name}` for the release. */
+	function gives(outcome: HelmOutcome) {
+		const values = { revision: outcome.revision, chart: `${chartLabel(outcome)}${outcome.appVersion ? ` (app ${outcome.appVersion})` : ''}` };
+		return install ? t('Installing gives {name} revision {revision} with {chart}.', values) : t('Upgrading gives {name} revision {revision} with {chart}.', values);
+	}
+
+	const blocked = $derived(app.readOnly ? t('Kubri is read-only for this context') : null);
 
 	function onkeydown(e: KeyboardEvent) {
 		if (app.overlayOpen) return;
@@ -189,17 +199,17 @@
 <svelte:window {onkeydown} />
 
 <PageHeader
-	crumbs={[{ label: 'Helm', onclick: oncancel, title: 'Back (Esc)' }, install ? 'Install' : `${name} · upgrade`]}
-	title={install ? 'Install a chart' : `Upgrade ${initial?.name}`}
+	crumbs={[{ label: 'Helm', onclick: oncancel, title: t('Back (Esc)') }, install ? t('Install') : `${name} · ${t('Upgrade')}`]}
+	title={install ? t('Install a chart') : t('Upgrade {name}', { name: initial?.name ?? '' })}
 	mono={!install}
 	subtitle={install
-		? 'From a repository, an OCI registry or Artifact Hub, with a dry run against the cluster first'
-		: `In ${namespace} · now ${initial ? chartLabel(initial) : ''}, revision ${initial?.revision}`}
+		? t('From a repository, an OCI registry or Artifact Hub, with a dry run against the cluster first')
+		: t('In {namespace} · now {chart}, revision {revision}', { namespace, chart: initial ? chartLabel(initial) : '', revision: initial?.revision ?? '' })}
 />
 
 {#if error}<div class="notice" role="alert">{error}</div>{/if}
 {#if app.production && !review}
-	<div class="notice warn">This is a production context. The review shows exactly what will change before anything does.</div>
+	<div class="notice warn">{t('This is a production context. The review shows exactly what will change before anything does.')}</div>
 {/if}
 
 <div class="card">
@@ -208,13 +218,13 @@
 			{#if install}
 				<form class="row" onsubmit={search}>
 					<label class="field grow">
-						<span>Search Artifact Hub</span>
-						<input bind:value={query} placeholder="nginx, postgres, cert-manager…" spellcheck="false" />
+						<span>{t('Search Artifact Hub')}</span>
+						<input bind:value={query} placeholder={t('nginx, postgres, cert-manager…')} spellcheck="false" />
 					</label>
-					<button type="submit" disabled={searching || !query.trim()}>{searching ? 'Searching…' : 'Search'}</button>
+					<button type="submit" disabled={searching || !query.trim()}>{searching ? t('Searching…') : t('Search')}</button>
 				</form>
 				{#if found}
-					<ul class="found" aria-label="Charts found">
+					<ul class="found" aria-label={t('Charts found')}>
 						{#each found.slice(0, 20) as c (c.url)}
 							<li>
 								<button class="pick" onclick={() => pick(c)}>
@@ -224,64 +234,63 @@
 								</button>
 							</li>
 						{:else}
-							<li class="muted">No charts found.</li>
+							<li class="muted">{t('No charts found.')}</li>
 						{/each}
 					</ul>
 				{/if}
 			{:else}
-				<div class="segmented" role="group" aria-label="Chart">
+				<div class="segmented" role="group" aria-label={t('Chart')}>
 					<button aria-pressed={source === 'stored'} onclick={() => (source = 'stored')}>
-						Same chart ({initial ? chartLabel(initial) : ''})
+						{t('Same chart ({chart})', { chart: initial ? chartLabel(initial) : '' })}
 					</button>
-					<button aria-pressed={source === 'other'} onclick={() => (source = 'other')}>Another chart or version</button>
+					<button aria-pressed={source === 'other'} onclick={() => (source = 'other')}>{t('Another chart or version')}</button>
 				</div>
 				{#if source === 'stored'}
 					<p class="muted hint">
-						Helm keeps the chart with the release, so only the values change. Subcharts are fetched again from their
-						repositories.
+						{t('Helm keeps the chart with the release, so only the values change. Subcharts are fetched again from their repositories.')}
 					</p>
 				{/if}
 			{/if}
 			{#if install || source === 'other'}
 				<div class="row">
 					<label class="field grow">
-						<span>Chart</span>
-						<input bind:value={chart} placeholder="nginx, bitnami/nginx or oci://registry/charts/nginx" spellcheck="false" />
+						<span>{t('Chart')}</span>
+						<input bind:value={chart} placeholder={t('nginx, bitnami/nginx or oci://registry/charts/nginx')} spellcheck="false" />
 					</label>
 					<label class="field grow">
-						<span>Repository URL</span>
-						<input bind:value={repo} placeholder="https://charts.example.com (for a chart by name)" spellcheck="false" />
+						<span>{t('Repository URL')}</span>
+						<input bind:value={repo} placeholder={t('https://charts.example.com (for a chart by name)')} spellcheck="false" />
 					</label>
 					<label class="field">
-						<span>Version</span>
-						<input class="short" bind:value={version} placeholder="latest" spellcheck="false" />
+						<span>{t('Version')}</span>
+						<input class="short" bind:value={version} placeholder={t('latest')} spellcheck="false" />
 					</label>
-					<button onclick={loadDefaults} disabled={!!busy || !chart.trim()} title="Replace the values with the chart's defaults">
-						Default values
+					<button onclick={loadDefaults} disabled={!!busy || !chart.trim()} title={t('Replace the values with the chart\'s defaults')}>
+						{t('Default values')}
 					</button>
 				</div>
 			{/if}
 			{#if install}
 				<div class="row">
 					<label class="field">
-						<span>Release name</span>
+						<span>{t('Release name')}</span>
 						<input bind:value={name} spellcheck="false" />
 					</label>
 					<label class="field">
-						<span>Namespace</span>
+						<span>{t('Namespace')}</span>
 						<input bind:value={namespace} list="helm-namespaces" spellcheck="false" />
 						<datalist id="helm-namespaces">
 							{#each app.namespaces as n (n)}<option value={n}></option>{/each}
 						</datalist>
 					</label>
-					<label class="check"><input type="checkbox" bind:checked={createNamespace} /> Create the namespace if missing</label>
+					<label class="check"><input type="checkbox" bind:checked={createNamespace} /> {t('Create the namespace if missing')}</label>
 				</div>
 			{/if}
 		</div>
 		<div class="values-head">
-			<span>Values</span>
+			<span>{t('Values')}</span>
 			<span class="muted">
-				{install ? 'Only what differs from the chart defaults is needed.' : 'These replace the values the release was given.'}
+				{install ? t('Only what differs from the chart defaults is needed.') : t('These replace the values the release was given.')}
 			</span>
 		</div>
 		<div class="editor">
@@ -290,18 +299,15 @@
 			{/key}
 		</div>
 		<div class="footer">
-			<button onclick={oncancel}>Cancel</button>
-			<button class="primary" onclick={preview} disabled={!!busy}>{busy ?? 'Review'} <kbd>Ctrl+S</kbd></button>
+			<button onclick={oncancel}>{t('Cancel')}</button>
+			<button class="primary" onclick={preview} disabled={!!busy}>{busy ?? t('Review')} <kbd>Ctrl+S</kbd></button>
 		</div>
 	{:else}
 		<div class="review">
 			<p>
-				{install ? 'Installing' : 'Upgrading'} gives <strong class="mono">{review.outcome.name}</strong>
-				revision {review.outcome.revision} with {chartLabel(review.outcome)}{review.outcome.appVersion
-					? ` (app ${review.outcome.appVersion})`
-					: ''}.
+				<Phrase text={gives(review.outcome)} strong={{ name: review.outcome.name }} />
 				{#if review.outcome.hooks}
-					<span class="muted">The chart also runs {review.outcome.hooks} {review.outcome.hooks === 1 ? 'hook' : 'hooks'}.</span>
+					<span class="muted">{plural(review.outcome.hooks, 'The chart also runs {n} hook.', 'The chart also runs {n} hooks.')}</span>
 				{/if}
 			</p>
 			<HelmCompare
@@ -310,14 +316,14 @@
 				after={{ values: review.values, manifest: review.outcome.manifest }}
 			/>
 			{#if review.outcome.notes.trim()}
-				<h4>Notes</h4>
+				<h4>{t('Notes')}</h4>
 				<pre class="notes">{review.outcome.notes.trim()}</pre>
 			{/if}
 		</div>
 		<div class="footer">
-			<button onclick={() => (review = null)} disabled={!!busy}>Back to editing <kbd>Esc</kbd></button>
+			<button onclick={() => (review = null)} disabled={!!busy}>{t('Back to editing')} <kbd>Esc</kbd></button>
 			<button class="primary" onclick={run} disabled={!!busy || !!blocked} title={blocked ?? ''}>
-				{busy ?? (install ? 'Install' : 'Upgrade')}
+				{busy ?? (install ? t('Install') : t('Upgrade'))}
 			</button>
 		</div>
 	{/if}
@@ -455,6 +461,9 @@
 	}
 	.review > p {
 		margin: 0 0 6px;
+	}
+	.review > p :global(strong) {
+		font-family: var(--mono);
 	}
 	h4 {
 		margin: 16px 0 6px;

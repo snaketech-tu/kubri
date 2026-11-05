@@ -1,5 +1,6 @@
 import type { Health, ResourceRef } from './api';
 import type { ToolStatus } from './gitops';
+import { plural, t } from './i18n';
 
 export const isCertificates = (resource: ResourceRef) => resource.group === 'cert-manager.io' && resource.plural === 'certificates';
 
@@ -22,10 +23,27 @@ interface Cert {
 	};
 }
 
-/** Days, or hours below two days. */
-function span(ms: number) {
+/** Days, or hours below two days: how many, and whether they are days. */
+function span(ms: number): [number, boolean] {
 	const hours = Math.floor(Math.abs(ms) / 3_600_000);
-	return hours < 48 ? `${hours} ${hours === 1 ? 'hour' : 'hours'}` : `${Math.floor(hours / 24)} days`;
+	return hours < 48 ? [hours, false] : [Math.floor(hours / 24), true];
+}
+
+function expiredAgo(ms: number) {
+	const [n, days] = span(ms);
+	return days ? plural(n, 'Expired {n} day ago', 'Expired {n} days ago') : plural(n, 'Expired {n} hour ago', 'Expired {n} hours ago');
+}
+
+function expiresIn(ms: number) {
+	const [n, days] = span(ms);
+	return days ? plural(n, 'Expires in {n} day', 'Expires in {n} days') : plural(n, 'Expires in {n} hour', 'Expires in {n} hours');
+}
+
+function readyFor(ms: number) {
+	const [n, days] = span(ms);
+	return days
+		? plural(n, 'Ready, expires in {n} day', 'Ready, expires in {n} days')
+		: plural(n, 'Ready, expires in {n} hour', 'Ready, expires in {n} hours');
 }
 
 /**
@@ -35,16 +53,16 @@ function span(ms: number) {
 export function certificateHealth(cert: Cert, now: number): { health: Health; text: string } {
 	const ready = cert.status?.conditions?.find((c) => c.type === 'Ready');
 	const end = cert.status?.notAfter ? Date.parse(cert.status.notAfter) : NaN;
-	if (end <= now) return { health: 'failed', text: `Expired ${span(now - end)} ago` };
-	if (ready?.status === 'False') return { health: 'failed', text: `Not ready: ${ready.message || ready.reason || 'unknown'}` };
-	if (!ready) return { health: 'warning', text: 'Not issued yet' };
-	if (Number.isNaN(end)) return { health: 'ok', text: 'Ready' };
+	if (end <= now) return { health: 'failed', text: expiredAgo(now - end) };
+	if (ready?.status === 'False') return { health: 'failed', text: t('Not ready: {reason}', { reason: ready.message || ready.reason || t('unknown') }) };
+	if (!ready) return { health: 'warning', text: t('Not issued yet') };
+	if (Number.isNaN(end)) return { health: 'ok', text: t('Ready') };
 	const left = end - now;
 	const start = cert.status?.notBefore ? Date.parse(cert.status.notBefore) : NaN;
 	const part = (divisor: number, capDays: number) => Math.min(capDays * DAY, Number.isNaN(start) ? Infinity : (end - start) / divisor);
-	if (left < part(6, 7)) return { health: 'failed', text: `Expires in ${span(left)}` };
-	if (left < part(3, 21)) return { health: 'warning', text: `Expires in ${span(left)}` };
-	return { health: 'ok', text: `Ready, expires in ${span(left)}` };
+	if (left < part(6, 7)) return { health: 'failed', text: expiresIn(left) };
+	if (left < part(3, 21)) return { health: 'warning', text: expiresIn(left) };
+	return { health: 'ok', text: readyFor(left) };
 }
 
 export function certificateStatus(resource: ResourceRef, object: unknown, now: number): ToolStatus | null {
@@ -55,14 +73,14 @@ export function certificateStatus(resource: ResourceRef, object: unknown, now: n
 	const issuing = cert.status?.conditions?.find((c) => c.type === 'Issuing' && c.status === 'True');
 	const facts: ToolStatus['facts'] = [];
 	const add = (label: string, value: string | null | undefined, time = false) => value && facts.push({ label, value, time });
-	add('Expires', cert.status?.notAfter, true);
-	add('Renews', cert.status?.renewalTime, true);
-	add('Issuer', cert.spec?.issuerRef ? `${cert.spec.issuerRef.kind ?? 'Issuer'} ${cert.spec.issuerRef.name}` : null);
-	add('Secret', cert.spec?.secretName);
-	add('Names', [cert.spec?.commonName, ...(cert.spec?.dnsNames ?? [])].filter((n, i, all) => n && all.indexOf(n) === i).join(', '));
-	add('Lifetime', cert.spec?.duration);
+	add(t('Expires'), cert.status?.notAfter, true);
+	add(t('Renews'), cert.status?.renewalTime, true);
+	add(t('Issuer'), cert.spec?.issuerRef ? `${cert.spec.issuerRef.kind ?? 'Issuer'} ${cert.spec.issuerRef.name}` : null);
+	add(t('Secret'), cert.spec?.secretName);
+	add(t('Names'), [cert.spec?.commonName, ...(cert.spec?.dnsNames ?? [])].filter((n, i, all) => n && all.indexOf(n) === i).join(', '));
+	add(t('Lifetime'), cert.spec?.duration);
 	return {
-		state: issuing ? `${text} · issuing` : text,
+		state: issuing ? t('{state} · issuing', { state: text }) : text,
 		health,
 		message: issuing ? (issuing.message ?? null) : ready?.status === 'True' ? null : (ready?.message ?? null),
 		facts,

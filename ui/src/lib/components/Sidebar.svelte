@@ -4,6 +4,7 @@
 	import { version } from '../../../package.json';
 	import { NAV_SECTIONS, SIDEBAR_TOOLS, TOOLS, pluralKind, toolOf } from '../nav';
 	import { samePin } from '../pins';
+	import { t } from '../i18n';
 	import { app, sameResource } from '../state.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 
@@ -30,7 +31,7 @@
 	const listedTools = TOOLS.slice(0, SIDEBAR_TOOLS);
 	const tool = $derived(toolOf(app.page));
 	/** On a tool the sidebar does not list, All tools shows where you are. */
-	const otherTool = $derived(app.page === 'tools' || (tool !== null && !listedTools.some((t) => t.id === tool)));
+	const otherTool = $derived(app.page === 'tools' || (tool !== null && !listedTools.some((entry) => entry.id === tool)));
 
 	/** A search of its own, unless it is one saved in the sidebar. */
 	const searching = $derived(app.page === 'search' && !app.settings.searches.some((s) => s.query === app.searchQuery));
@@ -60,33 +61,33 @@
 	});
 </script>
 
-<nav aria-label="Cluster navigation">
+<nav aria-label={t('Cluster navigation')}>
 	<div class="brand">
 		<img src={logo} alt="" width="28" height="28" />
 		<span>kubri</span>
-		<span class="version" aria-label={`Version ${version}`}>v{version}</span>
+		<span class="version" aria-label={t('Version {version}', { version })}>v{version}</span>
 	</div>
 	<div class="list">
 		<div class="scroll" bind:this={scroller} onscroll={measure}>
 			<div class="items" bind:this={items}>
-				<button class:active={app.page === 'pulses'} aria-current={here(app.page === 'pulses')} onclick={() => app.showPulses()} title="Health, warnings and use of this cluster (:pulses)">
+				<button class:active={app.page === 'pulses'} aria-current={here(app.page === 'pulses')} onclick={() => app.showPulses()} title="{t('Health, warnings and use of this cluster')} (:pulses)">
 					<Icon name="overview" />
-					<span class="label">Overview</span>
+					<span class="label">{t('Overview')}</span>
 					<span class="hint">:pulses</span>
 				</button>
-				<button class:active={app.page === 'fleet'} aria-current={here(app.page === 'fleet')} onclick={() => app.showFleet()} title="Every context at once (:fleet)">
+				<button class:active={app.page === 'fleet'} aria-current={here(app.page === 'fleet')} onclick={() => app.showFleet()} title="{t('Every context at once')} (:fleet)">
 					<Icon name="fleet" />
-					<span class="label">Clusters</span>
+					<span class="label">{t('Clusters')}</span>
 					<span class="hint">:fleet</span>
 				</button>
 				<button
 					class:active={searching}
 					aria-current={here(searching)}
 					onclick={() => app.showSearch()}
-					title="Objects by name, label and field (:search)"
+					title="{t('Objects by name, label and field')} (:search)"
 				>
 					<Icon name="search" />
-					<span class="label">Search</span>
+					<span class="label">{t('Search')}</span>
 					<span class="hint">:search</span>
 				</button>
 				{#each app.settings.searches as saved (saved.name)}
@@ -101,29 +102,29 @@
 						<span class="label">{saved.name}</span>
 					</button>
 				{/each}
-				<button class:active={app.page === 'create'} aria-current={here(app.page === 'create')} onclick={() => app.showCreate()} title="Create from a template or YAML (:new)">
+				<button class:active={app.page === 'create'} aria-current={here(app.page === 'create')} onclick={() => app.showCreate()} title="{t('Create from a template or YAML')} (:new)">
 					<Icon name="plus" />
-					<span class="label">Create</span>
+					<span class="label">{t('Create')}</span>
 					<span class="hint">:new</span>
 				</button>
 
-				<h3>Tools</h3>
-				{#each listedTools as t (t.id)}
-					<button class:active={tool === t.id} aria-current={here(tool === t.id)} onclick={() => app.showTool(t.id)} title="{t.detail} ({t.command})">
-						<Icon name={t.icon} />
-						<span class="label">{t.label}</span>
-						{#if t.id === 'portforwards' && app.forwards.length}
-							<span class="badge" title="Running">{app.forwards.length}</span>
+				<h3>{t('Tools')}</h3>
+				{#each listedTools as entry (entry.id)}
+					<button class:active={tool === entry.id} aria-current={here(tool === entry.id)} onclick={() => app.showTool(entry.id)} title="{entry.detail} ({entry.command})">
+						<Icon name={entry.icon} />
+						<span class="label">{entry.label}</span>
+						{#if entry.id === 'portforwards' && app.forwards.length}
+							<span class="badge" title={t('Running')}>{app.forwards.length}</span>
 						{:else}
-							<span class="hint">{t.command}</span>
+							<span class="hint">{entry.command}</span>
 						{/if}
 					</button>
 				{/each}
-				<button class:active={otherTool} aria-current={here(otherTool)} onclick={() => app.showTools()} title="Every tool, with what it does (:tools)">
+				<button class:active={otherTool} aria-current={here(otherTool)} onclick={() => app.showTools()} title="{t('Every tool, with what it does')} (:tools)">
 					<Icon name="tools" />
-					<span class="label">All tools</span>
+					<span class="label">{t('All tools')}</span>
 					{#if running}
-						<span class="badge" title="Benchmarks running">{running}</span>
+						<span class="badge" title={t('Benchmarks running')}>{running}</span>
 					{:else}
 						<span class="hint">:tools</span>
 					{/if}
@@ -135,26 +136,26 @@
 						{@render item(resource, label, icon)}
 					{/each}
 				{/each}
-				<button class:active={otherKind} aria-current={here(otherKind)} onclick={() => app.showKinds()} title="Every kind the cluster serves, with a search (:kinds)">
+				<button class:active={otherKind} aria-current={here(otherKind)} onclick={() => app.showKinds()} title="{t('Every kind the cluster serves, with a search')} (:kinds)">
 					<Icon name="kinds" />
-					<span class="label">All kinds</span>
+					<span class="label">{t('All kinds')}</span>
 					<span class="hint">:kinds</span>
 				</button>
 
 				{#if app.pinsHere.length}
-					<h3>Pinned</h3>
+					<h3>{t('Pinned')}</h3>
 					{#each app.pinsHere as pin (`${pin.group}/${pin.plural}/${pin.namespace ?? ''}/${pin.name}`)}
 						<div class="pin">
-							<button onclick={() => app.openPin(pin)} title={pin.name ? `${pin.kind} ${pin.namespace ? `${pin.namespace}/` : ''}${pin.name}` : `${pin.kind} list`}>
+							<button onclick={() => app.openPin(pin)} title={pin.name ? `${pin.kind} ${pin.namespace ? `${pin.namespace}/` : ''}${pin.name}` : t('{kind} list', { kind: pin.kind })}>
 								<Icon name="bookmark" size={16} />
 								<span class="label">{pin.name || pluralKind(pin.kind, pin.plural)}</span>
 							</button>
-							<button class="unpin" onclick={() => app.togglePin(pin)} title="Unpin" aria-label="Unpin {pin.name || pin.kind}">×</button>
+							<button class="unpin" onclick={() => app.togglePin(pin)} title={t('Unpin')} aria-label={t('Unpin {name}', { name: pin.name || pin.kind })}>×</button>
 						</div>
 					{/each}
 				{/if}
 				{#if recents.length}
-					<h3>Recent</h3>
+					<h3>{t('Recent')}</h3>
 					{#each recents as recent (`${recent.group}/${recent.plural}/${recent.namespace ?? ''}/${recent.name}`)}
 						<button onclick={() => app.openPin(recent)} title="{recent.kind} {recent.namespace ? `${recent.namespace}/` : ''}{recent.name}">
 							<Icon name="history" size={16} />
@@ -170,24 +171,24 @@
 	<div class="bottom">
 		<button class:active={app.page === 'integrations'} aria-current={here(app.page === 'integrations')} onclick={() => app.showIntegrations()} title=":integrations">
 			<Icon name="plug" />
-			<span class="label">Integrations</span>
+			<span class="label">{t('Integrations')}</span>
 		</button>
 		<button class:active={app.page === 'config'} aria-current={here(app.page === 'config')} onclick={() => app.showConfig()} title=":config">
 			<Icon name="settings" />
-			<span class="label">Settings</span>
+			<span class="label">{t('Settings')}</span>
 		</button>
 		<div class="keys">
-			<strong><Icon name="terminal" size={16} /> Your keys. Still here.</strong>
-			<span>Use <kbd>:</kbd> or <kbd>Ctrl K</kbd> to jump anywhere.</span>
+			<strong><Icon name="terminal" size={16} /> {t('Your keys. Still here.')}</strong>
+			<span>{t('Use')} <kbd>:</kbd> {t('or')} <kbd>Ctrl K</kbd> {t('to jump anywhere.')}</span>
 		</div>
-		<button onclick={() => (app.activityOpen = true)} title="Changes made in this session, with undo">
+		<button onclick={() => (app.activityOpen = true)} title={t('Changes made in this session, with undo')}>
 			<Icon name="history" />
-			<span class="label">Activity</span>
+			<span class="label">{t('Activity')}</span>
 			{#if app.activity.length}<span class="badge">{app.activity.length}</span>{/if}
 		</button>
-		<button onclick={() => (app.helpOpen = true)} title="Keys and commands (?)">
+		<button onclick={() => (app.helpOpen = true)} title="{t('Keys and commands')} (?)">
 			<Icon name="book" />
-			<span class="label">Shortcuts & help</span>
+			<span class="label">{t('Shortcuts & help')}</span>
 		</button>
 	</div>
 </nav>

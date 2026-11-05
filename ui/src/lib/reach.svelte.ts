@@ -2,6 +2,7 @@ import { backend, type FleetCluster, type Health } from './api';
 import { connectSummary } from './connect';
 import { connectError, eachLimited, fleetState } from './fleet';
 import { errorMessage } from './format';
+import { t } from './i18n';
 
 /** What Kubri last learned about a context: from the Clusters page, a connect, or a quick check. */
 export interface ContextReach {
@@ -65,7 +66,7 @@ class Reach {
 		const before = this.of[name];
 		this.of[name] = before?.reachable
 			? { ...before, at: Date.now(), server }
-			: { at: Date.now(), reachable: true, health: null, summary: 'Reachable', error: null, server };
+			: { at: Date.now(), reachable: true, health: null, summary: t('Reachable'), error: null, server };
 	}
 
 	/** Checks the contexts not checked within `maxAge`, a few at once, without connecting to them. */

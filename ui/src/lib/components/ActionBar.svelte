@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { hintOf, type MenuAction } from '../menu';
+	import { t } from '../i18n';
 	import { app } from '../state.svelte';
 
 	let {
@@ -46,13 +47,13 @@
 	}
 </script>
 
-<div class="bar" class:marked class:compact role="toolbar" aria-label="Actions" bind:clientWidth={width}>
+<div class="bar" class:marked class:compact role="toolbar" aria-label={t('Actions')} bind:clientWidth={width}>
 	{#if children}<span class="subject">{@render children()}</span>{/if}
 	{#each buttons as action, i (i)}
 		{@render button(action)}
 	{/each}
 	{#if more.length}
-		<button onclick={openMore} onmousedown={keepFocus} aria-haspopup="menu">More <span class="chevron" aria-hidden="true">▾</span></button>
+		<button onclick={openMore} onmousedown={keepFocus} aria-haspopup="menu">{t('More')} <span class="chevron" aria-hidden="true">▾</span></button>
 	{/if}
 	<span class="spacer"></span>
 	{#each dangerous as action, i (i)}
@@ -68,7 +69,7 @@
 		aria-disabled={action.disabled ? 'true' : undefined}
 		onclick={() => action.run()}
 		onmousedown={keepFocus}
-		title={action.disabled ? `${action.disabled}. Click for details.` : hint ? `${action.label} (${hint})` : action.label}
+		title={action.disabled ? t('{reason}. Click for details.', { reason: action.disabled }) : hint ? `${action.label} (${hint})` : action.label}
 	>
 		{action.label}
 		{#if hint}<kbd>{hint}</kbd>{/if}

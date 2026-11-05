@@ -1,10 +1,11 @@
 import type { KubeObject, LogOptions, LogSource, ResourceInfo, ResourceRef } from './api';
+import { plural, t } from './i18n';
 
 /** Kinds whose `spec.selector` picks the pods that logs and port-forwards use. */
 const SELECTING_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet', 'ReplicaSet', 'Job', 'ReplicationController', 'Service'];
 
-function isCore(resource: ResourceRef, plural: string) {
-	return resource.group === '' && resource.plural === plural;
+function isCore(resource: ResourceRef, name: string) {
+	return resource.group === '' && resource.plural === name;
 }
 
 export const isPods = (resource: ResourceRef) => isCore(resource, 'pods');
@@ -147,7 +148,7 @@ export function forwardablePorts(object: KubeObject | null | undefined): Forward
 		return ports.filter(tcp).map((p) => ({
 			port: p.port,
 			name: p.name ?? null,
-			detail: `targets ${p.targetPort ?? p.port}`
+			detail: t('targets {port}', { port: p.targetPort ?? p.port })
 		}));
 	}
 	const spec = podSpec(object);
@@ -167,9 +168,9 @@ export interface LogRange {
  * or its `sinceSeconds` when that is set.
  */
 export function logRanges(tail: number, sinceSeconds: number): { ranges: Map<string, LogRange>; start: string } {
-	const ranges = new Map<string, LogRange>([['tail', { label: `Last ${tail} lines`, options: { tailLines: tail } }]]);
+	const ranges = new Map<string, LogRange>([['tail', { label: plural(tail, 'Last line', 'Last {n} lines'), options: { tailLines: tail } }]]);
 	for (const n of [500, 2000]) {
-		if (n !== tail) ranges.set(String(n), { label: `Last ${n} lines`, options: { tailLines: n } });
+		if (n !== tail) ranges.set(String(n), { label: plural(n, 'Last line', 'Last {n} lines'), options: { tailLines: n } });
 	}
 	const times: [string, number][] = [
 		['1m', 60],
@@ -178,19 +179,21 @@ export function logRanges(tail: number, sinceSeconds: number): { ranges: Map<str
 		['30m', 1800],
 		['1h', 3600]
 	];
-	for (const [key, seconds] of times) ranges.set(key, { label: `Last ${span(seconds)}`, options: { sinceSeconds: seconds } });
+	for (const [key, seconds] of times) ranges.set(key, { label: last(seconds), options: { sinceSeconds: seconds } });
 	let start = 'tail';
 	if (sinceSeconds > 0) {
 		start = times.find(([, s]) => s === sinceSeconds)?.[0] ?? 'since';
-		if (start === 'since') ranges.set(start, { label: `Last ${span(sinceSeconds)}`, options: { sinceSeconds } });
+		if (start === 'since') ranges.set(start, { label: last(sinceSeconds), options: { sinceSeconds } });
 	}
-	ranges.set('all', { label: 'Everything', options: {} });
+	ranges.set('all', { label: t('Everything'), options: {} });
 	return { ranges, start };
 }
 
-function span(seconds: number) {
-	const [n, unit] = seconds % 3600 === 0 ? [seconds / 3600, 'hour'] : seconds % 60 === 0 ? [seconds / 60, 'minute'] : [seconds, 'second'];
-	return n === 1 ? unit : `${n} ${unit}s`;
+/** "Last 5 minutes", in the largest whole unit. */
+function last(seconds: number) {
+	if (seconds % 3600 === 0) return plural(seconds / 3600, 'Last hour', 'Last {n} hours');
+	if (seconds % 60 === 0) return plural(seconds / 60, 'Last minute', 'Last {n} minutes');
+	return plural(seconds, 'Last second', 'Last {n} seconds');
 }
 
 /** Matches log lines: `/regex/flags`, or else a case-insensitive substring. */

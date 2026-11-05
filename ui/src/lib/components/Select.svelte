@@ -1,4 +1,5 @@
 <script lang="ts" generics="T extends string | number">
+	import { t } from '../i18n';
 	import { tick } from 'svelte';
 	import type { HTMLButtonAttributes } from 'svelte/elements';
 	import Icon from './Icon.svelte';
@@ -298,8 +299,8 @@
 					aria-controls="{id}-list"
 					aria-autocomplete="list"
 					aria-activedescendant={active >= 0 ? optionId(active) : undefined}
-					aria-label="Filter the choices"
-					placeholder="Filter…"
+					aria-label={t('Filter the choices')}
+					placeholder={t('Filter…')}
 					spellcheck="false"
 				/>
 			</div>
@@ -326,7 +327,7 @@
 					{#if i === selected}<span class="tick"><Icon name="check" size={14} /></span>{/if}
 				</li>
 			{:else}
-				<li class="empty" role="presentation">{query ? 'Nothing matches' : 'Nothing to choose'}</li>
+				<li class="empty" role="presentation">{query ? t('Nothing matches') : t('Nothing to choose')}</li>
 			{/each}
 		</ul>
 	</div>

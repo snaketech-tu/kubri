@@ -1,4 +1,5 @@
 import type { ChangeKind, HistoryEntry, Span } from './api';
+import { t } from './i18n';
 
 /** What the What changed page shows: a namespace (all when empty), one object, the last hours. */
 export interface ChangesFilter {
@@ -10,36 +11,36 @@ export interface ChangesFilter {
 
 /** Which changes a filter chip stands for. */
 export const CHANGE_GROUPS: { label: string; kinds: ChangeKind[] }[] = [
-	{ label: 'Rollouts', kinds: ['image', 'rollout', 'restarted'] },
-	{ label: 'Scaling', kinds: ['scaled'] },
-	{ label: 'Config', kinds: ['data'] },
-	{ label: 'Spec', kinds: ['spec', 'metadata'] },
-	{ label: 'Created and deleted', kinds: ['created', 'deleted'] },
-	{ label: 'Nodes', kinds: ['node'] },
-	{ label: 'Warnings', kinds: ['warning'] }
+	{ label: t('Rollouts'), kinds: ['image', 'rollout', 'restarted'] },
+	{ label: t('Scaling'), kinds: ['scaled'] },
+	{ label: t('Config'), kinds: ['data'] },
+	{ label: t('Spec'), kinds: ['spec', 'metadata'] },
+	{ label: t('Created and deleted'), kinds: ['created', 'deleted'] },
+	{ label: t('Nodes'), kinds: ['node'] },
+	{ label: t('Warnings'), kinds: ['warning'] }
 ];
 
 /** How far back to look, by its label in the range picker; `0` for everything kept. */
 export const RANGES: { label: string; hours: number }[] = [
-	{ label: 'Last hour', hours: 1 },
-	{ label: 'Last 6 hours', hours: 6 },
-	{ label: 'Last 24 hours', hours: 24 },
-	{ label: 'Last 7 days', hours: 24 * 7 },
-	{ label: 'Everything kept', hours: 0 }
+	{ label: t('Last hour'), hours: 1 },
+	{ label: t('Last 6 hours'), hours: 6 },
+	{ label: t('Last 24 hours'), hours: 24 },
+	{ label: t('Last 7 days'), hours: 24 * 7 },
+	{ label: t('Everything kept'), hours: 0 }
 ];
 
 const TAGS: Record<ChangeKind, string> = {
-	created: 'Created',
-	deleted: 'Deleted',
-	scaled: 'Scaled',
-	image: 'Image',
-	restarted: 'Restart',
-	rollout: 'Rollout',
-	data: 'Data',
-	spec: 'Spec',
-	metadata: 'Labels',
-	node: 'Node',
-	warning: 'Warning'
+	created: t('Created'),
+	deleted: t('Deleted'),
+	scaled: t('Scaled'),
+	image: t('Image'),
+	restarted: t('Restart'),
+	rollout: t('Rollout'),
+	data: t('Data'),
+	spec: t('Spec'),
+	metadata: t('Labels'),
+	node: t('Node'),
+	warning: t('Warning')
 };
 
 export function changeTag(kind: ChangeKind): string {
@@ -65,8 +66,8 @@ function dayLabel(at: number, now: number): string {
 	const today = new Date(now);
 	const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 	const days = Math.round((start(today) - start(day)) / 86_400_000);
-	if (days === 0) return 'Today';
-	if (days === 1) return 'Yesterday';
+	if (days === 0) return t('Today');
+	if (days === 1) return t('Yesterday');
 	return day.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: day.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
 }
 

@@ -2,6 +2,7 @@ import type { Alias, ContextInfo, ObjectRef, ResourceInfo } from './api';
 import { parseChangesArgs, type ChangesFilter } from './changes';
 import { CORE_GROUPS, parseShortForm, TEMPLATE_KINDS, type TemplateParams } from './create';
 import { xrayResources } from './xray';
+import { t } from './i18n';
 
 export type ConfigSection = 'contexts' | 'diffs' | 'changes' | 'agents' | 'explain' | 'appearance' | 'updates' | 'views' | 'skins' | 'hotkeys' | 'plugins' | 'aliases';
 
@@ -55,8 +56,8 @@ export interface Suggestion {
 }
 
 const feedback: Suggestion[] = [
-	{ label: 'feedback', detail: 'Report a problem on GitHub, with your Kubri version filled in', action: { type: 'feedback', kind: 'bug' } },
-	{ label: 'feedback idea', detail: 'Suggest an idea on GitHub', action: { type: 'feedback', kind: 'idea' } }
+	{ label: 'feedback', detail: t('Report a problem on GitHub, with your Kubri version filled in'), action: { type: 'feedback', kind: 'bug' } },
+	{ label: 'feedback idea', detail: t('Suggest an idea on GitHub'), action: { type: 'feedback', kind: 'idea' } }
 ];
 
 const CONTEXT_COMMANDS = ['ctx', 'context', 'contexts'];
@@ -139,9 +140,9 @@ function score(resource: ResourceInfo, term: string): number | null {
 
 /** Finds resources matching `term`, best first. */
 export function matchResources(term: string, resources: ResourceInfo[]): ResourceInfo[] {
-	const t = term.toLowerCase();
+	const lower = term.toLowerCase();
 	return resources
-		.map((r) => ({ r, s: score(r, t) }))
+		.map((r) => ({ r, s: score(r, lower) }))
 		.filter((x): x is { r: ResourceInfo; s: number } => x.s !== null)
 		.sort((a, b) => a.s - b.s || groupRank(a.r) - groupRank(b.r) || a.r.kind.localeCompare(b.r.kind))
 		.map((x) => x.r);
@@ -217,7 +218,7 @@ export function suggest(
 		const target = suggest(expanded, resources, contexts, namespaces, config, depth + 1)[0];
 		if (target) {
 			const label = [command, ...rest].join(' ');
-			const own: Suggestion = { label, detail: `${alias.command} · alias`, action: target.action };
+			const own: Suggestion = { label, detail: t('{command} · alias', { command: alias.command }), action: target.action };
 			return depth ? [own] : [own, ...builtins(input, resources, contexts, namespaces, config)];
 		}
 	}
@@ -254,28 +255,28 @@ function builtins(
 		const section = CONFIG_COMMANDS[cmd];
 		configPage.push({
 			label: cmd,
-			detail: 'Settings: contexts, and the k9s skins, hotkeys, plugins and aliases',
+			detail: t('Settings: contexts, and the k9s skins, hotkeys, plugins and aliases'),
 			action: section ? { type: 'config', section } : { type: 'config' }
 		});
 	}
 
 	if (SKIN_COMMANDS.includes(cmd)) {
-		const reset: Suggestion = { label: 'skin kubri', detail: "Kubri's own colors", action: { type: 'skin', name: null } };
+		const reset: Suggestion = { label: 'skin kubri', detail: t("Kubri's own colors"), action: { type: 'skin', name: null } };
 		const skins = config.skins
 			.filter((name) => name.toLowerCase().includes(arg))
-			.map((name): Suggestion => ({ label: `skin ${name}`, detail: 'k9s skin', action: { type: 'skin', name } }));
+			.map((name): Suggestion => ({ label: `skin ${name}`, detail: t('k9s skin'), action: { type: 'skin', name } }));
 		return 'kubri'.startsWith(arg) ? [...skins, reset] : skins;
 	}
 
 	if (cmd === '?' || cmd === 'help') {
-		return [{ label: 'help', detail: 'Keyboard shortcuts', action: { type: 'help' } }];
+		return [{ label: 'help', detail: t('Keyboard shortcuts'), action: { type: 'help' } }];
 	}
 
 	if (cmd === 'feedback') return arg && 'idea'.startsWith(arg) ? [feedback[1], feedback[0]] : feedback;
 
 	const portForwards: Suggestion = {
 		label: 'pf',
-		detail: 'Running port-forwards',
+		detail: t('Running port-forwards'),
 		action: { type: 'portforwards' }
 	};
 	if (PORT_FORWARD_COMMANDS.includes(cmd)) return [portForwards];
@@ -283,74 +284,74 @@ function builtins(
 	// The views go by one name; the k9s commands still lead there.
 	const pulses = (namespace?: string): Suggestion => ({
 		label: namespace ? `overview ${namespace}` : 'overview',
-		detail: 'Overview: health, warnings, CPU and memory · also :pulses',
+		detail: t('Overview: health, warnings, CPU and memory · also :pulses'),
 		action: { type: 'pulses', namespace }
 	});
 	if (PULSE_COMMANDS.includes(cmd)) return [pulses(rest[0])];
 
 	const rbac = (namespace?: string): Suggestion => ({
 		label: namespace ? `access ${namespace}` : 'access',
-		detail: 'Access: who may do what, and your own rights · also :rbac',
+		detail: t('Access: who may do what, and your own rights · also :rbac'),
 		action: { type: 'rbac', namespace }
 	});
 	if (RBAC_COMMANDS.includes(cmd)) return [rbac(rest[0])];
 
 	const helm = (namespace?: string): Suggestion => ({
 		label: namespace ? `helm ${namespace}` : 'helm',
-		detail: 'Helm releases: values, manifests, history and rollback',
+		detail: t('Helm releases: values, manifests, history and rollback'),
 		action: { type: 'helm', namespace }
 	});
 	if (HELM_COMMANDS.includes(cmd)) return [helm(rest[0])];
 
 	const sanitizer = (namespace?: string): Suggestion => ({
 		label: namespace ? `checks ${namespace}` : 'checks',
-		detail: 'Checks: common mistakes and risky settings, scored · also :popeye',
+		detail: t('Checks: common mistakes and risky settings, scored · also :popeye'),
 		action: { type: 'sanitizer', namespace }
 	});
 	if (SANITIZER_COMMANDS.includes(cmd)) return [sanitizer(rest[0])];
 
 	const benchmarks: Suggestion = {
 		label: 'bench',
-		detail: 'HTTP benchmarks through port-forwards',
+		detail: t('HTTP benchmarks through port-forwards'),
 		action: { type: 'benchmarks' }
 	};
 	if (BENCH_COMMANDS.includes(cmd)) return [benchmarks];
 
 	const integrations: Suggestion = {
 		label: 'integrations',
-		detail: 'Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager in this cluster',
+		detail: t('Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager in this cluster'),
 		action: { type: 'integrations' }
 	};
 	if (INTEGRATION_COMMANDS.includes(cmd)) return [integrations];
 
 	const sizing: Suggestion = {
 		label: 'rightsizing',
-		detail: 'Containers that request much more or less than they use',
+		detail: t('Containers that request much more or less than they use'),
 		action: { type: 'rightsizing' }
 	};
 	if (SIZING_COMMANDS.includes(cmd)) return [sizing];
 
-	const tools: Suggestion = { label: 'tools', detail: 'Every tool beyond the lists, with its command', action: { type: 'tools' } };
+	const tools: Suggestion = { label: 'tools', detail: t('Every tool beyond the lists, with its command'), action: { type: 'tools' } };
 	if (TOOLS_COMMANDS.includes(cmd)) return [tools];
 
 	const kinds: Suggestion = {
 		label: arg ? `kinds ${arg}` : 'kinds',
-		detail: 'Every kind the cluster serves, to find one and open its list',
+		detail: t('Every kind the cluster serves, to find one and open its list'),
 		action: { type: 'kinds', filter: arg || undefined }
 	};
 	if (KINDS_COMMANDS.includes(cmd)) return [kinds];
 
 	const fleet: Suggestion = {
 		label: 'fleet',
-		detail: 'Every context at once: reachable, version and health',
+		detail: t('Every context at once: reachable, version and health'),
 		action: { type: 'fleet' }
 	};
 	if (FLEET_COMMANDS.includes(cmd)) return [fleet];
 
 	const terminal = config.terminal !== false;
 	const terminals: Suggestion[] = [
-		{ label: 'term', detail: 'A terminal here with kubectl and helm set to this context and namespace', action: { type: 'terminal' } },
-		{ label: 'term new', detail: 'Another terminal, also when one is open', action: { type: 'terminal', another: true } }
+		{ label: 'term', detail: t('A terminal here with kubectl and helm set to this context and namespace'), action: { type: 'terminal' } },
+		{ label: 'term new', detail: t('Another terminal, also when one is open'), action: { type: 'terminal', another: true } }
 	];
 	if (terminal && TERMINAL_COMMANDS.includes(cmd)) return arg === 'new' ? [terminals[1]] : terminals;
 
@@ -358,14 +359,14 @@ function builtins(
 	const query = input.trim().replace(/^:/, '').slice(command.length).trim();
 	const search: Suggestion = {
 		label: query ? `${cmd} ${query}` : 'search',
-		detail: query ? 'Search objects by name, label and field' : 'Objects by name, label and field, in one or more contexts',
+		detail: query ? t('Search objects by name, label and field') : t('Objects by name, label and field, in one or more contexts'),
 		action: { type: 'search', query }
 	};
 	if (SEARCH_COMMANDS.includes(cmd)) return [search];
 
 	const graph = (namespace?: string): Suggestion => ({
 		label: namespace ? `graph ${namespace}` : 'graph',
-		detail: 'Topology as one graph: how objects connect, and the request paths of Ingresses',
+		detail: t('Topology as one graph: how objects connect, and the request paths of Ingresses'),
 		action: { type: 'graph', namespace }
 	});
 	if (GRAPH_COMMANDS.includes(cmd)) return [graph(rest[0])];
@@ -375,7 +376,7 @@ function builtins(
 		const hours = filter.hours ? (filter.hours < 1 ? `${Math.round(filter.hours * 60)}m` : `${filter.hours}h`) : '';
 		return {
 			label: ['changes', filter.namespace, hours].filter(Boolean).join(' '),
-			detail: 'What changed: rollouts, scaling, config and warnings Kubri recorded',
+			detail: t('What changed: rollouts, scaling, config and warnings Kubri recorded'),
 			action: { type: 'changes', filter }
 		};
 	};
@@ -389,13 +390,15 @@ function builtins(
 		label: arg ? `snapshot ${arg}` : 'snapshot',
 		detail:
 			arg === 'all'
-				? 'Save the whole cluster to a file to open offline, or open one'
-				: `Save ${arg ? `namespace ${arg}` : 'this namespace'} to a file to open offline, or open one`,
+				? t('Save the whole cluster to a file to open offline, or open one')
+				: arg
+					? t('Save namespace {name} to a file to open offline, or open one', { name: arg })
+					: t('Save this namespace to a file to open offline, or open one'),
 		action: { type: 'snapshot', namespace: arg === 'all' ? null : arg }
 	});
 	if (SNAPSHOT_COMMANDS.includes(cmd)) return [snapshot(rest[0]), ...(rest[0] ? [] : [snapshot('all')])];
 	if (KUBECONFIG_COMMANDS.includes(cmd)) {
-		return [{ label: 'kubeconfig', detail: 'The kubeconfig files Kubri reads, and load more', action: { type: 'kubeconfig' } }];
+		return [{ label: 'kubeconfig', detail: t('The kubeconfig files Kubri reads, and load more'), action: { type: 'kubeconfig' } }];
 	}
 
 	// `xray deploy kube-system`: the kind, then optionally a namespace.
@@ -404,7 +407,7 @@ function builtins(
 		return (kind ? matchResources(kind, roots) : roots).map(
 			(r): Suggestion => ({
 				label: `xray ${resourceLabel(r)}${namespace ? ` ${namespace}` : ''}`,
-				detail: `Topology of ${r.kind}s: how they depend on pods, config and volumes`,
+				detail: t('Topology of {kinds}: how they depend on pods, config and volumes', { kinds: `${r.kind}s` }),
 				action: { type: 'xray', resource: r, namespace }
 			})
 		);
@@ -413,7 +416,7 @@ function builtins(
 
 	const blank: Suggestion = {
 		label: 'new',
-		detail: 'Create objects from a template, a file, a URL or the clipboard',
+		detail: t('Create objects from a template, a file, a URL or the clipboard'),
 		action: { type: 'new' }
 	};
 	// `new deploy web --image nginx --replicas 3`, like kubectl create.
@@ -424,7 +427,7 @@ function builtins(
 			const common = TEMPLATE_KINDS.flatMap((k) => creatable.filter((r) => r.kind === k && CORE_GROUPS.includes(r.group)).slice(0, 1));
 			return [
 				{ ...blank, label: cmd },
-				...common.map((r): Suggestion => ({ label: `${cmd} ${r.singular || r.kind.toLowerCase()}`, detail: `New ${r.kind}`, action: { type: 'new', resource: r } }))
+				...common.map((r): Suggestion => ({ label: `${cmd} ${r.singular || r.kind.toLowerCase()}`, detail: t('New {kind}', { kind: r.kind }), action: { type: 'new', resource: r } }))
 			];
 		}
 		const more = rest.slice(1).join(' ');
@@ -432,13 +435,13 @@ function builtins(
 			.slice(0, 8)
 			.map((r): Suggestion => ({
 				label: [cmd, r.singular || r.kind.toLowerCase(), more].filter(Boolean).join(' '),
-				detail: `New ${r.kind}${form.params.name ? ` ${form.params.name}` : ''}${r.group ? ` · ${r.group}` : ''}`,
+				detail: `${t('New {kind}', { kind: r.kind })}${form.params.name ? ` ${form.params.name}` : ''}${r.group ? ` · ${r.group}` : ''}`,
 				action: { type: 'new', resource: r, params: form.params }
 			}));
 	}
 
 	if (CONTEXT_COMMANDS.includes(cmd)) {
-		if (arg === '-') return [{ label: 'ctx -', detail: 'The previous context', action: { type: 'context', name: '-' } }];
+		if (arg === '-') return [{ label: 'ctx -', detail: t('The previous context'), action: { type: 'context', name: '-' } }];
 		const matches = contexts
 			.filter((c) => c.name.toLowerCase().includes(arg))
 			.map((c): Suggestion => ({
@@ -447,15 +450,15 @@ function builtins(
 				action: { type: 'context', name: c.name }
 			}));
 		// Like k9s, a bare `:ctx` lists the contexts rather than switching to the first one.
-		if (!arg && !input.endsWith(' ')) return [{ ...fleet, label: cmd, detail: 'Every context in your kubeconfig, to pick one' }, ...matches];
+		if (!arg && !input.endsWith(' ')) return [{ ...fleet, label: cmd, detail: t('Every context in your kubeconfig, to pick one') }, ...matches];
 		return matches;
 	}
 
 	if (NAMESPACE_COMMANDS.includes(cmd) && (rest.length > 0 || input.endsWith(' '))) {
-		const all: Suggestion = { label: 'ns all', detail: 'All namespaces', action: { type: 'namespace', name: '' } };
+		const all: Suggestion = { label: 'ns all', detail: t('All namespaces'), action: { type: 'namespace', name: '' } };
 		const matches = namespaces
 			.filter((n) => n.toLowerCase().includes(arg))
-			.map((n) => ({ label: `ns ${n}`, detail: 'Namespace', action: { type: 'namespace', name: n } }) as Suggestion);
+			.map((n) => ({ label: `ns ${n}`, detail: t('Namespace'), action: { type: 'namespace', name: n } }) as Suggestion);
 		return 'all'.startsWith(arg) ? [all, ...matches] : matches;
 	}
 
@@ -464,7 +467,7 @@ function builtins(
 		.map(
 			(r): Suggestion => ({
 				label: rest.length ? `${resourceLabel(r)} ${rest.join(' ')}` : resourceLabel(r),
-				detail: [r.kind, r.shortNames.length ? r.shortNames.join(', ') : '', r.namespaced ? '' : 'cluster']
+				detail: [r.kind, r.shortNames.length ? r.shortNames.join(', ') : '', r.namespaced ? '' : t('cluster-wide')]
 					.filter(Boolean)
 					.join(' · '),
 				action: { type: 'resource', resource: r, ...resourceArgs(rest) }

@@ -1,4 +1,5 @@
 import type { ExplainPrompt, ExplainProvider } from './api';
+import { t } from './i18n';
 
 /** The models Explain suggests for Anthropic, best first. The first is the default. */
 export const ANTHROPIC_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
@@ -8,20 +9,20 @@ export function providerName(provider: ExplainProvider): string {
 		case 'anthropic':
 			return 'Anthropic';
 		case 'openai':
-			return 'an OpenAI-compatible endpoint';
+			return t('an OpenAI-compatible endpoint');
 		default:
-			return 'nobody';
+			return t('nobody');
 	}
 }
 
 /** Why a prompt cannot be sent yet, or null when it can. */
 export function explainBlocker(prompt: Pick<ExplainPrompt, 'provider' | 'model' | 'hasKey'>): string | null {
 	if (prompt.provider === 'none') {
-		return 'Explain is off. Pick a provider and add your API key in the settings: until then nothing is sent anywhere.';
+		return t('Explain is off. Pick a provider and add your API key in the settings: until then nothing is sent anywhere.');
 	}
 	if (prompt.provider === 'anthropic' && !prompt.hasKey)
-		return 'Add your Anthropic API key in the settings to send this.';
-	if (!prompt.model) return 'Name the model to ask in the settings to send this.';
+		return t('Add your Anthropic API key in the settings to send this.');
+	if (!prompt.model) return t('Name the model to ask in the settings to send this.');
 	return null;
 }
 

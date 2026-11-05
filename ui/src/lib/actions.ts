@@ -14,6 +14,7 @@ import {
 } from './api';
 import { suggest } from './commands';
 import { errorMessage } from './format';
+import { plural, t } from './i18n';
 import { expandVariables, focusVariables } from './k9s';
 import { AUTO_PORT_FORWARDS_KEY, annotatedForwards, suggestedLocalPort } from './pods';
 import type { Cause } from './causes';
@@ -48,7 +49,7 @@ async function runAction(success: string, action: () => Promise<unknown>, undo?:
 		return true;
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');
-		app.record({ text: `Failed: ${success}`, ok: false });
+		app.record({ text: t('Failed: {what}', { what: success }), ok: false });
 		return false;
 	}
 }
@@ -56,13 +57,11 @@ async function runAction(success: string, action: () => Promise<unknown>, undo?:
 export async function deleteObjects(resource: ResourceInfo, targets: ObjectRef[], options: DeleteOptions) {
 	const results = await Promise.allSettled(targets.map((t) => backend.deleteObject(t, options)));
 	const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
-	if (failed.length) {
-		app.toast(`${failed.length} of ${targets.length} deletes failed: ${errorMessage(failed[0].reason)}`, 'bad');
-	} else {
-		const what = targets.length === 1 ? label(targets[0]) : `${targets.length} ${resource.kind} objects`;
-		app.toast(`Deleted ${what}`);
-	}
-	app.record({ text: failed.length ? `${failed.length} of ${targets.length} deletes failed` : `Deleted ${targets.length === 1 ? label(targets[0]) : `${targets.length} ${resource.kind} objects`}`, ok: failed.length === 0 });
+	const what = targets.length === 1 ? label(targets[0]) : t('{n} {kind} objects', { n: targets.length, kind: resource.kind });
+	const failures = t('{failed} of {n} deletes failed', { failed: failed.length, n: targets.length });
+	if (failed.length) app.toast(t('{failures}: {error}', { failures, error: errorMessage(failed[0].reason) }), 'bad');
+	else app.toast(t('Deleted {what}', { what }));
+	app.record({ text: failed.length ? failures : t('Deleted {what}', { what }), ok: failed.length === 0 });
 	return failed.length === 0;
 }
 
@@ -73,18 +72,18 @@ export async function scale(target: ObjectRef, replicas: number) {
 		.then((o) => (o.spec as { replicas?: number } | undefined)?.replicas)
 		.catch(() => undefined);
 	return runAction(
-		`Scaled ${label(target)} to ${replicas}`,
+		t('Scaled {name} to {n}', { name: label(target), n: replicas }),
 		() => backend.scale(target, replicas),
 		typeof before === 'number' ? () => backend.scale(target, before) : undefined
 	);
 }
 
 export function restart(target: ObjectRef) {
-	return runAction(`Restarting ${label(target)}`, () => backend.restart(target));
+	return runAction(t('Restarting {name}', { name: label(target) }), () => backend.restart(target));
 }
 
 export function save(target: ObjectRef, value: KubeObject) {
-	return runAction(`Saved ${label(target)}`, () => backend.replaceObject(target, value));
+	return runAction(t('Saved {name}', { name: label(target) }), () => backend.replaceObject(target, value));
 }
 
 /** Merge-patches labels and annotations; keys set to null are removed. */
@@ -93,14 +92,14 @@ export function patchMetadata(
 	labels: Record<string, string | null>,
 	annotations: Record<string, string | null>
 ) {
-	return runAction(`Updated ${label(target)}`, () =>
+	return runAction(t('Updated {name}', { name: label(target) }), () =>
 		backend.patchObject(target, { metadata: { labels, annotations } })
 	);
 }
 
 export function cordon(node: string, cordoned: boolean) {
 	return runAction(
-		cordoned ? `Cordoned ${node}` : `Uncordoned ${node}`,
+		cordoned ? t('Cordoned {name}', { name: node }) : t('Uncordoned {name}', { name: node }),
 		() => backend.cordon(node, cordoned),
 		() => backend.cordon(node, !cordoned)
 	);
@@ -110,7 +109,7 @@ export function cordon(node: string, cordoned: boolean) {
 export async function triggerCronJob(target: ObjectRef) {
 	try {
 		const job = await backend.triggerCronJob(target);
-		app.toast(`Started Job ${job}`);
+		app.toast(t('Started Job {name}', { name: job }));
 		return true;
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');
@@ -120,33 +119,35 @@ export async function triggerCronJob(target: ObjectRef) {
 
 export function suspendCronJob(target: ObjectRef, suspend: boolean) {
 	return runAction(
-		suspend ? `Suspended ${label(target)}` : `Resumed ${label(target)}`,
+		suspend ? t('Suspended {name}', { name: label(target) }) : t('Resumed {name}', { name: label(target) }),
 		() => backend.suspendCronJob(target, suspend),
 		() => backend.suspendCronJob(target, !suspend)
 	);
 }
 
-const GITOPS_DONE: Record<GitOpsAction, string> = {
-	reconcile: 'Asked Flux to reconcile',
-	suspend: 'Suspended',
-	resume: 'Resumed',
-	sync: 'Started a sync of',
-	refresh: 'Asked Argo CD to compare again',
-	autoSyncOff: 'Turned auto-sync off for',
-	autoSyncOn: 'Turned auto-sync on for'
-};
+/** What a Flux or Argo CD action did, with `{name}` for the object. */
+const gitopsDone = (action: GitOpsAction, name: string) =>
+	({
+		reconcile: () => t('Asked Flux to reconcile {name}', { name }),
+		suspend: () => t('Suspended {name}', { name }),
+		resume: () => t('Resumed {name}', { name }),
+		sync: () => t('Started a sync of {name}', { name }),
+		refresh: () => t('Asked Argo CD to compare {name} again', { name }),
+		autoSyncOff: () => t('Turned auto-sync off for {name}', { name }),
+		autoSyncOn: () => t('Turned auto-sync on for {name}', { name })
+	})[action]();
 
 /** A Flux or Argo CD action, as their CLIs run it. */
 export function runGitOps(target: ObjectRef, action: GitOpsAction) {
-	return runAction(`${GITOPS_DONE[action]} ${label(target)}`, () => backend.gitops(target, action));
+	return runAction(gitopsDone(action, label(target)), () => backend.gitops(target, action));
 }
 
 export function renewCertificate(target: ObjectRef) {
-	return runAction(`Asked cert-manager to renew ${label(target)}`, () => backend.renewCertificate(target));
+	return runAction(t('Asked cert-manager to renew {name}', { name: label(target) }), () => backend.renewCertificate(target));
 }
 
 export function setImages(target: ObjectRef, images: ContainerImage[]) {
-	return runAction(`Set ${images.length === 1 ? 'the image' : 'images'} of ${label(target)}`, () =>
+	return runAction(plural(images.length, 'Set the image of {name}', 'Set the images of {name}', { name: label(target) }), () =>
 		backend.setImages(target, images)
 	);
 }
@@ -158,7 +159,7 @@ export function setImages(target: ObjectRef, images: ContainerImage[]) {
 export async function rollback(target: ObjectRef) {
 	try {
 		const owner = await backend.rollback(target);
-		app.toast(`Rolled ${owner} back to ${target.name}`);
+		app.toast(t('Rolled {owner} back to {name}', { owner, name: target.name }));
 		return true;
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');
@@ -166,11 +167,14 @@ export async function rollback(target: ObjectRef) {
 	}
 }
 
-/** Copies lines to the clipboard and says how many, like k9s `c` and `n`. */
-export function copyLines(lines: string[], what: [string, string]) {
+/**
+ * Copies lines to the clipboard and says what: the line itself, or with `many` how many, like
+ * k9s `c` and `n`.
+ */
+export function copyLines(lines: string[], many?: (n: number) => string) {
 	if (!lines.length) return;
 	navigator.clipboard.writeText(lines.join('\n')).then(
-		() => app.toast(lines.length === 1 ? `Copied ${lines[0]}` : `Copied ${lines.length} ${what[1]}`),
+		() => app.toast(lines.length > 1 && many ? many(lines.length) : t('Copied {text}', { text: lines.join(' ') })),
 		(err) => app.toast(errorMessage(err), 'bad')
 	);
 }
@@ -179,7 +183,7 @@ export function copyLines(lines: string[], what: [string, string]) {
 export async function saveFile(name: string, text: string) {
 	try {
 		const path = await backend.saveText(name, text);
-		if (path) app.toast(`Saved ${path}`);
+		if (path) app.toast(t('Saved {name}', { name: path }));
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');
 	}
@@ -188,7 +192,7 @@ export async function saveFile(name: string, text: string) {
 export async function startPortForward(request: PortForwardRequest) {
 	try {
 		const f = await backend.startPortForward(request);
-		app.toast(`Forwarding ${f.address}:${f.localPort} to ${f.pod}:${f.podPort}`);
+		app.toast(t('Forwarding {local} to {pod}', { local: `${f.address}:${f.localPort}`, pod: `${f.pod}:${f.podPort}` }));
 		app.refreshForwards();
 		return true;
 	} catch (err) {
@@ -220,7 +224,7 @@ export async function portForward(resource: ResourceInfo, target: ObjectRef) {
 }
 
 export async function stopPortForward(id: number) {
-	const ok = await runAction('Stopped the port-forward', () => backend.stopPortForward(id));
+	const ok = await runAction(t('Stopped the port-forward'), () => backend.stopPortForward(id));
 	app.refreshForwards();
 	return ok;
 }
@@ -232,7 +236,7 @@ function contextInfo() {
 /** Runs a k9s plugin on what the view has under the cursor, asking first if it wants that. */
 export function startPlugin(plugin: Plugin) {
 	if (plugin.dangerous && app.readOnly) {
-		app.toast(`${plugin.description || plugin.name} changes the cluster, and Kubri is read-only`, 'bad');
+		app.toast(t('{name} changes the cluster, and Kubri is read-only', { name: plugin.description || plugin.name }), 'bad');
 		return;
 	}
 	const focus = app.focus?.() ?? null;
@@ -263,7 +267,7 @@ export async function launchPlugin(plugin: Plugin, run: PluginRun) {
 		app.pluginTerminal = { plugin, run };
 		return true;
 	}
-	return await runAction(`Started ${plugin.description || plugin.name}`, () => backend.runPlugin(run));
+	return await runAction(t('Started {name}', { name: plugin.description || plugin.name }), () => backend.runPlugin(run));
 }
 
 /** Runs a command as if typed after `:`; false if nothing matches it. */
@@ -277,7 +281,7 @@ export function runCommand(command: string): boolean {
 export function runHotkey(hotkey: Hotkey) {
 	const focus = app.focus?.() ?? null;
 	const command = expandVariables(hotkey.command, focusVariables(focus, contextInfo()), focus?.columns ?? []);
-	if (!runCommand(command)) app.toast(`Hotkey ${hotkey.name}: nothing matches “${command}”`, 'bad');
+	if (!runCommand(command)) app.toast(t('Hotkey {name}: nothing matches “{command}”', { name: hotkey.name, command }), 'bad');
 }
 
 /** Kinds that own pods through a pod template, by the kind an owner reference names. */
@@ -328,7 +332,7 @@ export async function raiseMemoryOf(target: ObjectRef, container: string) {
 		const fix = await backend.memoryFix(target, container);
 		const resource = fix.workload && findResource(app.resources, fix.workload.resource);
 		if (!fix.workload || !resource) {
-			app.toast('Nothing owns this pod that Kubri can change; raise the limit where the pod is defined', 'bad');
+			app.toast(t('Nothing owns this pod that Kubri can change; raise the limit where the pod is defined'), 'bad');
 			return;
 		}
 		app.dialog = { kind: 'memory', resource, target: fix.workload, fix };
@@ -348,7 +352,7 @@ export async function changeRequestsOf(cause: Cause, target: ObjectRef, pod: Kub
 		const resource = findResource(app.resources, at.resource);
 		// Requests are changed through the pod template, which only these kinds have.
 		if (!resource || !['deployments', 'statefulsets', 'daemonsets'].includes(at.resource.plural)) {
-			app.toast('Nothing owns this pod that Kubri can change; set the requests where the pod is defined', 'bad');
+			app.toast(t('Nothing owns this pod that Kubri can change; set the requests where the pod is defined'), 'bad');
 			return;
 		}
 		const object = await backend.getObject(at);

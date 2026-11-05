@@ -2,8 +2,11 @@
 	import { drafts } from '#lib/navigation.svelte.js';
 	import { applyScheme } from '#lib/skin.js';
 	import { dropdown } from '#lib/dismiss.js';
+	import { t } from '#lib/i18n/index.js';
+	import { coreText } from '#lib/i18n/errors.js';
 	import { stepZoom, zoomKey } from '#lib/appearance.js';
 	import Icon from '#lib/components/Icon.svelte';
+	import Phrase from '#lib/components/Phrase.svelte';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { untrack } from 'svelte';
 	import { forControl } from '#lib/keys.js';
@@ -245,136 +248,136 @@
 
 	const viewHints = $derived.by(() => {
 		// The view waits under the connecting card; only cancelling works.
-		if (app.connecting && app.cluster && app.contexts.some((c) => c.name === app.connecting)) return [['esc', 'cancel']] as [string, string][];
-		const panel: [string, string][] = app.details ? [['f', app.maximized ? 'restore' : 'maximize'], ['esc', 'close']] : [];
+		if (app.connecting && app.cluster && app.contexts.some((c) => c.name === app.connecting)) return [['esc', t('cancel')]] as [string, string][];
+		const panel: [string, string][] = app.details ? [['f', app.maximized ? t('restore') : t('maximize')], ['esc', t('close')]] : [];
 		// The log keys, while the logs are on screen.
 		if (app.details?.tab === 'logs') {
 			return [
-				['/', 'search'],
-				['n/N', 'match'],
-				['0–6', 'range'],
-				['t', 'timestamps'],
-				['w', 'wrap'],
-				['s', 'autoscroll'],
-				['m', 'mark'],
-				['x', 'explain'],
-				['c', 'copy'],
-				['^s', 'save'],
+				['/', t('search')],
+				['n/N', t('match')],
+				['0–6', t('range')],
+				['t', t('timestamps')],
+				['w', t('wrap')],
+				['s', t('autoscroll')],
+				['m', t('mark')],
+				['x', t('explain')],
+				['c', t('copy')],
+				['^s', t('save')],
 				...panel,
-				['?', 'help']
+				['?', t('help')]
 			] as [string, string][];
 		}
 		// Typing goes to the shell. The panel's keys work there as buttons, and after Esc twice.
 		if (app.details?.tab === 'shell') {
-			return [['esc esc', 'leave terminal'], ['ctrl+d', 'exit shell'], ...panel, ['?', 'help']] as [string, string][];
+			return [['esc esc', t('leave terminal')], ['ctrl+d', t('exit shell')], ...panel, ['?', t('help')]] as [string, string][];
 		}
 		if (app.page === 'portforwards') {
 			return [
-				[':', 'command'],
-				['c', 'copy url'],
-				['o', 'open'],
-				['s', 'favorite'],
-				['b', 'benchmark'],
-				['^d', 'stop'],
-				['?', 'help']
+				[':', t('command')],
+				['c', t('copy url')],
+				['o', t('open')],
+				['s', t('favorite')],
+				['b', t('benchmark')],
+				['^d', t('stop')],
+				['?', t('help')]
 			] as [string, string][];
 		}
 		if (app.page === 'pulses') {
-			return [[':', 'command'], ['←→', 'move'], ['enter', 'open list'], ...panel, ['?', 'help']] as [string, string][];
+			return [[':', t('command')], ['←→', t('move')], ['enter', t('open list')], ...panel, ['?', t('help')]] as [string, string][];
 		}
 		if (app.page === 'xray') {
 			return [
-				[':', 'command'],
-				['/', 'filter'],
-				['h/l', 'collapse/expand'],
-				['space', 'toggle'],
-				['enter', 'describe'],
+				[':', t('command')],
+				['/', t('filter')],
+				['h/l', t('collapse/expand')],
+				['space', t('toggle')],
+				['enter', t('describe')],
 				...panel,
-				['?', 'help']
+				['?', t('help')]
 			] as [string, string][];
 		}
 		if (app.page === 'kinds') {
-			return [[':', 'command'], ['/', 'find'], ['j/k', 'move'], ['enter', 'open'], ['?', 'help']] as [string, string][];
+			return [[':', t('command')], ['/', t('find')], ['j/k', t('move')], ['enter', t('open')], ['?', t('help')]] as [string, string][];
 		}
 		if (app.page === 'rbac') {
-			return [[':', 'command'], ['/', 'filter'], ['j/k', 'move'], ...panel, ['?', 'help']] as [string, string][];
+			return [[':', t('command')], ['/', t('filter')], ['j/k', t('move')], ...panel, ['?', t('help')]] as [string, string][];
 		}
 		if (app.page === 'sanitizer') {
 			return [
-				[':', 'command'],
-				['/', 'filter'],
-				['h/l', 'collapse/expand'],
-				['enter', 'describe'],
-				['⇧e', 'explain'],
-				['⇧r', 'scan again'],
+				[':', t('command')],
+				['/', t('filter')],
+				['h/l', t('collapse/expand')],
+				['enter', t('describe')],
+				['⇧e', t('explain')],
+				['⇧r', t('scan again')],
 				...panel,
-				['?', 'help']
+				['?', t('help')]
 			] as [string, string][];
 		}
 		if (app.page === 'create') {
-			return [[':', 'command'], ['^s', 'review'], ['esc', 'back to editing'], ['?', 'help']] as [string, string][];
+			return [[':', t('command')], ['^s', t('review')], ['esc', t('back to editing')], ['?', t('help')]] as [string, string][];
 		}
 		if (app.page === 'config') {
-			return [[':', 'command'], ['⇧r', 'reload'], ['?', 'help']] as [string, string][];
+			return [[':', t('command')], ['⇧r', t('reload')], ['?', t('help')]] as [string, string][];
 		}
 		if (app.page === 'benchmarks') {
-			return [[':', 'command'], ['j/k', 'move'], ['b', 'run again'], ['^d', 'stop/remove'], ['?', 'help']] as [string, string][];
+			return [[':', t('command')], ['j/k', t('move')], ['b', t('run again')], ['^d', t('stop/remove')], ['?', t('help')]] as [string, string][];
 		}
 		if (app.page === 'helm') {
 			return [
-				[':', 'command'],
-				['/', 'filter'],
-				['enter', 'open'],
-				['v', 'values'],
-				['h', 'history'],
-				['c', 'compare'],
-				['x', 'drift'],
-				['u', 'upgrade'],
-				['i', 'install'],
-				['r', 'roll back'],
-				['^d', 'uninstall'],
+				[':', t('command')],
+				['/', t('filter')],
+				['enter', t('open')],
+				['v', t('values')],
+				['h', t('history')],
+				['c', t('compare')],
+				['x', t('drift')],
+				['u', t('upgrade')],
+				['i', t('install')],
+				['r', t('roll back')],
+				['^d', t('uninstall')],
 				...panel,
-				['?', 'help']
+				['?', t('help')]
 			] as [string, string][];
 		}
 		// Pages without list keys of their own; the list's keys would do nothing there.
-		if (app.page !== 'resources') return [[':', 'command'], ...panel, ['?', 'help']] as [string, string][];
+		if (app.page !== 'resources') return [[':', t('command')], ...panel, ['?', t('help')]] as [string, string][];
 		const r = app.selected;
 		const h: [string, string][] = [
-			[':', 'command'],
-			['/', 'filter'],
-			['enter', 'open'],
-			['d', 'describe'],
-			['y', 'yaml']
+			[':', t('command')],
+			['/', t('filter')],
+			['enter', t('open')],
+			['d', t('describe')],
+			['y', t('yaml')]
 		];
 		if (!r) return h;
 		// An empty list has no row for the keys to act on.
 		if (app.listRows === 0) {
-			const empty: [string, string][] = [[':', 'command'], ['/', 'filter']];
-			if (app.scope) empty.push(['esc', 'back']);
-			if (app.details) empty.push(['f', app.maximized ? 'restore' : 'maximize']);
-			empty.push(['?', 'help']);
+			const empty: [string, string][] = [[':', t('command')], ['/', t('filter')]];
+			if (app.scope) empty.push(['esc', t('back')]);
+			if (app.details) empty.push(['f', app.maximized ? t('restore') : t('maximize')]);
+			empty.push(['?', t('help')]);
 			return empty;
 		}
 		const writable = !app.readOnly;
-		if (hasLogs(r)) h.push(['l', 'logs']);
-		if (isPods(r) && writable) h.push(['s', 'shell'], ['a', 'attach']);
-		if (isPods(r)) h.push(['o', 'node']);
-		if (isSecrets(r)) h.push(['x', 'decode']);
-		if (isNamespaces(r)) h.push(['u', 'use']);
-		if (hasUsers(r)) h.push(['u', 'used by']);
-		if (canPortForward(r)) h.push(['⇧f', 'port-forward']);
-		if (isNodes(r) && writable) h.push(['c', 'cordon'], ['u', 'uncordon'], ['r', 'drain']);
-		if (isCronJobs(r) && writable) h.push(['t', 'trigger'], ['s', 'suspend']);
-		if (hasImages(r) && writable) h.push(['i', 'image']);
-		if (isReplicaSets(r) && writable) h.push(['^l', 'roll back']);
-		if (canEdit(r) && writable) h.push(['e', 'edit']);
-		if (canDelete(r) && writable) h.push(['^d', 'delete']);
-		if (canScale(r) && !isPods(r) && writable) h.push(['s', 'scale']);
-		if (canRestart(r) && writable) h.push(['r', 'restart']);
-		if (app.scope) h.push(['esc', 'back']);
-		if (app.details) h.push(['f', app.maximized ? 'restore' : 'maximize']);
-		h.push(['?', 'help']);
+		if (hasLogs(r)) h.push(['l', t('logs')]);
+		if (isPods(r) && writable) h.push(['s', t('shell')], ['a', t('attach')]);
+		if (isPods(r)) h.push(['o', t('node')]);
+		if (isSecrets(r)) h.push(['x', t('decode')]);
+		if (isNamespaces(r)) h.push(['u', t('use')]);
+		if (hasUsers(r)) h.push(['u', t('used by')]);
+		if (canPortForward(r)) h.push(['⇧f', t('port-forward')]);
+		if (isNodes(r) && writable) h.push(['c', t('cordon')], ['u', t('uncordon')], ['r', t('drain')]);
+		if (isCronJobs(r) && writable) h.push(['t', t('trigger')], ['s', t('suspend')]);
+		if (hasImages(r) && writable) h.push(['i', t('image')]);
+		if (isReplicaSets(r) && writable) h.push(['^l', t('roll back')]);
+		if (canEdit(r) && writable) h.push(['e', t('edit')]);
+		if (canDelete(r) && writable) h.push(['^d', t('delete')]);
+		if (canScale(r) && !isPods(r) && writable) h.push(['s', t('scale')]);
+		if (canRestart(r) && writable) h.push(['r', t('restart')]);
+		if (app.scope) h.push(['esc', t('back')]);
+		if (app.details) h.push(['f', app.maximized ? t('restore') : t('maximize')]);
+		h.push(['?', t('help')]);
 		return h;
 	});
 
@@ -437,14 +440,14 @@
 		lockFixed
 			? `${readOnlyReason(app.guard, app.contextSettings.readOnly, app.k9s?.readOnly ?? false)}.`
 			: app.contextSettings.readOnly
-				? 'Read-only in Kubri: no edits, deletes, scaling or shells. Click to allow changes.'
+				? t('Read-only in Kubri: no edits, deletes, scaling or shells. Click to allow changes.')
 				: unlockLeft !== null
-					? 'Unlocked for now; it locks again by itself. Click to lock it now.'
+					? t('Unlocked for now; it locks again by itself. Click to lock it now.')
 					: app.guard.readOnly && app.guard.canUnlock
-						? 'Locked: click to unlock for 15 minutes.'
+						? t('Locked: click to unlock for 15 minutes.')
 						: app.guard.readOnly
-							? `Read-only: ${app.guard.reason ?? 'Kubri does not change this cluster'}`
-							: 'Changes are allowed; Kubernetes permissions still apply. Click to make Kubri read-only.'
+							? t('Read-only: {reason}', { reason: app.guard.reason ? coreText(app.guard.reason) : t('Kubri does not change this cluster') })
+							: t('Changes are allowed; Kubernetes permissions still apply. Click to make Kubri read-only.')
 	);
 	const accent = $derived(app.contextSettings.color || null);
 
@@ -478,8 +481,8 @@
 				class="square menu-button"
 				onclick={() => (navOpen = !navOpen)}
 				aria-expanded={navOpen}
-				title={navOpen ? 'Hide the resource list' : 'Show the resource list'}
-				aria-label="Resources"
+				title={navOpen ? t('Hide the resource list') : t('Show the resource list')}
+				aria-label={t('Resources')}
 			>
 				<Icon name={navOpen ? 'close' : 'menu'} />
 			</button>
@@ -488,8 +491,8 @@
 					onclick={() => app.go(-1)}
 					onmousedown={keepFocus}
 					disabled={!app.canGoBack}
-					title="Back ([ or Alt+←)"
-					aria-label="Back"
+					title="{t('Back')} ([ {t('or')} Alt+←)"
+					aria-label={t('Back')}
 				>
 					<Icon name="back" size={16} />
 				</button>
@@ -497,8 +500,8 @@
 					onclick={() => app.go(1)}
 					onmousedown={keepFocus}
 					disabled={!app.canGoForward}
-					title="Forward (] or Alt+→)"
-					aria-label="Forward"
+					title="{t('Forward')} (] {t('or')} Alt+→)"
+					aria-label={t('Forward')}
 				>
 					<Icon name="next" size={16} />
 				</button>
@@ -509,17 +512,17 @@
 					<summary
 						class:set={app.environment}
 						class:production={app.production}
-						title="Settings for this context: name, color and guard rails"
-						aria-label="Context settings{app.environment ? `, ${app.environment}` : ''}"
+						title={t('Settings for this context: name, color and guard rails')}
+						aria-label="{t('Context settings')}{app.environment ? `, ${app.environment}` : ''}"
 					>
 						<Icon name="sliders" size={16} />
 						{#if app.environment}{app.environment}{/if}
 					</summary>
 					<div class="popover">
-						<p class="popover-title">Settings for <strong>{app.cluster.context}</strong></p>
+						<p class="popover-title">{t('Settings for')} <strong>{app.cluster.context}</strong></p>
 						<ContextSettingsForm context={app.cluster.context} namespaces={app.namespaces} />
 						<p class="note">
-							Kept in Kubri's settings file; the kubeconfig is never changed.
+							{t("Kept in Kubri's settings file; the kubeconfig is never changed.")}
 							<button
 								class="all-contexts"
 								onclick={(e) => {
@@ -527,7 +530,7 @@
 									app.showConfig('contexts');
 								}}
 							>
-								All contexts in Settings
+								{t('All contexts in Settings')}
 							</button>
 						</p>
 					</div>
@@ -535,17 +538,17 @@
 			{/if}
 			<span class="divider"></span>
 			<NamespacePicker />
-			<button class="palette-button" data-tour="palette" onclick={() => (app.paletteOpen = true)} aria-label="Search or run a command">
+			<button class="palette-button" data-tour="palette" onclick={() => (app.paletteOpen = true)} aria-label={t('Search or run a command')}>
 				<Icon name="search" size={17} />
-				<span>Search or run a command</span>
+				<span>{t('Search or run a command')}</span>
 				<kbd>Ctrl K</kbd>
 			</button>
 			{#if app.localTerminal && app.cluster && !app.snapshot}
 				<button
 					class="square"
 					onclick={(e) => app.openLocalTerminal(e.shiftKey)}
-					title="Terminal with kubectl and helm set to this context and namespace (Ctrl+`, with Shift another one)"
-					aria-label="Terminal"
+					title={t('Terminal with kubectl and helm set to this context and namespace (Ctrl+`, with Shift another one)')}
+					aria-label={t('Terminal')}
 				>
 					<Icon name="terminal" size={17} />
 				</button>
@@ -554,11 +557,13 @@
 				class="square"
 				onclick={() => app.toggleScheme()}
 				title={app.skin
-					? `The skin ${app.skin} sets the colors; use Kubri's ${app.dark ? 'light' : 'dark'} colors instead`
+					? app.dark
+						? t("The skin {skin} sets the colors; use Kubri's light colors instead", { skin: app.skin })
+						: t("The skin {skin} sets the colors; use Kubri's dark colors instead", { skin: app.skin })
 					: app.dark
-						? 'Use light colors'
-						: 'Use dark colors'}
-				aria-label={app.dark ? 'Use light colors' : 'Use dark colors'}
+						? t('Use light colors')
+						: t('Use dark colors')}
+				aria-label={app.dark ? t('Use light colors') : t('Use dark colors')}
 			>
 				<Icon name={app.dark ? 'sun' : 'moon'} />
 			</button>
@@ -569,20 +574,20 @@
 				class:unlocked={app.unlockedUntil !== null}
 				role="switch"
 				aria-checked={app.readOnly}
-				aria-label="Read-only"
+				aria-label={t('Read-only')}
 				disabled={!app.cluster || lockFixed}
 				onclick={() => app.toggleReadOnly()}
 				title={lockTitle}
 			>
 				<Icon name={app.readOnly ? 'lock' : 'unlock'} size={15} />
-				Read-only{unlockLeft !== null ? ` · ${Math.floor(unlockLeft / 60)}:${String(unlockLeft % 60).padStart(2, '0')}` : ''}
+				{t('Read-only')}{unlockLeft !== null ? ` · ${Math.floor(unlockLeft / 60)}:${String(unlockLeft % 60).padStart(2, '0')}` : ''}
 				<span class="track" aria-hidden="true"><span class="knob"></span></span>
 			</button>
-			<button class="square help" onclick={() => (app.helpOpen = true)} title="Keys and commands (?)" aria-label="Help">
+			<button class="square help" onclick={() => (app.helpOpen = true)} title="{t('Keys and commands')} (?)" aria-label={t('Help')}>
 				?
 			</button>
 			{#if session.required}
-				<button class="sign-out" onclick={signOut} title={session.person ? `Signed in as ${session.person.name}` : undefined}>Sign out</button>
+				<button class="sign-out" onclick={signOut} title={session.person ? t('Signed in as {name}', { name: session.person.name }) : undefined}>{t('Sign out')}</button>
 			{/if}
 		</header>
 
@@ -590,8 +595,8 @@
 			<div class="production-banner" role="note">
 				<Icon name="warning" size={15} />
 				<span>
-					<strong>Production</strong> · {app.contextName(app.cluster.context)} ·
-					{app.readOnly ? 'changes are off' : 'changes go live; deleting asks you to type the name'}
+					<strong>{t('Production')}</strong> · {app.contextName(app.cluster.context)} ·
+					{app.readOnly ? t('changes are off') : t('changes go live; deleting asks you to type the name')}
 				</span>
 			</div>
 		{/if}
@@ -600,26 +605,26 @@
 			<div class="snapshot-banner" role="note">
 				<Icon name="camera" size={15} />
 				<span>
-					<strong>Snapshot</strong> of {snapshot.context} · {snapshot.namespace ? `namespace ${snapshot.namespace}` : 'the whole cluster'}
-					· taken {new Date(snapshot.taken).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-					({age(new Date(snapshot.taken).toISOString(), Date.now()) || '0s'} ago) · read-only, nothing here is live
+					<strong>{t('Snapshot')}</strong> {t('of')} {snapshot.context} · {snapshot.namespace ? t('namespace {name}', { name: snapshot.namespace }) : t('the whole cluster')}
+					· {t('taken {when} ({age} ago)', { when: new Date(snapshot.taken).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }), age: age(new Date(snapshot.taken).toISOString(), Date.now()) || '0s' })}
+					· {t('read-only, nothing here is live')}
 					{#if snapshot.leftOut.length}
-						· <span class="left-out" title={snapshot.leftOut.join('\n')}>{snapshot.leftOut.length} left out</span>
+						· <span class="left-out" title={snapshot.leftOut.join('\n')}>{t('{n} left out', { n: snapshot.leftOut.length })}</span>
 					{/if}
 				</span>
-				<button onclick={() => (app.contexts.length ? app.leaveSnapshot() : closeSnapshot())}>Leave snapshot</button>
+				<button onclick={() => (app.contexts.length ? app.leaveSnapshot() : closeSnapshot())}>{t('Leave snapshot')}</button>
 			</div>
 		{/if}
 		{#if app.settingsError}
 			<div class="error" role="alert">
-				<span>Kubri's settings file could not be read, so it uses the defaults: {app.settingsError}</span>
-				<button onclick={() => (app.settingsError = null)} aria-label="Dismiss">×</button>
+				<span>{t("Kubri's settings file could not be read, so it uses the defaults: {error}", { error: app.settingsError })}</span>
+				<button onclick={() => (app.settingsError = null)} aria-label={t('Dismiss')}>×</button>
 			</div>
 		{/if}
 		{#if app.error}
 			<div class="error" role="alert">
 				<span>{app.error}</span>
-				<button onclick={() => (app.error = null)} aria-label="Dismiss">×</button>
+				<button onclick={() => (app.error = null)} aria-label={t('Dismiss')}>×</button>
 			</div>
 		{/if}
 
@@ -697,35 +702,35 @@
 							<ResourceView resource={app.selected} namespace={app.namespace} scope={app.scope} />
 						{/key}
 					{:else}
-						<div class="placeholder">Choose a resource or press <kbd>:</kbd>.</div>
+						<div class="placeholder"><Phrase text={t('Choose a resource or press {key}.')} kbd={{ key: ':' }} /></div>
 					{/if}
 				{:else}
 					{#if app.kubeconfigProblem !== null && !app.contexts.length && !app.connecting}
 						<section class="connect">
 							<img src={logo} alt="" width="56" height="56" />
-							<span class="eyebrow">Getting started</span>
-							<h1>No clusters yet.</h1>
+							<span class="eyebrow">{t('Getting started')}</span>
+							<h1>{t('No clusters yet.')}</h1>
 							<p>
 								{isTauri()
-									? 'Kubri reads your clusters from a kubeconfig, as kubectl does, and found none it can use. Load the kubeconfig file you got for your cluster, or start a cluster on this computer.'
-									: 'kubri-server found no kubeconfig it can use. Add contexts from a kubeconfig file, or start the server with one.'}
-								To look around first, open the demo: a snapshot of a small shop, read-only.
+									? t('Kubri reads your clusters from a kubeconfig, as kubectl does, and found none it can use. Load the kubeconfig file you got for your cluster, or start a cluster on this computer.')
+									: t('kubri-server found no kubeconfig it can use. Add contexts from a kubeconfig file, or start the server with one.')}
+								{t('To look around first, open the demo: a snapshot of a small shop, read-only.')}
 							</p>
 							<p class="problem">{app.kubeconfigProblem}</p>
 							<div class="connect-actions">
 								<button class="primary" onclick={() => (app.kubeconfigFilesOpen = isTauri() ? true : 'copy')}>
-									{isTauri() ? 'Load kubeconfig file…' : 'Add contexts from a file…'}
+									{isTauri() ? t('Load kubeconfig file…') : t('Add contexts from a file…')}
 									<Icon name="arrow" size={16} />
 								</button>
 								{#await backend.localClusters().catch(() => null) then clusters}
-									{#if clusters?.allowed}<button onclick={() => (localClusterOpen = true)}>Start a cluster…</button>{/if}
+									{#if clusters?.allowed}<button onclick={() => (localClusterOpen = true)}>{t('Start a cluster…')}</button>{/if}
 								{/await}
-								<button onclick={openDemo}>Open the demo</button>
-								<button onclick={retryKubeconfig}>Try again</button>
+								<button onclick={openDemo}>{t('Open the demo')}</button>
+								<button onclick={retryKubeconfig}>{t('Try again')}</button>
 							</div>
 							{#if localClusterOpen}<LocalClusterDialog onclose={() => (localClusterOpen = false)} />{/if}
 							<p class="small">
-								Kubri looks in the files listed in <code>KUBECONFIG</code>, or in <code>~/.kube/config</code>.
+								{t('Kubri looks in the files listed in')} <code>KUBECONFIG</code>{t(', or in')} <code>~/.kube/config</code>.
 							</p>
 						</section>
 					{:else if app.connecting || app.connectFailure}
@@ -734,18 +739,18 @@
 							<ConnectCard inline />
 							{#if !app.connecting}
 								<div class="connect-actions">
-									<button onclick={() => (app.kubeconfigFilesOpen = true)}>Kubeconfig files…</button>
+									<button onclick={() => (app.kubeconfigFilesOpen = true)}>{t('Kubeconfig files…')}</button>
 								</div>
 							{/if}
 						</section>
 					{:else}
 						<section class="connect">
 							<img src={logo} alt="" width="56" height="56" />
-							<h1>Connect to a cluster.</h1>
+							<h1>{t('Connect to a cluster.')}</h1>
 							<p>
 								{isTauri()
-									? 'Choose a context from your kubeconfig. Reload it after you update your credentials.'
-									: 'Choose a context configured on kubri-server. The server holds the credentials.'}
+									? t('Choose a context from your kubeconfig. Reload it after you update your credentials.')
+									: t('Choose a context configured on kubri-server. The server holds the credentials.')}
 							</p>
 							<div class="connect-actions">
 								<button
@@ -755,13 +760,13 @@
 										app.reloadContexts(true);
 									}}
 								>
-									Choose context <Icon name="arrow" size={16} />
+									{t('Choose context')} <Icon name="arrow" size={16} />
 								</button>
-								<button onclick={() => app.load()}>Try again</button>
-								<button onclick={() => (app.kubeconfigFilesOpen = true)}>Kubeconfig files…</button>
-								{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>See all clusters</button>{/if}
+								<button onclick={() => app.load()}>{t('Try again')}</button>
+								<button onclick={() => (app.kubeconfigFilesOpen = true)}>{t('Kubeconfig files…')}</button>
+								{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>{t('See all clusters')}</button>{/if}
 							</div>
-							<p class="small">Your k9s aliases, hotkeys, plugins and skins keep working.</p>
+							<p class="small">{t('Your k9s aliases, hotkeys, plugins and skins keep working.')}</p>
 						</section>
 					{/if}
 				{/if}
@@ -779,27 +784,27 @@
 				{app.connectingText
 					? app.connectingText
 					: app.snapshot
-						? `Snapshot · ${app.snapshot.file ?? app.snapshot.context}`
+						? t('Snapshot · {name}', { name: app.snapshot.file ?? app.snapshot.context })
 						: app.cluster
-							? `Live · ${app.contextName(app.cluster.context)}`
-							: 'Not connected'}
+							? t('Live · {name}', { name: app.contextName(app.cluster.context) })
+							: t('Not connected')}
 			</span>
 			{#if app.release}
 				{@const release = app.release}
 				<span class="release">
 					{#if release.installable}
-						<button onclick={() => (app.updateOpen = true)} title="Update Kubri to {release.version}">
-							Kubri {release.version} is out · Update
+						<button onclick={() => (app.updateOpen = true)} title={t('Update Kubri to {version}', { version: release.version })}>
+							{t('Kubri {version} is out', { version: release.version })} · {t('Update')}
 						</button>
 					{:else}
 						<button
 							onclick={() => backend.openUrl(release.url)}
-							title={release.manual ? `${release.manual} Opens the release notes and downloads.` : 'Open the release notes and downloads'}
+							title={release.manual ? `${release.manual} ${t('Opens the release notes and downloads.')}` : t('Open the release notes and downloads')}
 						>
-							Kubri {release.version} is out
+							{t('Kubri {version} is out', { version: release.version })}
 						</button>
 					{/if}
-					<button class="close" onclick={() => app.dismissRelease()} aria-label="Hide until the next release">×</button>
+					<button class="close" onclick={() => app.dismissRelease()} aria-label={t('Hide until the next release')}>×</button>
 				</span>
 			{/if}
 			<span class="hints" data-tour="keys">
@@ -1311,7 +1316,8 @@
 		background: var(--surface-2);
 		color: var(--text);
 	}
-	kbd {
+	kbd,
+	.placeholder :global(kbd) {
 		margin-right: 5px;
 		padding: 0 5px;
 		border: 1px solid var(--border);

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import type { Chart } from '../api';
 	import { colorSlots, formatValue, timeLabel, timeTicks, valueAt, valueTicks } from '../charts';
 
@@ -81,9 +83,9 @@
 
 <figure class="chart">
 	<figcaption>
-		<strong>{chart.title}</strong>
+		<strong>{coreText(chart.title)}</strong>
 		{#if single && latest(chart.series[0]) !== undefined}
-			<span class="now">{formatValue(chart.unit, latest(chart.series[0])!)} now</span>
+			<span class="now">{t('{value} now', { value: formatValue(chart.unit, latest(chart.series[0])!) })}</span>
 		{/if}
 	</figcaption>
 	<div class="plot" bind:clientWidth={width}>
@@ -92,7 +94,7 @@
 				{width}
 				height={HEIGHT}
 				role="img"
-				aria-label="{chart.title}: {chart.series.length} {chart.series.length === 1 ? 'line' : 'lines'}"
+				aria-label={plural(chart.series.length, '{title}: {n} line', '{title}: {n} lines', { title: coreText(chart.title) })}
 				{onpointermove}
 				onpointerleave={() => (hover = null)}
 			>
@@ -105,13 +107,13 @@
 				{/each}
 				{#each markers as marker (marker.at + marker.label)}
 					<line class="marker" x1={x(marker.at)} x2={x(marker.at)} y1={TOP} y2={HEIGHT - BOTTOM}>
-						<title>{marker.label}</title>
+						<title>{coreText(marker.label)}</title>
 					</line>
 				{/each}
 				{#each chart.levels as level (level.label)}
 					<line class="level" x1={LEFT} x2={LEFT + plotWidth} y1={y(level.value)} y2={y(level.value)} />
 					<text class="level-label" x={LEFT + plotWidth - 2} y={y(level.value) - 4} text-anchor="end">
-						{level.label} {formatValue(chart.unit, level.value)}
+						{coreText(level.label)} {formatValue(chart.unit, level.value)}
 					</text>
 				{/each}
 				{#each chart.series as s (s.name)}
@@ -130,11 +132,11 @@
 			{#if hover !== null && (rows.length || markerNear)}
 				<div class="tip" style:left={tipLeft ? null : `${x(hover) + 12}px`} style:right={tipLeft ? `${width - x(hover) + 12}px` : null}>
 					<div class="when">{new Date(hover * 1000).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</div>
-					{#if markerNear}<div class="event">{markerNear.label}</div>{/if}
+					{#if markerNear}<div class="event">{coreText(markerNear.label)}</div>{/if}
 					{#each rows.slice(0, 8) as row (row.name)}
 						<div class="row">
 							<span class="swatch" style:background={color(row.name)}></span>
-							<span class="name">{single ? chart.title : row.name}</span>
+							<span class="name">{coreText(single ? chart.title : row.name)}</span>
 							<strong>{formatValue(chart.unit, row.value!)}</strong>
 						</div>
 					{/each}

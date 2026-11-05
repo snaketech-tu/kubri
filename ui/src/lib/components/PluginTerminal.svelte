@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { backend, type Plugin, type PluginRun } from '../api';
 	import { app } from '../state.svelte';
 	import { mountTerminal, TERMINAL_BACKGROUND } from '../terminal';
@@ -21,7 +22,7 @@
 		// Read here, so that a change opens a new terminal: the terminal connects once its fonts are in.
 		const [name, request] = [plugin.name, { ...run }];
 		return mountTerminal(element, (term) => {
-			term.write(`\x1b[2mStarting ${name}…\x1b[0m\r\n`);
+			term.write(`\x1b[2m${t('Starting {name}…', { name })}\x1b[0m\r\n`);
 			return backend.openPlugin({ ...request, cols: term.cols, rows: term.rows }, (event) => {
 				switch (event.type) {
 					case 'ready':
@@ -33,7 +34,7 @@
 					case 'exit':
 						status = 'exited';
 						failed = event.message !== null;
-						term.write(`\r\n\x1b[2m[${event.message ?? 'Done'}. Press Enter or Esc to close.]\x1b[0m\r\n`);
+						term.write(`\r\n\x1b[2m[${t('{result}. Press Enter or Esc to close.', { result: event.message ?? t('Done') })}]\x1b[0m\r\n`);
 						break;
 				}
 			});
@@ -65,10 +66,10 @@
 			{#if subject}<code>{subject}</code>{/if}
 		</div>
 		<span class="status" class:running={status === 'running'} class:failed>
-			{status === 'running' ? 'Running' : status === 'exited' ? (failed ? 'Failed' : 'Done') : 'Starting…'}
+			{status === 'running' ? t('Running') : status === 'exited' ? (failed ? t('Failed') : t('Done')) : t('Starting…')}
 		</span>
-		<button onclick={close} title={status === 'exited' ? 'Close (Enter)' : 'Stop the plugin and close'}>
-			{status === 'exited' ? 'Close' : 'Stop'}
+		<button onclick={close} title={status === 'exited' ? t('Close (Enter)') : t('Stop the plugin and close')}>
+			{status === 'exited' ? t('Close') : t('Stop')}
 		</button>
 	</header>
 	<div class="screen" style:background={TERMINAL_BACKGROUND}><div class="host" bind:this={element}></div></div>

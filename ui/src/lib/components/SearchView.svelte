@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import { untrack } from 'svelte';
 	import { backend, type SearchHit, type SearchResult } from '../api';
 	import { age, errorMessage } from '../format';
@@ -6,6 +7,7 @@
 	import { parseSearch, unbounded } from '../search';
 	import { app } from '../state.svelte';
 	import Icon from './Icon.svelte';
+	import Phrase from './Phrase.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import SearchField from './SearchField.svelte';
 
@@ -77,13 +79,13 @@
 		if (!name) return;
 		const rest = app.settings.searches.filter((s) => s.name !== name && s.query !== searched.trim());
 		if (await app.setSavedSearches([...rest, { name, query: searched.trim() }])) {
-			app.toast(`Saved ${name}`);
+			app.toast(t('Saved {name}', { name }));
 			naming = null;
 		}
 	}
 
 	async function forget(name: string) {
-		if (await app.setSavedSearches(app.settings.searches.filter((s) => s.name !== name))) app.toast(`Removed ${name}`);
+		if (await app.setSavedSearches(app.settings.searches.filter((s) => s.name !== name))) app.toast(t('Removed {name}', { name }));
 	}
 
 	const key = (h: SearchHit) => `${h.object.context}/${h.object.resource.group}/${h.object.resource.plural}/${h.object.namespace}/${h.object.name}`;
@@ -91,17 +93,17 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Search']} prefix="none"
-		title={saved?.name ?? 'Search'}
+		crumbs={[t('Search')]} prefix="none"
+		title={saved?.name ?? t('Search')}
 		count={found?.hits.length}
-		subtitle="Objects by name, label and field, in this cluster or in several"
+		subtitle={t('Objects by name, label and field, in this cluster or in several')}
 	>
 		{#snippet tools()}
 			{#if found && !saved && naming === null}
-				<button class="btn" onclick={() => (naming = searched.trim())}><Icon name="bookmark" size={14} /> Save search</button>
+				<button class="btn" onclick={() => (naming = searched.trim())}><Icon name="bookmark" size={14} /> {t('Save search')}</button>
 			{/if}
 			{#if saved}
-				<button class="btn" onclick={() => forget(saved.name)}>Remove from sidebar</button>
+				<button class="btn" onclick={() => forget(saved.name)}>{t('Remove from sidebar')}</button>
 			{/if}
 		{/snippet}
 	</PageHeader>
@@ -113,8 +115,8 @@
 			search();
 		}}
 	>
-		<SearchField bind:value={text} bind:input label="Search objects" placeholder="web kind:deploy,svc ns:shop -l tier=front status.phase!=Running ctx:*" key={text.trim() && text !== searched ? '↵ Enter' : ''} />
-		<button class="btn primary" disabled={busy}>{busy ? 'Searching…' : 'Search'}</button>
+		<SearchField bind:value={text} bind:input label={t('Search objects')} placeholder={t('web kind:deploy,svc ns:shop -l tier=front status.phase!=Running ctx:*')} key={text.trim() && text !== searched ? '↵ Enter' : ''} />
+		<button class="btn primary" disabled={busy}>{busy ? t('Searching…') : t('Search')}</button>
 	</form>
 	{#if naming !== null}
 		<form
@@ -125,12 +127,12 @@
 			}}
 		>
 			<label>
-				<span>Name in the sidebar</span>
+				<span>{t('Name in the sidebar')}</span>
 				<!-- svelte-ignore a11y_autofocus -->
 				<input bind:value={naming} autofocus spellcheck="false" />
 			</label>
-			<button class="btn primary" disabled={!naming.trim()}>Save</button>
-			<button type="button" class="btn" onclick={() => (naming = null)}>Cancel</button>
+			<button class="btn primary" disabled={!naming.trim()}>{t('Save')}</button>
+			<button type="button" class="btn" onclick={() => (naming = null)}>{t('Cancel')}</button>
 		</form>
 	{/if}
 
@@ -138,31 +140,37 @@
 		<div class="banner" role="alert">{error}</div>
 	{:else if !found && !busy}
 		<div class="help">
-			<p>Type part of a name, or narrow it down:</p>
+			<p>{t('Type part of a name, or narrow it down:')}</p>
 			<dl>
 				<dt><code>web</code> <code>/^api-\d+$/</code></dt>
-				<dd>Part of the name, or a regular expression between slashes</dd>
+				<dd>{t('Part of the name, or a regular expression between slashes')}</dd>
 				<dt><code>kind:deploy,svc</code> <code>kind:all</code></dt>
-				<dd>Kinds, named as in the palette; without it the common kinds, with <code>all</code> every kind you may list</dd>
+				<dd><Phrase text={t('Kinds, named as in the palette; without it the common kinds, with {all} every kind you may list')} code={{ all: 'all' }} /></dd>
 				<dt><code>ns:shop</code> <code>-l app=web</code></dt>
-				<dd>One namespace, and a label selector</dd>
+				<dd>{t('One namespace, and a label selector')}</dd>
 				<dt><code>status.phase!=Running</code> <code>spec.replicas&gt;2</code></dt>
-				<dd>A field compared with <code>= != ~ !~ &gt; &lt; &gt;= &lt;=</code>; <code>~</code> means contains</dd>
+				<dd><Phrase text={t('A field compared with {operators}; {tilde} means contains')} code={{ operators: '= != ~ !~ > < >= <=', tilde: '~' }} /></dd>
 				<dt><code>ctx:*</code> <code>ctx:prod,staging</code></dt>
-				<dd>Search every context, or some; without it only {app.cluster?.context ?? 'the connected one'}</dd>
+				<dd>
+					{app.cluster
+						? t('Search every context, or some; without it only {context}', { context: app.cluster.context })
+						: t('Search every context, or some; without it only the connected one')}
+				</dd>
 			</dl>
 			{#if searched.trim() && unbounded(parsed.request)}
-				<p class="muted">Name, label, field, kind or namespace: a search needs at least one of them.</p>
+				<p class="muted">{t('Name, label, field, kind or namespace: a search needs at least one of them.')}</p>
 			{/if}
 		</div>
 	{:else if found}
 		<p class="source">
-			Searched {found.searched} {found.searched === 1 ? 'list' : 'lists'}{contexts > 1 ? ` in ${contexts} contexts` : ''}.
-			{#if found.truncated}<strong>Showing the first {found.hits.length}; narrow the search to see the rest.</strong>{/if}
+			{contexts > 1
+				? plural(found.searched, 'Searched {n} list in {contexts} contexts.', 'Searched {n} lists in {contexts} contexts.', { contexts })
+				: plural(found.searched, 'Searched {n} list.', 'Searched {n} lists.')}
+			{#if found.truncated}<strong>{t('Showing the first {n}; narrow the search to see the rest.', { n: found.hits.length })}</strong>{/if}
 		</p>
 		{#if found.problems.length}
 			<details class="problems">
-				<summary><Icon name="warning" size={14} /> {found.problems.length} {found.problems.length === 1 ? 'list' : 'lists'} could not be searched</summary>
+				<summary><Icon name="warning" size={14} /> {plural(found.problems.length, '{n} list could not be searched', '{n} lists could not be searched')}</summary>
 				<ul>
 					{#each found.problems as p, i (i)}
 						<li><strong>{p.context}{p.kind ? ` · ${p.kind}` : ''}</strong>: {connectError(p.message)}</li>
@@ -176,11 +184,11 @@
 					<table>
 						<thead>
 							<tr>
-								<th>Name</th>
-								<th>Kind</th>
-								<th>Namespace</th>
-								{#if elsewhere}<th>Context</th>{/if}
-								<th class="numeric">Age</th>
+								<th>{t('Name')}</th>
+								<th>{t('Kind')}</th>
+								<th>{t('Namespace')}</th>
+								{#if elsewhere}<th>{t('Context')}</th>{/if}
+								<th class="numeric">{t('Age')}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -197,7 +205,7 @@
 					</table>
 				</div>
 			{:else}
-				<p class="empty">Nothing matches.</p>
+				<p class="empty">{t('Nothing matches.')}</p>
 			{/if}
 		</div>
 	{/if}

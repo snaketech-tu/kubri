@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { FORMS, fieldText, fieldValue, getPath, rename, setPath, type FormField } from '../forms';
 	import { plainOptions } from '../select';
 	import Icon from './Icon.svelte';
@@ -51,9 +52,9 @@
 	}
 </script>
 
-<aside class="form" aria-label="{object.kind} form">
+<aside class="form" aria-label={t('{kind} form', { kind: object.kind })}>
 	<h3>{object.kind}</h3>
-	<p class="lead">Changes here go into the YAML, and edits in the YAML show here.</p>
+	<p class="lead">{t('Changes here go into the YAML, and edits in the YAML show here.')}</p>
 	{#each fields as field (field.path.join('.'))}
 		{#if field.kind === 'map'}
 			<fieldset>
@@ -62,25 +63,25 @@
 					<div class="row">
 						<input
 							value={key}
-							aria-label="{field.label} key {i + 1}"
+							aria-label={t('{label} key {n}', { label: field.label, n: i + 1 })}
 							spellcheck="false"
 							onchange={(e) => editEntry(field, i, e.currentTarget.value, null)}
 						/>
 						<input
 							value={value}
-							aria-label="{field.label} value {i + 1}"
+							aria-label={t('{label} value {n}', { label: field.label, n: i + 1 })}
 							spellcheck="false"
 							onchange={(e) => editEntry(field, i, null, e.currentTarget.value)}
 						/>
 						<button
 							class="remove"
 							onclick={() => setEntries(field, entries(field).filter((_, j) => j !== i))}
-							aria-label="Remove {key}"
-							title="Remove"><Icon name="close" size={13} /></button
+							aria-label={t('Remove {key}', { key })}
+							title={t('Remove')}><Icon name="close" size={13} /></button
 						>
 					</div>
 				{/each}
-				<button class="add" onclick={() => addEntry(field)}>Add</button>
+				<button class="add" onclick={() => addEntry(field)}>{t('Add')}</button>
 				{#if field.hint}<p class="hint">{field.hint}</p>{/if}
 			</fieldset>
 		{:else}

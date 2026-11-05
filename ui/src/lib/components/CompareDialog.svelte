@@ -5,6 +5,7 @@
 	import { comparable, imageChanges } from '../compare';
 	import { errorMessage } from '../format';
 	import { app, type Dialog } from '../state.svelte';
+	import { t } from '../i18n';
 	import DiffView from './DiffView.svelte';
 	import Select from './Select.svelte';
 
@@ -63,7 +64,7 @@
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	aria-label="Compare"
+	aria-label={t('Compare')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
@@ -71,29 +72,29 @@
 	}}
 >
 	<form onsubmit={compare}>
-		<h2>Compare {d.resource.kind} {d.target.name}</h2>
-		<p class="this"><span>This</span><strong>{label(here, d.target.namespace, d.target.name)}</strong></p>
+		<h2>{t('Compare {kind} {name}', { kind: d.resource.kind, name: d.target.name })}</h2>
+		<p class="this"><span>{t('This')}</span><strong>{label(here, d.target.namespace, d.target.name)}</strong></p>
 		<div class="with">
-			<span class="side">With</span>
+			<span class="side">{t('With')}</span>
 			<label>
-				<span>Context</span>
+				<span>{t('Context')}</span>
 				<Select bind:value={context} options={app.contexts.map((c) => ({ value: c.name, label: app.contextName(c.name) }))} mono style="width: 190px" />
 			</label>
 			{#if d.target.namespace !== null}
 				<label>
-					<span>Namespace</span>
+					<span>{t('Namespace')}</span>
 					<input bind:value={namespace} required spellcheck="false" />
 				</label>
 			{/if}
 			<label>
-				<span>Name</span>
+				<span>{t('Name')}</span>
 				<input bind:value={name} required spellcheck="false" />
 			</label>
-			<button type="submit" class="primary" disabled={busy}>{busy ? 'Comparing…' : 'Compare'}</button>
+			<button type="submit" class="primary" disabled={busy}>{busy ? t('Comparing…') : t('Compare')}</button>
 		</div>
 		<label class="check">
 			<input type="checkbox" bind:checked={status} />
-			Include status
+			{t('Include status')}
 		</label>
 	</form>
 
@@ -102,7 +103,7 @@
 	{:else if shown}
 		{#if changes.length}
 			<table class="images">
-				<thead><tr><th>Container</th><th>This</th><th>{shown.where}</th></tr></thead>
+				<thead><tr><th>{t('Container')}</th><th>{t('This')}</th><th>{shown.where}</th></tr></thead>
 				<tbody>
 					{#each changes as c (c.container)}
 						<tr><td>{c.container}</td><td>{c.left ?? '—'}</td><td>{c.right ?? '—'}</td></tr>
@@ -114,12 +115,12 @@
 			before={comparable(shown.left, status)}
 			after={comparable(shown.right, status)}
 			maxHeight="52dvh"
-			changed="lines differ, from this to {shown.where}"
-			unchanged="The same, apart from what each copy keeps of its own, such as its namespace, version and timestamps."
+			changed={t('lines differ, from this to {where}', { where: shown.where })}
+			unchanged={t('The same, apart from what each copy keeps of its own, such as its namespace, version and timestamps.')}
 		/>
 	{/if}
 	<div class="buttons">
-		<button type="button" class="secondary" onclick={() => (app.dialog = null)}>Close</button>
+		<button type="button" class="secondary" onclick={() => (app.dialog = null)}>{t('Close')}</button>
 	</div>
 </dialog>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { backend, type FleetCluster, type KindPulse } from '../api';
 	import { connectError, eachLimited, fleetState, serverHost, workloads } from '../fleet';
 	import { cpu, errorMessage, memory, relative } from '../format';
@@ -82,7 +83,7 @@
 		try {
 			app.contexts = (await backend.removeContext(name)).contexts;
 			delete found[name];
-			app.toast(`Removed ${name} from Kubri`);
+			app.toast(t('Removed {name} from Kubri', { name }));
 		} catch (err) {
 			app.toast(errorMessage(err), 'bad');
 		}
@@ -94,30 +95,30 @@
 
 <section class="page">
 	<PageHeader
-		crumbs={['Clusters']} prefix="none"
-		title="Clusters"
+		crumbs={[t('Clusters')]} prefix="none"
+		title={t('Clusters')}
 		count={contexts.length}
-		subtitle="Every context in your kubeconfig, checked side by side without connecting to it"
+		subtitle={t('Every context in your kubeconfig, checked side by side without connecting to it')}
 	>
 		{#snippet tools()}
 			{#if checking}
-				<span class="muted small" role="status">Checking…</span>
+				<span class="muted small" role="status">{t('Checking…')}</span>
 			{:else if checked}
-				<span class="muted small">Checked {relative(new Date(checked).toISOString(), now)}</span>
+				<span class="muted small">{t('Checked {when}', { when: relative(new Date(checked).toISOString(), now) })}</span>
 			{/if}
-			<button class="btn" onclick={check} disabled={checking}>Check again</button>
-			<button class="btn" onclick={() => (adding = true)}>Add clusters…</button>
+			<button class="btn" onclick={check} disabled={checking}>{t('Check again')}</button>
+			<button class="btn" onclick={() => (adding = true)}>{t('Add clusters…')}</button>
 		{/snippet}
 	</PageHeader>
 
 	{#if !contexts.length}
-		<p class="muted">No contexts in your kubeconfig.</p>
+		<p class="muted">{t('No contexts in your kubeconfig.')}</p>
 	{:else}
 		<p class="tally" role="status">
-			{#if tally.ok}<span><HealthIcon health="ok" /> {tally.ok} healthy</span>{/if}
-			{#if tally.warning}<span><HealthIcon health="warning" /> {tally.warning} need a look</span>{/if}
-			{#if tally.failed}<span><HealthIcon health="failed" /> {tally.failed} with failing workloads</span>{/if}
-			{#if tally.unreachable}<span><HealthIcon health="failed" /> {tally.unreachable} unreachable</span>{/if}
+			{#if tally.ok}<span><HealthIcon health="ok" /> {t('{ok} healthy', { ok: tally.ok })}</span>{/if}
+			{#if tally.warning}<span><HealthIcon health="warning" /> {t('{warning} need a look', { warning: tally.warning })}</span>{/if}
+			{#if tally.failed}<span><HealthIcon health="failed" /> {t('{failed} with failing workloads', { failed: tally.failed })}</span>{/if}
+			{#if tally.unreachable}<span><HealthIcon health="failed" /> {t('{unreachable} unreachable', { unreachable: tally.unreachable })}</span>{/if}
 		</p>
 		<div class="grid">
 			{#each contexts as name (name)}
@@ -140,26 +141,26 @@
 								class="name open"
 								onclick={() => open(name)}
 								disabled={!!app.connecting}
-								title={app.cluster?.context === name ? 'Show its overview' : `Connect to ${name}`}
+								title={app.cluster?.context === name ? t('Show its overview') : t('Connect to {name}', { name })}
 							>
 								{app.contextName(name)}
 							</button>
 							{#if settings.displayName}<span class="context mono">{name}</span>{/if}
 						</span>
-						{#if settings.production}<span class="tag prod">Production</span>{:else if settings.label}<span class="tag">{settings.label}</span>{/if}
-						{#if app.cluster?.context === name}<span class="tag here">Connected</span>{/if}
+						{#if settings.production}<span class="tag prod">{t('Production')}</span>{:else if settings.label}<span class="tag">{settings.label}</span>{/if}
+						{#if app.cluster?.context === name}<span class="tag here">{t('Connected')}</span>{/if}
 					</span>
 					<span class="state">
 						{#if state.health}<HealthIcon health={state.health} size={11} />{:else}<Icon name="pending" size={13} />{/if}
-						<span>{failed[name] ? 'Could not be checked' : state.summary}</span>
+						<span>{failed[name] ? t('Could not be checked') : state.summary}</span>
 					</span>
 					{#if failed[name] || (c?.error && !c.version)}
 						<span class="error" title={failed[name] ?? c?.error ?? undefined}>{failed[name] ?? connectError(c?.error ?? '')}</span>
 					{:else if c?.version}
 						<span class="counts">
-							<span><small>Nodes</small>{counted(nodes)}</span>
-							<span><small>Pods</small>{counted(pods)}</span>
-							<span><small>Workloads</small>{counted(work)}</span>
+							<span><small>{t('Nodes')}</small>{counted(nodes)}</span>
+							<span><small>{t('Pods')}</small>{counted(pods)}</span>
+							<span><small>{t('Workloads')}</small>{counted(work)}</span>
 						</span>
 						{#if c.cpu && c.memory}
 							{@const usage = [
@@ -169,7 +170,7 @@
 							<span class="meters">
 								{#each usage as [label, [requested, capacity], format] (label)}
 									{@const share = percent(requested, capacity)}
-									<span class="meter-row" title="{format(requested)} requested of {format(capacity)}">
+									<span class="meter-row" title={t('{requested} requested of {capacity}', { requested: format(requested), capacity: format(capacity) })}>
 										<small>{label}</small>
 										<span class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(share * 100)} aria-label={label}>
 											<span class="fill {meterTone(share)}" style:width="{Math.min(share, 1) * 100}%"></span>
@@ -179,21 +180,21 @@
 								{/each}
 							</span>
 						{/if}
-						{#if c.error}<span class="note">{c.error}</span>{/if}
+						{#if c.error}<span class="note">{connectError(c.error)}</span>{/if}
 						<span class="meta mono">{serverHost(c.server)} · {c.version} · {c.millis} ms</span>
 					{/if}
 					{#if added}
 						<span class="added">
-							<small>Added in Kubri</small>
+							<small>{t('Added in Kubri')}</small>
 							<button class="btn small remove" class:danger={removing === name} onclick={() => remove(name)} onblur={() => removing === name && (removing = null)}>
-								{removing === name ? 'Remove from Kubri?' : 'Remove'}
+								{removing === name ? t('Remove from Kubri?') : t('Remove')}
 							</button>
 						</span>
 					{/if}
 				</article>
 			{/each}
 		</div>
-		<p class="muted small">Meters show what pods request of what nodes can hold. Opening a cluster connects Kubri to it.</p>
+		<p class="muted small">{t('Meters show what pods request of what nodes can hold. Opening a cluster connects Kubri to it.')}</p>
 	{/if}
 </section>
 

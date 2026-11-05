@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { EventInfo } from '../api';
 	import { age } from '../format';
 
@@ -25,11 +26,15 @@
 				<span class="dot" aria-hidden="true"></span>
 				<div>
 					<strong>{e.reason}</strong>
-					{#if e.kind === 'Warning'}<span class="tag">Warning</span>{/if}
+					{#if e.kind === 'Warning'}<span class="tag">{t('Warning')}</span>{/if}
 					<p class="meta">
-						{age(e.lastSeen, now) || 'just now'} ago{e.count > 1 ? ` · ${e.count} times` : ''}{e.source
-							? ` · ${e.source}`
-							: ''}
+						{[
+							age(e.lastSeen, now) ? t('{age} ago', { age: age(e.lastSeen, now) }) : t('just now'),
+							e.count > 1 ? t('{n} times', { n: e.count }) : '',
+							e.source ?? ''
+						]
+							.filter(Boolean)
+							.join(' · ')}
 					</p>
 					<p class="message">{e.message}</p>
 				</div>
@@ -37,7 +42,7 @@
 		{/each}
 	</ol>
 {:else}
-	<p class="none">No recent events.</p>
+	<p class="none">{t('No recent events.')}</p>
 {/if}
 
 <style>

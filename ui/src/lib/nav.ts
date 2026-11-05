@@ -1,5 +1,6 @@
 import type { IconName } from './components/Icon.svelte';
 import type { ResourceInfo, ResourceRef } from './api';
+import { t } from './i18n';
 
 export interface NavItem {
 	plural: string;
@@ -11,7 +12,7 @@ export interface NavItem {
 /** The views k9s users jump to most, grouped and in this order. Core resources only. */
 export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
 	{
-		title: 'Workloads',
+		title: t('Workloads'),
 		items: [
 			{ plural: 'pods', label: 'Pods', icon: 'pod' },
 			{ plural: 'deployments', label: 'Deployments', icon: 'deployment' },
@@ -22,19 +23,19 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
 		]
 	},
 	{
-		title: 'Network',
+		title: t('Network'),
 		items: [
 			{ plural: 'services', label: 'Services', icon: 'service' },
 			{ plural: 'ingresses', label: 'Ingresses', icon: 'ingress' },
-			{ plural: 'networkpolicies', label: 'Network policies', icon: 'access' }
+			{ plural: 'networkpolicies', label: t('Network policies'), icon: 'access' }
 		]
 	},
 	{
-		title: 'Config and storage',
+		title: t('Config and storage'),
 		items: [
 			{ plural: 'configmaps', label: 'ConfigMaps', icon: 'config' },
 			{ plural: 'secrets', label: 'Secrets', icon: 'secret' },
-			{ plural: 'persistentvolumeclaims', label: 'Volume claims', icon: 'volume' }
+			{ plural: 'persistentvolumeclaims', label: t('Volume claims'), icon: 'volume' }
 		]
 	},
 	{
@@ -50,14 +51,14 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
 
 /** The pages beyond the lists, as the sidebar and the Tools page show them. */
 export const TOOLS = [
-	{ id: 'xray', label: 'Topology', icon: 'topology', command: ':xray', detail: 'What each object depends on, as trees or as one graph' },
-	{ id: 'changes', label: 'What changed', icon: 'history', command: ':changes', detail: 'Rollouts, scaling, config edits and warnings, as a timeline' },
-	{ id: 'helm', label: 'Helm', icon: 'helm', command: ':helm', detail: 'Releases with their values, history and rollback' },
-	{ id: 'portforwards', label: 'Port-forwards', icon: 'forward', command: ':pf', detail: 'Running port-forwards, and favorites that start on their own' },
-	{ id: 'rbac', label: 'Access', icon: 'access', command: ':rbac', detail: 'Who may do what, and what you may do yourself' },
-	{ id: 'sanitizer', label: 'Checks', icon: 'sanitizer', command: ':popeye', detail: 'Common mistakes and risky settings, with a grade' },
-	{ id: 'rightsizing', label: 'Right-sizing', icon: 'sizing', command: ':rightsizing', detail: 'Containers that request much more or less than they use' },
-	{ id: 'benchmarks', label: 'Benchmarks', icon: 'benchmark', command: ':bench', detail: 'HTTP load tests through a port-forward' }
+	{ id: 'xray', label: t('Topology'), icon: 'topology', command: ':xray', detail: t('What each object depends on, as trees or as one graph') },
+	{ id: 'changes', label: t('What changed'), icon: 'history', command: ':changes', detail: t('Rollouts, scaling, config edits and warnings, as a timeline') },
+	{ id: 'helm', label: 'Helm', icon: 'helm', command: ':helm', detail: t('Releases with their values, history and rollback') },
+	{ id: 'portforwards', label: t('Port-forwards'), icon: 'forward', command: ':pf', detail: t('Running port-forwards, and favorites that start on their own') },
+	{ id: 'rbac', label: t('Access'), icon: 'access', command: ':rbac', detail: t('Who may do what, and what you may do yourself') },
+	{ id: 'sanitizer', label: t('Checks'), icon: 'sanitizer', command: ':popeye', detail: t('Common mistakes and risky settings, with a grade') },
+	{ id: 'rightsizing', label: t('Right-sizing'), icon: 'sizing', command: ':rightsizing', detail: t('Containers that request much more or less than they use') },
+	{ id: 'benchmarks', label: 'Benchmarks', icon: 'benchmark', command: ':bench', detail: t('HTTP load tests through a port-forward') }
 ] as const satisfies readonly { id: string; label: string; icon: IconName; command: string; detail: string }[];
 
 export type ToolId = (typeof TOOLS)[number]['id'];
@@ -68,7 +69,7 @@ export const SIDEBAR_TOOLS = 4;
 /** The pages that belong to a tool: Topology has its trees and its graph. */
 export function toolOf(page: string): ToolId | null {
 	if (page === 'graph') return 'xray';
-	return TOOLS.find((t) => t.id === page)?.id ?? null;
+	return TOOLS.find((tool) => tool.id === page)?.id ?? null;
 }
 
 /** The kinds the cluster serves, by API group with the core group first, that match `filter`. */
@@ -101,7 +102,7 @@ export function navPlace(resource: ResourceRef & { kind: string }): { section: s
 			if (item) return { section: section.title, label: item.label };
 		}
 	}
-	return { section: 'All kinds', label: pluralKind(resource.kind, resource.plural) };
+	return { section: t('All kinds'), label: pluralKind(resource.kind, resource.plural) };
 }
 
 /** The kind in its plural, cased like the kind: NetworkPolicy and networkpolicies make NetworkPolicies. */

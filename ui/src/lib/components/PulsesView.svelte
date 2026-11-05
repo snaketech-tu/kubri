@@ -14,6 +14,7 @@
 	import { attentionTitle } from '../causes';
 	import { attentionItems, fill, kindLabel, meterTone, record, shortMessage, splitKinds } from '../pulse';
 	import { app, findResource } from '../state.svelte';
+	import { plural, t } from '../i18n';
 	import HealthIcon from './HealthIcon.svelte';
 	import OtherContexts from './OtherContexts.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
@@ -104,7 +105,7 @@
 	function openList(ref: ResourceRef) {
 		const resource = findResource(app.resources, ref);
 		if (resource) app.open(resource);
-		else app.toast(`${ref.plural} is not served by this cluster`, 'bad');
+		else app.toast(t('{plural} is not served by this cluster', { plural: ref.plural }), 'bad');
 	}
 
 	const pods = $derived(pulse?.kinds.find((k) => k.kind === 'Pod'));
@@ -134,7 +135,7 @@
 	const KIND_TILES = 5;
 
 	const attention = $derived(attentionItems(pulse?.events.recent ?? []));
-	const scopeText = $derived(namespace ? `Namespace ${namespace}` : 'All namespaces');
+	const scopeText = $derived(namespace ? t('Namespace {name}', { name: namespace }) : t('All namespaces'));
 	const clusterText = $derived(
 		app.cluster ? [serverHost(app.cluster.server), app.cluster.version].filter(Boolean).join(' · ') : ''
 	);
@@ -147,14 +148,14 @@
 	function openEvent(event: RecentEvent) {
 		const resource = findResource(app.resources, event.object.resource);
 		if (resource) app.showDetails(resource, { ...event.object, resource });
-		else app.toast(`${event.objectKind} ${event.object.name} cannot be opened here`, 'bad');
+		else app.toast(t('{kind} {name} cannot be opened here', { kind: event.objectKind, name: event.object.name }), 'bad');
 	}
 
 	/** CPU in cores, and below a tenth of one in millicores, so a small use does not read 0.0. */
 	function cores(millicores: number) {
 		if (millicores > 0 && millicores < 100) return `${Math.max(1, Math.round(millicores))}m`;
 		const value = millicores / 1000;
-		return `${value < 10 ? value.toFixed(1) : Math.round(value)} cores`;
+		return t('{n} cores', { n: value < 10 ? value.toFixed(1) : Math.round(value) });
 	}
 
 	const percent = (value: number) => `${Math.round(value * 100)}%`;
@@ -223,14 +224,14 @@
 
 <section>
 	<header>
-		<nav class="crumbs" aria-label="Breadcrumb">
+		<nav class="crumbs" aria-label={t('Breadcrumb')}>
 			<span>{app.cluster?.context}</span>
 			<Icon name="next" size={12} />
-			<span>Overview</span>
+			<span>{t('Overview')}</span>
 		</nav>
 		<div class="heading">
 			<div>
-				<h1>Overview</h1>
+				<h1>{t('Overview')}</h1>
 				<p class="subtitle">
 					{scopeText}{app.environment ? ` · ${app.environment}` : ''}
 					{#if clusterText}<span class="mono">· {clusterText}</span>{/if}
@@ -241,11 +242,11 @@
 					<span class="health" role="status"><HealthIcon health={health.health} size={11} />{health.summary}</span>
 				{/if}
 				{#if attention.length}
-					<span class="tag warn"><Icon name="warning" size={14} />{attention.length} need attention</span>
+					<span class="tag warn"><Icon name="warning" size={14} />{plural(attention.length, '{n} needs attention', '{n} need attention')}</span>
 				{/if}
 				{#if updated}
-					<span class="live" title="Refreshes every {REFRESH_MS / 1000} seconds">
-						<span class="dot"></span>Updated {age(new Date(updated).toISOString(), now) || '0s'} ago
+					<span class="live" title={t('Refreshes every {seconds} seconds', { seconds: REFRESH_MS / 1000 })}>
+						<span class="dot"></span>{t('Updated {age} ago', { age: age(new Date(updated).toISOString(), now) || '0s' })}
 					</span>
 				{/if}
 			</div>
@@ -254,18 +255,18 @@
 
 	{#if error}
 		<div class="error" role="alert">
-			Could not load the overview: {error}{pulse ? ' Showing the last values.' : ''}
+			{t('Could not load the overview: {error}', { error })}{pulse ? ` ${t('Showing the last values.')}` : ''}
 		</div>
 	{/if}
 
 	{#if pulse}
 		<div class="body" bind:this={body}>
 			<div class="kpis">
-				{@render countCard(0, 'Healthy pods', 'pod', pods, namespace ? `In ${namespace}` : 'All namespaces')}
-				{@render countCard(1, 'Ready nodes', 'node', nodes, 'Cluster-wide')}
-				{@render countCard(2, 'Ready workloads', 'deployment', work ?? undefined, namespace ? `In ${namespace}` : 'All namespaces')}
-				{@render usageCard(3, 'CPU utilization', 'benchmark', pulse.cpu, cores)}
-				{@render usageCard(4, 'Memory utilization', 'volume', pulse.memory, memory)}
+				{@render countCard(0, t('Healthy pods'), 'pod', pods, namespace ? t('In {namespace}', { namespace }) : t('All namespaces'))}
+				{@render countCard(1, t('Ready nodes'), 'node', nodes, t('Cluster-wide'))}
+				{@render countCard(2, t('Ready workloads'), 'deployment', work ?? undefined, namespace ? t('In {namespace}', { namespace }) : t('All namespaces'))}
+				{@render usageCard(3, t('CPU utilization'), 'benchmark', pulse.cpu, cores)}
+				{@render usageCard(4, t('Memory utilization'), 'volume', pulse.memory, memory)}
 			</div>
 
 			<div class="columns">
@@ -273,17 +274,17 @@
 					<section class="card" aria-labelledby="attention-title">
 						<div class="card-head">
 							<div>
-								<h2 id="attention-title">Needs attention <span class="n">{attention.length}</span></h2>
-								<p>Warnings of the last hour, one entry per object.</p>
+								<h2 id="attention-title">{t('Needs attention')} <span class="n">{attention.length}</span></h2>
+								<p>{t('Warnings of the last hour, one entry per object.')}</p>
 							</div>
 							<button class="link" onclick={() => openList({ group: '', version: 'v1', plural: 'events' })}>
-								All events <Icon name="arrow" size={15} />
+								{t('All events')} <Icon name="arrow" size={15} />
 							</button>
 						</div>
 						{#if pulse.events.error}
-							<p class="empty">Warnings are not available: {pulse.events.error}</p>
+							<p class="empty">{t('Warnings are not available: {error}', { error: pulse.events.error })}</p>
 						{:else if attention.length === 0}
-							<p class="empty"><Icon name="ok" size={16} /> Nothing needs a look in {scopeText.toLowerCase()}.</p>
+							<p class="empty"><Icon name="ok" size={16} /> {namespace ? t('Nothing needs a look in namespace {name}.', { name: namespace }) : t('Nothing needs a look in all namespaces.')}</p>
 						{:else}
 							{#each attention as item (`${item.event.object.namespace}/${item.event.object.name}/${item.event.objectKind}`)}
 								<button class="signal" onclick={() => openEvent(item.event)}>
@@ -294,7 +295,7 @@
 										<span class="headline">
 											<strong>{attentionTitle(item.event.object.name, item.reasons, item.event.message)}</strong>
 											<span class="tag {item.severity === 'critical' ? 'bad' : 'warn'}">
-												{item.severity === 'critical' ? 'Critical' : 'Warning'}
+												{item.severity === 'critical' ? t('Critical') : t('Warning')}
 											</span>
 										</span>
 										<span class="message" title={item.event.message}
@@ -306,10 +307,10 @@
 												{item.event.object.namespace ? `${item.event.object.namespace} / ` : ''}{item.event.object
 													.name}</code
 											>
-											<span>{item.count}× · {age(item.event.lastSeen, app.snapshot?.taken ?? now) || 'just now'} ago</span>
+											<span>{item.count}× · {age(item.event.lastSeen, app.snapshot?.taken ?? now) ? t('{age} ago', { age: age(item.event.lastSeen, app.snapshot?.taken ?? now) }) : t('just now')}</span>
 										</span>
 									</span>
-									<span class="go">Investigate <Icon name="arrow" size={15} /></span>
+									<span class="go">{t('Investigate')} <Icon name="arrow" size={15} /></span>
 								</button>
 							{/each}
 						{/if}
@@ -317,15 +318,15 @@
 
 					<section class="card" aria-labelledby="events-title">
 						<div class="card-head">
-							<h2 id="events-title">Recent warnings</h2>
-							<span class="muted">{pulse.events.warning} warnings · {pulse.events.normal} normal, last hour</span>
+							<h2 id="events-title">{t('Recent warnings')}</h2>
+							<span class="muted">{t('{warnings} warnings · {normal} normal, last hour', { warnings: pulse.events.warning, normal: pulse.events.normal })}</span>
 						</div>
 						{#if pulse.events.recent.length}
 							<ul class="events">
 								{#each pulse.events.recent.slice(0, RECENT) as event, i (i)}
 									<li>
-										<button onclick={() => openEvent(event)} title="Open {event.object.name}">
-											<span class="when">{age(event.lastSeen, now) || 'now'}</span>
+										<button onclick={() => openEvent(event)} title={t('Open {name}', { name: event.object.name })}>
+											<span class="when">{age(event.lastSeen, now) || t('now')}</span>
 											<span class="tag warn">{event.reason}</span>
 											<span class="what">
 												<span class="message">{event.message}</span>
@@ -338,7 +339,7 @@
 								{/each}
 							</ul>
 						{:else}
-							<p class="empty">No warnings in the last hour.</p>
+							<p class="empty">{t('No warnings in the last hour.')}</p>
 						{/if}
 					</section>
 				</div>
@@ -346,7 +347,7 @@
 				<div class="side-column">
 					<section class="card" aria-labelledby="health-title">
 						<div class="card-head">
-							<h2 id="health-title">Resource health</h2>
+							<h2 id="health-title">{t('Resource health')}</h2>
 						</div>
 						<ul class="kinds">
 							{#each shownKinds as kind, i (kind.kind)}
@@ -357,10 +358,9 @@
 									<button class="fold" aria-expanded={showHealthy} onclick={() => (showHealthy = !showHealthy)}>
 										<span class="kind-name">
 											<Icon name="ok" />
-											{kindGroups.healthy.length}
-											{kindGroups.healthy.length === 1 ? 'kind is' : 'kinds are'} healthy
+											{plural(kindGroups.healthy.length, '{n} kind is healthy', '{n} kinds are healthy')}
 										</span>
-										<span class="muted">{showHealthy ? 'Hide' : 'Show'}</span>
+										<span class="muted">{showHealthy ? t('Hide') : t('Show')}</span>
 									</button>
 								</li>
 							{/if}
@@ -370,17 +370,17 @@
 					{#if pulse.certificates.length}
 						<section class="card" aria-labelledby="certificates-title">
 							<div class="card-head">
-								<h2 id="certificates-title">Certificates <span class="n">{pulse.certificates.length}</span></h2>
+								<h2 id="certificates-title">{t('Certificates')} <span class="n">{pulse.certificates.length}</span></h2>
 								<button class="link" onclick={() => openList(pulse!.certificates[0].object.resource)}>
-									All <Icon name="arrow" size={15} />
+									{t('All')} <Icon name="arrow" size={15} />
 								</button>
 							</div>
 							<ul class="events">
 								{#each pulse.certificates as alert (`${alert.object.namespace}/${alert.object.name}`)}
 									<li>
-										<button onclick={() => openCertificate(alert)} title="Open {alert.object.name}">
+										<button onclick={() => openCertificate(alert)} title={t('Open {name}', { name: alert.object.name })}>
 											<span class="when" title={alert.notAfter ?? undefined}>{alert.notAfter ? relative(alert.notAfter, now) : '—'}</span>
-											<span class="tag {alert.health === 'failed' ? 'bad' : 'warn'}">{alert.health === 'failed' ? 'Critical' : 'Warning'}</span>
+											<span class="tag {alert.health === 'failed' ? 'bad' : 'warn'}">{alert.health === 'failed' ? t('Critical') : t('Warning')}</span>
 											<span class="what">
 												<span class="message">{alert.detail}</span>
 												<span class="muted">{alert.object.namespace ? `${alert.object.namespace} / ` : ''}{alert.object.name}</span>
@@ -394,20 +394,20 @@
 
 					<section class="card" aria-labelledby="trend-title">
 						<div class="card-head">
-							<h2 id="trend-title">Usage trend</h2>
-							<span class="muted">{namespace ? 'This namespace' : 'Cluster-wide'}</span>
+							<h2 id="trend-title">{t('Usage trend')}</h2>
+							<span class="muted">{namespace ? t('This namespace') : t('Cluster-wide')}</span>
 						</div>
 						{#if cpuTrend.length < 2 && memoryTrend.length < 2 && (fill(pulse.cpu) || fill(pulse.memory))}
 							<!-- One line until there is a trend to draw, not two empty charts. -->
-							<p class="trend-wait" role="status"><span class="loader" aria-hidden="true"></span>The trend appears after a few updates.</p>
+							<p class="trend-wait" role="status"><span class="loader" aria-hidden="true"></span>{t('The trend appears after a few updates.')}</p>
 						{:else}
 							<div class="trends">
 								{@render trend('CPU', pulse.cpu, cpuTrend, cores)}
-								{@render trend('Memory', pulse.memory, memoryTrend, memory)}
+								{@render trend(t('Memory'), pulse.memory, memoryTrend, memory)}
 							</div>
 						{/if}
 						<p class="note">
-							{trendWindow ? 'The last hour from Prometheus, measured use.' : 'Kept for this session; Kubri stores no history.'}
+							{trendWindow ? t('The last hour from Prometheus, measured use.') : t('Kept for this session; Kubri stores no history.')}
 						</p>
 					</section>
 				</div>
@@ -415,7 +415,7 @@
 			<OtherContexts />
 		</div>
 	{:else if !error}
-		<div class="loading">Loading the overview…</div>
+		<div class="loading">{t('Loading the overview…')}</div>
 	{/if}
 </section>
 
@@ -423,21 +423,21 @@
 	<button class="kpi" class:cursor={keyboard && cursor === index} data-tile={index} onclick={() => activate(index)}>
 		<span class="kpi-label">{label}<Icon name={icon} /></span>
 		{#if !kind}
-			<span class="denied">Not shown</span>
-			<span class="kpi-note">{label === 'Ready nodes' ? 'Nodes show for all namespaces' : 'Not listed'}</span>
+			<span class="denied">{t('Not shown')}</span>
+			<span class="kpi-note">{index === 1 ? t('Nodes show for all namespaces') : t('Not listed')}</span>
 		{:else if kind.error}
-			<span class="denied" title={kind.error}>No access</span>
+			<span class="denied" title={kind.error}>{t('No access')}</span>
 			<span class="kpi-note">{scope}</span>
 		{:else}
 			<span class="kpi-value">{kind.ok}<small> / {kind.total}</small></span>
 			<span class="kpi-note">
 				{kind.warning || kind.failed
-					? [kind.warning && `${kind.warning} warning`, kind.failed && `${kind.failed} failing`]
+					? [kind.warning && t('{n} warning', { n: kind.warning }), kind.failed && t('{n} failing', { n: kind.failed })]
 							.filter(Boolean)
 							.join(' · ')
 					: kind.total
-						? `${scope} · all healthy`
-						: `${scope} · none`}
+						? `${scope} · ${t('all healthy')}`
+						: `${scope} · ${t('none')}`}
 			</span>
 			<span class="bar" aria-hidden="true">
 				{#each [['ok', kind.ok], ['warning', kind.warning], ['failed', kind.failed]] as [health, count] (health)}
@@ -455,16 +455,16 @@
 		class:cursor={keyboard && cursor === index}
 		data-tile={index}
 		onclick={() => activate(index)}
-		title="Open {namespace ? 'pods' : 'nodes'}"
+		title={namespace ? t('Open pods') : t('Open nodes')}
 	>
 		<span class="kpi-label">{label}<Icon name={icon} /></span>
 		{#if level && u.capacity}
-			<span class="kpi-value">{Math.round(level.value * 100)}<small>%{level.measured ? '' : ' requested'}</small></span>
+			<span class="kpi-value">{Math.round(level.value * 100)}<small>%{level.measured ? '' : ` ${t('requested')}`}</small></span>
 			<span class="kpi-note">
 				{#if level.measured && u.used !== null}
-					{format(u.used)} used of {format(u.capacity)}
+					{t('{used} used of {capacity}', { used: format(u.used), capacity: format(u.capacity) })}
 				{:else}
-					{format(u.requested ?? 0)} of {format(u.capacity)} · no metrics-server
+					{t('{requested} of {capacity}', { requested: format(u.requested ?? 0), capacity: format(u.capacity) })} · {t('no metrics-server')}
 				{/if}
 			</span>
 			{#if level.measured && u.requested !== null}
@@ -473,11 +473,11 @@
 					class="kpi-note requested"
 					class:over
 					title={over
-						? `Pods request ${format(u.requested)} of ${format(u.capacity)}: those that do not fit wait as Pending`
+						? t('Pods request {requested} of {capacity}: those that do not fit wait as Pending', { requested: format(u.requested), capacity: format(u.capacity) })
 						: undefined}
 				>
-					<strong>{percent(u.requested / u.capacity)}</strong> requested · {over
-						? 'more than the nodes hold'
+					<strong>{percent(u.requested / u.capacity)}</strong> {t('requested')} · {over
+						? t('more than the nodes hold')
 						: format(u.requested)}
 				</span>
 			{/if}
@@ -487,7 +487,7 @@
 				aria-valuemin="0"
 				aria-valuemax="100"
 				aria-valuenow={Math.round(level.value * 100)}
-				aria-label="{label} {level.measured ? 'used' : 'requested'}"
+				aria-label="{label} {level.measured ? t('used') : t('requested')}"
 			>
 				<span
 					class="fill {meterTone(level.value) === 'accent' ? '' : meterTone(level.value)}"
@@ -498,13 +498,13 @@
 						class="request"
 						class:over={u.requested > u.capacity}
 						style:left={percent(Math.min(u.requested / u.capacity, 1))}
-						title="Requested"
+						title={t('Requested')}
 					></span>
 				{/if}
 			</span>
 		{:else}
-			<span class="denied">Not available</span>
-			<span class="kpi-note">Needs access to nodes{u.used === null ? ' and metrics-server' : ''}</span>
+			<span class="denied">{t('Not available')}</span>
+			<span class="kpi-note">{u.used === null ? t('Needs access to nodes and metrics-server') : t('Needs access to nodes')}</span>
 		{/if}
 	</button>
 {/snippet}
@@ -514,14 +514,14 @@
 		<button class:cursor={keyboard && cursor === index} data-tile={index} onclick={() => activate(index)}>
 			<span class="kind-name"><Icon name={KIND_ICONS[kind.kind] ?? 'resource'} />{kindLabel(kind)}</span>
 			{#if kind.error}
-				<span class="muted" title={kind.error}>No access</span>
+				<span class="muted" title={kind.error}>{t('No access')}</span>
 			{:else if kind.total === 0}
-				<span class="muted">None</span>
+				<span class="muted">{t('None')}</span>
 			{:else}
 				<span class="kind-counts">
-					{#if kind.failed}<span class="bad">{kind.failed} failing</span>{/if}
-					{#if kind.warning}<span class="warn">{kind.warning} warning</span>{/if}
-					<span><strong>{kind.ok}</strong> / {kind.total} healthy</span>
+					{#if kind.failed}<span class="bad">{t('{n} failing', { n: kind.failed })}</span>{/if}
+					{#if kind.warning}<span class="warn">{t('{n} warning', { n: kind.warning })}</span>{/if}
+					<span><strong>{kind.ok}</strong> / {t('{total} healthy', { total: kind.total })}</span>
 				</span>
 				<span class="bar" aria-hidden="true">
 					{#each [['ok', kind.ok], ['warning', kind.warning], ['failed', kind.failed]] as [health, count] (health)}
@@ -544,9 +544,9 @@
 			{/if}
 		</span>
 		{#if level}
-			<Sparkline samples={history} {format} label="{label} {level.measured ? 'used' : 'requested'}" {now} window={trendWindow} />
+			<Sparkline samples={history} {format} label="{label} {level.measured ? t('used') : t('requested')}" {now} window={trendWindow} />
 		{:else}
-			<span class="muted">Not available</span>
+			<span class="muted">{t('Not available')}</span>
 		{/if}
 	</div>
 {/snippet}

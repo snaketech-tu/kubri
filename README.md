@@ -166,6 +166,7 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
         <li>Fast with big clusters: 10,000 pods in about a second, <a href="docs/SPEED.md">measured in CI</a></li>
         <li>An MCP server so AI agents can read your clusters with your permissions</li>
         <li>Explain: ask your own model why a pod fails, and see first what is sent</li>
+        <li>In English or German</li>
       </ul>
     </td>
   </tr>

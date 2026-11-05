@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { manifestChanges, valuesDiffer, type ManifestChangeKind } from '../helm';
 	import DiffView from './DiffView.svelte';
 
@@ -6,7 +7,7 @@
 		namespace,
 		before,
 		after,
-		valuesLabel = 'Given values'
+		valuesLabel = t('Given values')
 	}: {
 		/** The release namespace, where objects without one land. */
 		namespace: string;
@@ -24,25 +25,25 @@
 	);
 	const differ = $derived(valuesDiffer(before.values, after.values));
 	const LABEL: Record<ManifestChangeKind, string> = {
-		changed: 'Changes',
-		added: 'New',
-		removed: 'Deleted',
-		unchanged: 'Same'
+		changed: t('Changes'),
+		added: t('New'),
+		removed: t('Deleted'),
+		unchanged: t('Same')
 	};
 </script>
 
 <div class="compare">
 	<h4>{valuesLabel}</h4>
 	{#if differ}
-		<DiffView before={before.values ?? {}} after={after.values ?? {}} changed="lines of values" maxHeight="280px" />
+		<DiffView before={before.values ?? {}} after={after.values ?? {}} changed={t('lines of values')} maxHeight="280px" />
 	{:else}
-		<p class="muted">The same.</p>
+		<p class="muted">{t('The same.')}</p>
 	{/if}
 
 	<h4>
-		Objects
+		{t('Objects')}
 		<span class="muted counts">
-			{counts.changed} changed · {counts.added} new · {counts.removed} deleted · {counts.unchanged} the same
+			{t('{changed} changed · {added} new · {removed} deleted · {unchanged} the same', { changed: counts.changed, added: counts.added, removed: counts.removed, unchanged: counts.unchanged })}
 		</span>
 	</h4>
 	{#each changes.filter((c) => c.change !== 'unchanged') as c (`${c.change}/${c.kind}/${c.namespace}/${c.name}`)}
@@ -51,18 +52,18 @@
 				<span class="badge {c.change}">{LABEL[c.change]}</span>
 				<span class="kind">{c.kind}</span>
 				<span class="mono">{c.name}</span>
-				{#if c.namespace && c.namespace !== namespace}<span class="muted">in {c.namespace}</span>{/if}
+				{#if c.namespace && c.namespace !== namespace}<span class="muted">{t('in {namespace}', { namespace: c.namespace })}</span>{/if}
 			</summary>
 			<DiffView
 				before={c.before}
 				after={c.after}
-				changed="lines in the rendered manifest"
-				unchanged="No changes."
+				changed={t('lines in the rendered manifest')}
+				unchanged={t('No changes.')}
 				maxHeight="420px"
 			/>
 		</details>
 	{:else}
-		<p class="muted">No object changes.</p>
+		<p class="muted">{t('No object changes.')}</p>
 	{/each}
 </div>
 

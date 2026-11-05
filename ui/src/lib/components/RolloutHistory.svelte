@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { backend, type ObjectRef, type ResourceInfo } from '../api';
 	import { errorMessage } from '../format';
 	import { age } from '../format';
@@ -64,18 +65,18 @@
 
 {#if revisions !== 'loading' && !('error' in revisions) && revisions.length > 1}
 	<section class="history">
-		<h3>Rollout history</h3>
+		<h3>{t('Rollout history')}</h3>
 		<ul>
 			{#each revisions as r, i (r.revision)}
 				{@const next = revisions[i + 1]}
 				{@const changes = next ? imageChanges(next.images, r.images) : []}
 				<li>
 					<div class="line">
-						<strong>Revision {r.revision}</strong>
-						{#if r.current}<span class="now">current</span>{/if}
-						{#if r.created}<span class="muted">{age(r.created, now)} ago</span>{/if}
+						<strong>{t('Revision {revision}', { revision: r.revision })}</strong>
+						{#if r.current}<span class="now">{t('current')}</span>{/if}
+						{#if r.created}<span class="muted">{t('{age} ago', { age: age(r.created, now) })}</span>{/if}
 						{#if !r.current && rollbackAllowed}
-							<button class="btn small" onclick={() => rollBack(r)}>Roll back to revision {r.revision}</button>
+							<button class="btn small" onclick={() => rollBack(r)}>{t('Roll back to revision {revision}', { revision: r.revision })}</button>
 						{/if}
 					</div>
 					<div class="images">

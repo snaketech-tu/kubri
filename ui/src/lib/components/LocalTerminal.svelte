@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import { untrack } from 'svelte';
 	import { backend, type LocalTerminalInfo } from '../api';
 	import type { LocalSession } from '../dock.svelte';
@@ -63,7 +65,7 @@
 				if (cancelled) return;
 				info = null;
 				status = 'refused';
-				app.toast(`Could not open a terminal: ${errorMessage(err)}`, 'bad');
+				app.toast(t('Could not open a terminal: {error}', { error: errorMessage(err) }), 'bad');
 			}
 		);
 		return () => {
@@ -80,49 +82,49 @@
 
 	const refusal = $derived.by(() => {
 		if (status !== 'refused') return null;
-		if (!here) return `This terminal belongs to ${app.contextName(s.context)}. Switch to it to open the terminal again.`;
-		return info?.reason ?? 'Kubri could not tell whether a terminal may be opened here.';
+		if (!here) return t('This terminal belongs to {context}. Switch to it to open the terminal again.', { context: app.contextName(s.context) });
+		return info?.reason ? coreText(info.reason) : t('Kubri could not tell whether a terminal may be opened here.');
 	});
 </script>
 
 <div class="terminal" style:--terminal-bg={TERMINAL_BACKGROUND}>
 	<div class="toolbar">
-		<strong>Terminal</strong>
+		<strong>{t('Terminal')}</strong>
 		<code
 			class:production
 			title={s.namespace
-				? 'kubectl and helm here talk to this context and namespace'
-				: "kubectl and helm here talk to this context, in the context's own namespace"}>{where}</code
+				? t('kubectl and helm here talk to this context and namespace')
+				: t("kubectl and helm here talk to this context, in the context's own namespace")}>{where}</code
 		>
 		{#if info?.allowed}
 			<span class="tool" title={info.shell}>
-				{#if info.kubectl}kubectl {info.kubectl}{:else}<a href={INSTALL} target="_blank" rel="noreferrer">kubectl not found</a>{/if}
+				{#if info.kubectl}kubectl {info.kubectl}{:else}<a href={INSTALL} target="_blank" rel="noreferrer">{t('kubectl not found')}</a>{/if}
 			</span>
 			{#if info.helm}<span class="tool">helm {info.helm}</span>{/if}
-			{#if info.skew}<a class="skew" href="{INSTALL}" target="_blank" rel="noreferrer" title={info.skew}>kubectl version too far from the cluster's</a>{/if}
+			{#if info.skew}<a class="skew" href="{INSTALL}" target="_blank" rel="noreferrer" title={coreText(info.skew)}>{t("kubectl version too far from the cluster's")}</a>{/if}
 		{/if}
 		<span class="status" class:open={status === 'open'} class:exited={status === 'exited' || status === 'refused'}>
 			{status === 'open'
-				? 'Running'
+				? t('Running')
 				: status === 'exited'
-					? 'Ended'
+					? t('Ended')
 					: status === 'refused'
-						? 'Not opened'
-						: 'Starting…'}
+						? t('Not opened')
+						: t('Starting…')}
 		</span>
 		<span class="spacer"></span>
-		<button onclick={() => restarts++} disabled={!here} title={here ? '' : `Switch to ${app.contextName(s.context)} to open it again`}>
-			{status === 'open' || status === 'starting' ? 'Restart' : 'Open again'}
+		<button onclick={() => restarts++} disabled={!here} title={here ? '' : t('Switch to {context} to open it again', { context: app.contextName(s.context) })}>
+			{status === 'open' || status === 'starting' ? t('Restart') : t('Open again')}
 		</button>
 	</div>
 	{#if status === 'open' && here && app.guard.readOnly}
-		<p class="note" role="status">Changes are off for this context again. This shell keeps running, without Kubri's checks.</p>
+		<p class="note" role="status">{t('Changes are off for this context again. This shell keeps running, without Kubri\'s checks.')}</p>
 	{/if}
 	{#if refusal}
 		<div class="refused" role="status">
 			<p>{refusal}</p>
 			{#if here && app.guard.readOnly && app.guard.canUnlock}
-				<button onclick={unlock}>Unlock for 15 minutes</button>
+				<button onclick={unlock}>{t('Unlock for 15 minutes')}</button>
 			{/if}
 		</div>
 	{/if}

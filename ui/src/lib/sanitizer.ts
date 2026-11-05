@@ -1,4 +1,5 @@
 import type { Finding, Level, SanitizerReport, SanitizerSection } from './api';
+import { coreText } from './i18n/errors';
 
 const RANK: Record<Level, number> = { info: 0, warning: 1, error: 2 };
 
@@ -31,7 +32,7 @@ export function filterFindings(findings: Finding[], min: LevelFilter, text: stri
 		.filter(
 			(f) =>
 				!t ||
-				[f.name, f.namespace ?? '', ...f.issues.flatMap((i) => [i.message, i.code, i.container ?? ''])].some((v) =>
+				[f.name, f.namespace ?? '', ...f.issues.flatMap((i) => [i.message, coreText(i.message), i.code, i.container ?? ''])].some((v) =>
 					v.toLowerCase().includes(t)
 				)
 		);

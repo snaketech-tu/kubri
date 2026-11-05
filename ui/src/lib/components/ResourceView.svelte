@@ -20,6 +20,8 @@
 	import ColumnChooser from './ColumnChooser.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 	import { describeCron } from '../cron';
+	import { midSentence, t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 
 	let {
 		resource,
@@ -209,10 +211,10 @@
 		!table.error
 			? null
 			: table.hasLoaded
-				? `Connection interrupted. Showing the rows from ${age(new Date(table.updated).toISOString(), now) || '0s'} ago.`
+				? t('Connection interrupted. Showing the rows from {age} ago.', { age: age(new Date(table.updated).toISOString(), now) || '0s' })
 				: /forbidden|403|unauthorized|permission/i.test(table.error)
-					? 'Access denied.'
-					: 'Could not load the list.'
+					? t('Access denied.')
+					: t('Could not load the list.')
 	);
 
 	const rows = $derived.by(() => {
@@ -320,7 +322,7 @@
 			(r) => r.name === wanted.name && (wanted.namespace === null || r.namespace === wanted.namespace)
 		);
 		if (row) pick(row.key);
-		else app.toast(`${wanted.name} is not in the list`, 'bad');
+		else app.toast(t('{name} is not in the list', { name: wanted.name }), 'bad');
 		app.cursorRequest = null;
 	});
 
@@ -410,7 +412,7 @@
 				// Yes and No read better than True and False for switches such as Suspend. Condition
 				// columns (Ready True) keep the word Kubernetes uses, and their color.
 				if (typeof value === 'boolean' || (column.label === 'Suspend' && /^(true|false)$/i.test(String(value)))) {
-					return String(value).toLowerCase() === 'true' ? 'Yes' : 'No';
+					return String(value).toLowerCase() === 'true' ? t('Yes') : t('No');
 				}
 				// Times in custom columns, like a certificate's expiry, read as ages.
 				if (column.custom && typeof value === 'string' && TIMESTAMP.test(value)) return relative(value, now);
@@ -427,18 +429,22 @@
 		const used = u[what];
 		const limit = u.limits?.[what];
 		const request = u.requests?.[what];
-		const name = what === 'cpu' ? 'CPU' : 'memory';
 		if (limit && used >= limit * 0.9) {
+			const n = Math.round((used / limit) * 100);
 			return {
 				tone: 'bad',
 				hint:
 					what === 'cpu'
-						? `At ${Math.round((used / limit) * 100)} % of its CPU limit: it is being throttled`
-						: `At ${Math.round((used / limit) * 100)} % of its memory limit: it may be killed`
+						? t('At {n} % of its CPU limit: it is being throttled', { n })
+						: t('At {n} % of its memory limit: it may be killed', { n })
 			};
 		}
 		if (request && used > request) {
-			return { tone: 'warn', hint: `Using more ${name} than it requests (${Math.round((used / request) * 100)} %)` };
+			const n = Math.round((used / request) * 100);
+			return {
+				tone: 'warn',
+				hint: what === 'cpu' ? t('Using more CPU than it requests ({n} %)', { n }) : t('Using more memory than it requests ({n} %)', { n })
+			};
 		}
 		return null;
 	}
@@ -486,7 +492,7 @@
 	function sanitize() {
 		const done = completedPods(table.columns, rows);
 		if (!done.length) {
-			app.toast('No successfully completed pods in this view');
+			app.toast(t('No successfully completed pods in this view'));
 			return;
 		}
 		const statuses = Object.fromEntries(
@@ -533,7 +539,7 @@
 	function actionOptions(row: Row, chosen: Row[]): ActionOptions {
 		const cleanUp: MenuAction[] =
 			isPods(resource) && canDelete(resource)
-				? [{ group: 'Delete', label: 'Delete finished pods…', keys: ['z'], danger: true, run: sanitize }]
+				? [{ group: 'Delete', label: t('Delete finished pods…'), keys: ['z'], danger: true, run: sanitize }]
 				: [];
 		return {
 			show: (tab, extra) => open(row, tab, extra),
@@ -549,25 +555,25 @@
 	function markedActions(chosen: Row[]): MenuAction[] {
 		if (table.stale) return [];
 		const out: MenuAction[] = [
-			{ group: 'Marked', label: 'Copy names', keys: ['c'], primary: 0, run: () => copyLines(chosen.map((r) => r.name), ['name', 'names']) }
+			{ group: 'Marked', label: t('Copy names'), keys: ['c'], primary: 0, run: () => copyLines(chosen.map((r) => r.name), (n) => t('Copied {n} names', { n })) }
 		];
 		if (resource.namespaced) {
 			out.push({
 				group: 'Marked',
-				label: 'Copy namespaces',
+				label: t('Copy namespaces'),
 				keys: ['n'],
 				primary: 0,
-				run: () => copyLines([...new Set(chosen.map((r) => r.namespace ?? ''))], ['namespace', 'namespaces'])
+				run: () => copyLines([...new Set(chosen.map((r) => r.namespace ?? ''))], (n) => t('Copied {n} namespaces', { n }))
 			});
 		}
 		out.push(
-			{ group: 'Marked', label: 'Mark all', keys: ['ctrl+a'], primary: 0, run: () => rows.forEach((r) => selection.add(r.key)) },
-			{ group: 'Marked', label: 'Unmark all', keys: ['ctrl+\\'], primary: 0, run: () => selection.clear() }
+			{ group: 'Marked', label: t('Mark all'), keys: ['ctrl+a'], primary: 0, run: () => rows.forEach((r) => selection.add(r.key)) },
+			{ group: 'Marked', label: t('Unmark all'), keys: ['ctrl+\\'], primary: 0, run: () => selection.clear() }
 		);
 		if (writable && canScale(resource) && !isPods(resource)) {
 			out.push({
 				group: 'Change',
-				label: `Scale ${chosen.length}…`,
+				label: t('Scale {n}…', { n: chosen.length }),
 				keys: ['s'],
 				primary: 0,
 				run: () => (app.dialog = { kind: 'scaleMany', resource, targets: chosen.map(target) })
@@ -576,7 +582,7 @@
 		if (writable && canRestart(resource)) {
 			out.push({
 				group: 'Change',
-				label: `Restart ${chosen.length}…`,
+				label: t('Restart {n}…', { n: chosen.length }),
 				keys: ['r'],
 				primary: 0,
 				run: () => (app.dialog = { kind: 'restartMany', resource, targets: chosen.map(target) })
@@ -585,7 +591,7 @@
 		if (writable && canDelete(resource)) {
 			out.push({
 				group: 'Delete',
-				label: `Delete ${chosen.length}…`,
+				label: t('Delete {n}…', { n: chosen.length }),
 				keys: ['ctrl+d', 'Delete'],
 				danger: true,
 				primary: 0,
@@ -616,15 +622,15 @@
 		return [
 			{
 				group: 'Copy',
-				label: text ? `Copy “${text.length > 32 ? `${text.slice(0, 31)}…` : text}”` : 'Copy cell',
+				label: text ? t('Copy “{text}”', { text: text.length > 32 ? `${text.slice(0, 31)}…` : text }) : t('Copy cell'),
 				keys: [],
-				run: () => copyLines([text], ['value', 'values'])
+				run: () => copyLines([text])
 			},
 			{
 				group: 'Copy',
-				label: `Copy the ${column.label} column`,
+				label: t('Copy the {column} column', { column: column.label }),
 				keys: [],
-				run: () => copyLines(rows.map((r) => cellText(r, column)), ['value', 'values'])
+				run: () => copyLines(rows.map((r) => cellText(r, column)), (n) => t('Copied {n} values', { n }))
 			}
 		];
 	}
@@ -658,7 +664,7 @@
 						return true;
 					case 'z':
 						if (!healthy && !faults) {
-							app.toast(`${place.label} have no state to tell which need attention`);
+							app.toast(t('{kinds} have no state to tell which need attention', { kinds: place.label }));
 							return true;
 						}
 						showTab(faults ? 'all' : 'attention');
@@ -813,13 +819,13 @@
 
 <section>
 	<header>
-		<nav class="crumbs" aria-label="Breadcrumb">
-			<button onclick={() => app.showPulses()} title="Overview">{app.contextName(app.cluster?.context ?? '')}</button>
+		<nav class="crumbs" aria-label={t('Breadcrumb')}>
+			<button onclick={() => app.showPulses()} title={t('Overview')}>{app.contextName(app.cluster?.context ?? '')}</button>
 			<Icon name="next" size={12} />
-			<span>{!resource.namespaced ? 'cluster-wide' : app.namespace === ALL_NAMESPACES ? 'all namespaces' : app.namespace}</span>
+			<span>{!resource.namespaced ? t('cluster-wide') : app.namespace === ALL_NAMESPACES ? t('all namespaces') : app.namespace}</span>
 			<Icon name="next" size={12} />
 			{#if scope}
-				<button onclick={() => (app.scope = null)} title="Show all {resource.kind} objects">{place.label}</button>
+				<button onclick={() => (app.scope = null)} title={t('Show all {kind} objects', { kind: resource.kind })}>{place.label}</button>
 				<Icon name="next" size={12} />
 				<span aria-current="page">{scope.title}</span>
 			{:else}
@@ -837,8 +843,8 @@
 						class:on={app.isPinned(pin)}
 						aria-pressed={app.isPinned(pin)}
 						onclick={() => app.togglePin(pin)}
-						title={app.isPinned(pin) ? 'Unpin from the sidebar' : 'Pin this list to the sidebar'}
-						aria-label={app.isPinned(pin) ? 'Unpin from the sidebar' : 'Pin to the sidebar'}
+						title={app.isPinned(pin) ? t('Unpin from the sidebar') : t('Pin this list to the sidebar')}
+						aria-label={app.isPinned(pin) ? t('Unpin from the sidebar') : t('Pin to the sidebar')}
 					>
 						<Icon name="bookmark" size={16} />
 					</button>
@@ -846,7 +852,7 @@
 				{#if scope}
 					<span class="chip">
 						{scope.title}
-						<button onclick={() => (app.scope = null)} title="Show all {resource.kind} objects" aria-label="Show all">×</button>
+						<button onclick={() => (app.scope = null)} title={t('Show all {kind} objects', { kind: resource.kind })} aria-label={t('Show all')}>×</button>
 					</span>
 				{/if}
 			</div>
@@ -857,9 +863,9 @@
 						class:on={wide}
 						aria-pressed={wide}
 						onclick={() => (wide = !wide)}
-						title={wide ? 'Back to the columns that fit (w)' : 'Every column, scrolling sideways when they do not fit (w)'}
+						title={wide ? t('Back to the columns that fit (w)') : t('Every column, scrolling sideways when they do not fit (w)')}
 					>
-						All columns
+						{t('All columns')}
 					</button>
 				{/if}
 				<div class="chooser">
@@ -868,9 +874,9 @@
 						class:on={chooserOpen}
 						aria-expanded={chooserOpen}
 						onclick={() => (chooserOpen = !chooserOpen)}
-						title="Choose, order and add columns for {resource.kind} lists"
+						title={t('Choose, order and add columns for {kind} lists', { kind: resource.kind })}
 					>
-						Columns
+						{t('Columns')}
 					</button>
 					{#if chooserOpen}
 						<ColumnChooser
@@ -884,7 +890,7 @@
 						/>
 					{/if}
 				</div>
-				<button class="toggle" onclick={exportCsv} title="Save the list as CSV (Ctrl+S)">
+				<button class="toggle" onclick={exportCsv} title={t('Save the list as CSV (Ctrl+S)')}>
 					<Icon name="download" size={15} /> CSV
 				</button>
 			</div>
@@ -895,17 +901,17 @@
 		<div class="banner" role="alert">
 			<Icon name="critical" />
 			<span><strong>{problem}</strong> {table.error}</span>
-			<button onclick={() => retry++}>Retry</button>
+			<button onclick={() => retry++}>{t('Retry')}</button>
 		</div>
 	{/if}
 	{#if table.notice}
-		<div class="metrics-note" role="status">{table.notice}.</div>
+		<div class="metrics-note" role="status">{coreText(table.notice)}.</div>
 	{/if}
 	{#if metricsKind && metrics.error}
 		<div class="metrics-note" role="status">
-			Metrics {metrics.available ? 'are stale' : 'are unavailable'}{metrics.updated
-				? `, last measured ${age(new Date(metrics.updated).toISOString(), now)} ago`
-				: ''}: {metrics.error}
+			{metrics.available ? t('Metrics are stale') : t('Metrics are unavailable')}{metrics.updated
+				? t(', last measured {age} ago', { age: age(new Date(metrics.updated).toISOString(), now) })
+				: ''}: {coreText(metrics.error)}
 		</div>
 	{/if}
 
@@ -916,24 +922,24 @@
 				<input
 					bind:this={filterInput}
 					bind:value={filter}
-					aria-label="Filter {place.label.toLowerCase()}"
-					placeholder="Filter by name, /regex/, -l app=web or -f text"
+					aria-label={t('Filter {kinds}', { kinds: midSentence(place.label) })}
+					placeholder={t('Filter by name, /regex/, -l app=web or -f text')}
 				/>
 				<kbd>/</kbd>
 			</label>
 		</div>
-		<div class="tabs" role="tablist" aria-label="Show">
+		<div class="tabs" role="tablist" aria-label={t('Show')}>
 			<button role="tab" aria-selected={!faults && !runningOnly} onclick={() => showTab('all')}>
-				All <span class="n">{counts.all}</span>
+				{t('All')} <span class="n">{counts.all}</span>
 			</button>
 			{#if healthy || faults}
-				<button role="tab" aria-selected={faults} onclick={() => showTab('attention')} title="Only rows that need a look (Ctrl+Z)">
-					Needs attention <span class="n" class:alert={counts.attention}>{counts.attention}</span>
+				<button role="tab" aria-selected={faults} onclick={() => showTab('attention')} title={t('Only rows that need a look (Ctrl+Z)')}>
+					{t('Needs attention')} <span class="n" class:alert={counts.attention}>{counts.attention}</span>
 				</button>
 			{/if}
 			{#if isPods(resource)}
 				<button role="tab" aria-selected={runningOnly} onclick={() => showTab('running')}>
-					Running <span class="n">{counts.running}</span>
+					{t('Running')} <span class="n">{counts.running}</span>
 				</button>
 			{/if}
 		</div>
@@ -941,14 +947,15 @@
 		<div class="actions">
 			{#if selection.size}
 				{@const marked = chosenRows()}
-				<ActionBar actions={markedActions(marked)} marked>{marked.length} marked</ActionBar>
+				<ActionBar actions={markedActions(marked)} marked>{t('{n} marked', { n: marked.length })}</ActionBar>
 			{:else if current && app.details}
 				<!-- The inspector holds the actions while it is open: one place, not two. -->
 				<ActionBar actions={[]}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
 			{:else if current && picked}
 				<ActionBar actions={actionsFor(current, [current])}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
 			{:else if current}
-				<ActionBar actions={[]}><span class="choose">Click a row or press <kbd>↓</kbd> to act on it</span></ActionBar>
+				{@const [before, after] = t('Click a row or press {key} to act on it').split('{key}')}
+				<ActionBar actions={[]}><span class="choose">{before}<kbd>↓</kbd>{after}</span></ActionBar>
 			{/if}
 		</div>
 
@@ -978,7 +985,7 @@
 								</button>
 							</th>
 						{/each}
-						<th class="more" aria-label="Actions"></th>
+						<th class="more" aria-label={t('Actions')}></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -1006,7 +1013,7 @@
 							<td class="check">
 								<input
 									type="checkbox"
-									aria-label="Mark {row.name}"
+									aria-label={t('Mark {name}', { name: row.name })}
 									checked={selection.has(row.key)}
 									onclick={(e) => {
 										e.stopPropagation();
@@ -1040,7 +1047,7 @@
 									{#if column.kind === 'cell' && column.name}
 										<button
 											class="open"
-											title="Describe {row.name}"
+											title={t('Describe {name}', { name: row.name })}
 											onclick={(e) => {
 												e.stopPropagation();
 												open(row);
@@ -1054,7 +1061,7 @@
 										{@const trail = metrics.trail(row.namespace, row.name)}
 										{#if trail}<RowSpark
 												values={column.label === 'CPU' ? trail.cpu : trail.memory}
-												label="{column.label} of {row.name}"
+												label={t('{column} of {name}', { column: column.label, name: row.name })}
 											/>{/if}<span class="reading">{text}</span>
 									{:else}
 										{text}
@@ -1063,8 +1070,8 @@
 							{/each}
 							<td class="more">
 								<button
-									aria-label="Actions for {row.name}"
-									title="Actions (right click)"
+									aria-label={t('Actions for {name}', { name: row.name })}
+									title={t('Actions (right click)')}
 									onclick={(e) => {
 										e.stopPropagation();
 										const rect = e.currentTarget.getBoundingClientRect();
@@ -1083,35 +1090,37 @@
 				</tbody>
 			</table>
 			{#if table.loading}
-				<p class="empty">Loading…</p>
+				<p class="empty">{t('Loading…')}</p>
 			{:else if rows.length === 0 && !problem}
 				<p class="empty">
 					{filter
-						? 'Nothing matches the filter.'
+						? t('Nothing matches the filter.')
 						: faults
-							? 'Nothing needs a look.'
+							? t('Nothing needs a look.')
 							: runningOnly
-								? 'No pods are running.'
+								? t('No pods are running.')
 								: scope
-									? `No ${scope.title}.`
-									: `No ${resource.kind} objects${ns ? ` in ${ns}` : ''}.`}
+									? t('No {what}.', { what: scope.title })
+									: ns
+										? t('No {kind} objects in {namespace}.', { kind: resource.kind, namespace: ns })
+										: t('No {kind} objects.', { kind: resource.kind })}
 				</p>
 				{#if !filter && !faults && !runningOnly && !scope && resource.verbs.includes('create') && !app.readOnly && !app.cluster?.snapshot}
 					<p class="empty-action">
-						<button onclick={() => app.showCreate(resource)}>Create {resource.kind}…</button>
+						<button onclick={() => app.showCreate(resource)}>{t('Create {kind}…', { kind: resource.kind })}</button>
 					</p>
 				{/if}
 			{/if}
 		</div>
 		<div class="foot">
-			<span>{rows.length} of {owned.length} {place.label.toLowerCase()}</span>
-			{#if table.stale}<span class="updating">— updating…</span>{/if}
+			<span>{t('{n} of {total} {kinds}', { n: rows.length, total: owned.length, kinds: midSentence(place.label) })}</span>
+			{#if table.stale}<span class="updating">{t('— updating…')}</span>{/if}
 			<span class="end">
-				{#if metricsKind}<span>— not measured</span>{/if}
+				{#if metricsKind}<span>{t('— not measured')}</span>{/if}
 				{#if fitted.left.length}
 					<span class="left-out" title={fitted.left.join(', ')}>
-						{fitted.left.length === 1 ? `${fitted.left[0]} hidden to fit` : `${fitted.left.length} columns hidden to fit`}
-						<button onclick={() => (wide = true)}>Show all <kbd>w</kbd></button>
+						{fitted.left.length === 1 ? t('{column} hidden to fit', { column: fitted.left[0] }) : t('{n} columns hidden to fit', { n: fitted.left.length })}
+						<button onclick={() => (wide = true)}>{t('Show all')} <kbd>w</kbd></button>
 					</span>
 				{/if}
 			</span>

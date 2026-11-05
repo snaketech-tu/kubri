@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { untrack } from 'svelte';
 	import { backend, type LocalClusters, type LocalClusterTool } from '../api';
 	import { lightDismiss } from '../dismiss';
@@ -91,27 +92,26 @@
 	{@attach lightDismiss}
 	class="dialog"
 	class:wide={run > 0}
-	aria-label="Start a cluster on this computer"
+	aria-label={t('Start a cluster on this computer')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
 		if (!busy) close();
 	}}
 >
-	<h2>Start a cluster on this computer</h2>
+	<h2>{t('Start a cluster on this computer')}</h2>
 	<p class="muted">
-		kind and k3d run a small Kubernetes cluster in containers on this computer. Kubri runs the one you pick, shows what it does, and
-		connects to the new cluster when it is ready. This takes a minute or two the first time.
+		{t('kind and k3d run a small Kubernetes cluster in containers on this computer. Kubri runs the one you pick, shows what it does, and connects to the new cluster when it is ready. This takes a minute or two the first time.')}
 	</p>
 
 	{#if problem}
 		<p class="problem">{problem}</p>
 	{:else if !info}
-		<p class="muted">Looking for kind and k3d…</p>
+		<p class="muted">{t('Looking for kind and k3d…')}</p>
 	{:else if !info.allowed}
 		<p class="problem">{info.reason}</p>
 	{:else if run === 0}
-		<div class="tools" role="radiogroup" aria-label="Tool">
+		<div class="tools" role="radiogroup" aria-label={t('Tool')}>
 			{#each info.tools as option (option.tool)}
 				<label class:missing={!option.found}>
 					<input type="radio" bind:group={tool} value={option.tool} disabled={!option.found} />
@@ -119,39 +119,39 @@
 					{#if option.found}
 						<code>{option.command}</code>
 					{:else}
-						<span class="muted">Not installed. <a href={option.install} target="_blank" rel="noreferrer">How to install {option.tool}</a></span>
+						<span class="muted">{t('Not installed.')} <a href={option.install} target="_blank" rel="noreferrer">{t('How to install {name}', { name: option.tool })}</a></span>
 					{/if}
 				</label>
 			{/each}
 		</div>
 		{#if !info.containers}
-			<p class="hint">Docker was not found. Install and start Docker first: kind and k3d run the cluster in its containers.</p>
+			<p class="hint">{t('Docker was not found. Install and start Docker first: kind and k3d run the cluster in its containers.')}</p>
 		{/if}
 		{#if !info.tools.some((t) => t.found)}
-			<p class="hint">Install kind or k3d, then open this again.</p>
+			<p class="hint">{t('Install kind or k3d, then open this again.')}</p>
 		{/if}
 	{:else}
 		<div class="screen" style:background={TERMINAL_BACKGROUND}><div class="host" bind:this={element}></div></div>
 		<p class="status" class:failed={status === 'failed'} role="status">
 			{status === 'starting'
-				? `Starting ${tool}…`
+				? t('Starting {name}…', { name: tool ?? '' })
 				: status === 'running'
-					? `${tool} is making the cluster ${chosen?.context ?? ''}…`
+					? t('{tool} is making the cluster {name}…', { tool: tool ?? '', name: chosen?.context ?? '' })
 					: status === 'connecting'
-						? `Connecting to ${chosen?.context ?? 'the new cluster'}…`
-						: `${tool} could not make the cluster. Its output above says why.`}
+						? t('Connecting to {name}…', { name: chosen?.context ?? t('the new cluster') })
+						: t('{tool} could not make the cluster. Its output above says why.', { tool: tool ?? '' })}
 		</p>
 	{/if}
 
 	<div class="buttons">
 		{#if run === 0}
-			<button onclick={close}>Cancel</button>
-			<button class="primary" disabled={!info?.allowed || !chosen?.found} onclick={start}>Start the cluster</button>
+			<button onclick={close}>{t('Cancel')}</button>
+			<button class="primary" disabled={!info?.allowed || !chosen?.found} onclick={start}>{t('Start the cluster')}</button>
 		{:else if status === 'failed'}
-			<button onclick={close}>Close</button>
-			<button class="primary" onclick={start}>Try again</button>
+			<button onclick={close}>{t('Close')}</button>
+			<button class="primary" onclick={start}>{t('Try again')}</button>
 		{:else}
-			<button onclick={close} disabled={status === 'connecting'} title="Stops the tool">Stop</button>
+			<button onclick={close} disabled={status === 'connecting'} title={t('Stops the tool')}>{t('Stop')}</button>
 		{/if}
 	</div>
 </dialog>

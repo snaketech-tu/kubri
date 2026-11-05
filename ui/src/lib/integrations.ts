@@ -1,5 +1,6 @@
 import { backend, type DashboardLink, type IntegrationId, type ObjectRef } from './api';
 import { errorMessage } from './format';
+import { t } from './i18n';
 import { app } from './state.svelte';
 
 /** Opens a dashboard on the Grafana Kubri reaches. */
@@ -21,7 +22,7 @@ export async function copyDashboard(link: DashboardLink) {
 		// A Grafana in the cluster needs its address, which may start a port-forward.
 		const url = (await backend.integrationUrl('grafana')) + link.path;
 		await navigator.clipboard.writeText(url);
-		app.toast(`Copied ${url}`);
+		app.toast(t('Copied {url}', { url }));
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');
 	}

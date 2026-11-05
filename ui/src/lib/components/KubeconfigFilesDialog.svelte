@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import { lightDismiss } from '../dismiss';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { untrack } from 'svelte';
@@ -57,7 +58,9 @@
 			path = '';
 			await done(list);
 			app.toast(
-				`Loaded ${paths.length === 1 ? 'the file' : `${paths.length} files`}: ${added === 1 ? '1 new context' : `${added} new contexts`}`
+				paths.length === 1
+					? plural(added, 'Loaded the file: {n} new context', 'Loaded the file: {n} new contexts')
+					: plural(added, 'Loaded {files} files: {n} new context', 'Loaded {files} files: {n} new contexts', { files: paths.length })
 			);
 			if (first && list.contexts.length) app.kubeconfigFilesOpen = false;
 		} catch (err) {
@@ -81,7 +84,7 @@
 		error = null;
 		try {
 			await done(await backend.removeKubeconfigFile(file.path));
-			app.toast(`Kubri no longer reads ${file.path}`);
+			app.toast(t('Kubri no longer reads {path}', { path: file.path }));
 		} catch (err) {
 			error = errorMessage(err);
 		} finally {
@@ -90,10 +93,10 @@
 	}
 
 	function contextsText(file: KubeconfigFile): string {
-		if (!file.contexts.length) return 'No contexts';
+		if (!file.contexts.length) return t('No contexts');
 		const shown = file.contexts.slice(0, 6).join(', ');
 		const more = file.contexts.length - 6;
-		return more > 0 ? `${shown} and ${more} more` : shown;
+		return more > 0 ? t('{shown} and {n} more', { shown, n: more }) : shown;
 	}
 </script>
 
@@ -101,54 +104,54 @@
 	<dialog
 		{@attach lightDismiss}
 		class="dialog"
-		aria-label="Kubeconfig files"
+		aria-label={t('Kubeconfig files')}
 		bind:this={box}
 		oncancel={(e) => {
 			e.preventDefault();
 			close();
 		}}
 	>
-		<h2>Kubeconfig files</h2>
+		<h2>{t('Kubeconfig files')}</h2>
 		<p class="lead">
 			{#if desktop}
-				Kubri reads your kubeconfig as kubectl does. Load more files here: Kubri reads them where they are, so changes to them show up
-				after a reload, and they stay loaded the next time Kubri starts. helm and k9s plugins see them too. Kubri never changes them.
+				{t('Kubri reads your kubeconfig as kubectl does. Load more files here: Kubri reads them where they are, so changes to them show up after a reload, and they stay loaded the next time Kubri starts. helm and k9s plugins see them too. Kubri never changes them.')}
 			{:else}
-				These are the files kubri-server reads. To use another cluster in the browser, add its contexts from a kubeconfig file.
+				{t('These are the files kubri-server reads. To use another cluster in the browser, add its contexts from a kubeconfig file.')}
 			{/if}
 		</p>
 
 		{#if files === null && !error}
-			<p class="muted">Reading…</p>
+			<p class="muted">{t('Reading…')}</p>
 		{:else if files}
 			<ul class="files">
 				{#each files as file (file.path)}
 					<li class:off={!!file.problem || file.missing}>
 						<div class="row">
 							<span class="path mono" title={file.path}>{file.path}</span>
-							<span class="badge">{file.chosen ? 'Loaded in Kubri' : 'Your kubeconfig'}</span>
+							<span class="badge">{file.chosen ? t('Loaded in Kubri') : t('Your kubeconfig')}</span>
 							{#if file.chosen && desktop}
-								<button type="button" class="remove" onclick={() => remove(file)} disabled={busy} aria-label={`Stop reading ${file.path}`}>
-									Remove
+								<button type="button" class="remove" onclick={() => remove(file)} disabled={busy} aria-label={t('Stop reading {path}', { path: file.path })}>
+									{t('Remove')}
 								</button>
 							{/if}
 						</div>
 						{#if file.problem}
 							<small class="problem">{file.problem}</small>
 						{:else if file.missing}
-							<small>Does not exist, so it is skipped</small>
+							<small>{t('Does not exist, so it is skipped')}</small>
 						{:else}
 							<small>{contextsText(file)}</small>
 							{#if file.shadowed.length}
 								<small class="warn">
-									{file.shadowed.join(', ')}
-									{file.shadowed.length === 1 ? 'is' : 'are'} also in an earlier file, which wins.
+									{plural(file.shadowed.length, '{names} is also in an earlier file, which wins.', '{names} are also in an earlier file, which wins.', {
+										names: file.shadowed.join(', ')
+									})}
 								</small>
 							{/if}
 						{/if}
 					</li>
 				{:else}
-					<li class="muted">No kubeconfig files yet.</li>
+					<li class="muted">{t('No kubeconfig files yet.')}</li>
 				{/each}
 			</ul>
 		{/if}
@@ -161,17 +164,17 @@
 					load([path]);
 				}}
 			>
-				<input bind:value={path} placeholder="~/.kube/lab.yaml" aria-label="Path of a kubeconfig file" spellcheck="false" disabled={busy} />
-				<button type="submit" class="secondary" disabled={busy || !path.trim()}>Load</button>
-				<button type="button" class="primary" onclick={choose} disabled={busy}>Choose files…</button>
+				<input bind:value={path} placeholder={t('~/.kube/lab.yaml')} aria-label={t('Path of a kubeconfig file')} spellcheck="false" disabled={busy} />
+				<button type="submit" class="secondary" disabled={busy || !path.trim()}>{t('Load')}</button>
+				<button type="button" class="primary" onclick={choose} disabled={busy}>{t('Choose files…')}</button>
 			</form>
 		{/if}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		<div class="buttons">
 			{#if !desktop}
-				<button type="button" class="primary" onclick={() => (copying = true)}>Add contexts from a file…</button>
+				<button type="button" class="primary" onclick={() => (copying = true)}>{t('Add contexts from a file…')}</button>
 			{/if}
-			<button type="button" class="secondary" onclick={close} disabled={busy}>Close</button>
+			<button type="button" class="secondary" onclick={close} disabled={busy}>{t('Close')}</button>
 		</div>
 	</dialog>
 {/if}

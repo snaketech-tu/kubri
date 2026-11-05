@@ -7,6 +7,7 @@
 	import { backend } from '#lib/api/index.js';
 	import { errorMessage } from '#lib/format.js';
 	import { externalHref } from '#lib/links.js';
+	import { language } from '#lib/i18n/index.js';
 	import { app } from '#lib/state.svelte.js';
 	import { drafts } from '#lib/navigation.svelte.js';
 	import { session } from '#lib/session.svelte.js';
@@ -16,6 +17,9 @@
 
 	$effect(() => {
 		session.check();
+	});
+	$effect(() => {
+		document.documentElement.lang = language;
 	});
 	// Closing the desktop window with an unsaved YAML draft asks first; the guard closes it on the user's say.
 	$effect(() => {

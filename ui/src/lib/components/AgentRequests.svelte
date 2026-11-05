@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { parts, plural, t } from '../i18n';
 	import { lightDismiss } from '../dismiss';
 	import { backend, type AgentRequest } from '../api';
 	import { app } from '../state.svelte';
@@ -53,7 +54,7 @@
 			answering = false;
 			requests = requests.filter((r) => r.id !== id);
 		}
-		app.toast(allow ? 'Allowed the change' : 'Refused the change');
+		app.toast(allow ? t('Allowed the change') : t('Refused the change'));
 		if (allow) app.refreshGuard();
 	}
 </script>
@@ -61,7 +62,7 @@
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	aria-label="An AI agent asks to make a change"
+	aria-label={t('An AI agent asks to make a change')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
@@ -70,23 +71,23 @@
 >
 	{#if request}
 		{@const settings = app.contextSettingsOf(request.context)}
-		<h2>An AI agent asks to make a change</h2>
+		<h2>{t('An AI agent asks to make a change')}</h2>
 		<p class="summary">{request.summary}</p>
 		<p class="muted">
-			On
-			<strong style:color={settings.color || null}>{request.context ? app.contextName(request.context) : 'the current context'}</strong
-			>{#if settings.label}&nbsp;<span class="tag">{settings.label}</span>{/if}. Nothing happens unless you allow it.
+			{#each parts(t('On {context}. Nothing happens unless you allow it.')) as part, i (i)}{#if 'text' in part}{part.text}{:else}<strong
+						style:color={settings.color || null}>{request.context ? app.contextName(request.context) : t('the current context')}</strong
+					>{#if settings.label}&nbsp;<span class="tag">{settings.label}</span>{/if}{/if}{/each}
 		</p>
 		<details>
-			<summary>Same as kubectl</summary>
+			<summary>{t('Same as kubectl')}</summary>
 			<pre>{request.kubectl}</pre>
 		</details>
 		{#if requests.length > 1}
-			<p class="muted small">{requests.length - 1} more {requests.length === 2 ? 'change waits' : 'changes wait'} after this one.</p>
+			<p class="muted small">{plural(requests.length - 1, '{n} more change waits after this one.', '{n} more changes wait after this one.')}</p>
 		{/if}
 		<div class="buttons">
-			<button class="secondary" bind:this={refuse} onclick={() => answer(false)} disabled={answering}>Refuse</button>
-			<button class="primary" onclick={() => answer(true)} disabled={answering}>Allow</button>
+			<button class="secondary" bind:this={refuse} onclick={() => answer(false)} disabled={answering}>{t('Refuse')}</button>
+			<button class="primary" onclick={() => answer(true)} disabled={answering}>{t('Allow')}</button>
 		</div>
 	{/if}
 </dialog>

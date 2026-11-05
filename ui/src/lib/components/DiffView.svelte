@@ -2,13 +2,14 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { stringify } from 'yaml';
 	import { diffLines, fold } from '../diff';
+	import { plural, t } from '../i18n';
 
 	let {
 		before,
 		after,
 		maxHeight = '360px',
-		changed = 'lines, as the API server would store it',
-		unchanged = 'No changes: the API server would store the object as it is.'
+		changed = t('lines, as the API server would store it'),
+		unchanged = t('No changes: the API server would store the object as it is.')
 	}: {
 		before: unknown;
 		after: unknown;
@@ -36,7 +37,7 @@
 	}
 </script>
 
-<div class="diff" role="region" aria-label="Changes">
+<div class="diff" role="region" aria-label={t('Changes')}>
 	<div class="summary">
 		{#if added || removed}
 			<span class="added">+{added}</span> <span class="removed">−{removed}</span>
@@ -48,7 +49,7 @@
 	<div class="lines" style:max-height={maxHeight}>
 		{#each parts as part, i (i)}
 			{#if part.kind === 'fold' && !opened.has(i)}
-				<button class="fold" onclick={() => opened.add(i)}>⋯ {part.count} unchanged {part.count === 1 ? 'line' : 'lines'}</button>
+				<button class="fold" onclick={() => opened.add(i)}>⋯ {plural(part.count, '{n} unchanged line', '{n} unchanged lines')}</button>
 			{:else}
 				{#each part.kind === 'fold' ? hidden(i) : part.lines as line, j (j)}
 					<div class="line {line.kind}">

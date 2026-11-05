@@ -1,4 +1,5 @@
 import { isTauri } from '@tauri-apps/api/core';
+import { t } from './i18n';
 
 /** Someone signed in to a Kubri shared by a team, as the clusters know them. */
 export interface Person {
@@ -60,7 +61,7 @@ class Session {
 		try {
 			await post('/login', { password });
 		} catch (err) {
-			throw err instanceof TypeError ? new Error('Could not reach kubri-server') : err;
+			throw err instanceof TypeError ? new Error(t('Could not reach kubri-server')) : err;
 		}
 		this.signedIn = true;
 	}

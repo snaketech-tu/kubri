@@ -1,4 +1,5 @@
 import type { AgentConnection } from './api';
+import { t } from './i18n';
 import { shellQuote } from './kubectl';
 
 export interface AgentSnippet {
@@ -27,7 +28,7 @@ export function stdioSnippets(connection: AgentConnection): AgentSnippet[] {
 			json: false
 		},
 		{
-			client: 'Claude Desktop, Cursor and other clients',
+			client: t('Claude Desktop, Cursor and other clients'),
 			text: JSON.stringify({ mcpServers: { kubri: { command, args } } }, null, 2),
 			json: true
 		}
@@ -47,7 +48,7 @@ export function httpSnippets(connection: AgentConnection, token: string): AgentS
 			json: false
 		},
 		{
-			client: 'Other clients',
+			client: t('Other clients'),
 			text: JSON.stringify(
 				{ mcpServers: { kubri: { type: 'http', url: connection.url, headers: { Authorization: `Bearer ${token}` } } } },
 				null,

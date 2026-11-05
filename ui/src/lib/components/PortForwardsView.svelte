@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { stopPortForward } from '../actions';
@@ -7,6 +8,7 @@
 	import { app, favoriteLabel, isForwardOf } from '../state.svelte';
 	import type { FavoriteForward } from '../api';
 	import PageHeader from './PageHeader.svelte';
+	import Phrase from './Phrase.svelte';
 
 	let cursorId = $state<number | null>(null);
 	let now = $state(Date.now());
@@ -41,7 +43,7 @@
 			});
 			await app.refreshForwards();
 		} catch (err) {
-			app.toast(`${favoriteLabel(f)} did not start: ${errorMessage(err)}`, 'bad');
+			app.toast(t('{name} did not start: {error}', { name: favoriteLabel(f), error: errorMessage(err) }), 'bad');
 		} finally {
 			starting = null;
 		}
@@ -61,7 +63,7 @@
 	function choose() {
 		const pods = app.resources.find((r) => r.group === '' && r.plural === 'pods');
 		if (pods) app.open(pods);
-		app.toast('Select a pod and press Shift+F, or use its Port-forward action');
+		app.toast(t('Select a pod and press Shift+F, or use its Port-forward action'));
 	}
 
 	function url(f: PortForwardInfo) {
@@ -81,7 +83,7 @@
 	}
 
 	function copy(f: PortForwardInfo) {
-		navigator.clipboard.writeText(url(f)).then(() => app.toast(`Copied ${url(f)}`));
+		navigator.clipboard.writeText(url(f)).then(() => app.toast(t('Copied {url}', { url: url(f) })));
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -130,10 +132,10 @@
 
 <section>
 	<PageHeader
-		crumbs={['Port-forwards']}
-		title="Port-forwards"
+		crumbs={[t('Port-forwards')]}
+		title={t('Port-forwards')}
 		count={forwards.length}
-		subtitle="Local ports tunneled to pods. They keep running while you work elsewhere in Kubri, and move to another pod when theirs goes away."
+		subtitle={t('Local ports tunneled to pods. They keep running while you work elsewhere in Kubri, and move to another pod when theirs goes away.')}
 	/>
 
 	<div class="card">
@@ -142,12 +144,12 @@
 				<table>
 					<thead>
 						<tr>
-							<th>Local</th>
-							<th>Target</th>
-							<th>Pod</th>
-							<th>Context</th>
-							<th class="numeric">Conns</th>
-							<th>Age</th>
+							<th>{t('Local')}</th>
+							<th>{t('Target')}</th>
+							<th>{t('Pod')}</th>
+							<th>{t('Context')}</th>
+							<th class="numeric">{t('Conns')}</th>
+							<th>{t('Age')}</th>
 							<th></th>
 						</tr>
 					</thead>
@@ -156,8 +158,8 @@
 							{@const favorite = !!app.favoriteOf(f)}
 							<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)}>
 								<td class="mono">
-									<a href={url(f)} target="_blank" rel="noreferrer" title="Open in the browser (o)">{f.address}:{f.localPort}</a>
-									<button class="link" onclick={() => copy(f)} title="Copy URL (c)">copy</button>
+									<a href={url(f)} target="_blank" rel="noreferrer" title={t('Open in the browser (o)')}>{f.address}:{f.localPort}</a>
+									<button class="link" onclick={() => copy(f)} title={t('Copy URL (c)')}>{t('copy')}</button>
 								</td>
 								<td class="mono">{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</td>
 								<td class="mono">
@@ -174,12 +176,12 @@
 											class:on={favorite}
 											aria-pressed={favorite}
 											onclick={() => app.toggleFavorite(f)}
-											title={favorite ? 'A favorite: starts whenever Kubri connects to this context (s)' : 'Keep as a favorite that starts with Kubri (s)'}
+											title={favorite ? t('A favorite: starts whenever Kubri connects to this context (s)') : t('Keep as a favorite that starts with Kubri (s)')}
 										>
-											{favorite ? '★' : '☆'} Favorite
+											{favorite ? '★' : '☆'} {t('Favorite')}
 										</button>
-										<button class="btn small" onclick={() => (app.dialog = { kind: 'benchmark', forward: f })} title="HTTP benchmark (b)">Benchmark</button>
-										<button class="btn small danger" onclick={() => stopPortForward(f.id)} title="Stop (Ctrl+D)">Stop</button>
+										<button class="btn small" onclick={() => (app.dialog = { kind: 'benchmark', forward: f })} title={t('HTTP benchmark (b)')}>{t('Benchmark')}</button>
+										<button class="btn small danger" onclick={() => stopPortForward(f.id)} title={t('Stop (Ctrl+D)')}>{t('Stop')}</button>
 									</div>
 								</td>
 							</tr>
@@ -188,22 +190,22 @@
 				</table>
 			{:else}
 				<div class="empty" role="status">
-					<p>No port-forwards running.</p>
-					<p class="muted">Select a pod, deployment or service and press <kbd>Shift+F</kbd> to start one.</p>
-					<button class="btn" onclick={choose}>Start a port-forward…</button>
+					<p>{t('No port-forwards running.')}</p>
+					<p class="muted"><Phrase text={t('Select a pod, deployment or service and press {key} to start one.')} kbd={{ key: 'Shift+F' }} /></p>
+					<button class="btn" onclick={choose}>{t('Start a port-forward…')}</button>
 				</div>
 			{/if}
 			{#if stopped.length}
 				<div class="favorites">
-					<h3>Favorites not running in {app.cluster ? app.contextName(app.cluster.context) : ''}</h3>
+					<h3>{t('Favorites not running in {context}', { context: app.cluster ? app.contextName(app.cluster.context) : '' })}</h3>
 					<ul>
 						{#each stopped as f (favoriteLabel(f))}
 							<li>
 								<span class="mono">{f.address || '127.0.0.1'}:{f.localPort}</span>
 								<span class="mono muted">→ {f.target.resource.plural}/{f.target.name}:{f.remotePort}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</span>
 								<span class="buttons">
-									<button class="btn small" onclick={() => start(f)} disabled={starting === f}>{starting === f ? 'Starting…' : 'Start'}</button>
-									<button class="btn small" onclick={() => app.removeFavorite(f)} title="Forget this favorite">Remove</button>
+									<button class="btn small" onclick={() => start(f)} disabled={starting === f}>{starting === f ? t('Starting…') : t('Start')}</button>
+									<button class="btn small" onclick={() => app.removeFavorite(f)} title={t('Forget this favorite')}>{t('Remove')}</button>
 								</span>
 							</li>
 						{/each}
@@ -345,7 +347,7 @@
 	.empty p {
 		margin: 4px 0;
 	}
-	kbd {
+	.empty :global(kbd) {
 		padding: 0 5px;
 		border: 1px solid var(--border);
 		border-radius: 4px;

@@ -1,4 +1,5 @@
 import type { Reference } from './api';
+import { t } from './i18n';
 
 /** `3 Deployments`, `1 Ingress`: a count with the kind, plural when needed. */
 export function counted(n: number, kind: string): string {
@@ -14,8 +15,8 @@ export function summarizeUsers(refs: Reference[]): string {
 		entry.n++;
 		counts.set(key, entry);
 	}
-	const parts = [...counts.values()].map((c) => `${counted(c.n, c.kind)}${c.how ? ` for ${c.how}` : ''}`);
-	return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : (parts[0] ?? '');
+	const parts = [...counts.values()].map((c) => (c.how ? t('{kinds} for {how}', { kinds: counted(c.n, c.kind), how: c.how }) : counted(c.n, c.kind)));
+	return parts.length > 1 ? t('{list} and {last}', { list: parts.slice(0, -1).join(', '), last: parts.at(-1)! }) : (parts[0] ?? '');
 }
 
 export interface Related {
@@ -50,26 +51,26 @@ export function relatedOf(object: { kind?: string; spec?: unknown }): Related[] 
 		if (name && !found.has(`${kind}/${name}`)) found.set(`${kind}/${name}`, { kind, apiVersion, name, how });
 	};
 	for (const v of spec.volumes ?? []) {
-		add('ConfigMap', 'v1', v.configMap?.name, 'volume');
-		add('Secret', 'v1', v.secret?.secretName, 'volume');
-		add('PersistentVolumeClaim', 'v1', v.persistentVolumeClaim?.claimName, 'volume');
+		add('ConfigMap', 'v1', v.configMap?.name, t('volume'));
+		add('Secret', 'v1', v.secret?.secretName, t('volume'));
+		add('PersistentVolumeClaim', 'v1', v.persistentVolumeClaim?.claimName, t('volume'));
 		for (const s of v.projected?.sources ?? []) {
-			add('ConfigMap', 'v1', s.configMap?.name, 'volume');
-			add('Secret', 'v1', s.secret?.name, 'volume');
+			add('ConfigMap', 'v1', s.configMap?.name, t('volume'));
+			add('Secret', 'v1', s.secret?.name, t('volume'));
 		}
 	}
 	for (const c of [...(spec.containers ?? []), ...(spec.initContainers ?? [])]) {
 		for (const e of c.envFrom ?? []) {
-			add('ConfigMap', 'v1', e.configMapRef?.name, 'environment');
-			add('Secret', 'v1', e.secretRef?.name, 'environment');
+			add('ConfigMap', 'v1', e.configMapRef?.name, t('environment'));
+			add('Secret', 'v1', e.secretRef?.name, t('environment'));
 		}
 		for (const e of c.env ?? []) {
-			add('ConfigMap', 'v1', e.valueFrom?.configMapKeyRef?.name, 'environment');
-			add('Secret', 'v1', e.valueFrom?.secretKeyRef?.name, 'environment');
+			add('ConfigMap', 'v1', e.valueFrom?.configMapKeyRef?.name, t('environment'));
+			add('Secret', 'v1', e.valueFrom?.secretKeyRef?.name, t('environment'));
 		}
 	}
 	if (spec.serviceAccountName && spec.serviceAccountName !== 'default') {
-		add('ServiceAccount', 'v1', spec.serviceAccountName, 'service account');
+		add('ServiceAccount', 'v1', spec.serviceAccountName, t('service account'));
 	}
 	return [...found.values()];
 }

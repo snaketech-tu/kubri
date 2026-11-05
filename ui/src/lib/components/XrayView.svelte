@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import { forControl } from '../keys';
 	import { tick, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -102,7 +103,7 @@
 		cursorId = node.id;
 		const info = node.resource && findResource(app.resources, node.resource);
 		const tree: MenuAction[] = node.children.length
-			? [{ group: 'Tree', label: row.expanded ? 'Collapse' : 'Expand', keys: [], run: () => toggle(row) }]
+			? [{ group: 'Tree', label: row.expanded ? t('Collapse') : t('Expand'), keys: [], run: () => toggle(row) }]
 			: [];
 		if (!info) {
 			if (tree.length) app.menu = { actions: tree, x: e.clientX, y: e.clientY, hints: false };
@@ -201,44 +202,46 @@
 
 <section>
 	<PageHeader
-		crumbs={['Topology']}
-		title="Topology"
+		crumbs={[t('Topology')]}
+		title={t('Topology')}
 		count={loaded ? roots.length : null}
-		subtitle="{pluralKind(resource.kind, resource.plural)} and what they own and use, {namespace ? `in ${namespace}` : 'in all namespaces'}"
+		subtitle={namespace
+			? t('{kinds} and what they own and use, in {namespace}', { kinds: pluralKind(resource.kind, resource.plural), namespace })
+			: t('{kinds} and what they own and use, in all namespaces', { kinds: pluralKind(resource.kind, resource.plural) })}
 	>
-		{#if withIssues}<span class="tag bad"><HealthIcon health="failed" />{withIssues} with issues</span>{/if}
+		{#if withIssues}<span class="tag bad"><HealthIcon health="failed" />{t('{withIssues} with issues', { withIssues })}</span>{/if}
 		{#snippet tools()}
-			<div class="segmented" role="group" aria-label="Show as">
-				<button aria-pressed="true" title="A tree for each object (:xray)">Trees</button>
-				<button aria-pressed="false" onclick={() => app.showGraph()} title="All objects as one graph, with request paths (:graph)">Graph</button>
+			<div class="segmented" role="group" aria-label={t('Show as')}>
+				<button aria-pressed="true" title={t('A tree for each object (:xray)')}>{t('Trees')}</button>
+				<button aria-pressed="false" onclick={() => app.showGraph()} title={t('All objects as one graph, with request paths (:graph)')}>{t('Graph')}</button>
 			</div>
-			<button class="btn" onclick={expandAll} title="Open every tree">Expand all</button>
-			<button class="btn" onclick={() => expanded.clear()} title="Close every tree">Collapse all</button>
+			<button class="btn" onclick={expandAll} title={t('Open every tree')}>{t('Expand all')}</button>
+			<button class="btn" onclick={() => expanded.clear()} title={t('Close every tree')}>{t('Collapse all')}</button>
 		{/snippet}
 	</PageHeader>
 
 	{#if error}
-		<div class="notice" role="alert">Could not build the tree: {error}</div>
+		<div class="notice" role="alert">{t('Could not build the tree: {error}', { error })}</div>
 	{/if}
 
 	<div class="card">
 		<div class="toolbar">
 			<label class="start">
-				<span>Start from</span>
+				<span>{t('Start from')}</span>
 				<Select value={resource.plural} options={kinds.map((k) => ({ value: k.plural, label: `${k.kind}s` }))} onchange={switchKind} />
 			</label>
-			<SearchField bind:value={filter} bind:input={filterInput} label="Filter the trees" placeholder="Filter by name or status" />
+			<SearchField bind:value={filter} bind:input={filterInput} label={t('Filter the trees')} placeholder={t('Filter by name or status')} />
 		</div>
-		<div class="tabs" role="tablist" aria-label="Show">
+		<div class="tabs" role="tablist" aria-label={t('Show')}>
 			<button role="tab" aria-selected={!issuesOnly} onclick={() => (issuesOnly = false)}>
-				All <span class="n">{roots.length}</span>
+				{t('All')} <span class="n">{roots.length}</span>
 			</button>
 			<button role="tab" aria-selected={issuesOnly} onclick={() => (issuesOnly = true)}>
-				With issues <span class="n" class:alert={withIssues}>{withIssues}</span>
+				{t('With issues')} <span class="n" class:alert={withIssues}>{withIssues}</span>
 			</button>
 		</div>
 
-		<div class="tree" bind:this={scroller} role="tree" aria-label="Topology of {resource.kind}s">
+		<div class="tree" bind:this={scroller} role="tree" aria-label={t('Topology of {kind}s', { kind: resource.kind })}>
 			{#each rows as row, i (row.node.id)}
 				{@const node = row.node}
 				{@const hidden = row.expanded ? 0 : issuesBelow(node)}
@@ -261,7 +264,7 @@
 						class:open={row.expanded}
 						class:leaf={!node.children.length}
 						tabindex="-1"
-						aria-label={row.expanded ? 'Collapse' : 'Expand'}
+						aria-label={row.expanded ? t('Collapse') : t('Expand')}
 						onclick={(e) => {
 							e.stopPropagation();
 							cursorId = node.id;
@@ -271,22 +274,24 @@
 					<HealthIcon health={node.health} />
 					<span class="tag">{kindTag(node.kind)}</span>
 					{#if node.resource}
-						<button class="name link" tabindex="-1" onclick={() => openDetails(row)} title="Describe {node.kind} {node.name}">{node.name}</button>
+						<button class="name link" tabindex="-1" onclick={() => openDetails(row)} title={t('Describe {kind} {name}', { kind: node.kind, name: node.name })}>{node.name}</button>
 					{:else}
 						<span class="name">{node.name}</span>
 					{/if}
 					{#if row.depth === 0 && !namespace && node.namespace}<span class="ns">{node.namespace}</span>{/if}
 					{#if node.detail}<span class="detail {node.health}" title={node.detail}>{node.detail}</span>{/if}
-					{#if hidden}<span class="hidden-issues" title="Problems below this row">{hidden} {hidden === 1 ? 'issue' : 'issues'} inside</span>{/if}
+					{#if hidden}<span class="hidden-issues" title={t('Problems below this row')}>{plural(hidden, '{n} issue inside', '{n} issues inside')}</span>{/if}
 				</div>
 			{:else}
 				<div class="empty">
 					{#if !loaded}
-						Building the tree…
+						{t('Building the tree…')}
 					{:else if filter || issuesOnly}
-						Nothing matches the filter.
+						{t('Nothing matches the filter.')}
 					{:else if !error}
-						No {resource.kind}s {namespace ? `in ${namespace}` : 'in the cluster'}.
+						{namespace
+							? t('No {kinds} in {namespace}.', { kinds: `${resource.kind}s`, namespace })
+							: t('No {kinds} in the cluster.', { kinds: `${resource.kind}s` })}
 					{/if}
 				</div>
 			{/each}

@@ -1,36 +1,38 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { Integration, IntegrationSettings } from '../api';
 	import { openTool } from '../integrations';
 	import { app } from '../state.svelte';
 	import DashboardList from './DashboardList.svelte';
 	import PageHeader from './PageHeader.svelte';
+	import Phrase from './Phrase.svelte';
 
 	/** What each tool adds, and the kinds to open for the operators. */
 	const ABOUT: Record<string, { text: string; install?: string; kinds?: { group: string; plural: string; label: string }[] }> = {
-		prometheus: { install: 'https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack', text: 'Charts of CPU, memory, restarts, network and requests for pods, workloads and nodes (m), and an hour of history in the overview.' },
-		grafana: { install: 'https://grafana.com/docs/grafana/latest/setup-grafana/installation/kubernetes/', text: 'The logs of the namespace, pod, workload or Service you pick in Grafana’s Explore, and the dashboards that show it.' },
-		loki: { install: 'https://grafana.com/docs/loki/latest/setup/install/helm/', text: 'Log history beyond a pod’s lifetime, in the log workspace.' },
+		prometheus: { install: 'https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack', text: t('Charts of CPU, memory, restarts, network and requests for pods, workloads and nodes (m), and an hour of history in the overview.') },
+		grafana: { install: 'https://grafana.com/docs/grafana/latest/setup-grafana/installation/kubernetes/', text: t('The logs of the namespace, pod, workload or Service you pick in Grafana’s Explore, and the dashboards that show it.') },
+		loki: { install: 'https://grafana.com/docs/loki/latest/setup/install/helm/', text: t('Log history beyond a pod’s lifetime, in the log workspace.') },
 		flux: {
 			install: 'https://fluxcd.io/flux/installation/',
-			text: 'Kustomizations, HelmReleases and their sources.',
+			text: t('Kustomizations, HelmReleases and their sources.'),
 			kinds: [
 				{ group: 'kustomize.toolkit.fluxcd.io', plural: 'kustomizations', label: 'Kustomizations' },
 				{ group: 'helm.toolkit.fluxcd.io', plural: 'helmreleases', label: 'HelmReleases' },
-				{ group: 'source.toolkit.fluxcd.io', plural: 'gitrepositories', label: 'Git repositories' }
+				{ group: 'source.toolkit.fluxcd.io', plural: 'gitrepositories', label: t('Git repositories') }
 			]
 		},
 		argocd: {
 			install: 'https://argo-cd.readthedocs.io/en/stable/getting_started/',
-			text: 'Applications, their sync state and health.',
+			text: t('Applications, their sync state and health.'),
 			kinds: [{ group: 'argoproj.io', plural: 'applications', label: 'Applications' }]
 		},
 		certManager: {
 			install: 'https://cert-manager.io/docs/installation/',
-			text: 'Certificates, when they expire, and their issuers.',
+			text: t('Certificates, when they expire, and their issuers.'),
 			kinds: [
 				{ group: 'cert-manager.io', plural: 'certificates', label: 'Certificates' },
 				{ group: 'cert-manager.io', plural: 'issuers', label: 'Issuers' },
-				{ group: 'cert-manager.io', plural: 'clusterissuers', label: 'Cluster issuers' }
+				{ group: 'cert-manager.io', plural: 'clusterissuers', label: t('Cluster issuers') }
 			]
 		}
 	};
@@ -68,16 +70,16 @@
 		const ok = await app.setContextSettings(context, { ...app.contextSettings, integrations: { ...draft } });
 		saving = false;
 		if (ok) {
-			app.toast('Saved; looking again');
+			app.toast(t('Saved; looking again'));
 			await check();
 		}
 	}
 
 	function status(item: Integration): { text: string; tone: 'ok' | 'bad' | 'muted' } {
-		if (item.source === 'off') return { text: 'Off', tone: 'muted' };
-		if (item.source === 'missing') return { text: 'Not found', tone: 'muted' };
-		if (item.error) return { text: 'Not answering', tone: 'bad' };
-		const how = item.source === 'settings' ? 'From settings' : 'Found';
+		if (item.source === 'off') return { text: t('Off'), tone: 'muted' };
+		if (item.source === 'missing') return { text: t('Not found'), tone: 'muted' };
+		if (item.error) return { text: t('Not answering'), tone: 'bad' };
+		const how = item.source === 'settings' ? t('From settings') : t('Found');
 		return { text: item.version ? `${how} · ${item.version}` : how, tone: 'ok' };
 	}
 
@@ -88,7 +90,7 @@
 	function where(item: Integration): string | null {
 		const e = item.endpoint;
 		if (!e) return null;
-		return e.via === 'url' ? e.url : `Service ${e.namespace}/${e.name}:${e.port}, through the API server`;
+		return e.via === 'url' ? e.url : t('Service {service}, through the API server', { service: `${e.namespace}/${e.name}:${e.port}` });
 	}
 
 	/** The namespace picked in the sidebar, whose dashboards the Grafana card lists. */
@@ -103,15 +105,15 @@
 </script>
 
 <section class="page">
-	<PageHeader crumbs={['Integrations']} prefix="context" title="Integrations" subtitle="Tools the cluster runs, found without setup">
+	<PageHeader crumbs={[t('Integrations')]} prefix="context" title={t('Integrations')} subtitle={t('Tools the cluster runs, found without setup')}>
 		{#snippet tools()}
-			<button class="btn" onclick={check} disabled={checking}>{checking ? 'Looking…' : 'Look again'}</button>
+			<button class="btn" onclick={check} disabled={checking}>{checking ? t('Looking…') : t('Look again')}</button>
 		{/snippet}
 	</PageHeader>
 
 	<div class="body">
 		{#if !app.integrations}
-			<p class="muted">{checking ? 'Looking for Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager…' : 'Kubri could not look for integrations.'}</p>
+			<p class="muted">{checking ? t('Looking for Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager…') : t('Kubri could not look for integrations.')}</p>
 		{:else}
 			{#if present.length}
 				<ul class="tools">
@@ -128,11 +130,11 @@
 							{#if item.error}<p class="error">{item.error}</p>{/if}
 							{#if item.id === 'grafana' && item.endpoint && !item.error}
 								<div class="kinds">
-									<button class="btn" onclick={() => openTool('grafana', '/')}>Open Grafana</button>
+									<button class="btn" onclick={() => openTool('grafana', '/')}>{t('Open Grafana')}</button>
 								</div>
 								{#if namespaceRef}
 									<div class="dashboards">
-										<DashboardList target={namespaceRef} title="Grafana for {app.namespace}" empty="Grafana has nothing for {app.namespace}." />
+										<DashboardList target={namespaceRef} title={t('Grafana for {namespace}', { namespace: app.namespace })} empty={t('Grafana has nothing for {namespace}.', { namespace: app.namespace })} />
 									</div>
 								{/if}
 							{/if}
@@ -149,7 +151,7 @@
 			{/if}
 			{#if absent.length}
 				<div class="absent">
-					<h2>{present.length ? 'Not in this cluster' : 'None of these runs in this cluster'}</h2>
+					<h2>{present.length ? t('Not in this cluster') : t('None of these runs in this cluster')}</h2>
 					<ul>
 						{#each absent as item (item.id)}
 							{@const about = ABOUT[item.id]}
@@ -157,9 +159,9 @@
 								<strong>{item.name}</strong>
 								<span class="muted">{about?.text}</span>
 								{#if item.source === 'off'}
-									<span class="muted off">Off</span>
+									<span class="muted off">{t('Off')}</span>
 								{:else if about?.install}
-									<a href={about.install} target="_blank" rel="noreferrer" aria-label="How to install {item.name}">How to install</a>
+									<a href={about.install} target="_blank" rel="noreferrer" aria-label={t('How to install {name}', { name: item.name })}>{t('How to install')}</a>
 								{/if}
 							</li>
 						{/each}
@@ -169,52 +171,60 @@
 		{/if}
 
 		<form class="settings" onsubmit={save}>
-			<h2>Point elsewhere</h2>
-			<p class="muted">For {app.contextName(context)} only. Leave a field empty and Kubri finds the tool in the cluster.</p>
+			<h2>{t('Point elsewhere')}</h2>
+			<p class="muted">{t('For {context} only. Leave a field empty and Kubri finds the tool in the cluster.', { context: app.contextName(context) })}</p>
 			<details class="help">
-				<summary>How to fill these in</summary>
+				<summary>{t('How to fill these in')}</summary>
 				<p>
-					Type <code>off</code> to turn a tool off. A URL like <code>http://name.namespace.svc:port</code> reaches that Service through the
-					API server.
+					<Phrase
+						text={t('Type {off} to turn a tool off. A URL like {url} reaches that Service through the API server.')}
+						code={{ off: 'off', url: 'http://name.namespace.svc:port' }}
+					/>
 				</p>
 				<p>
-					<strong>Grafana URL</strong> is the address only, like <code>https://grafana.example.com</code>. <strong>Logs in Grafana</strong>
-					on a namespace, pod, workload or Service then opens its logs in Grafana’s Explore, and <strong>Grafana…</strong> lists the dashboards
-					that show it, ready to open or copy. Both work also when Grafana needs a login or a client certificate, as your browser opens them.
+					<Phrase
+						text={t('{field} is the address only, like {url}. {logs} on a namespace, pod, workload or Service then opens its logs in Grafana’s Explore, and {dashboards} lists the dashboards that show it, ready to open or copy. Both work also when Grafana needs a login or a client certificate, as your browser opens them.')}
+						strong={{ field: t('Grafana URL'), logs: t('Logs in Grafana'), dashboards: t('Grafana…') }}
+						code={{ url: 'https://grafana.example.com' }}
+					/>
 				</p>
 				<p>
-					<strong>Loki data source</strong> is the name or UID of the Loki data source in Grafana. Leave it empty unless Kubri picks the wrong
-					one.
+					<Phrase
+						text={t('{field} is the name or UID of the Loki data source in Grafana. Leave it empty unless Kubri picks the wrong one.')}
+						strong={{ field: t('Loki data source') }}
+					/>
 				</p>
 				<p>
-					<strong>Token</strong> lets Kubri list Grafana’s dashboards and find its Loki data source itself. It goes only to a Grafana given by
-					URL.
+					<Phrase
+						text={t('{field} lets Kubri list Grafana’s dashboards and find its Loki data source itself. It goes only to a Grafana given by URL.')}
+						strong={{ field: t('Token') }}
+					/>
 				</p>
 			</details>
 			{#each [URLS.prometheus, URLS.loki] as url (url!.key)}
 				<label>
-					<span>{url!.key === 'prometheus' ? 'Prometheus' : 'Loki'} URL</span>
+					<span>{url!.key === 'prometheus' ? t('Prometheus') : t('Loki')} URL</span>
 					<input bind:value={draft[url!.key]} placeholder="e.g. {url!.example}" spellcheck="false" autocomplete="off" />
 				</label>
 			{/each}
 			<fieldset class="grafana">
-				<legend>Grafana</legend>
+				<legend>{t('Grafana')}</legend>
 				<label>
 					<span>URL</span>
 					<input bind:value={draft.grafana} placeholder="e.g. {URLS.grafana!.example}" spellcheck="false" autocomplete="off" />
 				</label>
 				<label>
-					<span>Loki data source</span>
-					<input bind:value={draft.grafanaLogs} placeholder="Found in Grafana, else its default" spellcheck="false" autocomplete="off" />
+					<span>{t('Loki data source')}</span>
+					<input bind:value={draft.grafanaLogs} placeholder={t('Found in Grafana, else its default')} spellcheck="false" autocomplete="off" />
 				</label>
 				<label>
-					<span>Token</span>
-					<input type="password" bind:value={draft.grafanaToken} placeholder="A service account token with the Viewer role" autocomplete="off" />
+					<span>{t('Token')}</span>
+					<input type="password" bind:value={draft.grafanaToken} placeholder={t('A service account token with the Viewer role')} autocomplete="off" />
 				</label>
-				<p class="muted small">Kept in Kubri’s settings file.</p>
+				<p class="muted small">{t('Kept in Kubri’s settings file.')}</p>
 			</fieldset>
 			<div class="actions">
-				<button class="btn primary" type="submit" disabled={!dirty || saving || !context}>{saving ? 'Saving…' : 'Save'}</button>
+				<button class="btn primary" type="submit" disabled={!dirty || saving || !context}>{saving ? t('Saving…') : t('Save')}</button>
 			</div>
 		</form>
 	</div>
@@ -389,7 +399,7 @@
 		margin: 0;
 		font-size: 11.5px;
 	}
-	code {
+	.help :global(code) {
 		font-family: var(--mono);
 		font-size: 11.5px;
 	}

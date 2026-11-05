@@ -1,33 +1,34 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { app } from '../state.svelte';
 
 	/** The steps; each points at what it explains when that is on screen. */
 	const STEPS: { title: string; text: string; keys?: string[]; target?: string }[] = [
 		{
-			title: 'Welcome to Kubri',
-			text: 'A quick look at the four things that get you anywhere. It takes half a minute, and Help (?) brings it back.'
+			title: t('Welcome to Kubri'),
+			text: t('A quick look at the four things that get you anywhere. It takes half a minute, and Help (?) brings it back.')
 		},
 		{
-			title: 'Find anything with the palette',
-			text: 'Press Ctrl+K or : to jump to a kind, a namespace, a context or an object, or to run an action on the row you chose.',
+			title: t('Find anything with the palette'),
+			text: t('Press Ctrl+K or : to jump to a kind, a namespace, a context or an object, or to run an action on the row you chose.'),
 			keys: ['Ctrl+K', ':'],
 			target: '[data-tour="palette"]'
 		},
 		{
-			title: 'Right click for everything',
-			text: 'A right click or the ⋯ button on a row lists every action for it: logs, shell, scale, restart, delete. The action bar above the list shows the common ones.',
+			title: t('Right click for everything'),
+			text: t('A right click or the ⋯ button on a row lists every action for it: logs, shell, scale, restart, delete. The action bar above the list shows the common ones.'),
 			keys: ['right click'],
 			target: 'main tbody tr.row'
 		},
 		{
-			title: 'Keys, if you like them',
-			text: 'Move with j and k, open with Enter, describe with d, logs with l. Press ? any time for all of them; the bar at the bottom shows the ones that work here.',
+			title: t('Keys, if you like them'),
+			text: t('Move with j and k, open with Enter, describe with d, logs with l. Press ? any time for all of them; the bar at the bottom shows the ones that work here.'),
 			keys: ['j', 'k', 'Enter', '?'],
 			target: '[data-tour="keys"]'
 		},
 		{
-			title: 'Read-only keeps you safe',
-			text: 'This switch turns changes off. Guard rails in the context settings can force it for production clusters.',
+			title: t('Read-only keeps you safe'),
+			text: t('This switch turns changes off. Guard rails in the context settings can force it for production clusters.'),
 			target: '[data-tour="read-only"]'
 		}
 	];
@@ -109,7 +110,7 @@
 	class:pointing={placed}
 	role="dialog"
 	aria-modal="true"
-	aria-label="Quick tour"
+	aria-label={t('Quick tour')}
 	tabindex="-1"
 	bind:this={box}
 	bind:offsetWidth={width}
@@ -120,17 +121,17 @@
 	{#if placed}
 		<span class="arrow" class:up={placed.below} class:down={!placed.below} style:left="{placed.arrow}px" aria-hidden="true"></span>
 	{/if}
-	{#if step > 0}<p class="count">{step} of {STEPS.length - 1}</p>{/if}
+	{#if step > 0}<p class="count">{t('{step} of {total}', { step, total: STEPS.length - 1 })}</p>{/if}
 	<h2>{STEPS[step].title}</h2>
 	<p>{STEPS[step].text}</p>
 	{#if STEPS[step].keys}
 		<p class="keys">{#each STEPS[step].keys as key (key)}<kbd>{key}</kbd>{/each}</p>
 	{/if}
 	<div class="buttons">
-		<button class="skip" onclick={finish}>Skip</button>
+		<button class="skip" onclick={finish}>{t('Skip')}</button>
 		<span class="spacer"></span>
-		{#if step > 0}<button onclick={() => step--}>Back</button>{/if}
-		<button class="primary" onclick={() => (last ? finish() : step++)}>{last ? 'Done' : 'Next'}</button>
+		{#if step > 0}<button onclick={() => step--}>{t('Back')}</button>{/if}
+		<button class="primary" onclick={() => (last ? finish() : step++)}>{last ? t('Done') : t('Next')}</button>
 	</div>
 </div>
 

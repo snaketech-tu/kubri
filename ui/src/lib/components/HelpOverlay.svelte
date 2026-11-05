@@ -3,186 +3,187 @@
 	import { backend } from '../api';
 	import { FEEDBACK, feedbackLink, VERSION } from '../feedback';
 	import { app } from '../state.svelte';
+	import { t } from '../i18n';
 
 	const builtin: [string, [string, string][]][] = [
 		[
-			'Mouse',
+			t('Mouse'),
 			[
-				['Right click  or  ⋯', 'Everything there is to do on a row'],
-				['Double click', 'Open, like Enter'],
-				['Action bar', 'Above the list, for the row under the cursor or the marked rows'],
-				['‹ ›', 'Back / forward, at the top left'],
-				['Key hints', 'At the bottom: click one to press its key']
+				[t('Right click  or  ⋯'), t('Everything there is to do on a row')],
+				[t('Double click'), t('Open, like Enter')],
+				[t('Action bar'), t('Above the list, for the row under the cursor or the marked rows')],
+				['‹ ›', t('Back / forward, at the top left')],
+				[t('Key hints'), t('At the bottom: click one to press its key')]
 			]
 		],
 		[
-			'Move',
+			t('Move'),
 			[
-				[':  or  Ctrl+K', 'Command palette: kinds, objects, actions, ctx, ns …'],
-				['Ctrl+Shift+C', 'Switch context'],
-				['0', 'All namespaces'],
-				['j / k  or  ↑ / ↓', 'Move'],
-				['g / G', 'First / last row'],
-				['Ctrl+F / B  or  PgDn / PgUp', 'A page down / up'],
-				['/', 'Filter: regex, !inverse, -f fuzzy, -l app=web'],
-				['[ / ]  or  Alt+← / →', 'Back / forward'],
-				['-', 'Last view, and back again'],
-				['Shift+W', 'Warp to the namespace of the row'],
-				['Shift+J', 'Jump to the owner'],
-				['Esc', 'Close, clear selection or filter, go back']
+				[':  or  Ctrl+K', t('Command palette: kinds, objects, actions, ctx, ns …')],
+				['Ctrl+Shift+C', t('Switch context')],
+				['0', t('All namespaces')],
+				['j / k  or  ↑ / ↓', t('Move')],
+				['g / G', t('First / last row')],
+				['Ctrl+F / B  or  PgDn / PgUp', t('A page down / up')],
+				['/', t('Filter: regex, !inverse, -f fuzzy, -l app=web')],
+				['[ / ]  or  Alt+← / →', t('Back / forward')],
+				['-', t('Last view, and back again')],
+				['Shift+W', t('Warp to the namespace of the row')],
+				['Shift+J', t('Jump to the owner')],
+				['Esc', t('Close, clear selection or filter, go back')]
 			]
 		],
 		[
-			'Look',
+			t('Look'),
 			[
-				['Enter', 'Open: pods of a workload, jobs of a CronJob, … (jumps.yaml)'],
-				['d', 'Describe'],
-				['y', 'YAML'],
-				['l', 'Logs of a pod, workload or service'],
-				['p', 'Logs of the previous container'],
-				['m', 'Metrics from Prometheus'],
-				['f', 'Maximize or restore the panel'],
-				['w', 'All columns, scrolling sideways'],
-				['Shift+N / A / S / P', 'Sort by name / age / status / namespace'],
-				['Shift+R / T / I / O', 'Sort pods by ready / restarts / IP / node'],
-				['Shift+C / M / X / Z', 'Sort by CPU / memory / %CPU / %memory'],
-				['Ctrl+Z', 'Only faulty rows'],
-				['Shift+E', 'Explain with your model (also findings)'],
-				['c / n', 'Copy names / namespaces'],
-				['Ctrl+S', 'Save the list as CSV']
+				['Enter', t('Open: pods of a workload, jobs of a CronJob, … (jumps.yaml)')],
+				['d', t('Describe')],
+				['y', t('YAML')],
+				['l', t('Logs of a pod, workload or service')],
+				['p', t('Logs of the previous container')],
+				['m', t('Metrics from Prometheus')],
+				['f', t('Maximize or restore the panel')],
+				['w', t('All columns, scrolling sideways')],
+				['Shift+N / A / S / P', t('Sort by name / age / status / namespace')],
+				['Shift+R / T / I / O', t('Sort pods by ready / restarts / IP / node')],
+				['Shift+C / M / X / Z', t('Sort by CPU / memory / %CPU / %memory')],
+				['Ctrl+Z', t('Only faulty rows')],
+				['Shift+E', t('Explain with your model (also findings)')],
+				['c / n', t('Copy names / namespaces')],
+				['Ctrl+S', t('Save the list as CSV')]
 			]
 		],
 		[
-			'Change',
+			t('Change'),
 			[
-				['Space', 'Mark the row'],
-				['Ctrl+Space', 'Mark up to here'],
-				['Ctrl+A / Ctrl+\\', 'Mark all / none'],
-				['e', 'Edit YAML (Ctrl+S saves)'],
-				['s', 'Scale'],
-				['r', 'Rollout restart'],
-				['Shift+L', 'Labels and annotations'],
-				['Ctrl+D  or  Delete', 'Delete'],
-				[':new [kind name --image …]', 'Create from a template or YAML, like kubectl create']
+				['Space', t('Mark the row')],
+				['Ctrl+Space', t('Mark up to here')],
+				['Ctrl+A / Ctrl+\\', t('Mark all / none')],
+				['e', t('Edit YAML (Ctrl+S saves)')],
+				['s', t('Scale')],
+				['r', t('Rollout restart')],
+				['Shift+L', t('Labels and annotations')],
+				['Ctrl+D  or  Delete', t('Delete')],
+				[':new [kind name --image …]', t('Create from a template or YAML, like kubectl create')]
 			]
 		],
 		[
-			'Tools',
+			t('Tools'),
 			[
-				[':pulses  or  :overview', 'Overview: health, warnings, CPU and memory'],
-				[':xray deploy [ns]', 'Topology as trees: what each object depends on'],
-				[':graph [ns]', 'Topology as one graph, with Ingress request paths'],
-				[':changes [ns] [1h]', 'What changed: rollouts, scaling, config edits and warnings'],
-				[':helm', 'Helm releases'],
-				[':pf', 'Port-forwards'],
-				[':rbac  or  :access', 'Access: who may do what'],
-				[':popeye  or  :checks', 'Checks: common mistakes, scored'],
-				[':rightsizing', 'Requests far from what containers use'],
-				[':bench', 'HTTP benchmarks'],
-				[':tools', 'Every tool on one page'],
-				[':kinds', 'Every kind the cluster serves'],
-				[':fleet', 'Every context at once, with its health'],
-				[':search web ctx:*', 'Objects by name, label and field, in one context or several'],
-				[':integrations', 'Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager']
+				[':pulses  or  :overview', t('Overview: health, warnings, CPU and memory')],
+				[':xray deploy [ns]', t('Topology as trees: what each object depends on')],
+				[':graph [ns]', t('Topology as one graph, with Ingress request paths')],
+				[':changes [ns] [1h]', t('What changed: rollouts, scaling, config edits and warnings')],
+				[':helm', t('Helm releases')],
+				[':pf', t('Port-forwards')],
+				[':rbac  or  :access', t('Access: who may do what')],
+				[':popeye  or  :checks', t('Checks: common mistakes, scored')],
+				[':rightsizing', t('Requests far from what containers use')],
+				[':bench', t('HTTP benchmarks')],
+				[':tools', t('Every tool on one page')],
+				[':kinds', t('Every kind the cluster serves')],
+				[':fleet', t('Every context at once, with its health')],
+				[':search web ctx:*', t('Objects by name, label and field, in one context or several')],
+				[':integrations', t('Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager')]
 			]
 		],
 		[
-			'App',
+			t('App'),
 			[
-				['Ctrl+`  or  :term', 'Terminal with kubectl and helm set to this context (Shift: another one)'],
-				[':snapshot [ns|all]', 'Save a namespace or the cluster to a file to open offline, or open one'],
-				[':kubeconfig', 'The kubeconfig files Kubri reads, and load more'],
-				[':config', 'Settings, with k9s aliases, hotkeys, plugins and skins'],
-				[':skin name', 'Switch skin; :skin kubri for the built-in colors'],
-				['Ctrl+ +  /  −  /  0', 'Zoom in, out, back to 100% (:appearance for colors)'],
-				['?', 'This help'],
-				[':feedback [idea]', 'Report a problem or suggest an idea on GitHub, with your version filled in']
+				['Ctrl+`  or  :term', t('Terminal with kubectl and helm set to this context (Shift: another one)')],
+				[':snapshot [ns|all]', t('Save a namespace or the cluster to a file to open offline, or open one')],
+				[':kubeconfig', t('The kubeconfig files Kubri reads, and load more')],
+				[':config', t('Settings, with k9s aliases, hotkeys, plugins and skins')],
+				[':skin name', t('Switch skin; :skin kubri for the built-in colors')],
+				['Ctrl+ +  /  −  /  0', t('Zoom in, out, back to 100% (:appearance for colors)')],
+				['?', t('This help')],
+				[':feedback [idea]', t('Report a problem or suggest an idea on GitHub, with your version filled in')]
 			]
 		],
 		[
-			'Logs',
+			t('Logs'),
 			[
-				['/', 'Search: text, /regex/ or fields like level>=warn status>=500; Esc clears'],
-				['n / N', 'Next / previous match; Enter in the search too'],
-				['0 – 6', 'Tail, all, 1m, 5m, 15m, 30m, 1h'],
-				['t / w', 'Timestamps / wrap'],
-				['s', 'Autoscroll'],
-				['m', 'Mark: a line across the log'],
-				['x', 'Explain the selected lines, or the last 200'],
-				['c / Ctrl+S', 'Copy / save'],
-				['Shift+C', 'Clear']
+				['/', t('Search: text, /regex/ or fields like level>=warn status>=500; Esc clears')],
+				['n / N', t('Next / previous match; Enter in the search too')],
+				['0 – 6', t('Tail, all, 1m, 5m, 15m, 30m, 1h')],
+				['t / w', t('Timestamps / wrap')],
+				['s', t('Autoscroll')],
+				['m', t('Mark: a line across the log')],
+				['x', t('Explain the selected lines, or the last 200')],
+				['c / Ctrl+S', t('Copy / save')],
+				['Shift+C', t('Clear')]
 			]
 		],
 		[
-			'Pods',
+			t('Pods'),
 			[
-				['s', 'Shell'],
-				['a', 'Attach'],
-				['Shift+D', 'Debug a pod, or a shell on a node'],
-				['o', 'Show the node'],
-				['i', 'Set image (also workloads)'],
-				['z', 'Delete completed and failed pods'],
-				['Shift+F', 'Port-forward (also deployments, services)']
+				['s', t('Shell')],
+				['a', t('Attach')],
+				['Shift+D', t('Debug a pod, or a shell on a node')],
+				['o', t('Show the node')],
+				['i', t('Set image (also workloads)')],
+				['z', t('Delete completed and failed pods')],
+				['Shift+F', t('Port-forward (also deployments, services)')]
 			]
 		],
 		[
-			'Port-forwards',
+			t('Port-forwards'),
 			[
-				['b', 'HTTP benchmark'],
-				['o', 'Open in the browser'],
-				['c  or  Enter', 'Copy URL'],
-				['s', 'Favorite: start whenever Kubri connects'],
-				['Ctrl+D', 'Stop']
+				['b', t('HTTP benchmark')],
+				['o', t('Open in the browser')],
+				['c  or  Enter', t('Copy URL')],
+				['s', t('Favorite: start whenever Kubri connects')],
+				['Ctrl+D', t('Stop')]
 			]
 		],
 		[
-			'Workloads',
+			t('Workloads'),
 			[
-				['Enter', 'Pods (Deployments, StatefulSets, DaemonSets, Jobs, Services)'],
-				['z', 'ReplicaSets of a Deployment'],
-				['Ctrl+L', 'Roll back to a ReplicaSet'],
-				['t', 'Run a CronJob now'],
-				['s', 'Suspend or resume a CronJob'],
-				['x', 'Show the values of a Secret'],
-				['u', 'Use a namespace; what uses a ConfigMap, Secret, PVC or ServiceAccount']
+				['Enter', t('Pods (Deployments, StatefulSets, DaemonSets, Jobs, Services)')],
+				['z', t('ReplicaSets of a Deployment')],
+				['Ctrl+L', t('Roll back to a ReplicaSet')],
+				['t', t('Run a CronJob now')],
+				['s', t('Suspend or resume a CronJob')],
+				['x', t('Show the values of a Secret')],
+				['u', t('Use a namespace; what uses a ConfigMap, Secret, PVC or ServiceAccount')]
 			]
 		],
 		[
-			'Nodes',
+			t('Nodes'),
 			[
-				['c', 'Cordon'],
-				['u', 'Uncordon'],
-				['r', 'Drain']
+				['c', t('Cordon')],
+				['u', t('Uncordon')],
+				['r', t('Drain')]
 			]
 		],
 		[
-			'Topology',
+			t('Topology'),
 			[
-				['h / l  or  ← / →', 'Collapse / expand'],
-				['Space', 'Toggle'],
-				['Enter  or  d', 'Describe'],
-				['/', 'Filter']
+				['h / l  or  ← / →', t('Collapse / expand')],
+				['Space', t('Toggle')],
+				['Enter  or  d', t('Describe')],
+				['/', t('Filter')]
 			]
 		],
 		[
-			'Helm',
+			t('Helm'),
 			[
-				['Enter  or  n', 'Overview and notes'],
-				['v / m / h', 'Values / manifest / history'],
-				['c / x', 'Compare revisions / drift from the cluster'],
-				['u', 'Upgrade with changed values'],
-				['i', 'Install a chart'],
-				['r', 'Roll back (previous or shown revision)'],
-				['Ctrl+D', 'Uninstall'],
-				['Esc', 'Back to the releases']
+				['Enter  or  n', t('Overview and notes')],
+				['v / m / h', t('Values / manifest / history')],
+				['c / x', t('Compare revisions / drift from the cluster')],
+				['u', t('Upgrade with changed values')],
+				['i', t('Install a chart')],
+				['r', t('Roll back (previous or shown revision)')],
+				['Ctrl+D', t('Uninstall')],
+				['Esc', t('Back to the releases')]
 			]
 		],
 		[
-			'Checks',
+			t('Checks'),
 			[
-				['h / l', 'Collapse / expand a kind'],
-				['Enter  or  d', 'Describe the object'],
-				['Shift+R', 'Scan again']
+				['h / l', t('Collapse / expand a kind')],
+				['Enter  or  d', t('Describe the object')],
+				['Shift+R', t('Scan again')]
 			]
 		]
 	];
@@ -195,7 +196,7 @@
 		return { name, shared: !override && kubriUses(shortcut) };
 	}
 
-	const shared = ' (where the view does not use the key)';
+	const shared = t(' (where the view does not use the key)');
 
 	// The k9s hotkeys, and the plugins of the view the help was opened from.
 	const groups = $derived.by(() => {
@@ -210,8 +211,8 @@
 				const key = keyName(p.shortCut, p.override);
 				return key ? [[key.name, (p.description || p.name) + (key.shared ? shared : '')]] : [];
 			});
-		if (hotkeys.length) all.push(['k9s hotkeys', hotkeys]);
-		if (plugins.length) all.push(['k9s plugins here', plugins]);
+		if (hotkeys.length) all.push([t('k9s hotkeys'), hotkeys]);
+		if (plugins.length) all.push([t('k9s plugins here'), plugins]);
 		return all;
 	});
 
@@ -221,12 +222,12 @@
 
 	/** The groups with only the keys that match the filter, in the key or in what it does. */
 	const shown = $derived.by(() => {
-		const t = filter.trim().toLowerCase();
-		if (!t) return groups;
+		const query = filter.trim().toLowerCase();
+		if (!query) return groups;
 		return groups
 			.map(([title, keys]): [string, [string, string][]] => [
 				title,
-				keys.filter(([key, what]) => key.toLowerCase().includes(t) || what.toLowerCase().includes(t) || title.toLowerCase().includes(t))
+				keys.filter(([key, what]) => key.toLowerCase().includes(query) || what.toLowerCase().includes(query) || title.toLowerCase().includes(query))
 			])
 			.filter(([, keys]) => keys.length > 0);
 	});
@@ -258,23 +259,23 @@
 <svelte:window {onkeydown} />
 
 <div class="backdrop" onclick={() => (app.helpOpen = false)} role="presentation"></div>
-<div class="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabindex="-1" bind:this={box}>
+<div class="help" role="dialog" aria-modal="true" aria-label={t('Keyboard shortcuts')} tabindex="-1" bind:this={box}>
 	<h2>
-		Keyboard shortcuts
+		{t('Keyboard shortcuts')}
 		<button
 			class="tour-link"
 			onclick={() => {
 				app.helpOpen = false;
 				app.tourOpen = true;
-			}}>Show the quick tour</button
+			}}>{t('Show the quick tour')}</button
 		>
 	</h2>
 	<input
 		class="filter"
 		bind:this={search}
 		bind:value={filter}
-		placeholder="Type to find a key or a command…"
-		aria-label="Filter the shortcuts"
+		placeholder={t('Type to find a key or a command…')}
+		aria-label={t('Filter the shortcuts')}
 		spellcheck="false"
 	/>
 	<div class="groups">
@@ -283,18 +284,18 @@
 				<h3>{title}</h3>
 				<dl>
 					{#each keys as [key, what], i (key + i)}
-						<dt><kbd>{key}</kbd></dt>
+						<dt><kbd>{key.replaceAll('  or  ', `  ${t('or')}  `)}</kbd></dt>
 						<dd>{what}</dd>
 					{/each}
 				</dl>
 			</section>
 		{:else}
-			<p class="none">Nothing matches "{filter}".</p>
+			<p class="none">{t('Nothing matches “{filter}”.', { filter })}</p>
 		{/each}
 	</div>
 	<p class="feedback">
 		Kubri {VERSION} ·
-		Something wrong or missing?
+		{t('Something wrong or missing?')}
 		<a href={feedbackLink('bug', backend.desktop)} target="_blank" rel="noreferrer">{FEEDBACK.bug}</a>
 		·
 		<a href={feedbackLink('idea', backend.desktop)} target="_blank" rel="noreferrer">{FEEDBACK.idea}</a>

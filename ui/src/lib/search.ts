@@ -1,5 +1,6 @@
 import type { ContextInfo, FieldTest, ResourceInfo, SearchRequest } from './api';
 import { matchResources } from './commands';
+import { t } from './i18n';
 
 /** A query as typed, as the core takes it, and what in it was not understood. */
 export interface ParsedSearch {
@@ -60,7 +61,7 @@ export function parseSearch(query: string, resources: ResourceInfo[], contexts: 
 							if (!request.kinds.some((k) => k.group === found.group && k.plural === found.plural)) {
 								request.kinds.push({ group: found.group, version: found.version, plural: found.plural });
 							}
-						} else problems.push(`No kind is called ${name}`);
+						} else problems.push(t('No kind is called {name}', { name }));
 					}
 					break;
 				case 'ns':
@@ -73,7 +74,7 @@ export function parseSearch(query: string, resources: ResourceInfo[], contexts: 
 					else
 						for (const name of value.split(',').filter(Boolean)) {
 							if (contexts.some((c) => c.name === name)) request.contexts.push(name);
-							else problems.push(`No context is called ${name}`);
+							else problems.push(t('No context is called {name}', { name }));
 						}
 					break;
 				default:

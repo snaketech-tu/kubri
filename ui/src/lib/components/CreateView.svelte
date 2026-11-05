@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import { untrack } from 'svelte';
 	import { backend, type ApplyItem, type ApplyOutcome, type ResourceInfo } from '../api';
 	import { CORE_GROUPS, parseObjects, TEMPLATE_KINDS, toYaml, workloadOf } from '../create';
@@ -9,6 +10,7 @@
 	import DiffView from './DiffView.svelte';
 	import FormPanel from './FormPanel.svelte';
 	import Icon from './Icon.svelte';
+	import Phrase from './Phrase.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import Select from './Select.svelte';
 	import YamlEditor from './YamlEditor.svelte';
@@ -107,7 +109,7 @@
 		try {
 			load(await navigator.clipboard.readText());
 		} catch {
-			error = 'Kubri may not read the clipboard here. Paste into the editor with Ctrl+V instead.';
+			error = t('Kubri may not read the clipboard here. Paste into the editor with Ctrl+V instead.');
 		}
 	}
 
@@ -118,7 +120,7 @@
 		error = parsed.error;
 		if (parsed.error) return;
 		if (!parsed.objects.length) {
-			error = 'There is nothing to apply yet: start from a kind, or paste YAML.';
+			error = t('There is nothing to apply yet: start from a kind, or paste YAML.');
 			return;
 		}
 		objects = parsed.objects;
@@ -148,10 +150,10 @@
 			const failed = results.filter((r) => r.outcome === 'failed').length;
 			app.toast(
 				failed
-					? `${failed} of ${results.length} could not be applied`
+					? t('{n} of {total} could not be applied', { n: failed, total: results.length })
 					: done
-						? `Applied ${done} ${done === 1 ? 'object' : 'objects'}`
-						: 'Nothing changed',
+						? plural(done, 'Applied {n} object', 'Applied {n} objects')
+						: t('Nothing changed'),
 				failed ? 'bad' : 'ok'
 			);
 		} catch (err) {
@@ -196,27 +198,27 @@
 	const changes = $derived(results?.filter((r) => r.outcome === 'created' || r.outcome === 'changed' || r.outcome === 'unchecked').length ?? 0);
 	const blocked = $derived(
 		app.readOnly
-			? 'Kubri is read-only for this context'
+			? t('Kubri is read-only for this context')
 			: failed
-				? 'Fix what failed in the dry run first'
+				? t('Fix what failed in the dry run first')
 				: !changes
-					? 'Nothing would change'
+					? t('Nothing would change')
 					: null
 	);
 
 	const LABELS: Record<ApplyOutcome, string> = {
-		created: 'Create',
-		changed: 'Change',
-		unchanged: 'Unchanged',
-		unchecked: 'Create, not checked',
-		failed: 'Fails'
+		created: t('Create'),
+		changed: t('Change'),
+		unchanged: t('Unchanged'),
+		unchecked: t('Create, not checked'),
+		failed: t('Fails')
 	};
 	const DONE: Record<ApplyOutcome, string> = {
-		created: 'Created',
-		changed: 'Changed',
-		unchanged: 'Unchanged',
-		unchecked: 'Not checked',
-		failed: 'Failed'
+		created: t('Created'),
+		changed: t('Changed'),
+		unchanged: t('Unchanged'),
+		unchecked: t('Not checked'),
+		failed: t('Failed')
 	};
 
 	function open(item: ApplyItem) {
@@ -236,58 +238,58 @@
 
 <section>
 	<PageHeader
-		crumbs={['Create']}
+		crumbs={[t('Create')]}
 		prefix="context"
-		title="Create"
-		subtitle="Objects from a template, a file, a URL or the clipboard, applied like kubectl apply --server-side after a dry run"
+		title={t('Create')}
+		subtitle={t('Objects from a template, a file, a URL or the clipboard, applied like kubectl apply --server-side after a dry run')}
 	/>
 
 	<div class="card">
 		{#if !results}
 			<div class="toolbar">
 				<label class="field">
-					<span>Add</span>
+					<span>{t('Add')}</span>
 					<Select
 						bind:value={kind}
 						options={[
-							...common.map((r) => ({ value: key(r), label: r.kind, group: 'Common' })),
-							...others.map((r) => ({ value: key(r), label: `${r.kind}${r.group ? ` (${r.group})` : ''}`, group: 'All kinds' }))
+							...common.map((r) => ({ value: key(r), label: r.kind, group: t('Common') })),
+							...others.map((r) => ({ value: key(r), label: `${r.kind}${r.group ? ` (${r.group})` : ''}`, group: t('All kinds') }))
 						]}
-						placeholder="Choose a kind…"
-						aria-label="Add a kind's template"
+						placeholder={t('Choose a kind…')}
+						aria-label={t('Add a kind\'s template')}
 						compact
 						style="max-width: 260px"
 					/>
 				</label>
 				<span class="divider"></span>
-				<button onclick={() => file?.click()}><Icon name="config" size={15} /> Open files…</button>
+				<button onclick={() => file?.click()}><Icon name="config" size={15} /> {t('Open files…')}</button>
 				<input bind:this={file} type="file" accept=".yaml,.yml,.json" multiple hidden onchange={openFile} />
-				<button onclick={() => (urlOpen = !urlOpen)} aria-expanded={urlOpen}><Icon name="ingress" size={15} /> From URL…</button>
-				<button onclick={paste}><Icon name="clipboard" size={15} /> Paste</button>
+				<button onclick={() => (urlOpen = !urlOpen)} aria-expanded={urlOpen}><Icon name="ingress" size={15} /> {t('From URL…')}</button>
+				<button onclick={paste}><Icon name="clipboard" size={15} /> {t('Paste')}</button>
 				<span class="spacer"></span>
 				{#if formObject}
-					<button class:on={showForm} aria-pressed={showForm} onclick={() => (showForm = !showForm)} title="A form for the {formObject.kind}"
-						>Form</button
+					<button class:on={showForm} aria-pressed={showForm} onclick={() => (showForm = !showForm)} title={t('A form for the {kind}', { kind: formObject.kind })}
+						>{t('Form')}</button
 					>
 				{/if}
 				<label class="field" class:elsewhere>
-					<span>{elsewhere ? 'Context (not the current one)' : 'Context'}</span>
+					<span>{elsewhere ? t('Context (not the current one)') : t('Context')}</span>
 					<Select
 						bind:value={into}
 						options={app.contexts.map((c) => ({ value: c.name, label: app.contextName(c.name) }))}
-						title="The cluster to create the objects in"
-						aria-label="Create in context"
+						title={t('The cluster to create the objects in')}
+						aria-label={t('Create in context')}
 						compact
 						style="max-width: 260px"
 					/>
 				</label>
 				<label class="field">
-					<span>Namespace</span>
+					<span>{t('Namespace')}</span>
 					<Select
 						bind:value={namespace}
 						options={namespaceOptions}
-						title="For objects that name no namespace"
-						aria-label="Namespace for objects that name none"
+						title={t('For objects that name no namespace')}
+						aria-label={t('Namespace for objects that name none')}
 						compact
 						style="max-width: 220px"
 					/>
@@ -295,15 +297,18 @@
 			</div>
 			{#if creating.source}
 				<p class="source">
-					<Icon name="config" size={14} /> A copy of <strong>{creating.source}</strong> without what the cluster assigned. Pick
-					another namespace or context, or change the name.
+					<Icon name="config" size={14} />
+					<Phrase
+						text={t('A copy of {name} without what the cluster assigned. Pick another namespace or context, or change the name.')}
+						strong={{ name: creating.source }}
+					/>
 				</p>
 			{/if}
 			{#if urlOpen}
 				<form class="url" onsubmit={fromUrl}>
 					<!-- svelte-ignore a11y_autofocus -->
-					<input bind:value={url} type="url" required autofocus placeholder="https://… a YAML file, such as a GitHub page of one" spellcheck="false" />
-					<button class="primary" type="submit" disabled={busy}>{busy ? 'Reading…' : 'Load'}</button>
+					<input bind:value={url} type="url" required autofocus placeholder={t('https://… a YAML file, such as a GitHub page of one')} spellcheck="false" />
+					<button class="primary" type="submit" disabled={busy}>{busy ? t('Reading…') : t('Load')}</button>
 				</form>
 			{/if}
 			<div class="work">
@@ -313,8 +318,10 @@
 					{/key}
 					{#if !creating.text.trim()}
 						<p class="empty">
-							Add a kind's template, open files, load a URL or paste YAML. Several objects separated by <code>---</code> are applied
-							in dependency order: namespaces and config before the workloads that use them.
+							<Phrase
+								text={t("Add a kind's template, open files, load a URL or paste YAML. Several objects separated by {separator} are applied in dependency order: namespaces and config before the workloads that use them.")}
+								code={{ separator: '---' }}
+							/>
 						</p>
 					{/if}
 				</div>
@@ -324,12 +331,17 @@
 			</div>
 		{:else}
 			<div class="toolbar">
-				<strong>{applied ? 'Applied' : 'Dry run'}</strong>
+				<strong>{applied ? t('Applied') : t('Dry run')}</strong>
 				<span class="muted">
 					{#if applied}
-						in {app.contextName(into)}
+						{t('in {context}', { context: app.contextName(into) })}
 					{:else}
-						{results.length} {results.length === 1 ? 'object' : 'objects'} checked by the API server in {app.contextName(into)}; nothing has changed yet
+						{plural(
+							results.length,
+							'{n} object checked by the API server in {context}; nothing has changed yet',
+							'{n} objects checked by the API server in {context}; nothing has changed yet',
+							{ context: app.contextName(into) }
+						)}
 					{/if}
 				</span>
 			</div>
@@ -340,10 +352,10 @@
 							<summary>
 								<span class="outcome">{applied ? DONE[item.outcome] : LABELS[item.outcome]}</span>
 								<span class="kind">{item.kind}</span>
-								<span class="name">{item.namespace ? `${item.namespace}/` : ''}{item.name || '(no name)'}</span>
+								<span class="name">{item.namespace ? `${item.namespace}/` : ''}{item.name || t('(no name)')}</span>
 								{#if item.message}<span class="message">{item.message}</span>{/if}
 								{#if applied && item.target && item.outcome !== 'failed' && !elsewhere}
-									<button class="link" onclick={(e) => (e.preventDefault(), open(item))}>Open</button>
+									<button class="link" onclick={(e) => (e.preventDefault(), open(item))}>{t('Open')}</button>
 								{/if}
 							</summary>
 							{#if item.after}
@@ -357,17 +369,17 @@
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		<div class="buttons">
 			{#if !results}
-				{#if production}<span class="note"><Icon name="warning" size={14} /> {app.contextName(into)} is a production context</span>{/if}
-				<button class="secondary" onclick={startOver} disabled={busy || !creating.text}>Clear</button>
-				<button class="primary" onclick={() => review()} disabled={busy || !creating.text.trim()}>{busy ? 'Checking…' : 'Review'} <kbd>Ctrl+S</kbd></button>
+				{#if production}<span class="note"><Icon name="warning" size={14} /> {t('{context} is a production context', { context: app.contextName(into) })}</span>{/if}
+				<button class="secondary" onclick={startOver} disabled={busy || !creating.text}>{t('Clear')}</button>
+				<button class="primary" onclick={() => review()} disabled={busy || !creating.text.trim()}>{busy ? t('Checking…') : t('Review')} <kbd>Ctrl+S</kbd></button>
 			{:else if applied}
-				<button class="secondary" onclick={startOver}>Start over</button>
-				<button class="primary" onclick={back}>Back to the YAML</button>
+				<button class="secondary" onclick={startOver}>{t('Start over')}</button>
+				<button class="primary" onclick={back}>{t('Back to the YAML')}</button>
 			{:else}
 				{#if blocked}<span class="note">{blocked}</span>{/if}
-				<button class="secondary" onclick={back} disabled={busy}>Back to editing <kbd>Esc</kbd></button>
+				<button class="secondary" onclick={back} disabled={busy}>{t('Back to editing')} <kbd>Esc</kbd></button>
 				<button class="primary" onclick={apply} disabled={busy || !!blocked}>
-					{busy ? 'Applying…' : changes ? `Apply ${changes} ${changes === 1 ? 'change' : 'changes'}` : 'Apply'}
+					{busy ? t('Applying…') : changes ? plural(changes, 'Apply {n} change', 'Apply {n} changes') : t('Apply')}
 				</button>
 			{/if}
 		</div>
@@ -603,7 +615,7 @@
 		font-size: 11px;
 		opacity: 0.8;
 	}
-	code {
+	.empty :global(code) {
 		font-family: var(--mono);
 	}
 	@media (max-width: 720px) {

@@ -1,5 +1,6 @@
 import { backend } from './api';
 import { errorMessage } from './format';
+import { t } from './i18n';
 import { app } from './state.svelte';
 
 /** The demo that comes with Kubri: a snapshot of a small shop, saved from a real cluster. */
@@ -25,7 +26,7 @@ export async function openDemo() {
 		if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 		file = new File([await response.blob()], DEMO_FILE);
 	} catch (err) {
-		app.error = `Could not load the demo: ${errorMessage(err)}`;
+		app.error = t('Could not load the demo: {error}', { error: errorMessage(err) });
 		return;
 	}
 	await app.openSnapshot(file);

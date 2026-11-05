@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plural, t } from '../i18n';
 	import type { Bucket } from '../logs';
 	import { shortTime } from '../logs';
 
@@ -15,9 +16,9 @@
 	const h = (n: number) => (n ? Math.max(2, (n / max) * (HEIGHT - 4)) : 0);
 
 	function label(b: Bucket) {
-		const parts = [`${shortTime(new Date(b.from).toISOString())}: ${b.lines} ${b.lines === 1 ? 'line' : 'lines'}`];
-		if (b.errors) parts.push(`${b.errors} ${b.errors === 1 ? 'error' : 'errors'}`);
-		if (b.warnings) parts.push(`${b.warnings} ${b.warnings === 1 ? 'warning' : 'warnings'}`);
+		const parts = [`${shortTime(new Date(b.from).toISOString())}: ${plural(b.lines, '{n} line', '{n} lines')}`];
+		if (b.errors) parts.push(plural(b.errors, '{n} error', '{n} errors'));
+		if (b.warnings) parts.push(plural(b.warnings, '{n} warning', '{n} warnings'));
 		return [parts.join(', '), ...b.markers].join('\n');
 	}
 
@@ -25,7 +26,7 @@
 </script>
 
 <div class="rate" bind:clientWidth={width}>
-	<svg width={inner} height={HEIGHT} role="img" aria-label="Log lines over time; click a column to jump to its lines">
+	<svg width={inner} height={HEIGHT} role="img" aria-label={t('Log lines over time; click a column to jump to its lines')}>
 		{#each buckets as b, i (i)}
 			{@const x = i * slot}
 			{@const w = Math.max(1, slot - 1)}

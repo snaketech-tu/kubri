@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { ColumnSettings } from '../api';
 	import { NO_COLUMNS, moved, toggled, type Arrangeable } from '../columns';
 	import Icon from './Icon.svelte';
+	import Phrase from './Phrase.svelte';
 
 	let {
 		kind,
@@ -71,11 +73,11 @@
 <svelte:window {onpointerdown} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="popover" role="dialog" aria-label="Columns for {kind}" tabindex="-1" bind:this={box} {onkeydown}>
+<div class="popover" role="dialog" aria-label={t('Columns for {kind}', { kind })} tabindex="-1" bind:this={box} {onkeydown}>
 	<div class="head">
-		<strong>Columns for {kind}</strong>
+		<strong>{t('Columns for {kind}', { kind })}</strong>
 		<button class="link" onclick={() => onchange(defaults)} disabled={JSON.stringify(settings) === JSON.stringify(defaults)}>
-			Reset
+			{t('Reset')}
 		</button>
 	</div>
 	<ul>
@@ -84,34 +86,39 @@
 				<label>
 					<input type="checkbox" checked={checked(c)} onchange={(e) => onchange(toggled(settings, c, e.currentTarget.checked))} />
 					<span>{c.label}</span>
-					{#if c.custom}<span class="tag">JSONPath</span>{/if}
-					{#if c.wideOnly && !checked(c)}<span class="tag" title="Shows in the wide view{wide ? ', which is on' : ''}">wide</span>{/if}
+					{#if c.custom}<span class="tag">{t('JSONPath')}</span>{/if}
+					{#if c.wideOnly && !checked(c)}<span class="tag" title={wide ? t('Shows in the wide view, which is on') : t('Shows in the wide view')}>{t('wide')}</span>{/if}
 				</label>
 				<span class="moves">
-					<button onclick={() => onchange(moved(settings, labels, c.label, -1))} disabled={i === 0} aria-label="Move {c.label} up" title="Move up">
+					<button onclick={() => onchange(moved(settings, labels, c.label, -1))} disabled={i === 0} aria-label={t('Move {label} up', { label: c.label })} title={t('Move up')}>
 						<Icon name="up" size={13} />
 					</button>
 					<button
 						onclick={() => onchange(moved(settings, labels, c.label, 1))}
 						disabled={i === columns.length - 1}
-						aria-label="Move {c.label} down"
-						title="Move down"
+						aria-label={t('Move {label} down', { label: c.label })}
+						title={t('Move down')}
 					>
 						<Icon name="chevron" size={13} />
 					</button>
 					{#if c.custom}
-						<button onclick={() => remove(c.label)} aria-label="Remove {c.label}" title="Remove"><Icon name="close" size={13} /></button>
+						<button onclick={() => remove(c.label)} aria-label={t('Remove {label}', { label: c.label })} title={t('Remove')}><Icon name="close" size={13} /></button>
 					{/if}
 				</span>
 			</li>
 		{/each}
 	</ul>
 	<form onsubmit={add}>
-		<strong>Add a column</strong>
-		<input bind:value={name} placeholder="Name, such as Node" aria-label="Column name" spellcheck="false" />
-		<input bind:value={path} placeholder="JSONPath, such as .spec.nodeName" aria-label="JSONPath" spellcheck="false" required />
-		<button type="submit" disabled={!path.trim()}>Add</button>
-		<p class="hint">Like <code>kubectl get -o custom-columns</code>: <code>.spec.containers[*].image</code>, <code>.metadata.labels.app</code>.</p>
+		<strong>{t('Add a column')}</strong>
+		<input bind:value={name} placeholder={t('Name, such as Node')} aria-label={t('Column name')} spellcheck="false" />
+		<input bind:value={path} placeholder={t('JSONPath, such as .spec.nodeName')} aria-label={t('JSONPath')} spellcheck="false" required />
+		<button type="submit" disabled={!path.trim()}>{t('Add')}</button>
+		<p class="hint">
+			<Phrase
+				text={t('Like {command}: {first}, {second}.')}
+				code={{ command: 'kubectl get -o custom-columns', first: '.spec.containers[*].image', second: '.metadata.labels.app' }}
+			/>
+		</p>
 	</form>
 </div>
 
@@ -214,7 +221,7 @@
 		margin: 0;
 		color: var(--text-muted);
 	}
-	code {
+	.hint :global(code) {
 		font-family: var(--mono);
 		font-size: 11.5px;
 	}

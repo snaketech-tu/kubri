@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { Rule } from '../api';
 	import { allows, matrix, VERBS } from '../rbac';
 
@@ -12,10 +13,10 @@
 		<table>
 			<thead>
 				<tr>
-					<th class="resource">Resource</th>
-					<th>Group</th>
+					<th class="resource">{t('Resource')}</th>
+					<th>{t('Group')}</th>
 					{#each VERBS as verb (verb)}<th class="verb" title={verb}>{verb === 'deletecollection' ? 'del-all' : verb}</th>{/each}
-					<th class="other">Other</th>
+					<th class="other">{t('Other')}</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -23,21 +24,21 @@
 					<tr>
 						<td class="resource mono" class:wild={row.resource === '*'}>
 							{row.resource}
-							{#if row.names.length}<span class="names" title={row.names.join(', ')}>only {row.names.join(', ')}</span>{/if}
+							{#if row.names.length}<span class="names" title={row.names.join(', ')}>{t('only {names}', { names: row.names.join(', ') })}</span>{/if}
 						</td>
 						<td class="mono muted" class:wild={row.group === '*'}>{row.url ? 'URL' : row.group}</td>
 						{#each VERBS as verb (verb)}
 							{@const yes = allows(row, verb)}
-							<td class="verb" class:yes aria-label="{verb}: {yes ? 'allowed' : 'not allowed'}">{yes ? '✓' : '·'}</td>
+							<td class="verb" class:yes aria-label="{verb}: {yes ? t('allowed') : t('not allowed')}">{yes ? '✓' : '·'}</td>
 						{/each}
-						<td class="mono other" class:wild={row.verbs.has('*')}>{row.verbs.has('*') ? 'all verbs' : row.extras.join(', ')}</td>
+						<td class="mono other" class:wild={row.verbs.has('*')}>{row.verbs.has('*') ? t('all verbs') : row.extras.join(', ')}</td>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
 	</div>
 {:else}
-	<p class="muted">No rules.</p>
+	<p class="muted">{t('No rules.')}</p>
 {/if}
 
 <style>

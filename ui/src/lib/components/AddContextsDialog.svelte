@@ -1,8 +1,11 @@
 <script lang="ts">
+	import { t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import { lightDismiss } from '../dismiss';
 	import { backend, type NewContext } from '../api';
 	import { errorMessage } from '../format';
 	import { app } from '../state.svelte';
+	import Phrase from './Phrase.svelte';
 
 	let { onclose }: { onclose: (added: string[]) => void } = $props();
 
@@ -42,7 +45,7 @@
 			if (mine !== reading) return;
 			found = contexts;
 			chosen = found.filter((c) => !c.problem).map((c) => c.name);
-			if (!found.length) error = 'This kubeconfig has no contexts.';
+			if (!found.length) error = t('This kubeconfig has no contexts.');
 		} catch (err) {
 			if (mine === reading) error = errorMessage(err);
 		}
@@ -58,7 +61,7 @@
 	async function read(file: File | undefined) {
 		if (!file) return;
 		if (file.size > 1024 * 1024) {
-			error = `${file.name} is larger than a kubeconfig should be.`;
+			error = t('{name} is larger than a kubeconfig should be.', { name: file.name });
 			return;
 		}
 		text = await file.text();
@@ -72,7 +75,7 @@
 		try {
 			const list = await backend.addContexts(text, chosen);
 			app.contexts = list.contexts;
-			app.toast(chosen.length === 1 ? `Added ${chosen[0]}` : `Added ${chosen.length} contexts`);
+			app.toast(chosen.length === 1 ? t('Added {name}', { name: chosen[0] }) : t('Added {n} contexts', { n: chosen.length }));
 			onclose(chosen);
 		} catch (err) {
 			error = errorMessage(err);
@@ -85,23 +88,22 @@
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	aria-label="Add clusters"
+	aria-label={t('Add clusters')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
 		if (!busy) onclose([]);
 	}}
 >
-	<h2>Add clusters from a kubeconfig</h2>
+	<h2>{t('Add clusters from a kubeconfig')}</h2>
 	<p class="lead">
-		Kubri keeps the contexts you add in its own folder, readable only by you, and leaves your kubeconfig files as they are.
-		helm and k9s plugins see them too.
+		{t('Kubri keeps the contexts you add in its own folder, readable only by you, and leaves your kubeconfig files as they are. helm and k9s plugins see them too.')}
 	</p>
 	<div
 		class="drop"
 		class:dragging
 		role="region"
-		aria-label="Drop a kubeconfig file here"
+		aria-label={t('Drop a kubeconfig file here')}
 		ondragover={(e) => {
 			e.preventDefault();
 			dragging = true;
@@ -113,12 +115,12 @@
 			read(e.dataTransfer?.files[0]);
 		}}
 	>
-		<span>Drop a kubeconfig file here, or</span>
-		<button type="button" class="btn" onclick={() => picker?.click()}>Choose file…</button>
+		<span>{t('Drop a kubeconfig file here, or')}</span>
+		<button type="button" class="btn" onclick={() => picker?.click()}>{t('Choose file…')}</button>
 		<input bind:this={picker} type="file" hidden onchange={(e) => read(e.currentTarget.files?.[0])} />
 	</div>
 	<label class="paste">
-		<span>Or paste it{source ? ` (from ${source})` : ''}</span>
+		<span>{source ? t('Or paste it (from {source})', { source }) : t('Or paste it')}</span>
 		<textarea
 			bind:value={text}
 			rows="5"
@@ -131,17 +133,17 @@
 
 	{#if found.length}
 		<fieldset>
-			<legend>Contexts in it</legend>
+			<legend>{t('Contexts in it')}</legend>
 			{#each found as c (c.name)}
 				<label class="context" class:off={!!c.problem}>
 					<input type="checkbox" value={c.name} bind:group={chosen} disabled={!!c.problem} />
 					<span>
 						<strong>{c.name}</strong>
-						<small class="mono">{c.server ?? 'no server'}{c.namespace ? ` · ${c.namespace}` : ''}{c.user ? ` · ${c.user}` : ''}</small>
+						<small class="mono">{c.server ?? t('no server')}{c.namespace ? ` · ${c.namespace}` : ''}{c.user ? ` · ${c.user}` : ''}</small>
 						{#if c.problem}
-							<small class="problem">{c.problem}</small>
+							<small class="problem">{coreText(c.problem)}</small>
 						{:else if c.exec}
-							<small class="exec">Signs in by running <code>{c.exec}</code>, which must be installed here.</small>
+							<small class="exec"><Phrase text={t('Signs in by running {command}, which must be installed here.')} code={{ command: c.exec }} /></small>
 						{/if}
 					</span>
 				</label>
@@ -150,9 +152,9 @@
 	{/if}
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 	<div class="buttons">
-		<button type="button" class="secondary" onclick={() => onclose([])} disabled={busy}>Cancel</button>
+		<button type="button" class="secondary" onclick={() => onclose([])} disabled={busy}>{t('Cancel')}</button>
 		<button type="button" class="primary" onclick={add} disabled={busy || !chosen.length}>
-			{busy ? 'Adding…' : chosen.length > 1 ? `Add ${chosen.length} contexts` : 'Add context'}
+			{busy ? t('Adding…') : chosen.length > 1 ? t('Add {n} contexts', { n: chosen.length }) : t('Add context')}
 		</button>
 	</div>
 </dialog>
@@ -257,7 +259,7 @@
 		overflow-wrap: anywhere;
 	}
 	.mono,
-	code {
+	.exec :global(code) {
 		font-family: var(--mono);
 	}
 	.problem {

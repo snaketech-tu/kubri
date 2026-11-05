@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { age } from '../format';
+	import { t } from '../i18n';
+	import { age, errorMessage } from '../format';
 	import { session } from '../session.svelte';
 	import { app } from '../state.svelte';
 	import { describeChange, teamActivity, type TeamActivity } from '../team';
@@ -41,7 +42,7 @@
 					teamError = null;
 				})
 				.catch((err) => {
-					if (!stopped) teamError = err instanceof Error ? err.message : String(err);
+					if (!stopped) teamError = errorMessage(err);
 				});
 		load();
 		const timer = setInterval(load, 10_000);
@@ -63,22 +64,22 @@
 
 <!-- A side panel, not a dialog: the list stays in view and usable next to it. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<aside class="panel" aria-label="Activity in this session" tabindex="-1" bind:this={box} {onkeydown}>
+<aside class="panel" aria-label={t('Activity in this session')} tabindex="-1" bind:this={box} {onkeydown}>
 	<header>
-		<h2>Activity <span class="n">{tab === 'team' ? (team?.entries.length ?? 0) : app.activity.length}</span></h2>
-		<button onclick={close} aria-label="Close">×</button>
+		<h2>{t('Activity')} <span class="n">{tab === 'team' ? (team?.entries.length ?? 0) : app.activity.length}</span></h2>
+		<button onclick={close} aria-label={t('Close')}>×</button>
 	</header>
 	{#if session.person}
-		<div class="tabs" role="tablist" aria-label="Whose changes">
-			<button role="tab" aria-selected={tab === 'window'} onclick={() => (tab = 'window')}>This window</button>
-			<button role="tab" aria-selected={tab === 'team'} onclick={() => (tab = 'team')}>Team</button>
+		<div class="tabs" role="tablist" aria-label={t('Whose changes')}>
+			<button role="tab" aria-selected={tab === 'window'} onclick={() => (tab = 'window')}>{t('This window')}</button>
+			<button role="tab" aria-selected={tab === 'team'} onclick={() => (tab = 'team')}>{t('Team')}</button>
 		</div>
 	{/if}
 	{#if tab === 'team'}
 		<p class="muted">
 			{team?.everyone
-				? 'Changes everyone made through this Kubri, newest first.'
-				: 'Changes you made through this Kubri, from any window, newest first. People in the activity groups see everyone’s.'}
+				? t('Changes everyone made through this Kubri, newest first.')
+				: t('Changes you made through this Kubri, from any window, newest first. People in the activity groups see everyone’s.')}
 		</p>
 		{#if teamError}
 			<p class="empty failed-text" role="alert">{teamError}</p>
@@ -96,10 +97,10 @@
 				{/each}
 			</ul>
 		{:else if team}
-			<p class="empty">No changes yet since the server started.</p>
+			<p class="empty">{t('No changes yet since the server started.')}</p>
 		{/if}
 	{:else}
-		<p class="muted">Every change made from Kubri since it started. Undo is offered where Kubernetes allows it.</p>
+		<p class="muted">{t('Every change made from Kubri since it started. Undo is offered where Kubernetes allows it.')}</p>
 		{#if app.activity.length}
 			<ul>
 				{#each app.activity as entry (entry.id)}
@@ -110,15 +111,15 @@
 							<span class="where">{entry.context}</span>
 						</span>
 						{#if entry.undone}
-							<span class="muted">Undone</span>
+							<span class="muted">{t('Undone')}</span>
 						{:else if entry.undo}
-							<button class="undo" onclick={() => app.undoActivity(entry.id)}>Undo</button>
+							<button class="undo" onclick={() => app.undoActivity(entry.id)}>{t('Undo')}</button>
 						{/if}
 					</li>
 				{/each}
 			</ul>
 		{:else}
-			<p class="empty">Nothing yet. Changes you make, such as scaling or deleting, are listed here.</p>
+			<p class="empty">{t('Nothing yet. Changes you make, such as scaling or deleting, are listed here.')}</p>
 		{/if}
 	{/if}
 </aside>

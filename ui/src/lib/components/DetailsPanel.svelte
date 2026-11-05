@@ -13,6 +13,7 @@
 </script>
 
 <script lang="ts">
+	import { midSentence, t } from '../i18n';
 	import { tick, untrack } from 'svelte';
 	import { parse, stringify } from 'yaml';
 	import { canEdit, save } from '../actions';
@@ -277,7 +278,7 @@
 		try {
 			mine = parse(editor.text());
 		} catch (err) {
-			saveError = `Invalid YAML: ${errorMessage(err)}`;
+			saveError = t('Invalid YAML: {error}', { error: errorMessage(err) });
 			return;
 		}
 		const base = $state.snapshot(object);
@@ -299,7 +300,7 @@
 		await tick();
 		editor.replace(merged);
 		saveError = null;
-		app.toast('Your changes now apply to the latest version');
+		app.toast(t('Your changes now apply to the latest version'));
 	}
 
 	let compareButton = $state<HTMLButtonElement>();
@@ -317,7 +318,7 @@
 		try {
 			value = parse(text);
 		} catch (err) {
-			saveError = `Invalid YAML: ${errorMessage(err)}`;
+			saveError = t('Invalid YAML: {error}', { error: errorMessage(err) });
 			return false;
 		}
 		// Another name or namespace would save a different object; another resourceVersion would
@@ -328,13 +329,13 @@
 			meta?.namespace !== object?.metadata.namespace ||
 			meta?.resourceVersion !== object?.metadata.resourceVersion
 		) {
-			saveError = 'Keep the name, namespace and resourceVersion as they are.';
+			saveError = t('Keep the name, namespace and resourceVersion as they are.');
 			return false;
 		}
 		if (serverChanged) {
 			// Where the notice above the editor says so already, lead to its Compare button.
 			if (compareButton) focusForKeys(compareButton);
-			else saveError = 'Someone changed this object since you started editing. Compare and take their changes first.';
+			else saveError = t('Someone changed this object since you started editing. Compare and take their changes first.');
 			return false;
 		}
 		// The server only updated the status meanwhile: the edit still applies to the latest version.
@@ -347,7 +348,7 @@
 			try {
 				review = { text, preview: await backend.preview(details.target, { type: 'replace', value }) };
 			} catch (err) {
-				saveError = `The API server would refuse this: ${errorMessage(err)}`;
+				saveError = t('The API server would refuse this: {error}', { error: errorMessage(err) });
 			} finally {
 				saving = false;
 			}
@@ -365,7 +366,7 @@
 			details.editing = false;
 			load();
 		} else {
-			saveError = 'Saving failed. Your draft is still here. Review the error before retrying.';
+			saveError = t('Saving failed. Your draft is still here. Review the error before retrying.');
 		}
 		return ok;
 	}
@@ -444,7 +445,7 @@
 	const warnings = $derived(events.filter((e) => e.kind === 'Warning').length);
 </script>
 
-<aside aria-label="{details.resource.kind} inspector" class:compact={tool} bind:this={aside} bind:clientWidth={width}>
+<aside aria-label={t('{kind} inspector', { kind: details.resource.kind })} class:compact={tool} bind:this={aside} bind:clientWidth={width}>
 	{#if !app.panelWide}
 		<!-- A focusable separator is a widget: it takes the arrow keys. -->
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
@@ -452,11 +453,11 @@
 			class="resize"
 			role="separator"
 			aria-orientation="vertical"
-			aria-label="Resize the inspector"
+			aria-label={t('Resize the inspector')}
 			aria-valuenow={width}
 			aria-valuemin={MIN_WIDTH}
 			tabindex="0"
-			title="Drag to resize, double-click for the default width"
+			title={t('Drag to resize, double-click for the default width')}
 			{onpointerdown}
 			ondblclick={() => (app.panelWidth = null)}
 			onkeydown={onresizekey}
@@ -464,7 +465,7 @@
 	{/if}
 	<header>
 		<div class="title">
-			<span class="kind">{details.resource.kind} inspector</span>
+			<span class="kind">{t('{kind} inspector', { kind: details.resource.kind })}</span>
 			<h2 title={details.target.name}>{details.target.name}</h2>
 			<p class="context-path">{app.cluster ? app.contextName(app.cluster.context) : ''} / {details.target.namespace ?? 'cluster-scoped'}</p>
 			{#if status}
@@ -480,8 +481,10 @@
 					class="icon"
 					onclick={keep}
 					onmousedown={(e) => e.preventDefault()}
-					title="Move to the workspace, where the {details.tab} keep{details.tab === 'shell' ? 's' : ''} running while you browse"
-					aria-label="Move to the workspace"><Icon name="popout" size={16} /></button
+					title={details.tab === 'shell'
+						? t('Move to the workspace, where the shell keeps running while you browse')
+						: t('Move to the workspace, where the logs keep running while you browse')}
+					aria-label={t('Move to the workspace')}><Icon name="popout" size={16} /></button
 				>
 			{/if}
 			{#if tool && !app.maximized}
@@ -490,8 +493,14 @@
 					class:on={app.toolsBeside}
 					onclick={() => (app.toolsBeside = !app.toolsBeside)}
 					onmousedown={(e) => e.preventDefault()}
-					title={app.toolsBeside ? 'Hide the list and give the whole width to the ' + details.tab : 'Show the list beside the ' + details.tab}
-					aria-label="Show the list beside"
+					title={details.tab === 'shell'
+						? app.toolsBeside
+							? t('Hide the list and give the whole width to the shell')
+							: t('Show the list beside the shell')
+						: app.toolsBeside
+							? t('Hide the list and give the whole width to the logs')
+							: t('Show the list beside the logs')}
+					aria-label={t('Show the list beside')}
 					aria-pressed={app.toolsBeside}><Icon name="resource" size={17} /></button
 				>
 			{/if}
@@ -499,63 +508,63 @@
 				class="icon"
 				onclick={() => (app.maximized = !app.maximized)}
 				onmousedown={(e) => e.preventDefault()}
-				title={app.maximized ? 'Restore (f)' : 'Maximize (f)'}
-				aria-label={app.maximized ? 'Restore' : 'Maximize'}>{app.maximized ? '⤡' : '⤢'}</button
+				title={app.maximized ? t('Restore (f)') : t('Maximize (f)')}
+				aria-label={app.maximized ? t('Restore') : t('Maximize')}>{app.maximized ? '⤡' : '⤢'}</button
 			>
-			<button class="icon close" onclick={close} title="Close (Esc)" aria-label="Close"><Icon name="close" /></button>
+			<button class="icon close" onclick={close} title={t('Close (Esc)')} aria-label={t('Close')}><Icon name="close" /></button>
 		</div>
 	</header>
 
-	<nav aria-label="Inspector views">
-		<button class:active={details.tab === 'describe'} onclick={() => tab('describe')}>Overview <kbd>d</kbd></button>
+	<nav aria-label={t('Inspector views')}>
+		<button class:active={details.tab === 'describe'} onclick={() => tab('describe')}>{t('Overview')} <kbd>d</kbd></button>
 		<button class:active={details.tab === 'events'} onclick={() => tab('events')}>
-			Events <span class="n" class:alert={warnings}>{events.length}</span>
+			{t('Events')} <span class="n" class:alert={warnings}>{events.length}</span>
 		</button>
 		<button class:active={details.tab === 'yaml'} onclick={() => tab('yaml')}>YAML <kbd>y</kbd></button>
 		{#if charts}
-			<button class:active={details.tab === 'metrics'} onclick={() => tab('metrics')}>Metrics <kbd>m</kbd></button>
+			<button class:active={details.tab === 'metrics'} onclick={() => tab('metrics')}>{t('Metrics')} <kbd>m</kbd></button>
 		{/if}
 		{#if logs}
-			<button class:active={details.tab === 'logs'} onclick={() => tab('logs')}>Logs <kbd>l</kbd></button>
+			<button class:active={details.tab === 'logs'} onclick={() => tab('logs')}>{t('Logs')} <kbd>l</kbd></button>
 		{/if}
 		{#if shell}
-			<button class:active={details.tab === 'shell'} onclick={() => tab('shell')}>Shell <kbd>s</kbd></button>
+			<button class:active={details.tab === 'shell'} onclick={() => tab('shell')}>{t('Shell')} <kbd>s</kbd></button>
 		{/if}
 		<span class="spacer"></span>
 		{#if details.tab === 'yaml'}
-			<span class="view" role="group" aria-label="Show in the YAML">
-				<span class="view-label" aria-hidden="true">Show</span>
+			<span class="view" role="group" aria-label={t('Show in the YAML')}>
+				<span class="view-label" aria-hidden="true">{t('Show')}</span>
 				<span class="segmented">
 					<button
 						aria-pressed={showManaged}
 						disabled={details.editing}
 						onclick={() => (showManaged = !showManaged)}
-						title="The fields the server keeps on which client set what"
+						title={t('The fields the server keeps on which client set what')}
 					>
-						Managed fields
+						{t('Managed fields')}
 					</button>
 					{#if schema}
-						<button aria-pressed={fieldHelp} onclick={toggleFieldHelp} title="What the field under the cursor means, below the editor">
-							Field help
+						<button aria-pressed={fieldHelp} onclick={toggleFieldHelp} title={t('What the field under the cursor means, below the editor')}>
+							{t('Field help')}
 						</button>
 					{/if}
 				</span>
 			</span>
 			{#if details.editing && compare}
-				<button class="secondary" onclick={() => (compare = null)}>Back to editing</button>
-				<button class="primary" onclick={rebase}>Apply mine to theirs</button>
+				<button class="secondary" onclick={() => (compare = null)}>{t('Back to editing')}</button>
+				<button class="primary" onclick={rebase}>{t('Apply mine to theirs')}</button>
 			{:else if details.editing && review}
-				<button class="secondary" onclick={() => (review = null)}>Back to editing</button>
+				<button class="secondary" onclick={() => (review = null)}>{t('Back to editing')}</button>
 				<button class="primary" disabled={saving} onclick={() => review && onsave(review.text, true)}>
-					{saving ? 'Saving…' : 'Save'}
+					{saving ? t('Saving…') : t('Save')}
 				</button>
 			{:else if details.editing}
-				<button class="secondary" onclick={() => cancel()}>Cancel</button>
+				<button class="secondary" onclick={() => cancel()}>{t('Cancel')}</button>
 				<button class="primary" disabled={saving} onclick={() => editor && onsave(editor.text())}>
-					{saving ? 'Checking…' : 'Review & save'} <kbd>Ctrl+S</kbd>
+					{saving ? t('Checking…') : t('Review & save')} <kbd>Ctrl+S</kbd>
 				</button>
 			{:else if canEdit(details.resource) && !app.readOnly}
-				<button class="secondary" onclick={() => (details.editing = true)} disabled={!object}>Edit <kbd>e</kbd></button>
+				<button class="secondary" onclick={() => (details.editing = true)} disabled={!object}>{t('Edit')} <kbd>e</kbd></button>
 			{/if}
 		{/if}
 	</nav>
@@ -564,12 +573,12 @@
 		{@const prefix = isPods(details.resource) ? workloadPrefix(details.target.name) : null}
 		<div class="banner gone" role="alert">
 			<span>
-				This {details.resource.kind.toLowerCase()} no longer exists.
-				{#if prefix}A rollout or restart has probably replaced it.{/if}
+				{t('This {kind} no longer exists.', { kind: midSentence(details.resource.kind) })}
+				{#if prefix}{t('A rollout or restart has probably replaced it.')}{/if}
 			</span>
 			{#if prefix}
 				<button onclick={() => app.open(details.resource, details.target.namespace ?? 'all', prefix)}>
-					Show current pods
+					{t('Show current pods')}
 				</button>
 			{/if}
 		</div>
@@ -584,8 +593,8 @@
 	{/if}
 	{#if details.editing && serverChanged && !compare && details.tab === 'yaml'}
 		<div class="banner notice" role="status">
-			<span>Someone changed this object on the server since you started editing. Compare and take their changes before you save.</span>
-			<button class="secondary" bind:this={compareButton} onclick={showCompare}>Compare</button>
+			<span>{t('Someone changed this object on the server since you started editing. Compare and take their changes before you save.')}</span>
+			<button class="secondary" bind:this={compareButton} onclick={showCompare}>{t('Compare')}</button>
 		</div>
 	{/if}
 
@@ -616,7 +625,7 @@
 				{#key targetKey}<MetricsPanel target={details.target} />{/key}
 			</div>
 		{:else if !object}
-			{#if !error}<p class="muted">Loading…</p>{/if}
+			{#if !error}<p class="muted">{t('Loading…')}</p>{/if}
 		{:else if details.tab === 'describe'}
 			<div class="scroll">
 				<ManagedNote target={details.target} />
@@ -650,23 +659,23 @@
 			{#if compare && object && latest}
 				<div class="review">
 					<p>
-						Their changes are on the server now. Applying yours to theirs keeps both{compare.conflicts.length
-							? ', except where you both changed the same field: there yours win'
-							: ''}. Nothing is saved until you review and save.
+						{compare.conflicts.length
+							? t('Their changes are on the server now. Applying yours to theirs keeps both, except where you both changed the same field: there yours win. Nothing is saved until you review and save.')
+							: t('Their changes are on the server now. Applying yours to theirs keeps both. Nothing is saved until you review and save.')}
 					</p>
 					{#if compare.conflicts.length}
 						<p class="conflicts">
-							Both changed: {#each compare.conflicts as path, i (path)}{i ? ', ' : ''}<code>{path || 'the whole object'}</code>{/each}
+							{t('Both changed:')} {#each compare.conflicts as path, i (path)}{i ? ', ' : ''}<code>{path || t('the whole object')}</code>{/each}
 						</p>
 					{/if}
-					<h3>Their changes</h3>
+					<h3>{t('Their changes')}</h3>
 					<DiffView before={comparable($state.snapshot(object))} after={comparable($state.snapshot(latest))} maxHeight="none" />
-					<h3>Your changes</h3>
+					<h3>{t('Your changes')}</h3>
 					<DiffView before={comparable($state.snapshot(object))} after={comparable(compare.mine)} maxHeight="none" />
 				</div>
 			{:else if review}
 				<div class="review">
-					<p>Review the changes before saving. The API server checked them in a dry run.</p>
+					<p>{t('Review the changes before saving. The API server checked them in a dry run.')}</p>
 					<DiffView before={review.preview.before} after={review.preview.after} maxHeight="none" />
 				</div>
 			{/if}

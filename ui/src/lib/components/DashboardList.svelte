@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { backend, type Dashboards, type ObjectRef } from '../api';
 	import { errorMessage } from '../format';
 	import { copyDashboard, openDashboard } from '../integrations';
@@ -7,7 +8,7 @@
 	let {
 		target,
 		title = 'Grafana',
-		empty = 'Grafana has no dashboard for this object.'
+		empty = t('Grafana has no dashboard for this object.')
 	}: { target: ObjectRef; title?: string; empty?: string } = $props();
 
 	let found = $state<Dashboards | null>(null);
@@ -33,24 +34,24 @@
 	{#if error}
 		<p class="muted">{error}</p>
 	{:else if !found}
-		<p class="muted">Looking for dashboards…</p>
+		<p class="muted">{t('Looking for dashboards…')}</p>
 	{:else if !found.links.length}
-		<p class="muted">{empty}{found.note ? ` Grafana's own list: ${found.note}` : ''}</p>
+		<p class="muted">{empty}{#if found.note} {t("Grafana's own list: {note}", { note: found.note })}{/if}</p>
 	{:else}
-		{#if found.note}<p class="muted">Kubri could not read Grafana's dashboards: {found.note}</p>{/if}
+		{#if found.note}<p class="muted">{t('Kubri could not read Grafana\'s dashboards: {note}', { note: found.note })}</p>{/if}
 		<ul>
 			{#each found.links as link, i (`${i}:${link.path}`)}
 				<li>
 					<button
 						class="link"
 						onclick={() => openDashboard(link)}
-						title={link.filled.length ? `Open in Grafana with ${link.filled.join(', ')} set` : 'Open in Grafana'}
+						title={link.filled.length ? t('Open in Grafana with {values} set', { values: link.filled.join(', ') }) : t('Open in Grafana')}
 					>
 						<Icon name="popout" size={13} />
 						{link.title}
 					</button>
 					{#if link.folder}<span class="muted">{link.folder}</span>{/if}
-					<button class="copy" onclick={() => copyDashboard(link)} aria-label="Copy the address of {link.title}">Copy</button>
+					<button class="copy" onclick={() => copyDashboard(link)} aria-label={t('Copy the address of {title}', { title: link.title })}>{t('Copy')}</button>
 				</li>
 			{/each}
 		</ul>

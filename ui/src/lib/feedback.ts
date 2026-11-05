@@ -4,6 +4,7 @@
  */
 
 import { version } from '../../package.json';
+import { t } from './i18n';
 
 const NEW_ISSUE = 'https://github.com/snaketech-tu/kubri/issues/new';
 
@@ -13,8 +14,8 @@ export const VERSION: string = version;
 export type FeedbackKind = 'bug' | 'idea';
 
 export const FEEDBACK: Record<FeedbackKind, string> = {
-	bug: 'Report a problem',
-	idea: 'Suggest an idea'
+	bug: t('Report a problem'),
+	idea: t('Suggest an idea')
 };
 
 /** The system a browser runs on, from its user agent. */
@@ -38,7 +39,7 @@ export function browserOf(userAgent: string): string {
 	return '';
 }
 
-/** Where Kubri runs, in the words of the issue form: "Desktop app on Linux", "Browser (Firefox on macOS)". */
+/** Where Kubri runs, in the words of the issue form (English, as the issues are): "Desktop app on Linux", "Browser (Firefox on macOS)". */
 export function whereOf(desktop: boolean, userAgent: string): string {
 	const system = systemOf(userAgent);
 	if (desktop) return system ? `Desktop app on ${system}` : 'Desktop app';

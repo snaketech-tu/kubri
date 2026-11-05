@@ -1,4 +1,5 @@
 import type { BenchInfo } from './api';
+import { t } from './i18n';
 
 /** A response time in seconds, in the unit that reads best: 850µs, 12.3ms, 1.24s. */
 export function duration(seconds: number | null | undefined): string {
@@ -52,7 +53,7 @@ export function parseHeaders(text: string): Record<string, string> {
 		const trimmed = line.trim();
 		if (!trimmed) continue;
 		const i = trimmed.indexOf(':');
-		if (i <= 0) throw new Error(`Expected "Name: value", got "${trimmed}"`);
+		if (i <= 0) throw new Error(t('Expected "Name: value", got "{line}"', { line: trimmed }));
 		headers[trimmed.slice(0, i).trim()] = trimmed.slice(i + 1).trim();
 	}
 	return headers;

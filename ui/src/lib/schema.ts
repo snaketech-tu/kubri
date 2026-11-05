@@ -1,4 +1,5 @@
 import { isMap, isPair, isScalar, isSeq, parseDocument, type Node } from 'yaml';
+import { t } from './i18n';
 
 /** A schema as the API server publishes it in OpenAPI v3, trimmed by the core. */
 export interface SchemaNode {
@@ -226,7 +227,7 @@ export function unknownFields(text: string, schema: KindSchema): SchemaProblem[]
 						problems.push({
 							from: range[0],
 							to: range[1],
-							message: `Unknown field "${key}" in ${where}`
+							message: t('Unknown field "{key}" in {where}', { key, where: where ?? '' })
 						});
 					}
 					continue;

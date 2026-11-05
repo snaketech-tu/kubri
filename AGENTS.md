@@ -73,6 +73,7 @@ cargo run --release -p kubri-server    # root, after `pnpm build`: production UI
 - **Kubeconfig loading** (`crates/kubri-core/src/kubeconfig.rs`) deliberately mirrors client-go's loader, validation and transport, with kubectl's error messages: a context must work in Kubri exactly when it works in kubectl. Check client-go before changing behavior there.
 - **k9s compatibility**: keys, aliases, hotkeys, plugins and skins follow k9s (`crates/kubri-core/src/k9s.rs`, `ui/src/lib/k9s.ts`, `docs/K9S.md`). Do not break an existing k9s key.
 - **Errors**: core functions return `kubri_core::Result` with `Error` from `error.rs`. Messages reach users as they are: lowercase, no trailing period, saying what to do where possible ("not connected to a cluster, select a context first").
+- **UI text** goes through `t()` from `ui/src/lib/i18n`, with the English text as the key and its German in `de.ts`; `plural()` for counts, and `Phrase.svelte` for a text with a value in bold or as code. Never build a sentence from pieces or compare a translated text in code. `pnpm test` fails when a `t()` text has no German, when German is left over, and when `crates/kubri-core/src/error.rs` changes a message without `ui/src/lib/i18n/errors.ts` (the UI translates the core's errors by their format).
 - **Dialogs** are modal `<dialog>`s with `{@attach lightDismiss}` (`ui/src/lib/dismiss.ts`), so a click outside closes them like Esc.
 - Keep changes focused. Update the matching page in `docs/` when user-visible behavior changes.
 
