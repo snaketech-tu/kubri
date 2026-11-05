@@ -76,7 +76,11 @@ Give Grafana's address under **Point elsewhere > Grafana > URL** on the Integrat
 | A Service | The pods it selects right now, by name |
 | Anything else in a namespace, like a ConfigMap | Its namespace |
 
-The queries use the `namespace` and `pod` labels that Promtail, Grafana Alloy and most log collectors set. Kubri asks Grafana which Loki data source it has and takes the default one, else the one named `Loki`. When Grafana needs a login or a client certificate and you gave no token, Kubri cannot ask, and Grafana opens its own default data source; give the name or UID of the Loki data source under **Loki data source** then. Your browser opens the page, so a login or a client certificate there works as usual.
+The queries use the `namespace`, `pod` and `container` labels that Promtail, Grafana Alloy and most log collectors set. Where yours names them differently, such as `exported_namespace`, see [Other label names](#other-label-names). Kubri asks Grafana which Loki data source it has and takes the default one, else the one named `Loki`. When Grafana needs a login or a client certificate and you gave no token, Kubri cannot ask, and Grafana opens its own default data source; give the name or UID of the Loki data source under **Loki data source** then. Your browser opens the page, so a login or a client certificate there works as usual.
+
+### Other label names
+
+Some log collectors give logs other label names, such as `exported_namespace` instead of `namespace`. **Templates…** next to **Log label names** on the integrations page names them once, as a template with a name and the label for the namespace, the pod and the container; a field left empty keeps the usual name. Templates are kept for all contexts, and each context picks one under **Log label names**. Logs in Grafana and the log history from Loki in the log workspace then use those names.
 
 ### Dashboards
 

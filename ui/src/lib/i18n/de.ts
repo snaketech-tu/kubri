@@ -2470,6 +2470,17 @@ const de: Record<string, string> = {
 	'Report a problem': 'Problem melden',
 	'Suggest an idea': 'Idee vorschlagen',
 	'Signed in as {name}': 'Angemeldet als {name}',
+	'Usual: namespace, pod, container': 'Üblich: namespace, pod, container',
+	'{name} (removed)': '{name} (entfernt)',
+	'Log label names': 'Label-Namen der Logs',
+	'Templates…': 'Vorlagen…',
+	'For logs from Loki and in Grafana, where the collector names labels differently.': 'Für Logs aus Loki und in Grafana, wenn der Collector die Labels anders nennt.',
+	'Label templates': 'Label-Vorlagen',
+	'Some log collectors give logs other label names, such as exported_namespace. A template names them once; each context picks one on its integrations page. Leave a field empty for the usual name.': 'Manche Log-Collector geben Logs andere Label-Namen, etwa exported_namespace. Eine Vorlage legt sie einmal fest; jeder Kontext wählt eine auf seiner Integrationsseite. Lass ein Feld leer für den üblichen Namen.',
+	'New template': 'Neue Vorlage',
+	'such as OpenTelemetry': 'etwa OpenTelemetry',
+	'Remove {name}': '{name} entfernen',
+	'Add template': 'Vorlage hinzufügen',
 };
 
 export default de;

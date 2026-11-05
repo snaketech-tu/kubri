@@ -134,6 +134,7 @@ export const httpBackend: Backend = {
 	setHistorySettings: (settings) => request('PUT', '/settings/history', settings),
 	setConnectionSettings: (settings) => request('PUT', '/settings/connections', settings),
 	setTerminalSettings: (settings) => request('PUT', '/settings/terminal', settings),
+	setLabelTemplates: (templates) => request('PUT', '/settings/labels', templates),
 	history: (query) => request('POST', '/history', query),
 	historyDetail: (id) => request('GET', `/history/${id}`),
 	setColumnSettings: (kind, columns) => request('PUT', '/settings/columns', { kind, columns }),

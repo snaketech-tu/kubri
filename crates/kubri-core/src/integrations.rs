@@ -34,6 +34,8 @@ pub struct IntegrationSettings {
     pub loki: String,
     /// The Loki data source in Grafana for logs in Explore, by UID or name; found when empty.
     pub grafana_logs: String,
+    /// The label template whose names the logs use, by name; empty for the usual names.
+    pub labels: String,
 }
 
 impl IntegrationSettings {
@@ -52,6 +54,7 @@ impl IntegrationSettings {
         }
         self.grafana_token = self.grafana_token.trim().to_owned();
         self.grafana_logs = self.grafana_logs.trim().to_owned();
+        self.labels = self.labels.trim().to_owned();
         Ok(self)
     }
 }
@@ -1010,11 +1013,11 @@ impl crate::Kubri {
             ),
             Some(namespace) => (
                 format!("Logs of namespace {namespace}"),
-                loki::namespace_query(namespace),
+                loki::namespace_query(namespace, &self.loki_labels(&session.info.context)),
             ),
             None if target.resource.group.is_empty() && kind == "Namespace" => (
                 format!("Logs of namespace {}", target.name),
-                loki::namespace_query(&target.name),
+                loki::namespace_query(&target.name, &self.loki_labels(&session.info.context)),
             ),
             None => {
                 return Err(Error::Unsupported(format!(
@@ -1132,7 +1135,8 @@ impl crate::Kubri {
         };
         let limit = request.limit.unwrap_or(loki::MAX_LINES).clamp(1, loki::MAX_LINES);
         let seconds = request.seconds.clamp(60, 30 * 24 * 3600);
-        loki::query(&session.proxy_client, &endpoint, &query, seconds, limit).await
+        let labels = self.loki_labels(&session.info.context);
+        loki::query(&session.proxy_client, &endpoint, &query, seconds, limit, &labels).await
     }
 
     /// The LogQL that finds an object's lines: by the names of its pods.
@@ -1174,7 +1178,16 @@ impl crate::Kubri {
             &target.name,
             selected.as_deref(),
             container,
+            &self.loki_labels(&session.info.context),
         ))
+    }
+
+    /// The label names the logs of `context` use: those of the template its settings pick.
+    fn loki_labels(&self, context: &str) -> loki::Labels {
+        let settings = self.settings();
+        let picked = settings.context(context).integrations.labels;
+        let template = settings.label_templates.iter().find(|t| t.name == picked);
+        loki::Labels::from_template(template.filter(|_| !picked.is_empty()))
     }
 }
 

@@ -134,7 +134,7 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 	namespaceSelector: '',
 	agentWrites: false,
 	forwards: [],
-	integrations: { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLogs: '' }
+	integrations: { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLogs: '', labels: '' }
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -147,7 +147,8 @@ const DEFAULT_SETTINGS: Settings = {
 	searches: [],
 	history: { record: true, keepDays: 14, maxMb: 200 },
 	connections: { keepRecent: 3 },
-	terminal: { shell: '', args: [], startDir: '', fontSize: 13, fontFamily: '' }
+	terminal: { shell: '', args: [], startDir: '', fontSize: 13, fontFamily: '' },
+	labelTemplates: []
 };
 
 /** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
@@ -559,6 +560,17 @@ class AppState {
 		try {
 			this.settings = await backend.setContextSettings(context, settings);
 			if (context === this.cluster?.context) await this.refreshGuard();
+			return true;
+		} catch (err) {
+			this.toast(errorMessage(err), 'bad');
+			return false;
+		}
+	}
+
+	/** Replaces the label templates for logs. */
+	async setLabelTemplates(templates: Settings['labelTemplates']): Promise<boolean> {
+		try {
+			this.settings = await backend.setLabelTemplates(templates);
 			return true;
 		} catch (err) {
 			this.toast(errorMessage(err), 'bad');

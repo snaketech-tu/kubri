@@ -309,6 +309,14 @@ fn set_saved_searches(
 }
 
 #[tauri::command]
+fn set_label_templates(
+    kubri: State<'_, Arc<Kubri>>,
+    templates: Vec<kubri_core::LabelTemplate>,
+) -> CommandResult<Settings> {
+    kubri.set_label_templates(templates).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_column_settings(
     kubri: State<'_, Arc<Kubri>>,
     kind: String,
@@ -1311,6 +1319,7 @@ pub fn run() {
             right_sizing,
             fleet_cluster,
             set_saved_searches,
+            set_label_templates,
             search,
             kubeconfig_files,
             add_kubeconfig_files,
