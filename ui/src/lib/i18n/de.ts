@@ -808,8 +808,6 @@ const de: Record<string, string> = {
 	'Memory limit': 'Speicher-Limit',
 	'It requests {request}.': 'Er fordert {request} an.',
 	'Kubri suggests about twice the limit. If memory keeps growing, the app may leak it, and a higher limit only buys time.': 'Kubri schlägt etwa das doppelte Limit vor. Wächst der Speicher weiter, hat die App womöglich ein Leck, und ein höheres Limit verschafft nur Zeit.',
-	'{container} in {object}: {note} Its pods are replaced with a rolling update.': '{container} in {object}: {note} Die Pods werden mit einem Rolling Update ersetzt.',
-	', now {value}': ', derzeit {value}',
 	'CPU request': 'CPU-Request',
 	'Memory request': 'Speicher-Request',
 	'Limit': 'Limit',
@@ -1704,8 +1702,6 @@ const de: Record<string, string> = {
 	'Uses {used}, requests {request}, may use at most {limit}': 'Nutzt {used}, fordert {request} an, darf höchstens {limit} nutzen',
 	'Uses {used}, requests {request}. Not every container has a limit, so there is no maximum.':
 		'Nutzt {used}, fordert {request} an. Nicht jeder Container hat ein Limit, darum gibt es keine Obergrenze.',
-	'CPU request': 'CPU-Request',
-	'Memory request': 'Speicher-Request',
 	'Last connection closed by the pod, {when}': 'Letzte Verbindung vom Pod geschlossen, {when}',
 	'Last connection closed by the client, {when}': 'Letzte Verbindung vom Client geschlossen, {when}',
 	'Appearance': 'Darstellung',
