@@ -1,3 +1,4 @@
+import type { Fill } from './resources';
 import { tick } from 'svelte';
 import { drafts } from './navigation.svelte';
 import { access } from './access.svelte';
@@ -50,6 +51,7 @@ import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } fro
 import { loadPins, savePins, samePin, toggled as togglePinIn, type Pin } from './pins';
 import { Places, type Place } from './places';
 import { fromHash, toHash, type Address } from './address';
+import { keepViews, lastContext, rememberContext, saveView, savedView, startContext, startSetting } from './startup';
 import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu, MenuAction } from './menu';
@@ -218,19 +220,17 @@ export type Dialog =
 	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef; owner?: { kind: string; plural: string; name: string }; revision?: number }
 	/** A Flux or Argo CD action; `autoSync` turns Argo CD's auto-sync off or on, as it is now. */
 	| { kind: 'gitops'; resource: ResourceInfo; target: ObjectRef; action: GitOpsAction | 'autoSync' }
-	/** One container's requests and limits, prefilled from right-sizing advice. */
+	/**
+	 * The requests and limits of a workload's containers, with the room on its nodes. `fill`
+	 * prefills values, as right-sizing advice suggests them; the cursor starts at the first.
+	 */
 	| {
 			kind: 'resources';
 			resource: ResourceInfo;
 			target: ObjectRef;
-			container: string;
-			/** `cpu` or `memory`. */
-			name: string;
-			request: string;
-			limit: string;
-			current: { request: string | null; limit: string | null };
+			fill?: Fill[];
 			/** Why, as the advice says it. */
-			note: string;
+			note?: string;
 	  }
 	/** Has cert-manager issue a Certificate again now. */
 	| { kind: 'renew'; resource: ResourceInfo; target: ObjectRef }
@@ -276,6 +276,11 @@ class AppState {
 	warm = $state<string[]>([]);
 	/** The context Kubri was on before this one, for `:ctx -`. */
 	previousContext = $state<string | null>(null);
+	/**
+	 * The kubeconfig's `current-context`, when Kubri started in another one it used last and that
+	 * one did not answer: the connecting card offers it instead.
+	 */
+	startFallback = $state<string | null>(null);
 	/** Where each context was left, to return there. */
 	#places = new Places<View>();
 	cluster = $state<ClusterInfo | null>(null);
@@ -809,11 +814,16 @@ class AppState {
 			this.contexts = contexts;
 			this.warm = warm ?? [];
 			this.kubeconfigProblem = contexts.length ? null : t('Your kubeconfig has no contexts.');
+			if (contexts.length) keepViews(contexts.map((c) => c.name));
 			if (cluster) {
 				await this.connected(cluster);
 			} else {
-				const fallback = contexts.find((c) => c.isDefault) ?? contexts[0];
-				if (fallback) await this.switchContext(fallback.name);
+				const start = startContext(contexts, lastContext(), startSetting(), this.#addressed?.context);
+				if (start) {
+					const current = contexts.find((c) => c.isDefault)?.name ?? contexts[0]?.name ?? null;
+					await this.switchContext(start);
+					this.startFallback = !this.cluster && current && current !== start ? current : null;
+				}
 			}
 		} catch (err) {
 			this.error = errorMessage(err);
@@ -828,6 +838,7 @@ class AppState {
 			if (this.contexts.length) this.kubeconfigProblem = null;
 			this.warm = list.warm ?? [];
 			this.#places.keepOnly(list.contexts.map((c) => c.name));
+			if (list.contexts.length) keepViews(list.contexts.map((c) => c.name));
 			const current = this.cluster?.context;
 			dock.keepContexts([...list.contexts.map((c) => c.name), ...(current ? [current] : [])]);
 		} catch (err) {
@@ -985,6 +996,9 @@ class AppState {
 
 	/** Records a view in the history, unless going back or forth brought it up. */
 	remember(view: View) {
+		// For the next start, too.
+		const cluster = this.cluster;
+		if (cluster && !cluster.snapshot) saveView(cluster.context, { page: view.page, resource: view.resource, namespace: view.namespace, xray: view.xray });
 		if (this.#restoring) {
 			this.#restoring = false;
 			return;
@@ -1056,19 +1070,36 @@ class AppState {
 		});
 	}
 
-	/** Opens the view the address named, if it is in `context` and the cluster has its kinds. */
-	private openAddressed(context: string) {
+	/** Opens the view `context` showed when Kubri last ran there, if the cluster still has its kinds. */
+	private openSaved(context: string) {
+		const view = savedView(context);
+		if (!view || !(PAGES as readonly string[]).includes(view.page)) return;
+		const resource = view.resource && findResource(this.resources, view.resource);
+		if (view.resource && !resource) return;
+		const xray = view.xray && findResource(this.resources, view.xray);
+		if (view.page === 'xray' && !xray) return;
+		this.page = view.page as Page;
+		if (resource) this.selected = resource;
+		if (xray) this.xrayResource = xray;
+		this.namespace = view.namespace;
+	}
+
+	/**
+	 * Opens the view the address named, if it is in `context` and the cluster has its kinds;
+	 * false when there is no such address.
+	 */
+	private openAddressed(context: string): boolean {
 		const address = this.#addressed;
-		if (!address) return;
+		if (!address) return false;
 		if (address.context !== context) {
 			// Switching here would switch everyone who uses this server.
 			this.toast(t('This address is for {context}; switch to that context to open it', { context: address.context }));
-			return;
+			return false;
 		}
 		const resource = address.resource && findResource(this.resources, address.resource);
-		if (address.resource && !resource) return;
+		if (address.resource && !resource) return false;
 		const xray = address.xray && findResource(this.resources, address.xray);
-		if (address.page === 'xray' && !xray) return;
+		if (address.page === 'xray' && !xray) return false;
 		this.page = address.page;
 		if (resource) this.selected = resource;
 		if (xray) this.xrayResource = xray;
@@ -1076,6 +1107,7 @@ class AppState {
 		this.scope = address.scope;
 		// The address wins over the k9s `defaultView`, as the view was open before a reload.
 		this.#startup = false;
+		return true;
 	}
 
 	private restore(view: View) {
@@ -1614,7 +1646,11 @@ class AppState {
 		if (this.page === 'xray' && !this.xrayResource) this.page = 'resources';
 		const place = cluster.snapshot ? undefined : this.#places.take(cluster.context);
 		if (place) this.returnTo(place, before);
-		else if (!cluster.snapshot) this.openAddressed(cluster.context);
+		else if (!cluster.snapshot && !this.openAddressed(cluster.context)) this.openSaved(cluster.context);
+		if (!cluster.snapshot) {
+			this.startFallback = null;
+			rememberContext(cluster.context, this.contexts.find((c) => c.isDefault)?.name ?? null);
+		}
 		this.#addressed = null;
 		// Hotkeys, plugins and skins can differ per context.
 		this.loadK9s();

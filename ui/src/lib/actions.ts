@@ -18,7 +18,7 @@ import { plural, t } from './i18n';
 import { expandVariables, focusVariables } from './k9s';
 import { AUTO_PORT_FORWARDS_KEY, annotatedForwards, suggestedLocalPort } from './pods';
 import type { Cause } from './causes';
-import { app, findResource } from './state.svelte';
+import { app, findResource, type Dialog } from './state.svelte';
 
 /** Kinds `kubectl rollout restart` supports. */
 export function canRestart(resource: ResourceInfo) {
@@ -341,41 +341,37 @@ export async function raiseMemoryOf(target: ObjectRef, container: string) {
 	}
 }
 
+/** The kinds whose pod template Kubri can change requests and limits in. */
+const SIZED = ['deployments', 'statefulsets', 'daemonsets'];
+
+/**
+ * Opens Requests & limits… on `target`, or for a pod on the workload that owns it, with `fill`
+ * prefilled.
+ */
+export async function resourcesOf(target: ObjectRef, pod?: KubeObject | null, extra: Pick<Extract<Dialog, { kind: 'resources' }>, 'fill' | 'note'> = {}) {
+	try {
+		let at = target;
+		if (!target.resource.group && target.resource.plural === 'pods') at = await workloadOf(target, pod ?? (await backend.getObject(target)));
+		const resource = findResource(app.resources, at.resource);
+		if (!resource || at.resource.group !== 'apps' || !SIZED.includes(at.resource.plural)) {
+			app.toast(t('Nothing owns this pod that Kubri can change; set the requests where the pod is defined'), 'bad');
+			return;
+		}
+		app.dialog = { kind: 'resources', resource, target: at, ...extra };
+	} catch (err) {
+		app.toast(errorMessage(err), 'bad');
+	}
+}
+
 /**
  * Opens the requests of a workload's container for the cause's resource: the workload that owns
  * `pod`, or the one `workload` names, such as an autoscaler's target.
  */
 export async function changeRequestsOf(cause: Cause, target: ObjectRef, pod: KubeObject | null, workload?: ObjectRef) {
-	const name = cause.resource ?? 'cpu';
-	try {
-		const at = workload ?? (pod ? await workloadOf(target, pod) : target);
-		const resource = findResource(app.resources, at.resource);
-		// Requests are changed through the pod template, which only these kinds have.
-		if (!resource || !['deployments', 'statefulsets', 'daemonsets'].includes(at.resource.plural)) {
-			app.toast(t('Nothing owns this pod that Kubri can change; set the requests where the pod is defined'), 'bad');
-			return;
-		}
-		const object = await backend.getObject(at);
-		const containers: { name: string; resources?: { requests?: Record<string, string>; limits?: Record<string, string> } }[] =
-			(object.spec as { template?: { spec?: { containers?: [] } } } | undefined)?.template?.spec?.containers ?? [];
-		const container = containers.find((c) => c.resources?.requests?.[name]) ?? containers[0];
-		if (!container) return;
-		const request = container.resources?.requests?.[name] ?? null;
-		const limit = container.resources?.limits?.[name] ?? null;
-		app.dialog = {
-			kind: 'resources',
-			resource,
-			target: at,
-			container: container.name,
-			name,
-			request: request ?? '',
-			limit: limit ?? '',
-			current: { request, limit },
-			note: `${cause.title}.`
-		};
-	} catch (err) {
-		app.toast(errorMessage(err), 'bad');
-	}
+	await resourcesOf(workload ?? target, workload ? null : pod, {
+		fill: [{ container: null, name: cause.resource ?? 'cpu', request: null, limit: null }],
+		note: `${cause.title}.`
+	});
 }
 
 /** Starts a Secret or ConfigMap a container needs, with its key, on the Create page. */

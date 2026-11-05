@@ -503,6 +503,50 @@ export interface MemoryFix {
 	suggested: string;
 }
 
+/** Requests and limits to set on one container; null removes one. */
+export interface ContainerResources {
+	container: string;
+	requests: Record<string, string | null>;
+	limits: Record<string, string | null>;
+}
+
+/** CPU in cores and memory in bytes. */
+export interface Amounts {
+	cpu: number;
+	memory: number;
+}
+
+/** One node's room for a workload's pods. */
+export interface NodeRoom {
+	name: string;
+	/** Whether the workload's pods may run here; `reasons` say why not. */
+	eligible: boolean;
+	reasons: string[];
+	allocatable: Amounts;
+	requested: Amounts;
+	/** What the workload's own pods on this node request, part of `requested`. */
+	own: Amounts;
+	ownPods: number;
+}
+
+/** A ResourceQuota limit on CPU or memory, in cores or bytes. */
+export interface QuotaRoom {
+	name: string;
+	resource: 'requests.cpu' | 'requests.memory' | 'limits.cpu' | 'limits.memory';
+	hard: number;
+	used: number;
+}
+
+/** The room a workload has to grow. */
+export interface Capacity {
+	/** Its replicas, or for a DaemonSet the nodes it wants. */
+	pods: number;
+	/** Null when Kubri may not list nodes; `nodesError` says why. */
+	nodes: NodeRoom[] | null;
+	nodesError: string | null;
+	quotas: QuotaRoom[];
+}
+
 /** Why a node would refuse a pending pod; no reasons where Kubri finds none. */
 export interface NodeFit {
 	node: string;
@@ -627,7 +671,7 @@ export type Change =
 	| { type: 'images'; images: ContainerImage[] }
 	/** One container's memory limit in a workload's pod template. */
 	| { type: 'memory'; container: string; memory: string }
-	| { type: 'resources'; container: string; requests: Record<string, string>; limits: Record<string, string> };
+	| { type: 'resources'; containers: ContainerResources[] };
 
 /** An object now and after a change, without status and fields that change on every write. */
 export interface Preview {
@@ -908,6 +952,8 @@ export interface PortForwardInfo {
 	started: string;
 	connections: number;
 	error: string | null;
+	/** How and when the last connection ended. */
+	lastEnd?: { at: string; by: 'pod' | 'client' | 'error' } | null;
 }
 
 export interface BenchRequest {
@@ -1584,7 +1630,10 @@ export interface Backend {
 	/** Containers whose requests or limits are far from what they use. */
 	rightSizing(namespace: string | null): Promise<RightSizing>;
 	/** Sets one container's requests and limits in a workload's pod template. */
-	setResources(target: ObjectRef, container: string, requests: Record<string, string>, limits: Record<string, string>): Promise<void>;
+	/** Sets requests and limits of containers in a workload's pod template, in one patch; null removes one. */
+	setResources(target: ObjectRef, containers: ContainerResources[]): Promise<void>;
+	/** The room a workload has on its nodes and in its namespace's quotas. */
+	capacity(target: ObjectRef): Promise<Capacity>;
 	/** The Flux or Argo CD object that manages an object, if any. */
 	managedBy(target: ObjectRef): Promise<Manager | null>;
 	/** The views for custom resource kinds, read again from their files. */
