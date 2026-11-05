@@ -6,6 +6,7 @@
 	import { isTauri } from '@tauri-apps/api/core';
 	import { stepZoom } from '../appearance';
 	import { app } from '../state.svelte';
+	import { t } from '../i18n';
 
 	let input = $state('');
 	let active = $state(0);
@@ -22,7 +23,7 @@
 		[namespace, context && context !== app.cluster?.context ? context : ''].filter(Boolean).join(' · ');
 	const recentSuggestion = (o: RecentObject): Suggestion => ({
 		label: o.name,
-		detail: [o.kind, where(o.namespace, o.context), 'recent'].filter(Boolean).join(' · '),
+		detail: [o.kind, where(o.namespace, o.context), t('recent')].filter(Boolean).join(' · '),
 		action: {
 			type: 'object',
 			target: { context: o.context, resource: { group: o.group, version: o.version, plural: o.plural }, namespace: o.namespace, name: o.name },
@@ -65,7 +66,7 @@
 		if (!found) return [];
 		return found.actions.map((a) => ({
 			label: a.label.replace(/…$/, ''),
-			detail: `${a.disabled ? 'Not allowed' : 'Action'} · ${found.label}`,
+			detail: `${a.disabled ? t('Not allowed') : t('Action')} · ${found.label}`,
 			action: { type: 'call', run: a.run }
 		}));
 	});
@@ -74,22 +75,22 @@
 	const appCommands = $derived.by((): Suggestion[] => {
 		const out: Suggestion[] = [
 			{
-				label: 'Switch to dark or light mode',
-				detail: 'Command · appearance',
+				label: t('Switch to dark or light mode'),
+				detail: t('Command · appearance'),
 				action: { type: 'call', run: () => app.toggleScheme() }
 			},
 			{
-				label: app.readOnly ? 'Turn read-only off' : 'Turn read-only on',
-				detail: 'Command · this context',
+				label: app.readOnly ? t('Turn read-only off') : t('Turn read-only on'),
+				detail: t('Command · this context'),
 				action: { type: 'call', run: () => app.toggleReadOnly() }
 			},
-			{ label: 'Show the keyboard shortcuts', detail: 'Command · help', action: { type: 'help' } }
+			{ label: t('Show the keyboard shortcuts'), detail: t('Command · help'), action: { type: 'help' } }
 		];
 		if (isTauri()) {
 			out.push(
-				{ label: 'Zoom in', detail: 'Command · appearance', action: { type: 'call', run: () => app.setZoom(stepZoom(app.zoom, 1)) } },
-				{ label: 'Zoom out', detail: 'Command · appearance', action: { type: 'call', run: () => app.setZoom(stepZoom(app.zoom, -1)) } },
-				{ label: 'Reset the zoom', detail: 'Command · appearance', action: { type: 'call', run: () => app.setZoom(1) } }
+				{ label: t('Zoom in'), detail: t('Command · appearance'), action: { type: 'call', run: () => app.setZoom(stepZoom(app.zoom, 1)) } },
+				{ label: t('Zoom out'), detail: t('Command · appearance'), action: { type: 'call', run: () => app.setZoom(stepZoom(app.zoom, -1)) } },
+				{ label: t('Reset the zoom'), detail: t('Command · appearance'), action: { type: 'call', run: () => app.setZoom(1) } }
 			);
 		}
 		return out;
@@ -116,7 +117,7 @@
 					...(lookup ? objects : []),
 					...(/^(search|find|grep)\b/i.test(term)
 						? []
-						: [{ label: `search ${term}`, detail: 'Search objects by name, label and field', action: { type: 'search', query: term } } as Suggestion])
+						: [{ label: `search ${term}`, detail: t('Search objects by name, label and field'), action: { type: 'search', query: term } } as Suggestion])
 				]
 			: [
 					...forRow.slice(0, 6),
@@ -186,7 +187,7 @@
 </script>
 
 <div class="backdrop" onclick={close} role="presentation"></div>
-<div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+<div class="palette" role="dialog" aria-modal="true" aria-label={t('Command palette')}>
 	<div class="prompt">
 		<span>:</span>
 		<input
@@ -194,17 +195,17 @@
 			bind:value={input}
 			{onkeydown}
 			role="combobox"
-			aria-label="Command"
+			aria-label={t('Command')}
 			aria-expanded="true"
 			aria-controls="palette-suggestions"
 			aria-autocomplete="list"
 			aria-activedescendant={suggestions.length ? `palette-option-${active}` : undefined}
-			placeholder="A kind, object or action: pods, deploy kube-system, ns default, restart…"
+			placeholder={t('A kind, object or action: pods, deploy kube-system, ns default, restart…')}
 			spellcheck="false"
 			autocomplete="off"
 		/>
 	</div>
-	<ul id="palette-suggestions" role="listbox" aria-label="Suggestions">
+	<ul id="palette-suggestions" role="listbox" aria-label={t('Suggestions')}>
 		{#each suggestions as s, i (s.label + i)}
 			<li role="presentation">
 				<!-- Not mouseenter: a list that opens under a resting pointer keeps its first entry. -->
@@ -222,10 +223,12 @@
 				</button>
 			</li>
 		{:else}
-			<li class="empty" role="status">No matching resource or command</li>
+			<li class="empty" role="status">{t('No matching resource or command')}</li>
 		{/each}
 	</ul>
-	<footer><kbd>↑↓</kbd> select <kbd>Tab</kbd> complete <kbd>Enter</kbd> run <kbd>Esc</kbd> close</footer>
+	<footer>
+		<kbd>↑↓</kbd> {t('select')} <kbd>Tab</kbd> {t('complete')} <kbd>Enter</kbd> {t('run')} <kbd>Esc</kbd> {t('close')}
+	</footer>
 </div>
 
 <style>
