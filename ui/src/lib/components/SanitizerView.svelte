@@ -244,7 +244,7 @@
 
 	{#if report && sum}
 		<div class="summary">
-			<div class="grade {gradeTone(report.grade)}" aria-label="Grade {report.grade}">{report.grade}</div>
+			<div class="grade {gradeTone(report.grade, sum.error)}" aria-label="Grade {report.grade}">{report.grade}</div>
 			<div class="figures">
 				<div class="score"><strong>{report.score}</strong> <span class="muted">/ 100</span></div>
 				<div class="muted">

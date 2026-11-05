@@ -460,8 +460,17 @@
 				{/if}
 			</span>
 			{#if level.measured && u.requested !== null}
-				<span class="kpi-note requested">
-					<strong>{percent(u.requested / u.capacity)}</strong> requested · {format(u.requested)}
+				{@const over = u.requested > u.capacity}
+				<span
+					class="kpi-note requested"
+					class:over
+					title={over
+						? `Pods request ${format(u.requested)} of ${format(u.capacity)}: those that do not fit wait as Pending`
+						: undefined}
+				>
+					<strong>{percent(u.requested / u.capacity)}</strong> requested · {over
+						? 'more than the nodes hold'
+						: format(u.requested)}
 				</span>
 			{/if}
 			<span
@@ -477,7 +486,12 @@
 					style:width={percent(Math.min(level.value, 1))}
 				></span>
 				{#if level.measured && u.requested !== null}
-					<span class="request" style:left={percent(Math.min(u.requested / u.capacity, 1))} title="Requested"></span>
+					<span
+						class="request"
+						class:over={u.requested > u.capacity}
+						style:left={percent(Math.min(u.requested / u.capacity, 1))}
+						title="Requested"
+					></span>
 				{/if}
 			</span>
 		{:else}
@@ -671,6 +685,10 @@
 		color: var(--text);
 		font-weight: 600;
 	}
+	.kpi-note.requested.over,
+	.kpi-note.requested.over strong {
+		color: var(--bad);
+	}
 	.health {
 		display: inline-flex;
 		align-items: center;
@@ -715,6 +733,9 @@
 		width: 2px;
 		margin-left: -1px;
 		background: var(--text);
+	}
+	.request.over {
+		background: var(--bad);
 	}
 	.columns {
 		display: grid;

@@ -202,7 +202,10 @@
 				.catch(() => (replicas = 1))
 				.finally(() => {
 					loadingReplicas = false;
-					queueMicrotask(() => firstField?.focus());
+					void tick().then(() => {
+						firstField?.focus();
+						if (firstField instanceof HTMLInputElement) firstField.select();
+					});
 				});
 		} else if (
 			dialog.kind === 'scale' ||
@@ -241,7 +244,12 @@
 						labelsText = toLines(original.labels);
 						annotationsText = toLines(original.annotations);
 					}
-					queueMicrotask(() => firstField?.focus());
+					// The replicas field is disabled while it loads: enable it before focusing it.
+					loadingReplicas = false;
+					void tick().then(() => {
+						firstField?.focus();
+						if (firstField instanceof HTMLInputElement && firstField.type === 'number') firstField.select();
+					});
 				})
 				.catch((err) => (error = errorMessage(err)))
 				.finally(() => (loadingReplicas = false));
@@ -834,7 +842,7 @@
 			Set the number of replicas for <strong>{name(dialog.target)}</strong>{#if currentReplicas !== null}, now {currentReplicas}{/if}.
 		</p>
 		{#if autoscaler}
-			<div class="blast" role="alert">
+			<div class="blast caution" role="note">
 				<strong>An autoscaler sets this.</strong>
 				<p>
 					HorizontalPodAutoscaler <span class="mono">{autoscaler.name}</span> keeps the replicas between
@@ -1414,6 +1422,13 @@
 	}
 	.blast strong {
 		color: var(--bad);
+	}
+	.blast.caution {
+		border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+		background: color-mix(in srgb, var(--warn) 9%, transparent);
+	}
+	.blast.caution strong {
+		color: var(--warn);
 	}
 	.blast p {
 		margin: 4px 0;

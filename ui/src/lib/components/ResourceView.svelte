@@ -19,6 +19,7 @@
 	import ActionBar from './ActionBar.svelte';
 	import ColumnChooser from './ColumnChooser.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
+	import { describeCron } from '../cron';
 
 	let {
 		resource,
@@ -384,6 +385,12 @@
 				const value = row.cells[column.index];
 				if (value === null || value === undefined) return '';
 				if (column.label === 'Cluster-IP' && value === 'None') return 'Headless';
+				if (column.label === 'Schedule' && resource.kind === 'CronJob') return describeCron(String(value));
+				// Yes and No read better than True and False for switches such as Suspend. Condition
+				// columns (Ready True) keep the word Kubernetes uses, and their color.
+				if (typeof value === 'boolean' || (column.label === 'Suspend' && /^(true|false)$/i.test(String(value)))) {
+					return String(value).toLowerCase() === 'true' ? 'Yes' : 'No';
+				}
 				// Times in custom columns, like a certificate's expiry, read as ages.
 				if (column.custom && typeof value === 'string' && TIMESTAMP.test(value)) return relative(value, now);
 				return String(value);
@@ -953,7 +960,10 @@
 									}}
 									class={color}
 									class:wrap={column.kind === 'cell' && column.label === 'Message'}
-									title={hint}
+									title={hint ??
+										(column.kind === 'cell' && column.label === 'Schedule' && resource.kind === 'CronJob'
+											? String(row.cells[column.index] ?? '')
+											: undefined)}
 									class:name={column.kind === 'cell' && column.name}
 									class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
 									class:numeric={column.kind === 'metric'}

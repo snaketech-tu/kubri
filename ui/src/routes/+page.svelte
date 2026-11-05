@@ -49,6 +49,7 @@
 	import GraphView from '#lib/components/GraphView.svelte';
 	import ChangesView from '#lib/components/ChangesView.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
+	import { readOnlyFixed, readOnlyReason } from '#lib/guard.js';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
 	import { parseShortcut, pluginApplies, shortcutLabel } from '#lib/k9s.js';
@@ -401,9 +402,10 @@
 		return () => clearInterval(timer);
 	});
 	const unlockLeft = $derived(app.unlockedUntil === null ? null : Math.max(0, Math.ceil((app.unlockedUntil - now) / 1000)));
+	const lockFixed = $derived(readOnlyFixed(app.guard, app.k9s?.readOnly ?? false, app.contextSettings.readOnly));
 	const lockTitle = $derived(
-		app.k9s?.readOnly
-			? 'k9s readOnly is set: Kubri does not change this cluster'
+		lockFixed
+			? `${readOnlyReason(app.guard, app.contextSettings.readOnly, app.k9s?.readOnly ?? false)}.`
 			: app.contextSettings.readOnly
 				? 'Read-only in Kubri: no edits, deletes, scaling or shells. Click to allow changes.'
 				: unlockLeft !== null
@@ -526,7 +528,7 @@
 				role="switch"
 				aria-checked={app.readOnly}
 				aria-label="Read-only"
-				disabled={!app.cluster || app.k9s?.readOnly || (app.guard.readOnly && !app.guard.canUnlock && !app.contextSettings.readOnly)}
+				disabled={!app.cluster || lockFixed}
 				onclick={() => app.toggleReadOnly()}
 				title={lockTitle}
 			>
@@ -1015,15 +1017,15 @@
 		transition: transform 0.12s;
 	}
 	.mode.locked .track {
-		background: var(--ok);
+		background: var(--accent);
 	}
 	.mode.locked .knob {
 		transform: translateX(12px);
 	}
 	.mode.locked {
 		border-color: transparent;
-		background: color-mix(in srgb, var(--ok) 14%, var(--surface-1));
-		color: var(--ok);
+		background: color-mix(in srgb, var(--accent) 14%, var(--surface-1));
+		color: var(--accent-strong);
 	}
 	.mode:hover:not(:disabled) {
 		border-color: var(--accent);

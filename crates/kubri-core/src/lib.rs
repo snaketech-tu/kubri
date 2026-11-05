@@ -241,6 +241,8 @@ pub struct Guard {
     pub can_unlock: bool,
     /// Seconds until an unlocked context locks again.
     pub unlocked_for: Option<u64>,
+    /// Read-only for a reason no switch in Kubri lifts: a snapshot, `--read-only`, k9s `readOnly`.
+    pub fixed: bool,
 }
 
 /// What decides how Kubri connects to `context`: its context, cluster and user entries.
@@ -686,6 +688,7 @@ impl Kubri {
             return Guard {
                 read_only: true,
                 reason: Some("this is a snapshot: it shows what was saved and cannot change anything".into()),
+                fixed: true,
                 ..Default::default()
             };
         }
@@ -694,7 +697,7 @@ impl Kubri {
 
     async fn guard_for(&self, context: Option<&str>) -> Guard {
         let fixed = if self.read_only.load(Ordering::Relaxed) {
-            Some("it was started read-only")
+            Some("it was started with --read-only or KUBRI_READ_ONLY")
         } else if self.k9s_files().await.read_only {
             Some("readOnly is set in the k9s configuration")
         } else {
@@ -705,6 +708,7 @@ impl Kubri {
             return Guard {
                 read_only: true,
                 reason: Some(reason.into()),
+                fixed: true,
                 ..Default::default()
             };
         }
@@ -745,6 +749,7 @@ impl Kubri {
                 reason: Some("this context is locked; unlock it to make changes".into()),
                 can_unlock: true,
                 unlocked_for: None,
+                fixed: false,
             },
         }
     }
@@ -2462,6 +2467,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn started_read_only_is_fixed_and_says_so() {
+        let kubri = Kubri::with_kubeconfig(Err("not found".into()));
+        kubri
+            .set_context_settings(
+                "dev",
+                ContextSettings {
+                    read_only: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        // The setting is a switch in Kubri, so it is not fixed.
+        let guard = kubri.guard_for(Some("dev")).await;
+        assert!(guard.read_only && !guard.fixed, "{guard:?}");
+
+        kubri.set_read_only();
+        let guard = kubri.guard_for(Some("dev")).await;
+        assert!(guard.read_only && guard.fixed && !guard.can_unlock, "{guard:?}");
+        assert!(guard.reason.unwrap().contains("--read-only"));
+    }
+
+    #[tokio::test]
     async fn agents_change_only_contexts_that_allow_it() {
         let kubri = Kubri::with_kubeconfig(Err("not found".into()));
         let allow = |production: bool, locked: bool| ContextSettings {
@@ -3047,7 +3074,7 @@ contexts: [{name: eks, context: {cluster: c, user: u}}]
             Some("prod.kubri")
         );
         let guard = kubri.guard().await;
-        assert!(guard.read_only && !guard.can_unlock, "{guard:?}");
+        assert!(guard.read_only && !guard.can_unlock && guard.fixed, "{guard:?}");
         assert!(matches!(
             kubri.take_snapshot(None).await,
             Err(Error::Unsupported(_))
