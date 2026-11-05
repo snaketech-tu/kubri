@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.0 — 2026-11-05
+
+- **Try Kubri without a cluster.** Without a kubeconfig, **Open the demo** opens a snapshot of a small shop that comes with the app, and **Start a cluster…** makes one on this computer with kind or k3d. **Try again** reads the kubeconfig files again. A live demo runs in the browser on the new website.
+- **A new sidebar.** Overview, Clusters, Search and Create come first, then the main tools, **All tools** and **All kinds**, a page that finds any kind the cluster serves. Each view has one name everywhere: Overview, Topology, Access and Checks. The k9s commands such as `:pulses`, `:xray`, `:rbac` and `:popeye` still open them.
+- **Why a container does not run.** For an image that cannot be pulled, a missing Secret or ConfigMap, out of memory, a crash loop, a pod with no room on any node and an autoscaler without metrics, Kubri says what is wrong in one sentence and offers the action that helps, such as **Set image…**, **Create Secret…** or **Raise memory limit…**. The logs, the pod inspector and the overview show it. See [Debugging](docs/DEBUGGING.md).
+- **Switching contexts** shows a card with **Cancel** over the page, and says plainly when a cluster cannot be reached. The context switcher, the Clusters page and a strip on the overview show which contexts are reachable.
+- **Lists fit the window.** When not every column fits, Kubri leaves out the least important ones first and says which. **All columns** (<kbd>w</kbd>, before **Wide**) shows them all and keeps the name in place while scrolling sideways. Empty lists offer **Create**, and an empty Helm page **Install chart**.
+- **Actions in one place.** With the inspector open, an object's actions are there only. The row menu folds Copy, Go to and rarely used actions, and menus close when you go elsewhere. Typing a verb such as `restart` in the palette puts that action first. <kbd>Esc</kbd> twice leaves a terminal.
+- **Roll back StatefulSets and DaemonSets** to an earlier revision from the inspector, like Deployments.
+- **`kubri lint` and `kubri snapshot`** run the checks and save snapshots from the command line, for CI pipelines; `lint` also writes SARIF for GitHub code scanning. `kubri FILE.kubri` opens a snapshot in the app. See [Command line](docs/CLI.md).
+- Read-only says the real reason, also when Kubri was started with `--read-only`. Scale puts the cursor in the number field, and an autoscaler's note is amber instead of red. CPU or memory requested above what the nodes hold is red. CronJob schedules read as words. Status colors in light mode have more contrast.
+- The tour points at what it explains. Settings marks the section in view, the namespace menu can be searched, the palette says what to type, and Search shows that Enter runs it. Integrations lists the tools it did not find in a short list. Activity opens beside the page. The topology graph keeps names readable.
+- **Web app:** the unused Prometheus query route is gone, so signed-in users can no longer run their own PromQL through the server. A broken pasted kubeconfig is reported as such.
+- Drain checks that it may evict pods before it cordons the node. Opening a snapshot without a kubeconfig works, going back from a snapshot to the live cluster is quick, and the browser's Back works right after loading.
+
 ## 1.6.2 — 2026-11-04
 
 - **Security, web app:** contexts added with **Add clusters…** can no longer run commands or read files on the server. Before, anyone who could sign in could add a context that signs in through a command, such as an exec plugin, and so run any command on the server. A context could also name a token file there and send its content to an address of their choice. The server now accepts such contexts only when it is started with `KUBRI_LOCAL_TERMINAL=true`. The desktop app is unchanged. See [Running Kubri in the browser](docs/WEB.md).
