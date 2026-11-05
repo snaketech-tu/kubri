@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { ContextSettings } from '../api';
 	import { app } from '../state.svelte';
 	import { plainOptions } from '../select';
@@ -8,15 +9,15 @@
 
 	/** Accent colors that read well on both light and dark backgrounds. */
 	const COLORS: [string, string][] = [
-		['#d64545', 'Red'],
-		['#e07b24', 'Orange'],
-		['#c9a227', 'Yellow'],
-		['#1f9d55', 'Green'],
-		['#0f9b8e', 'Teal'],
-		['#326ce5', 'Blue'],
-		['#7c5cff', 'Violet'],
-		['#d63f8c', 'Pink'],
-		['#6b7280', 'Gray']
+		['#d64545', t('Red')],
+		['#e07b24', t('Orange')],
+		['#c9a227', t('Yellow')],
+		['#1f9d55', t('Green')],
+		['#0f9b8e', t('Teal')],
+		['#326ce5', t('Blue')],
+		['#7c5cff', t('Violet')],
+		['#d63f8c', t('Pink')],
+		['#6b7280', t('Gray')]
 	];
 
 	const current = $derived(app.contextSettingsOf(context));
@@ -39,7 +40,7 @@
 		if (production && !current.production) {
 			change.locked = true;
 			if (!current.color) change.color = '#d64545';
-			if (!current.label) change.label = 'Production';
+			if (!current.label) change.label = t('Production');
 		}
 		save(change);
 	}
@@ -47,22 +48,22 @@
 
 <div class="form">
 	<label class="field">
-		<span>Display name</span>
+		<span>{t('Display name')}</span>
 		<input value={current.displayName} placeholder={context} onchange={text('displayName')} spellcheck="false" />
 	</label>
 	<label class="field">
-		<span>Label</span>
-		<input value={current.label} placeholder="e.g. Staging" onchange={text('label')} />
+		<span>{t('Label')}</span>
+		<input value={current.label} placeholder={t('e.g. Staging')} onchange={text('label')} />
 	</label>
 	<div class="field">
-		<span id="color-{context}">Color</span>
+		<span id="color-{context}">{t('Color')}</span>
 		<div class="colors" role="radiogroup" aria-labelledby="color-{context}">
 			<button
 				class="swatch none"
 				role="radio"
 				aria-checked={!current.color}
-				title="No color"
-				aria-label="No color"
+				title={t('No color')}
+				aria-label={t('No color')}
 				onclick={() => save({ color: '' })}
 			></button>
 			{#each COLORS as [hex, name] (hex)}
@@ -78,8 +79,8 @@
 			{/each}
 			<input
 				class="custom"
-				aria-label="Custom color"
-				placeholder="#rrggbb"
+				aria-label={t('Custom color')}
+				placeholder={t('#rrggbb')}
 				value={COLORS.some(([hex]) => hex === current.color) ? custom : current.color}
 				oninput={(e) => (custom = e.currentTarget.value)}
 				onchange={(e) => {
@@ -92,7 +93,7 @@
 		</div>
 	</div>
 	<label class="field">
-		<span>Namespace after connecting</span>
+		<span>{t('Namespace after connecting')}</span>
 		{#if namespaces.length}
 			<Select
 				value={current.namespace}
@@ -103,14 +104,14 @@
 				onchange={(value) => value !== current.namespace && save({ namespace: value })}
 			/>
 		{:else}
-			<input value={current.namespace} placeholder="All namespaces" onchange={text('namespace')} spellcheck="false" />
+			<input value={current.namespace} placeholder={t('All namespaces')} onchange={text('namespace')} spellcheck="false" />
 		{/if}
 	</label>
 	<label class="field">
-		<span>Only these namespaces</span>
+		<span>{t('Only these namespaces')}</span>
 		<input
 			value={current.namespaces.join(', ')}
-			placeholder="All namespaces, e.g. shop, payments"
+			placeholder={t('All namespaces, e.g. shop, payments')}
 			onchange={(e) => {
 				const list = [...new Set(e.currentTarget.value.split(/[\s,]+/).filter(Boolean))];
 				if (list.join() !== current.namespaces.join()) save({ namespaces: list });
@@ -119,10 +120,10 @@
 		/>
 	</label>
 	<label class="field">
-		<span>Or namespaces labeled</span>
+		<span>{t('Or namespaces labeled')}</span>
 		<input
 			value={current.namespaceSelector}
-			placeholder="e.g. team=shop"
+			placeholder={t('e.g. team=shop')}
 			disabled={current.namespaces.length > 0}
 			onchange={(e) => {
 				const value = e.currentTarget.value.trim();
@@ -131,26 +132,26 @@
 			spellcheck="false"
 		/>
 	</label>
-	<p class="note">Lists across all namespaces then show only these, which also works when you may not list every namespace.</p>
+	<p class="note">{t('Lists across all namespaces then show only these, which also works when you may not list every namespace.')}</p>
 	<label class="check">
 		<input type="checkbox" checked={current.production} onchange={(e) => setProduction(e.currentTarget.checked)} />
 		<span>
-			<strong>Production</strong>
-			<small>A banner shows it, and deleting asks you to type the name.</small>
+			<strong>{t('Production')}</strong>
+			<small>{t('A banner shows it, and deleting asks you to type the name.')}</small>
 		</span>
 	</label>
 	<label class="check">
 		<input type="checkbox" checked={current.locked} onchange={(e) => save({ locked: e.currentTarget.checked })} />
 		<span>
-			<strong>Start locked</strong>
-			<small>Read-only until you unlock it, for 15 minutes at a time.</small>
+			<strong>{t('Start locked')}</strong>
+			<small>{t('Read-only until you unlock it, for 15 minutes at a time.')}</small>
 		</span>
 	</label>
 	<label class="check">
 		<input type="checkbox" checked={current.readOnly} onchange={(e) => save({ readOnly: e.currentTarget.checked })} />
 		<span>
-			<strong>Read-only</strong>
-			<small>Kubri never changes this cluster until you turn this off.</small>
+			<strong>{t('Read-only')}</strong>
+			<small>{t('Kubri never changes this cluster until you turn this off.')}</small>
 		</span>
 	</label>
 	<label class="check">
@@ -161,12 +162,12 @@
 			onchange={(e) => save({ agentWrites: e.currentTarget.checked })}
 		/>
 		<span>
-			<strong>AI agents may change it</strong>
+			<strong>{t('AI agents may change it')}</strong>
 			<small>
 				{#if current.production}
-					Never on a production context: agents only read here.
+					{t('Never on a production context: agents only read here.')}
 				{:else}
-					Agents connected over MCP may scale, restart, set images and delete here. You allow each change in Kubri.
+					{t('Agents connected over MCP may scale, restart, set images and delete here. You allow each change in Kubri.')}
 				{/if}
 			</small>
 		</span>

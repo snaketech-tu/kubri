@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { lightDismiss } from '../dismiss';
 	import { backend, type UpdateCheck, type UpdateProgress } from '../api';
 	import { errorMessage } from '../format';
@@ -41,29 +42,28 @@
 	);
 	const status = $derived.by(() => {
 		if (!progress) return '';
-		if (progress.type === 'install') return 'Installing… Your system may ask for your password.';
+		if (progress.type === 'install') return t('Installing… Your system may ask for your password.');
 		const { done, total } = progress;
-		return total ? `Downloading… ${megabytes(done)} of ${megabytes(total)} MB` : `Downloading… ${megabytes(done)} MB`;
+		return total ? t('Downloading… {done} of {total} MB', { done: megabytes(done), total: megabytes(total) }) : t('Downloading… {done} MB', { done: megabytes(done) });
 	});
 </script>
 
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	aria-label="Update Kubri"
+	aria-label={t('Update Kubri')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
 		later();
 	}}
 >
-	<h2>Kubri {release.version} is out</h2>
+	<h2>{t('Kubri {version} is out', { version: release.version })}</h2>
 	<p>
-		You have {release.current}. Kubri can download the update, check its signature, install it and start again. Port-forwards,
-		shells and log streams close when it does.
+		{t('You have {current}. Kubri can download the update, check its signature, install it and start again. Port-forwards, shells and log streams close when it does.', { current: release.current })}
 	</p>
 	<p class="muted">
-		<button class="link" onclick={() => backend.openUrl(release.url)}>What's new in {release.version}</button>
+		<button class="link" onclick={() => backend.openUrl(release.url)}>{t('What\'s new in {version}', { version: release.version })}</button>
 	</p>
 
 	{#if progress && !error}
@@ -72,7 +72,7 @@
 				class="bar"
 				class:indeterminate={percent === null}
 				role="progressbar"
-				aria-label="Update progress"
+				aria-label={t('Update progress')}
 				aria-valuemin={0}
 				aria-valuemax={100}
 				aria-valuenow={percent === null ? undefined : Math.round(percent)}
@@ -84,18 +84,18 @@
 	{/if}
 	{#if error}
 		<p class="error" role="alert">{error}</p>
-		<p class="muted small">You can download it from the release page and install it by hand instead.</p>
+		<p class="muted small">{t('You can download it from the release page and install it by hand instead.')}</p>
 	{/if}
 
 	<div class="buttons">
 		{#if error}
-			<button class="secondary" onclick={later}>Close</button>
-			<button class="secondary" onclick={() => backend.openUrl(release.url)}>Open the download page</button>
-			<button class="primary" onclick={install}>Try again</button>
+			<button class="secondary" onclick={later}>{t('Close')}</button>
+			<button class="secondary" onclick={() => backend.openUrl(release.url)}>{t('Open the download page')}</button>
+			<button class="primary" onclick={install}>{t('Try again')}</button>
 		{:else}
-			<button class="secondary" onclick={() => app.dismissRelease()} disabled={busy}>Skip this version</button>
-			<button class="secondary" onclick={later} disabled={busy}>Later</button>
-			<button class="primary" onclick={install} disabled={busy} bind:this={primary}>{busy ? 'Updating…' : 'Update and restart'}</button>
+			<button class="secondary" onclick={() => app.dismissRelease()} disabled={busy}>{t('Skip this version')}</button>
+			<button class="secondary" onclick={later} disabled={busy}>{t('Later')}</button>
+			<button class="primary" onclick={install} disabled={busy} bind:this={primary}>{busy ? t('Updating…') : t('Update and restart')}</button>
 		{/if}
 	</div>
 </dialog>

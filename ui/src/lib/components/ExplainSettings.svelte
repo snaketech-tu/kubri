@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { backend, type ExplainProvider, type ExplainSettings } from '../api';
 	import { ANTHROPIC_MODELS } from '../explain';
 	import { errorMessage } from '../format';
 	import { app } from '../state.svelte';
+	import Phrase from './Phrase.svelte';
 
 	const explain = $derived(app.settings.explain);
 	let hasKey = $state<boolean | null>(null);
@@ -10,9 +12,9 @@
 	let saving = $state(false);
 
 	const PROVIDERS: [ExplainProvider, string][] = [
-		['none', 'Off'],
+		['none', t('Off')],
 		['anthropic', 'Anthropic'],
-		['openai', 'OpenAI-compatible']
+		['openai', t('OpenAI-compatible')]
 	];
 
 	$effect(() => {
@@ -31,7 +33,7 @@
 		try {
 			hasKey = (await backend.setExplainKey(value)).hasKey;
 			key = '';
-			app.toast(value ? 'Saved the API key' : 'Removed the API key');
+			app.toast(value ? t('Saved the API key') : t('Removed the API key'));
 		} catch (err) {
 			app.toast(errorMessage(err), 'bad');
 		} finally {
@@ -39,21 +41,17 @@
 		}
 	}
 
-	const where = $derived(
-		backend.desktop && /Mac|Win/.test(navigator.userAgent)
-			? 'in the system keychain'
-			: 'in a file in Kubri’s config folder that only you can read'
-	);
+	/** Whether the key goes into the system keychain, or else into a file only the user can read. */
+	const keychain = $derived(backend.desktop && /Mac|Win/.test(navigator.userAgent));
 </script>
 
 <div class="block">
-	<h2 id="config-explain">Explain</h2>
+	<h2 id="config-explain">{t('Explain')}</h2>
 	<p class="muted">
-		Explain asks a model of your choice about a pod, an event, log lines, a finding or a failed action, with your own API
-		key. You always see what will be sent first, with secret values hidden. While it is off, nothing is sent anywhere.
+		{t('Explain asks a model of your choice about a pod, an event, log lines, a finding or a failed action, with your own API key. You always see what will be sent first, with secret values hidden. While it is off, nothing is sent anywhere.')}
 	</p>
 
-	<div class="providers" role="radiogroup" aria-label="Provider">
+	<div class="providers" role="radiogroup" aria-label={t('Provider')}>
 		{#each PROVIDERS as [value, label] (value)}
 			<label class:active={explain.provider === value}>
 				<input
@@ -71,11 +69,11 @@
 	{#if explain.provider !== 'none'}
 		<div class="fields">
 			<label>
-				<span>Model</span>
+				<span>{t('Model')}</span>
 				<input
 					list="explain-models"
 					value={explain.model}
-					placeholder={explain.provider === 'anthropic' ? ANTHROPIC_MODELS[0] : 'such as gpt-5 or llama3.2'}
+					placeholder={explain.provider === 'anthropic' ? ANTHROPIC_MODELS[0] : t('such as gpt-5 or llama3.2')}
 					onchange={(e) => update({ model: e.currentTarget.value })}
 				/>
 				{#if explain.provider === 'anthropic'}
@@ -85,7 +83,7 @@
 				{/if}
 			</label>
 			<label>
-				<span>Address</span>
+				<span>{t('Address')}</span>
 				<input
 					value={explain.baseUrl}
 					placeholder={explain.provider === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1'}
@@ -94,8 +92,10 @@
 			</label>
 			{#if explain.provider === 'openai'}
 				<p class="muted small hint">
-					Any endpoint with OpenAI’s chat completions works. For Ollama on this computer, use
-					<code>http://localhost:11434/v1</code> and a model you pulled; it needs no key.
+					<Phrase
+						text={t('Any endpoint with OpenAI’s chat completions works. For Ollama on this computer, use {url} and a model you pulled; it needs no key.')}
+						code={{ url: 'http://localhost:11434/v1' }}
+					/>
 				</p>
 			{/if}
 			<form
@@ -105,20 +105,19 @@
 					if (key.trim()) saveKey(key);
 				}}
 			>
-				<span>API key</span>
+				<span>{t('API key')}</span>
 				<input
 					type="password"
 					autocomplete="off"
 					bind:value={key}
-					placeholder={hasKey ? 'A key is stored; type a new one to replace it' : 'Paste your key'}
-					aria-label="API key"
+					placeholder={hasKey ? t('A key is stored; type a new one to replace it') : t('Paste your key')}
+					aria-label={t('API key')}
 				/>
-				<button type="submit" class="small" disabled={saving || !key.trim()}>Save</button>
-				{#if hasKey}<button type="button" class="small" disabled={saving} onclick={() => saveKey(null)}>Remove</button>{/if}
+				<button type="submit" class="small" disabled={saving || !key.trim()}>{t('Save')}</button>
+				{#if hasKey}<button type="button" class="small" disabled={saving} onclick={() => saveKey(null)}>{t('Remove')}</button>{/if}
 			</form>
 			<p class="muted small hint">
-				{#if hasKey}A key is stored {where}.{:else}No key is stored.{/if} Kubri never shows it again and never writes it into
-				the settings file.
+				{#if hasKey}{keychain ? t('A key is stored in the system keychain.') : t('A key is stored in a file in Kubri’s config folder that only you can read.')}{:else}{t('No key is stored.')}{/if} {t('Kubri never shows it again and never writes it into the settings file.')}
 			</p>
 		</div>
 	{/if}
@@ -204,7 +203,7 @@
 		color: var(--text);
 		font-size: 13px;
 	}
-	code {
+	.hint :global(code) {
 		font-family: var(--mono);
 	}
 	button.small {

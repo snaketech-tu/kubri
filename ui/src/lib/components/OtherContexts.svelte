@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { untrack } from 'svelte';
 	import { relative } from '../format';
 	import { CHECK_AT_MOST, reach, STALE_MS, type ContextReach } from '../reach.svelte';
@@ -26,8 +27,8 @@
 {#if others.length && !app.cluster?.snapshot}
 	<section class="others" aria-labelledby="others-title">
 		<div class="head">
-			<h2 id="others-title">Other contexts</h2>
-			<button class="link" onclick={() => app.showFleet()}>All clusters</button>
+			<h2 id="others-title">{t('Other contexts')}</h2>
+			<button class="link" onclick={() => app.showFleet()}>{t('All clusters')}</button>
 		</div>
 		<ul>
 			{#each others.slice(0, SHOWN) as ctx (ctx.name)}
@@ -40,16 +41,16 @@
 							<span class="name">
 								{#if settings.color}<span class="swatch" style:background={settings.color}></span>{/if}
 								{app.contextName(ctx.name)}
-								{#if settings.production}<span class="badge">production</span>{/if}
+								{#if settings.production}<span class="badge">{t('production')}</span>{/if}
 							</span>
-							<span class="state">{known ? `${known.summary}, ${relative(new Date(known.at).toISOString(), Date.now())}` : 'Not checked yet'}</span>
+							<span class="state">{known ? `${known.summary}, ${relative(new Date(known.at).toISOString(), Date.now())}` : t('Not checked yet')}</span>
 						</span>
 					</button>
 				</li>
 			{/each}
 			{#if others.length > SHOWN}
 				<li>
-					<button class="context more" onclick={() => app.showFleet()}>{others.length - SHOWN} more on the Clusters page</button>
+					<button class="context more" onclick={() => app.showFleet()}>{t('{n} more on the Clusters page', { n: others.length - SHOWN })}</button>
 				</li>
 			{/if}
 		</ul>

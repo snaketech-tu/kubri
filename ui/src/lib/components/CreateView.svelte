@@ -241,7 +241,7 @@
 		crumbs={[t('Create')]}
 		prefix="context"
 		title={t('Create')}
-		subtitle="Objects from a template, a file, a URL or the clipboard, applied like kubectl apply --server-side after a dry run"
+		subtitle={t('Objects from a template, a file, a URL or the clipboard, applied like kubectl apply --server-side after a dry run')}
 	/>
 
 	<div class="card">

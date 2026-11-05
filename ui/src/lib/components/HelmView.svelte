@@ -462,7 +462,7 @@
 			crumbs={[{ label: 'Helm', onclick: back, title: t('Back to releases (Esc)') }, opened.name]}
 			title={opened.name}
 			mono
-			subtitle="Release in {opened.namespace}{shown ? ` · ${chartLabel(shown)}` : ''}"
+			subtitle={`${t('Release in {namespace}', { namespace: opened.namespace })}${shown ? ` · ${chartLabel(shown)}` : ''}`}
 		>
 			{#if shown}<span class="tag">{@render status(shown.status)}</span>{/if}
 			{#snippet tools()}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { callArguments, httpSnippets, shownToken, stdioSnippets, type AgentSnippet } from '../agents';
 	import { backend, type AgentCall, type AgentConnection } from '../api';
@@ -45,15 +46,16 @@
 	async function newToken() {
 		try {
 			connection = await backend.newAgentToken();
-			app.toast('New token made: agents using the old one must be set up again');
+			app.toast(t('New token made: agents using the old one must be set up again'));
 		} catch (err) {
 			app.toast(errorMessage(err), 'bad');
 		}
 	}
 
-	function copy(text: string, what: string) {
+	/** Copies `text`, and says so with `done`. */
+	function copy(text: string, done: string) {
 		navigator.clipboard.writeText(text).then(
-			() => app.toast(`Copied ${what}`),
+			() => app.toast(done),
 			(err) => app.toast(errorMessage(err), 'bad')
 		);
 	}
@@ -69,18 +71,17 @@
 </script>
 
 <div class="block">
-	<h2 id="config-agents">AI agents</h2>
+	<h2 id="config-agents">{t('AI agents')}</h2>
 	<p class="muted">
-		Kubri is an MCP server: AI agents such as Claude Code, Claude Desktop or an IDE assistant can read your clusters
-		through it, with your permissions. Secrets stay hidden and every call is logged here.
+		{t('Kubri is an MCP server: AI agents such as Claude Code, Claude Desktop or an IDE assistant can read your clusters through it, with your permissions. Secrets stay hidden and every call is logged here.')}
 	</p>
 
-	<div class="ways" role="tablist" aria-label="How agents connect">
+	<div class="ways" role="tablist" aria-label={t('How agents connect')}>
 		<button role="tab" aria-selected={way === 'http'} class:active={way === 'http'} onclick={() => (way = 'http')}>
-			Through this Kubri (HTTP)
+			{t('Through this Kubri (HTTP)')}
 		</button>
 		<button role="tab" aria-selected={way === 'stdio'} class:active={way === 'stdio'} onclick={() => (way = 'stdio')}>
-			The agent starts Kubri (stdio)
+			{t('The agent starts Kubri (stdio)')}
 		</button>
 	</div>
 
@@ -88,16 +89,15 @@
 		<label class="check">
 			<input type="checkbox" checked={agents.http} onchange={(e) => update({ http: e.currentTarget.checked })} />
 			<span>
-				<strong>Serve MCP on this computer</strong>
+				<strong>{t('Serve MCP on this computer')}</strong>
 				<small>
-					While Kubri runs, agents connect to it with a token. Changes are possible only on contexts that allow them, and
-					you allow each one in this window.
+					{t('While Kubri runs, agents connect to it with a token. Changes are possible only on contexts that allow them, and you allow each one in this window.')}
 				</small>
 			</span>
 		</label>
 		{#if desktop}
 			<label class="port">
-				<span>Port</span>
+				<span>{t('Port')}</span>
 				<input
 					type="number"
 					min="1024"
@@ -118,25 +118,24 @@
 			<div class="endpoint">
 				<code>{connection.url}</code>
 				{#if connection.token}
-					<span class="muted">token</span>
+					<span class="muted">{t('token')}</span>
 					<code>{shownToken(connection.token, showToken)}</code>
-					<button class="small" onclick={() => (showToken = !showToken)}>{showToken ? 'Hide' : 'Show'}</button>
-					<button class="small" onclick={() => connection?.token && copy(connection.token, 'the token')}>Copy</button>
-					<button class="small" onclick={newToken}>New token</button>
+					<button class="small" onclick={() => (showToken = !showToken)}>{showToken ? t('Hide') : t('Show')}</button>
+					<button class="small" onclick={() => connection?.token && copy(connection.token, t('Copied the token'))}>{t('Copy')}</button>
+					<button class="small" onclick={newToken}>{t('New token')}</button>
 				{/if}
 			</div>
 			<p class="muted small">
 				{#if writable.length}
-					Agents may change {writable.map((c) => app.contextName(c.name)).join(', ')}, after you allow it.
+					{t('Agents may change {contexts}, after you allow it.', { contexts: writable.map((c) => app.contextName(c.name)).join(', ') })}
 				{:else}
-					Agents only read: no context allows changes. Turn on “AI agents may change it” for a context above to allow them.
+					{t('Agents only read: no context allows changes. Turn on “AI agents may change it” for a context above to allow them.')}
 				{/if}
 			</p>
 		{/if}
 	{:else}
 		<p class="muted small">
-			The agent runs Kubri itself and talks to it over stdin and stdout. Nothing needs to be turned on, but since no
-			Kubri window can confirm a change this way, agents only read.
+			{t('The agent runs Kubri itself and talks to it over stdin and stdout. Nothing needs to be turned on, but since no Kubri window can confirm a change this way, agents only read.')}
 		</p>
 	{/if}
 
@@ -145,8 +144,8 @@
 			<div class="snippet">
 				<div class="snippet-head">
 					<span>{snippet.client}</span>
-					<button class="small" onclick={() => copy(snippet.text, snippet.json ? 'the configuration' : 'the command')}>
-						Copy
+					<button class="small" onclick={() => copy(snippet.text, snippet.json ? t('Copied the configuration') : t('Copied the command'))}>
+						{t('Copy')}
 					</button>
 				</div>
 				<pre>{display(snippet)}</pre>
@@ -157,17 +156,17 @@
 	<label class="check">
 		<input type="checkbox" checked={agents.secrets} onchange={(e) => update({ secrets: e.currentTarget.checked })} />
 		<span>
-			<strong>Agents may read Secret values</strong>
-			<small>Otherwise they see a Secret's keys and sizes, never its values.</small>
+			<strong>{t('Agents may read Secret values')}</strong>
+			<small>{t('Otherwise they see a Secret\'s keys and sizes, never its values.')}</small>
 		</span>
 	</label>
 
-	<h3>Recent tool calls</h3>
+	<h3>{t('Recent tool calls')}</h3>
 	{#if calls.length}
 		<div class="calls">
 			<table>
 				<thead>
-					<tr><th>When</th><th>Tool</th><th>Arguments</th><th>Context</th><th>Result</th></tr>
+					<tr><th>{t('When')}</th><th>{t('Tool')}</th><th>{t('Arguments')}</th><th>{t('Context')}</th><th>{t('Result')}</th></tr>
 				</thead>
 				<tbody>
 					{#each calls.slice(0, 50) as call, i (i)}
@@ -183,7 +182,7 @@
 			</table>
 		</div>
 	{:else}
-		<p class="muted small">No agent has called Kubri yet.</p>
+		<p class="muted small">{t('No agent has called Kubri yet.')}</p>
 	{/if}
 </div>
 

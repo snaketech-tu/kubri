@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { lightDismiss } from '../dismiss';
 	import { untrack } from 'svelte';
 	import { backend, type ExplainAnswer, type ExplainPrompt, type ExplainSubject } from '../api';
@@ -7,6 +8,7 @@
 	import { explainBlocker, providerName } from '../explain';
 	import Icon from './Icon.svelte';
 	import Markdown from './Markdown.svelte';
+	import Phrase from './Phrase.svelte';
 
 	let { subject }: { subject: ExplainSubject } = $props();
 
@@ -63,7 +65,7 @@
 	function copy() {
 		if (!answer) return;
 		navigator.clipboard.writeText(answer.text).then(
-			() => app.toast('Copied the answer'),
+			() => app.toast(t('Copied the answer')),
 			(err) => app.toast(errorMessage(err), 'bad')
 		);
 	}
@@ -81,7 +83,7 @@
 <dialog
 	{@attach lightDismiss}
 	class="panel"
-	aria-label="Explain"
+	aria-label={t('Explain')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
@@ -90,21 +92,21 @@
 >
 	<header>
 		<div>
-			<h2>Explain</h2>
-			<p class="muted">{prompt?.title ?? 'Gathering what Kubri knows…'}</p>
+			<h2>{t('Explain')}</h2>
+			<p class="muted">{prompt?.title ?? t('Gathering what Kubri knows…')}</p>
 		</div>
-		<button class="icon" onclick={close} aria-label="Close" title="Close (Esc)"><Icon name="close" size={16} /></button>
+		<button class="icon" onclick={close} aria-label={t('Close')} title={t('Close (Esc)')}><Icon name="close" size={16} /></button>
 	</header>
 
 	<div class="body">
 		{#if phase === 'gathering' && !error}
-			<p class="muted">Gathering the object, its events and logs…</p>
+			<p class="muted">{t('Gathering the object, its events and logs…')}</p>
 		{/if}
 
 		{#if blocker}
 			<div class="notice">
 				<p>{blocker}</p>
-				<button class="secondary" onclick={settings}>Open Explain settings</button>
+				<button class="secondary" onclick={settings}>{t('Open Explain settings')}</button>
 			</div>
 		{/if}
 
@@ -115,34 +117,37 @@
 		{#if phase === 'asking'}
 			<p class="waiting" role="status">
 				<span class="spinner" aria-hidden="true"></span>
-				Asking {prompt?.model}… this can take a minute.
+				{t('Asking {model}… this can take a minute.', { model: prompt?.model ?? '' })}
 			</p>
 		{/if}
 
 		{#if answer && phase === 'answered'}
-			<section class="answer" aria-label="Answer">
+			<section class="answer" aria-label={t('Answer')}>
 				<Markdown text={answer.text} />
 				<p class="meta">
-					Answered by {answer.model}{answer.cutShort ? '. The answer was cut short at the length limit.' : '.'} Models can be
-					wrong: check before you change anything.
+					{answer.cutShort
+						? t('Answered by {model}. The answer was cut short at the length limit. Models can be wrong: check before you change anything.', { model: answer.model })
+						: t('Answered by {model}. Models can be wrong: check before you change anything.', { model: answer.model })}
 				</p>
 			</section>
 		{/if}
 
 		{#if prompt}
 			<details class="sent" open={phase !== 'answered'}>
-				<summary>{phase === 'answered' ? 'What was sent' : 'What will be sent'}</summary>
+				<summary>{phase === 'answered' ? t('What was sent') : t('What will be sent')}</summary>
 				<p class="muted small">
 					{#if prompt.endpoint}
-						To <strong>{providerName(prompt.provider)}</strong>{prompt.model ? `, model ${prompt.model}` : ''}, at
-						<code>{prompt.endpoint}</code>.
+						<Phrase
+							text={prompt.model ? t('To {provider}, model {model}, at {endpoint}.', { model: prompt.model }) : t('To {provider}, at {endpoint}.')}
+							strong={{ provider: providerName(prompt.provider) }}
+							code={{ endpoint: prompt.endpoint }}
+						/>
 					{/if}
-					Secret values, tokens, passwords and keys are hidden as <code>&lt;hidden&gt;</code>. Nothing is sent before you
-					press Send.
+					<Phrase text={t('Secret values, tokens, passwords and keys are hidden as {hidden}. Nothing is sent before you press Send.')} code={{ hidden: '<hidden>' }} />
 				</p>
 				<pre>{prompt.text}</pre>
 				<details class="system">
-					<summary>Instructions for the model</summary>
+					<summary>{t('Instructions for the model')}</summary>
 					<pre>{prompt.system}</pre>
 				</details>
 			</details>
@@ -151,16 +156,16 @@
 
 	<footer>
 		{#if phase === 'answered' && answer}
-			<button class="secondary" onclick={copy}>Copy answer</button>
-			<button class="secondary" onclick={gather}>Ask again</button>
-			<button class="primary" onclick={close}>Close</button>
+			<button class="secondary" onclick={copy}>{t('Copy answer')}</button>
+			<button class="secondary" onclick={gather}>{t('Ask again')}</button>
+			<button class="primary" onclick={close}>{t('Close')}</button>
 		{:else}
-			<button class="secondary" onclick={close}>Cancel</button>
+			<button class="secondary" onclick={close}>{t('Cancel')}</button>
 			{#if error && !prompt}
-				<button class="primary" onclick={gather}>Try again</button>
+				<button class="primary" onclick={gather}>{t('Try again')}</button>
 			{:else}
 				<button class="primary" bind:this={send} onclick={ask} disabled={!prompt || !!blocker || phase !== 'preview'}>
-					{error ? 'Send again' : 'Send'}
+					{error ? t('Send again') : t('Send')}
 				</button>
 			{/if}
 		{/if}
@@ -325,7 +330,7 @@
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
-	code {
+	.sent :global(code) {
 		font-family: var(--mono);
 		font-size: 12px;
 	}
