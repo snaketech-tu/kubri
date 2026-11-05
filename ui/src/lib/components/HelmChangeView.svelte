@@ -210,6 +210,8 @@
 {#if error}<div class="notice" role="alert">{error}</div>{/if}
 {#if app.production && !review}
 	<div class="notice warn">{t('This is a production context. The review shows exactly what will change before anything does.')}</div>
+{:else if app.productionIn(namespace) && !review}
+	<div class="notice warn">{t('{namespace} is a production namespace. The review shows exactly what will change before anything does.', { namespace })}</div>
 {/if}
 
 <div class="card">

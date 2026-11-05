@@ -23,6 +23,9 @@ pub struct ContextSettings {
     pub color: String,
     /// Destructive actions ask to type the object's name, and a banner says where you are.
     pub production: bool,
+    /// Namespaces treated like a production context, in a context that is not one: typed names
+    /// before destructive actions, a banner, and no changes by AI agents.
+    pub production_namespaces: Vec<String>,
     /// Kubri never changes this cluster until this is turned off again.
     pub read_only: bool,
     /// Starts read-only; unlocking lasts 15 minutes at a time.
@@ -77,6 +80,12 @@ impl FavoriteForward {
 }
 
 impl ContextSettings {
+    /// Whether changes in `namespace` get production's care: the whole context is production,
+    /// or the namespace is marked as such.
+    pub fn production_in(&self, namespace: Option<&str>) -> bool {
+        self.production || namespace.is_some_and(|ns| self.production_namespaces.iter().any(|p| p == ns))
+    }
+
     fn is_default(&self) -> bool {
         self == &Self::default()
     }
@@ -86,6 +95,15 @@ impl ContextSettings {
         self.display_name = self.display_name.trim().to_owned();
         self.label = self.label.trim().to_owned();
         self.namespace = self.namespace.trim().to_owned();
+        let mut production = Vec::new();
+        for ns in std::mem::take(&mut self.production_namespaces) {
+            let ns = ns.trim().to_owned();
+            if !ns.is_empty() && !production.contains(&ns) {
+                production.push(ns);
+            }
+        }
+        production.sort();
+        self.production_namespaces = production;
         self.color = self.color.trim().to_ascii_lowercase();
         self.integrations = self.integrations.normalized()?;
         let hex = self.color.strip_prefix('#').unwrap_or("");
@@ -209,6 +227,41 @@ pub struct Settings {
     pub connections: ConnectionSettings,
     /// The local terminal's shell, folder and font.
     pub terminal: crate::TerminalSettings,
+    /// Label names for logs, kept once and picked per context on the integrations page.
+    pub label_templates: Vec<LabelTemplate>,
+}
+
+/// The label names a log collector uses for the namespace, pod and container, where they are
+/// not `namespace`, `pod` and `container`, such as `exported_namespace`. Empty keeps the usual.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LabelTemplate {
+    pub name: String,
+    pub namespace: String,
+    pub pod: String,
+    pub container: String,
+}
+
+impl LabelTemplate {
+    /// Trimmed, with a name, and only label names Loki and Prometheus take.
+    pub(crate) fn normalized(mut self) -> Result<Self> {
+        self.name = self.name.trim().to_owned();
+        if self.name.is_empty() {
+            return Err(Error::Unsupported("a label template needs a name".into()));
+        }
+        for label in [&mut self.namespace, &mut self.pod, &mut self.container] {
+            *label = label.trim().to_owned();
+            let mut chars = label.chars();
+            let valid = chars.next().is_none_or(|c| c.is_ascii_alphabetic() || c == '_')
+                && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+            if !valid {
+                return Err(Error::Unsupported(format!(
+                    "`{label}` is not a label name; use letters, digits and _, like exported_namespace"
+                )));
+            }
+        }
+        Ok(self)
+    }
 }
 
 /// The most recent contexts kept connected when they are not the current one.

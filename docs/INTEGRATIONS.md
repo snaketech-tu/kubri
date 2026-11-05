@@ -58,7 +58,7 @@ Suggestions come with a reason, the most urgent first:
 - **No request**: the container has none, so the scheduler counts it as free.
 - **Over-requested**: the request is at least twice the suggestion, and by at least 50m CPU or 64Mi memory.
 
-The suggested request is use with 20% headroom, the suggested limit use with 50%, rounded up to 5m or 16Mi. The page sums what lowering the over-requested ones would free. **Review…** opens the change with the dry-run diff of the workload's template, the matching `kubectl set resources` command and, when Flux or Argo CD manage the workload, what they will do with it. Setting the values restarts the workload's pods, as any template change does.
+The suggested request is use with 20% headroom, the suggested limit use with 50%, rounded up to 5m or 16Mi. The page sums what lowering the over-requested ones would free. **Review…** opens [Requests & limits](CREATE.md#requests-and-limits) with the suggestions for all containers of the workload filled in, so one rollout covers them, the room on the nodes, the dry-run diff of the workload's template, the matching `kubectl set resources` command and, when Flux or Argo CD manage the workload, what they will do with it. Setting the values restarts the workload's pods, as any template change does.
 
 ## Grafana
 
@@ -76,7 +76,11 @@ Give Grafana's address under **Point elsewhere > Grafana > URL** on the Integrat
 | A Service | The pods it selects right now, by name |
 | Anything else in a namespace, like a ConfigMap | Its namespace |
 
-The queries use the `namespace` and `pod` labels that Promtail, Grafana Alloy and most log collectors set. Kubri asks Grafana which Loki data source it has and takes the default one, else the one named `Loki`. When Grafana needs a login or a client certificate and you gave no token, Kubri cannot ask, and Grafana opens its own default data source; give the name or UID of the Loki data source under **Loki data source** then. Your browser opens the page, so a login or a client certificate there works as usual.
+The queries use the `namespace`, `pod` and `container` labels that Promtail, Grafana Alloy and most log collectors set. Where yours names them differently, such as `exported_namespace`, see [Other label names](#other-label-names). Kubri asks Grafana which Loki data source it has and takes the default one, else the one named `Loki`. When Grafana needs a login or a client certificate and you gave no token, Kubri cannot ask, and Grafana opens its own default data source; give the name or UID of the Loki data source under **Loki data source** then. Your browser opens the page, so a login or a client certificate there works as usual.
+
+### Other label names
+
+Some log collectors give logs other label names, such as `exported_namespace` instead of `namespace`. **Templates…** next to **Log label names** on the integrations page names them once, as a template with a name and the label for the namespace, the pod and the container; a field left empty keeps the usual name. Templates are kept for all contexts, and each context picks one under **Log label names**. Logs in Grafana and the log history from Loki in the log workspace then use those names.
 
 ### Dashboards
 

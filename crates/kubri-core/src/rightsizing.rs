@@ -9,7 +9,7 @@ use k8s_openapi::api::core::v1::PodTemplateSpec;
 use kube::api::{Patch, PatchParams};
 use kube::{Client, ResourceExt};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::integrations::Endpoint;
@@ -35,6 +35,17 @@ pub enum SizeReason {
     OverRequested,
     /// Requests nothing, so the scheduler does not count it.
     NoRequest,
+}
+
+/// The requests and limits to set on one container of a workload; `None` removes one.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContainerResources {
+    pub container: String,
+    #[serde(default)]
+    pub requests: BTreeMap<String, Option<String>>,
+    #[serde(default)]
+    pub limits: BTreeMap<String, Option<String>>,
 }
 
 /// One container's CPU or memory, and what to set instead.
@@ -238,28 +249,36 @@ pub(crate) fn advise(
 }
 
 /// The strategic merge patch that sets one container's requests and limits in a template.
-pub(crate) fn resources_patch(
-    container: &str,
-    requests: &BTreeMap<String, String>,
-    limits: &BTreeMap<String, String>,
-) -> Result<Value> {
-    for (what, amount) in requests.iter().chain(limits) {
-        if !parse_quantity(amount).is_some_and(|q| q > 0.0) {
-            return Err(Error::Unsupported(format!(
-                "`{amount}` is not an amount of {what}"
-            )));
+pub(crate) fn resources_patch(containers: &[ContainerResources]) -> Result<Value> {
+    if containers.is_empty() {
+        return Err(Error::Unsupported("nothing changes".into()));
+    }
+    let mut list = Vec::new();
+    for c in containers {
+        let mut resources = serde_json::Map::new();
+        for (part, values) in [("requests", &c.requests), ("limits", &c.limits)] {
+            let mut map = serde_json::Map::new();
+            for (what, amount) in values {
+                match amount {
+                    // Null removes it, as a strategic merge patch does.
+                    None => map.insert(what.clone(), Value::Null),
+                    Some(amount) if parse_quantity(amount).is_some_and(|q| q > 0.0) => {
+                        map.insert(what.clone(), json!(amount))
+                    }
+                    Some(amount) => {
+                        return Err(Error::Unsupported(format!(
+                            "`{amount}` is not an amount of {what}"
+                        )));
+                    }
+                };
+            }
+            if !map.is_empty() {
+                resources.insert(part.into(), Value::Object(map));
+            }
         }
+        list.push(json!({ "name": c.container, "resources": resources }));
     }
-    let mut resources = serde_json::Map::new();
-    if !requests.is_empty() {
-        resources.insert("requests".into(), json!(requests));
-    }
-    if !limits.is_empty() {
-        resources.insert("limits".into(), json!(limits));
-    }
-    Ok(json!({ "spec": { "template": { "spec": { "containers": [
-        { "name": container, "resources": resources }
-    ] } } } }))
+    Ok(json!({ "spec": { "template": { "spec": { "containers": list } } } }))
 }
 
 /// A workload and the pods it ran, by name.
@@ -422,18 +441,13 @@ impl Kubri {
         })
     }
 
-    /// Sets one container's requests and limits in a workload's pod template.
-    pub async fn set_resources(
-        &self,
-        target: &ObjectRef,
-        container: &str,
-        requests: &BTreeMap<String, String>,
-        limits: &BTreeMap<String, String>,
-    ) -> Result<()> {
-        self.ensure_writable().await?;
+    /// Sets the requests and limits of containers in a workload's pod template, in one patch,
+    /// so its pods are replaced once.
+    pub async fn set_resources(&self, target: &ObjectRef, containers: &[ContainerResources]) -> Result<()> {
+        self.ensure_writable_in(target.namespace.as_deref()).await?;
         let session = self.object_session(target).await?;
         session.ensure_may("patch", target, "").await?;
-        let patch = resources_patch(container, requests, limits)?;
+        let patch = resources_patch(containers)?;
         session
             .api(&target.resource, target.namespace.as_deref())?
             .patch(&target.name, &PatchParams::default(), &Patch::Strategic(patch))
@@ -494,15 +508,36 @@ mod tests {
     }
 
     #[test]
-    fn patches_one_container() {
-        let requests = BTreeMap::from([("cpu".to_owned(), "60m".to_owned())]);
+    fn patches_containers_at_once() {
+        let web = ContainerResources {
+            container: "web".into(),
+            requests: BTreeMap::from([("cpu".to_owned(), Some("60m".to_owned()))]),
+            limits: BTreeMap::from([
+                ("cpu".to_owned(), None),
+                ("memory".to_owned(), Some("256Mi".to_owned())),
+            ]),
+        };
+        let sidecar = ContainerResources {
+            container: "proxy".into(),
+            requests: BTreeMap::from([("memory".to_owned(), Some("32Mi".to_owned()))]),
+            ..ContainerResources::default()
+        };
         assert_eq!(
-            resources_patch("web", &requests, &BTreeMap::new()).unwrap(),
+            resources_patch(&[web, sidecar]).unwrap(),
             json!({ "spec": { "template": { "spec": { "containers": [
-                { "name": "web", "resources": { "requests": { "cpu": "60m" } } }
+                { "name": "web", "resources": {
+                    "requests": { "cpu": "60m" },
+                    "limits": { "cpu": null, "memory": "256Mi" }
+                } },
+                { "name": "proxy", "resources": { "requests": { "memory": "32Mi" } } }
             ] } } } })
         );
-        let bad = BTreeMap::from([("memory".to_owned(), "lots".to_owned())]);
-        assert!(resources_patch("web", &BTreeMap::new(), &bad).is_err());
+        let bad = ContainerResources {
+            container: "web".into(),
+            limits: BTreeMap::from([("memory".to_owned(), Some("lots".to_owned()))]),
+            ..ContainerResources::default()
+        };
+        assert!(resources_patch(&[bad]).is_err());
+        assert!(resources_patch(&[]).is_err());
     }
 }

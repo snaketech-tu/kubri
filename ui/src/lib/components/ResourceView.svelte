@@ -7,6 +7,7 @@
 	import { canDelete, canRestart, canScale, copyLines, saveFile } from '../actions';
 	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
 	import { age, cpu, memory, relative } from '../format';
+	import { limitShare, limitSuffix, limitsHint, type Measure } from '../limits';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, refusedAction, type ActionOptions, type Subject } from '../objects';
 	import { isNodes, isPods, isServices } from '../pods';
@@ -101,6 +102,8 @@
 	}
 
 	const percent = (used: number, of: number | null | undefined) => (of ? Math.round((used / of) * 100) : null);
+	const free = (of: number | undefined, requested: number | undefined) =>
+		of === undefined || requested === undefined ? null : Math.max(0, of - requested);
 	const CPU: MetricColumn = { label: 'CPU', index: -2, wide: false, value: (u) => u.cpu, format: 'cpu' };
 	const MEM: MetricColumn = { label: 'Mem', index: -3, wide: false, value: (u) => u.memory, format: 'memory' };
 	// As in k9s: usage against what the containers request and may use at most, and for nodes
@@ -111,13 +114,21 @@
 		{ label: 'CPU / request', index: -4, wide: false, value: (u) => percent(u.cpu, u.requests?.cpu), format: 'percent', threshold: 'cpu' },
 		{ label: 'CPU / limit', index: -5, wide: true, value: (u) => percent(u.cpu, u.limits?.cpu), format: 'percent', threshold: 'cpu' },
 		{ label: 'Memory / request', index: -6, wide: false, value: (u) => percent(u.memory, u.requests?.memory), format: 'percent', threshold: 'memory' },
-		{ label: 'Memory / limit', index: -7, wide: true, value: (u) => percent(u.memory, u.limits?.memory), format: 'percent', threshold: 'memory' }
+		{ label: 'Memory / limit', index: -7, wide: true, value: (u) => percent(u.memory, u.limits?.memory), format: 'percent', threshold: 'memory' },
+		// What the pod spec sets, summed over the containers; a limit only when every container has one.
+		{ label: 'CPU request', index: -10, wide: true, value: (u) => u.requests?.cpu, format: 'cpu' },
+		{ label: 'CPU limit', index: -11, wide: true, value: (u) => u.limits?.cpu, format: 'cpu' },
+		{ label: 'Memory request', index: -12, wide: true, value: (u) => u.requests?.memory, format: 'memory' },
+		{ label: 'Memory limit', index: -13, wide: true, value: (u) => u.limits?.memory, format: 'memory' }
 	];
 	const NODE_METRICS: MetricColumn[] = [
 		CPU,
 		{ label: '%CPU', index: -8, wide: false, value: (u) => percent(u.cpu, u.allocatable?.cpu), format: 'percent', threshold: 'cpu' },
 		MEM,
-		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' }
+		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' },
+		// The room left for new pods: what the node gives to pods minus what its pods request.
+		{ label: 'CPU free', index: -14, wide: false, value: (u) => free(u.allocatable?.cpu, u.requests?.cpu), format: 'cpu' },
+		{ label: 'Mem free', index: -15, wide: false, value: (u) => free(u.allocatable?.memory, u.requests?.memory), format: 'memory' }
 	];
 
 	/** Empty cells, `<none>` and `None` all read as a dash. */
@@ -387,6 +398,12 @@
 		const index = table.columns.findIndex((c) => c.name === name);
 		const value = index === -1 ? null : row.cells[index];
 		return value === null || value === undefined ? null : String(value);
+	}
+
+	/** CPU or memory, for the pod list's columns of what pods use, which also show their limit. */
+	function usageColumn(column: DisplayColumn): Measure | null {
+		if (column.kind !== 'metric' || !isPods(resource)) return null;
+		return column.label === 'CPU' ? 'cpu' : column.label === 'Mem' ? 'memory' : null;
 	}
 
 	function metricValue(row: Row, column: MetricColumn) {
@@ -805,7 +822,10 @@
 		const sample = rows.slice(0, 200);
 		const fit = columns.map((c) => {
 			const rank = columnRank(c.label, c.kind, isNameColumn(c));
-			const texts = sample.map((r) => cellText(r, c));
+			const texts = sample.map((r) => {
+				const suffix = usageColumn(c) ? limitSuffix(metrics.get(r.namespace, r.name), usageColumn(c)!) : null;
+				return suffix ? `${cellText(r, c)} ${suffix}` : cellText(r, c);
+			});
 			const width = columnWidth(shownLabel(c), texts, { mono: isNameColumn(c), icon: rank === Infinity && !isNameColumn(c), max: isNameColumn(c) ? nameMax : undefined });
 			return { label: c.label, rank, width };
 		});
@@ -1025,7 +1045,11 @@
 								{@const raw = cellText(row, column)}
 								{@const text = column.kind === 'cell' && !column.name && NOTHING.test(raw) ? '—' : raw}
 								{@const color = tone(row, column, raw)}
-								{@const hint = column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem') ? pressure(row, column.label === 'CPU' ? 'cpu' : 'memory')?.hint : undefined}
+								{@const measure = usageColumn(column)}
+								{@const usage = measure ? metrics.get(row.namespace, row.name) : undefined}
+								{@const hint = column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')
+									? [pressure(row, column.label === 'CPU' ? 'cpu' : 'memory')?.hint, measure && limitsHint(usage, measure)].filter(Boolean).join('\n') || undefined
+									: undefined}
 								{@const icon = statusIcon(column, color)}
 								<td
 									oncontextmenu={(e) => {
@@ -1043,6 +1067,7 @@
 									style:max-width={isNameColumn(column) && fitted.nameMax ? `${fitted.nameMax}px` : null}
 									class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
 									class:numeric={column.kind === 'metric'}
+									class:limited={measure && limitSuffix(usage, measure)}
 								>
 									{#if column.kind === 'cell' && column.name}
 										<button
@@ -1062,7 +1087,15 @@
 										{#if trail}<RowSpark
 												values={column.label === 'CPU' ? trail.cpu : trail.memory}
 												label={t('{column} of {name}', { column: column.label, name: row.name })}
-											/>{/if}<span class="reading">{text}</span>
+											/>{/if}<span class="reading">{text}</span>{#if measure && limitSuffix(usage, measure)}
+											{@const share = limitShare(usage, measure) ?? 0}
+											<span class="limit">{limitSuffix(usage, measure)}</span><span
+												class="fill"
+												class:full={share >= 0.9}
+												style:--share="{Math.round(share * 100)}%"
+												aria-hidden="true"
+											></span>
+										{/if}
 									{:else}
 										{text}
 									{/if}
@@ -1292,6 +1325,28 @@
 		display: inline-block;
 		min-width: 4.5ch;
 		text-align: right;
+	}
+	/* What the pod may use at most, after its use, and how full that is as a thin bar. */
+	.limit {
+		margin-left: 0.4ch;
+		color: var(--text-muted);
+		font-size: 0.92em;
+	}
+	td.limited {
+		position: relative;
+	}
+	.fill {
+		position: absolute;
+		left: 8px;
+		right: 8px;
+		bottom: 5px;
+		height: 2px;
+		border-radius: 1px;
+		background: linear-gradient(to right, var(--fill-color) var(--share), var(--border-subtle) var(--share));
+		--fill-color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+	}
+	.fill.full {
+		--fill-color: var(--bad);
 	}
 	.metrics-note {
 		margin-bottom: 12px;

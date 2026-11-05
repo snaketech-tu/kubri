@@ -5,6 +5,7 @@
 	import { stopPortForward } from '../actions';
 	import { backend, type PortForwardInfo } from '../api';
 	import { age, errorMessage } from '../format';
+	import { lastEnd } from '../forwards';
 	import { app, favoriteLabel } from '../state.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import Phrase from './Phrase.svelte';
@@ -139,7 +140,8 @@
 								<td class="mono">{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</td>
 								<td class="mono">
 									{f.pod}:{f.podPort}
-									{#if f.error}<div class="error" title={f.error}>{f.error}</div>{/if}
+									{#if f.error}<div class="error" title={f.error}>{f.error}</div>
+									{:else if lastEnd(f, now)}<div class="ended">{lastEnd(f, now)}</div>{/if}
 								</td>
 								<td class="muted">{f.context}</td>
 								<td class="numeric">{f.connections}</td>
@@ -329,6 +331,11 @@
 		color: var(--text-muted);
 		font-size: 11px;
 		text-decoration: underline;
+	}
+	.ended {
+		color: var(--text-muted);
+		font-family: var(--sans);
+		font-size: 11.5px;
 	}
 	.error {
 		max-width: 360px;

@@ -50,6 +50,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings/context", put(set_context_settings))
         .route("/settings/diff", put(set_diff_settings))
         .route("/settings/searches", put(set_saved_searches))
+        .route("/settings/labels", put(set_label_templates))
         .route("/settings/history", put(set_history_settings))
         .route("/settings/connections", put(set_connection_settings))
         .route("/settings/terminal", put(set_terminal_settings))
@@ -84,6 +85,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/fix/memory", post(memory_fix))
         .route("/fix/memory/apply", post(set_memory_limit))
         .route("/fix/scheduling", post(scheduling))
+        .route("/object/capacity", post(capacity))
         .route("/fix/service", post(service_check))
         .route("/apply", post(apply))
         .route("/apply/fetch", post(fetch_manifest))
@@ -331,6 +333,13 @@ async fn set_saved_searches(
     Json(req): Json<Vec<kubri_core::SavedSearch>>,
 ) -> ApiResult<Settings> {
     Ok(Json(kubri.set_saved_searches(req)?))
+}
+
+async fn set_label_templates(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<Vec<kubri_core::LabelTemplate>>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_label_templates(req)?))
 }
 
 async fn set_terminal_settings(
@@ -676,6 +685,13 @@ async fn set_memory_limit(State(kubri): State<Arc<Kubri>>, Json(req): Json<Memor
     ))
 }
 
+async fn capacity(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<Target>,
+) -> ApiResult<kubri_core::Capacity> {
+    Ok(Json(kubri.capacity(&req.target).await?))
+}
+
 async fn scheduling(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<Vec<NodeFit>> {
     Ok(Json(kubri.scheduling(&req.target).await?))
 }
@@ -749,19 +765,11 @@ async fn right_sizing(
 #[derive(Deserialize)]
 struct SetResources {
     target: ObjectRef,
-    container: String,
-    #[serde(default)]
-    requests: std::collections::BTreeMap<String, String>,
-    #[serde(default)]
-    limits: std::collections::BTreeMap<String, String>,
+    containers: Vec<kubri_core::ContainerResources>,
 }
 
 async fn set_resources(State(kubri): State<Arc<Kubri>>, Json(req): Json<SetResources>) -> ApiResult<()> {
-    Ok(Json(
-        kubri
-            .set_resources(&req.target, &req.container, &req.requests, &req.limits)
-            .await?,
-    ))
+    Ok(Json(kubri.set_resources(&req.target, &req.containers).await?))
 }
 
 async fn renew_certificate(State(kubri): State<Arc<Kubri>>, Json(req): Json<Target>) -> ApiResult<()> {
@@ -1578,7 +1586,9 @@ mod tests {
             ("/certificate/renew", format!("{target}}}")),
             (
                 "/object/resources",
-                format!(r#"{target},"container":"app","requests":{{"cpu":"100m"}}}}"#),
+                format!(
+                    r#"{target},"containers":[{{"container":"app","requests":{{"cpu":"100m"}},"limits":{{}}}}]}}"#
+                ),
             ),
             ("/replicaset/rollback", format!("{target}}}")),
             (

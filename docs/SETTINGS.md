@@ -20,6 +20,7 @@ Kubri keeps its own settings in one file. The kubeconfig and the k9s configurati
 | Label | A word such as `Staging` beside the name. Kubri never guesses it from the name. |
 | Color | Tints the header and marks the context in the switcher. |
 | Production | Shows a banner, and dangerous actions, such as deleting, draining or uninstalling a Helm release, ask you to type the object's name (or the context's, for bulk actions) first. |
+| Production namespaces | For a context that is not production as a whole: these namespaces get the same care. A banner shows while one is picked, dangerous actions on objects in them ask you to type the name, Helm and Create say so, and AI agents never change anything there. The namespace picker marks them, and **Mark as production** in a namespace's menu adds one. |
 | Read-only | Kubri never changes this cluster until you turn it off. |
 | Locked | Starts read-only. **Unlock** in the header allows changes for 15 minutes, then the context locks again. |
 | Namespace | The namespace shown after connecting, instead of all namespaces. |
@@ -37,6 +38,10 @@ Kubri asks the cluster which actions you may run, with the same `SelfSubjectAcce
 Before a change, Kubri asks the API server to run it as a dry run (`dryRun=All`) and shows what would change, without status, `managedFields` and `resourceVersion`, like `kubectl diff`. YAML edits always show the diff. **Dry-run diffs** under Settings decides it for setting images, labels and annotations (on by default), and for scaling and restarting (off by default).
 
 Every action can also be copied as the `kubectl` command that does the same: in its dialog under **Same as kubectl**, or with **Copy as kubectl…** in the row menu.
+
+## On start
+
+Kubri starts in the context you used last, unless the kubeconfig's current context changed since. **Settings**, **On start** can make it always start in the kubeconfig's current context. This choice is kept per computer and browser, not in the settings file. See [Several clusters](CLUSTERS.md#starting-where-you-left-off).
 
 ## Recent contexts
 

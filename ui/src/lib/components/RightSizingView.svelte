@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { t } from '../i18n';
+	import { plural, t } from '../i18n';
 	import { coreText } from '../i18n/errors';
 	import { backend, type RightSizing, type SizeAdvice } from '../api';
 	import { cpu, errorMessage, memory } from '../format';
@@ -75,16 +75,17 @@
 	function review(a: SizeAdvice) {
 		const resource = findResource(app.resources, a.workload.resource);
 		if (!resource) return;
+		// One review for the whole workload: its other advice is filled in too.
+		const same = (x: SizeAdvice) => x.workload.namespace === a.workload.namespace && x.workload.name === a.workload.name && x.kind === a.kind;
+		const others = (found?.advice ?? []).filter((x) => x !== a && same(x) && (x.suggestedRequest || x.suggestedLimit));
 		app.dialog = {
 			kind: 'resources',
 			resource,
 			target: a.workload,
-			container: a.container,
-			name: a.resource,
-			request: a.suggestedRequest ?? a.request ?? '',
-			limit: a.suggestedLimit ?? a.limit ?? '',
-			current: { request: a.request, limit: a.limit },
-			note: `${why(a).text}: ${usedNote(a)}`
+			fill: [a, ...others].map((x) => ({ container: x.container, name: x.resource, request: x.suggestedRequest, limit: x.suggestedLimit })),
+			note: others.length
+				? `${why(a).text}: ${usedNote(a)} ${plural(others.length, 'The suggestion for {n} more container of it is filled in too.', 'The suggestions for {n} more containers of it are filled in too.')}`
+				: `${why(a).text}: ${usedNote(a)}`
 		};
 	}
 </script>

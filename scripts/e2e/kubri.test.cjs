@@ -5,6 +5,7 @@
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
+const net = require('node:net');
 const path = require('node:path');
 const { after, before, describe, test } = require('node:test');
 
@@ -165,6 +166,18 @@ describe('port-forward', () => {
 			{ message: `an answer on port ${port}` }
 		);
 
+		// A client that stops sending after its request still gets the whole answer.
+		const halfClosed = await new Promise((resolve, reject) => {
+			const socket = net.connect(port, '127.0.0.1', () => socket.end('GET / HTTP/1.0\r\n\r\n'));
+			let answer = '';
+			socket.setEncoding('utf8');
+			socket.on('data', (chunk) => (answer += chunk));
+			socket.on('end', () => resolve(answer));
+			socket.on('error', reject);
+			socket.setTimeout(20_000, () => reject(new Error('no answer after a half-close')));
+		});
+		assert.match(halfClosed, /hello from web/);
+
 		await h.command(page, 'pf');
 		const row = page.getByRole('row', { name: new RegExp(`\\b${port}\\b`) });
 		await row.waitFor();
@@ -274,6 +287,32 @@ describe('changes', () => {
 			);
 		} finally {
 			h.kubectl('delete', 'deployment', 'restarted', '-n', 'e2e', '--ignore-not-found', '--wait=false');
+		}
+	});
+
+	check('sets requests and limits with the room on the nodes', async () => {
+		h.kubectl('create', 'deployment', 'sized', '-n', 'e2e', '--image=busybox:1.36', '--replicas=0', '--', 'sleep', '1000000');
+		try {
+			await h.openList(page, server.url, { resource: 'deployments.v1.apps', heading: 'Deployments', filter: 'sized' });
+			await page.keyboard.press('Shift+Q');
+			const dialog = page.getByRole('dialog', { name: 'Requests & limits' });
+			const request = dialog.getByRole('combobox', { name: 'busybox: CPU request' });
+			await request.waitFor();
+			// Focused, empty: the arrow key starts at a small size, then steps up.
+			await page.keyboard.press('ArrowUp');
+			await page.keyboard.press('ArrowUp');
+			assert.equal(await request.inputValue(), '150m');
+			await h.until(async () => /requested/.test(await dialog.getByRole('region', { name: 'Room on the nodes' }).innerText()), {
+				message: 'the room on the nodes'
+			});
+			await dialog.getByRole('button', { name: 'Review changes' }).click();
+			await dialog.getByRole('button', { name: 'Set', exact: true }).click();
+			await h.until(
+				() => h.kubectl('get', 'deployment', 'sized', '-n', 'e2e', '-o', 'jsonpath={.spec.template.spec.containers[0].resources.requests.cpu}') === '150m',
+				{ message: 'the new CPU request' }
+			);
+		} finally {
+			h.kubectl('delete', 'deployment', 'sized', '-n', 'e2e', '--ignore-not-found', '--wait=false');
 		}
 	});
 

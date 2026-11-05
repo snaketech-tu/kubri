@@ -103,7 +103,7 @@ pub(crate) fn memory_patch(container: &str, memory: &str) -> Result<Value> {
 
 /// What a pod asks for: CPU in cores and memory in bytes, as the scheduler counts it, with init
 /// containers counted one at a time.
-fn pod_requests(pod: &Pod) -> (f64, f64) {
+pub(crate) fn pod_requests(pod: &Pod) -> (f64, f64) {
     let Some(spec) = &pod.spec else { return (0.0, 0.0) };
     let of = |c: &Container, what: &str| {
         quantity(c.resources.as_ref().and_then(|r| r.requests.as_ref()?.get(what)))
@@ -486,7 +486,7 @@ impl Kubri {
 
     /// Sets one container's memory limit in a workload's pod template.
     pub async fn set_memory_limit(&self, target: &ObjectRef, container: &str, memory: &str) -> Result<()> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(target.namespace.as_deref()).await?;
         let session = self.object_session(target).await?;
         session.ensure_may("patch", target, "").await?;
         let patch = memory_patch(container, memory)?;

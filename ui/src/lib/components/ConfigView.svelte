@@ -16,8 +16,10 @@
 	import PageHeader from './PageHeader.svelte';
 	import Phrase from './Phrase.svelte';
 	import Select from './Select.svelte';
+	import { setStartSetting, startSetting, type StartSetting } from '../startup';
 
 	let previews = $state<Record<string, SkinTheme | null>>({});
+	let start = $state<StartSetting>(startSetting());
 	let reloading = $state(false);
 	let scroller = $state<HTMLDivElement>();
 
@@ -27,6 +29,7 @@
 		['contexts', t('Contexts')],
 		['diffs', t('Dry-run diffs')],
 		['changes', t('What changed')],
+		['start', t('On start')],
 		['recent', t('Recent contexts')],
 		...(app.localTerminal ? ([['terminal', t('Terminal')]] as [string, string][]) : []),
 		['appearance', t('Appearance')],
@@ -254,6 +257,31 @@
 						}}
 					/>
 					MB
+				</label>
+			</div>
+		</div>
+
+		<div class="block">
+			<h2 id="config-start">{t('On start')}</h2>
+			<p class="muted">
+				{t('Kubri opens the context you used last, where you left it. When your kubeconfig names another current context since then, Kubri follows the kubeconfig.')}
+			</p>
+			<div class="diff-settings">
+				<label>
+					{t('Connect to')}
+					<Select
+						value={start}
+						options={[
+							{ value: 'last' as StartSetting, label: t('The context used last') },
+							{ value: 'kubeconfig' as StartSetting, label: t("The kubeconfig's current context") }
+						]}
+						onchange={(value) => {
+							start = value;
+							setStartSetting(value);
+						}}
+						aria-label={t('Context on start')}
+						compact
+					/>
 				</label>
 			</div>
 		</div>

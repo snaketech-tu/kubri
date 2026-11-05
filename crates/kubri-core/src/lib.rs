@@ -7,6 +7,7 @@ mod access;
 mod added;
 mod apply;
 mod bench;
+mod capacity;
 mod certmanager;
 mod chosen;
 mod context;
@@ -84,6 +85,7 @@ pub use apply::{ApplyItem, ApplyOutcome, ApplyRequest, fetch_manifest};
 pub use bench::{
     BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
 };
+pub use capacity::{Amounts, Capacity, NodeRoom, QuotaRoom};
 pub use context::{ContextInfo, write_in_cluster_kubeconfig};
 pub use debug::{DebugRequest, DebugSession, DebugSettings};
 pub use error::{Error, Result};
@@ -116,12 +118,12 @@ pub use pulse::{CertificateAlert, EventPulse, KindPulse, Pulse, RecentEvent, Uti
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
-pub use rightsizing::{RightSizing, SizeAdvice, SizeReason};
+pub use rightsizing::{ContainerResources, RightSizing, SizeAdvice, SizeReason};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
 pub use search::{FieldTest, SearchHit, SearchProblem, SearchRequest, SearchResult};
 pub use settings::{
     AgentSettings, ColumnSettings, ConnectionSettings, ContextSettings, CustomColumn, DiffSettings,
-    FavoriteForward, SavedSearch, Settings,
+    FavoriteForward, LabelTemplate, SavedSearch, Settings,
 };
 pub use snapshot::SnapshotInfo;
 pub use update::{LatestRelease, latest_release};
@@ -291,6 +293,9 @@ pub(crate) async fn client_config(
     Ok(config)
 }
 
+/// Why an AI agent may not change something in a namespace marked as production.
+pub(crate) const PRODUCTION_NAMESPACE: &str = "AI agents never change a production namespace";
+
 impl Kubri {
     /// Loads the kubeconfig from `KUBECONFIG` (all listed files, merged, missing ones skipped)
     /// or `~/.kube/config`, as kubectl does.
@@ -436,6 +441,27 @@ impl Kubri {
             .collect();
         self.update_settings(|s| {
             s.searches = value;
+            Ok(())
+        })
+    }
+
+    /// Replaces the label templates for logs. A context that picks a template no longer there
+    /// falls back to the usual names.
+    pub fn set_label_templates(&self, value: Vec<LabelTemplate>) -> Result<Settings> {
+        let value = value
+            .into_iter()
+            .map(LabelTemplate::normalized)
+            .collect::<Result<Vec<_>>>()?;
+        for (i, t) in value.iter().enumerate() {
+            if value[..i].iter().any(|o| o.name == t.name) {
+                return Err(Error::Unsupported(format!(
+                    "two label templates are named {}",
+                    t.name
+                )));
+            }
+        }
+        self.update_settings(|s| {
+            s.label_templates = value;
             Ok(())
         })
     }
@@ -874,6 +900,30 @@ impl Kubri {
                 ..
             } => Err(Error::ReadOnly(reason.unwrap_or_default())),
             _ => Ok(()),
+        }
+    }
+
+    /// As [`Self::ensure_writable`], for a change in `namespace`: AI agents also never change a
+    /// namespace marked as production.
+    async fn ensure_writable_in(&self, namespace: Option<&str>) -> Result<()> {
+        self.ensure_writable().await?;
+        if self.agent.load(Ordering::Relaxed) && self.production_namespace(namespace).await {
+            return Err(Error::ReadOnly(PRODUCTION_NAMESPACE.into()));
+        }
+        Ok(())
+    }
+
+    /// Whether `namespace` of the connected context is marked as production.
+    pub(crate) async fn production_namespace(&self, namespace: Option<&str>) -> bool {
+        let Some(namespace) = namespace else { return false };
+        match self.cluster().await {
+            Some(cluster) => self
+                .settings()
+                .context(&cluster.context)
+                .production_namespaces
+                .iter()
+                .any(|p| p == namespace),
+            None => false,
         }
     }
 
@@ -1410,7 +1460,7 @@ impl Kubri {
     /// Replaces an object, as `kubectl edit` does. Fails with a conflict if it changed since
     /// `object` was read.
     pub async fn replace(&self, obj: &ObjectRef, object: Value) -> Result<Value> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(obj.namespace.as_deref()).await?;
         let session = self.object_session(obj).await?;
         session.ensure_may("update", obj, "").await?;
         let api = session.api(&obj.resource, obj.namespace.as_deref())?;
@@ -1461,12 +1511,8 @@ impl Kubri {
                     api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,
                 )
             }
-            Change::Resources {
-                container,
-                requests,
-                limits,
-            } => {
-                let patch = rightsizing::resources_patch(&container, &requests, &limits)?;
+            Change::Resources { containers } => {
+                let patch = rightsizing::resources_patch(&containers)?;
                 (
                     api.get(&obj.name).await?,
                     api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,
@@ -1501,7 +1547,7 @@ impl Kubri {
 
     /// Applies a JSON merge patch, for example to change labels or annotations.
     pub async fn patch(&self, obj: &ObjectRef, patch: Value) -> Result<Value> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(obj.namespace.as_deref()).await?;
         let session = self.object_session(obj).await?;
         session.ensure_may("patch", obj, "").await?;
         let api = session.api(&obj.resource, obj.namespace.as_deref())?;
@@ -1512,7 +1558,7 @@ impl Kubri {
     }
 
     pub async fn delete(&self, obj: &ObjectRef, options: &DeleteOptions) -> Result<()> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(obj.namespace.as_deref()).await?;
         let session = self.object_session(obj).await?;
         session.ensure_may("delete", obj, "").await?;
         let api = session.api(&obj.resource, obj.namespace.as_deref())?;
@@ -1522,7 +1568,7 @@ impl Kubri {
 
     /// Sets the replica count through the `scale` subresource, so CRDs that support it work too.
     pub async fn scale(&self, obj: &ObjectRef, replicas: u32) -> Result<()> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(obj.namespace.as_deref()).await?;
         let session = self.object_session(obj).await?;
         let info = session.info_for(&obj.resource)?;
         if !info.subresources.iter().any(|s| s == "scale") {
@@ -1539,7 +1585,7 @@ impl Kubri {
     /// Restarts the pods of a Deployment, StatefulSet or DaemonSet, like
     /// `kubectl rollout restart`.
     pub async fn restart(&self, obj: &ObjectRef) -> Result<()> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(obj.namespace.as_deref()).await?;
         let session = self.object_session(obj).await?;
         let info = session.info_for(&obj.resource)?;
         if !matches!(info.kind.as_str(), "Deployment" | "StatefulSet" | "DaemonSet") {
@@ -1589,7 +1635,7 @@ impl Kubri {
     /// Runs a CronJob now: creates a Job from its template, like `kubectl create job
     /// --from=cronjob/…`. Returns the Job's name.
     pub async fn trigger_cronjob(&self, target: &ObjectRef) -> Result<String> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(target.namespace.as_deref()).await?;
         let session = self.object_session(target).await?;
         if session.info_for(&target.resource)?.kind != "CronJob" {
             return Err(Error::Unsupported("only CronJobs can be triggered".into()));
@@ -1618,7 +1664,7 @@ impl Kubri {
 
     /// Suspends a CronJob, so it starts no more Jobs, or resumes it.
     pub async fn suspend_cronjob(&self, target: &ObjectRef, suspend: bool) -> Result<()> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(target.namespace.as_deref()).await?;
         let session = self.object_session(target).await?;
         if session.info_for(&target.resource)?.kind != "CronJob" {
             return Err(Error::Unsupported("only CronJobs can be suspended".into()));
@@ -1675,7 +1721,7 @@ impl Kubri {
     /// Sets container images of a pod, Deployment, StatefulSet or DaemonSet, like
     /// `kubectl set image`.
     pub async fn set_images(&self, target: &ObjectRef, images: &[ContainerImage]) -> Result<()> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(target.namespace.as_deref()).await?;
         let session = self.object_session(target).await?;
         let info = session.info_for(&target.resource)?;
         if !workload::has_images(info) {
@@ -1695,7 +1741,7 @@ impl Kubri {
     /// `kubectl rollout undo --to-revision`. Returns the kind and name of what was rolled back,
     /// like `Deployment web`.
     pub async fn rollback(&self, target: &ObjectRef) -> Result<String> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(target.namespace.as_deref()).await?;
         let session = self.object_session(target).await?;
         let info = session.info_for(&target.resource)?;
         match (info.reference.group.as_str(), info.kind.as_str()) {
@@ -1798,8 +1844,14 @@ impl Kubri {
                 }
             }
             MetricsKind::Nodes => {
-                if let Ok(nodes) = typed::list(Api::<Node>::all(client)).await {
+                if let Ok(nodes) = typed::list(Api::<Node>::all(client.clone())).await {
                     metrics::add_node_allocatable(&mut usage, &nodes);
+                }
+                // What the pods on each node request, for the room left. Without the right to
+                // list every pod, the columns stay empty.
+                let scheduled = ListParams::default().fields("spec.nodeName!=");
+                if let Ok(pods) = Api::<Pod>::all(client).list(&scheduled).await {
+                    metrics::add_node_requests(&mut usage, &pods.items);
                 }
             }
         }
@@ -1916,7 +1968,7 @@ impl Kubri {
 
     /// Rolls a release back to `revision` with `helm rollback`, on the connected context.
     pub async fn helm_rollback(&self, namespace: &str, name: &str, revision: u32) -> Result<String> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(Some(namespace)).await?;
         let context = self.session().await?.info.context.clone();
         helm::rollback(&self.helm_access().await?, &context, namespace, name, revision).await
     }
@@ -1925,7 +1977,7 @@ impl Kubri {
     /// the cluster without changing anything, so it is allowed when Kubri may not change it.
     pub async fn helm_change(&self, change: &HelmChange) -> Result<HelmOutcome> {
         if !change.dry_run {
-            self.ensure_writable().await?;
+            self.ensure_writable_in(Some(&change.namespace)).await?;
         }
         let session = self.session().await?;
         let access = self.helm_access().await?;
@@ -1946,7 +1998,7 @@ impl Kubri {
 
     /// Uninstalls a release with `helm uninstall`, on the connected context.
     pub async fn helm_uninstall(&self, namespace: &str, name: &str) -> Result<String> {
-        self.ensure_writable().await?;
+        self.ensure_writable_in(Some(namespace)).await?;
         let context = self.session().await?.info.context.clone();
         helm::uninstall(&self.helm_access().await?, &context, namespace, name).await
     }
@@ -2159,7 +2211,7 @@ impl Kubri {
     /// Opens a shell in a pod's container, or attaches to its main process.
     pub async fn open_terminal(&self, target: &ObjectRef, options: TerminalOptions) -> Result<Terminal> {
         // A shell can change anything the container can.
-        self.ensure_writable().await?;
+        self.ensure_writable_in(target.namespace.as_deref()).await?;
         let session = self.object_session(target).await?;
         if !session.is_core(&target.resource, "Pod")? {
             return Err(Error::Unsupported("terminals open in pods".into()));
@@ -2704,6 +2756,64 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn agents_leave_production_namespaces_alone() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let (client, requests) = testing::client(|_| (200, r#"{"kind":"Status","status":"Success"}"#.into()));
+        let info = ClusterInfo {
+            context: "dev".into(),
+            server: "https://dev".into(),
+            version: "v1.36.0".into(),
+            default_namespace: "default".into(),
+            snapshot: None,
+            resumed: false,
+        };
+        let resources = vec![resource("", "v1", "configmaps", "ConfigMap", true)];
+        *kubri.session.write().await = Some(Arc::new(Session::new(info, client, resources)));
+        kubri
+            .set_context_settings(
+                "dev",
+                ContextSettings {
+                    agent_writes: true,
+                    production_namespaces: vec![" shop ".into(), "shop".into(), String::new()],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let settings = kubri.settings().context("dev");
+        assert_eq!(settings.production_namespaces, ["shop"]);
+        assert!(settings.production_in(Some("shop")) && !settings.production_in(Some("web")));
+        let config = |namespace: &str| ObjectRef {
+            resource: ResourceRef {
+                group: String::new(),
+                version: "v1".into(),
+                plural: "configmaps".into(),
+            },
+            namespace: Some(namespace.into()),
+            name: "settings".into(),
+            context: None,
+        };
+        let patch = serde_json::json!({ "data": { "a": "b" } });
+        // A person still may.
+        kubri.patch(&config("shop"), patch.clone()).await.unwrap();
+        kubri.set_agent();
+        let err = kubri
+            .patch(&config("shop"), patch.clone())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("production namespace"), "{err}");
+        kubri.patch(&config("web"), patch).await.unwrap();
+        let sent = requests.lock().unwrap();
+        assert_eq!(
+            sent.iter()
+                .filter(|r| r.uri.contains("/namespaces/shop/"))
+                .count(),
+            1,
+            "{sent:?}"
+        );
+    }
+
     fn resource(group: &str, version: &str, plural: &str, kind: &str, namespaced: bool) -> ResourceInfo {
         ResourceInfo {
             reference: ResourceRef {
@@ -2971,6 +3081,43 @@ mod tests {
                 .await
                 .is_err()
         );
+
+        // A template renames the labels, for collectors that use other names.
+        let template = LabelTemplate {
+            name: " otel ".into(),
+            namespace: "exported_namespace".into(),
+            pod: "k8s_pod_name".into(),
+            container: String::new(),
+        };
+        let wrong = LabelTemplate {
+            namespace: "exported-namespace".into(),
+            ..template.clone()
+        };
+        let err = kubri.set_label_templates(vec![wrong]).unwrap_err().to_string();
+        assert!(err.contains("not a label name"), "{err}");
+        assert!(
+            kubri
+                .set_label_templates(vec![template.clone(), template.clone()])
+                .is_err()
+        );
+        kubri.set_label_templates(vec![template]).unwrap();
+        let mut settings = kubri.settings().context("grafana-logs-test");
+        settings.integrations.labels = "otel".into();
+        kubri.set_context_settings("grafana-logs-test", settings).unwrap();
+        let logs = kubri.grafana_logs(&pod).await.unwrap();
+        assert_eq!(
+            query(&logs),
+            r#"{exported_namespace="shop", k8s_pod_name="web-1"}"#
+        );
+        let logs = kubri
+            .grafana_logs(&object("", "namespaces", None, "shop"))
+            .await
+            .unwrap();
+        assert_eq!(query(&logs), r#"{exported_namespace="shop"}"#);
+        // Once the template is gone, the usual names come back.
+        kubri.set_label_templates(Vec::new()).unwrap();
+        let logs = kubri.grafana_logs(&pod).await.unwrap();
+        assert_eq!(query(&logs), r#"{namespace="shop", pod="web-1"}"#);
     }
 
     fn percent_decode(text: &str) -> String {

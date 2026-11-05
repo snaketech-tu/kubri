@@ -26,6 +26,10 @@
 	});
 	const elsewhere = $derived(!!into && into !== app.cluster?.context);
 	const production = $derived(into ? app.contextSettingsOf(into).production : app.production);
+	/** The namespace to apply in is marked as production, in a context that is not. */
+	const productionNamespace = $derived(
+		!production && (app.contextSettingsOf(into || app.cluster?.context).productionNamespaces ?? []).includes(namespace)
+	);
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 	/** The dry run, or once applied, what happened. */
@@ -369,7 +373,8 @@
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		<div class="buttons">
 			{#if !results}
-				{#if production}<span class="note"><Icon name="warning" size={14} /> {t('{context} is a production context', { context: app.contextName(into) })}</span>{/if}
+				{#if production}<span class="note"><Icon name="warning" size={14} /> {t('{context} is a production context', { context: app.contextName(into) })}</span>
+				{:else if productionNamespace}<span class="note"><Icon name="warning" size={14} /> {t('{namespace} is a production namespace', { namespace })}</span>{/if}
 				<button class="secondary" onclick={startOver} disabled={busy || !creating.text}>{t('Clear')}</button>
 				<button class="primary" onclick={() => review()} disabled={busy || !creating.text.trim()}>{busy ? t('Checking…') : t('Review')} <kbd>Ctrl+S</kbd></button>
 			{:else if applied}

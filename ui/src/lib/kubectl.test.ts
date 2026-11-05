@@ -32,8 +32,19 @@ describe('kubectlCommand', () => {
 			`kubectl --context c -n shop patch deployments.apps/web --type=merge -p '{"spec":{"suspend":true}}'`
 		);
 		expect(
-			kubectlCommand('c', deploy, { op: 'resources', container: 'web', requests: { cpu: '35m', memory: '' }, limits: { cpu: '300m' } })
+			kubectlCommand('c', deploy, { op: 'resources', containers: [{ container: 'web', requests: { cpu: '35m' }, limits: { cpu: '300m' } }] })
 		).toBe('kubectl --context c -n shop set resources deployments.apps/web -c web --requests=cpu=35m --limits=cpu=300m');
+		expect(
+			kubectlCommand('c', deploy, {
+				op: 'resources',
+				containers: [
+					{ container: 'web', requests: { cpu: '35m' }, limits: { cpu: null } },
+					{ container: 'log', requests: { memory: '32Mi' }, limits: {} }
+				]
+			})
+		).toBe(
+			`kubectl --context c -n shop patch deployments.apps/web --type=strategic -p '{"spec":{"template":{"spec":{"containers":[{"name":"web","resources":{"requests":{"cpu":"35m"},"limits":{"cpu":null}}},{"name":"log","resources":{"requests":{"memory":"32Mi"}}}]}}}}'`
+		);
 		expect(kubectlCommand('c', node, { op: 'drain', options: { ignoreDaemonsets: true, force: true, gracePeriodSeconds: 30 } })).toBe(
 			'kubectl --context c drain worker-1 --ignore-daemonsets --force --grace-period=30'
 		);
