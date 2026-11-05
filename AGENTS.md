@@ -11,6 +11,7 @@ Kubri is a Kubernetes GUI for desktop and browser that covers what k9s does, by 
 | `crates/kubri-core` | All cluster access (kube-rs). `Kubri` in `src/lib.rs` owns the merged kubeconfig and the connection; features add `impl Kubri` blocks in their own module. Built-in views for custom resources live in `views/`. |
 | `crates/kubri-server` | Web mode: axum REST + WebSocket API (`api.rs`), sign-in (`auth.rs`), Host/Origin guard (`guard.rs`), serves `ui/build`. |
 | `crates/kubri-mcp` | MCP server (stdio and HTTP) on top of the core. |
+| `crates/kubri-cli` | `lint` and `snapshot` commands without a window; both `kubri` and `kubri-server` run them when they are the first argument. `actions/lint` is the GitHub Action around it. |
 | `ui/src-tauri` | Desktop app (crate `kubri-desktop`, binary `kubri`): Tauri commands in `src/lib.rs` call the core directly. |
 | `ui` | SvelteKit + TypeScript (Svelte 5 runes), static SPA shared by both apps. |
 | `ui/src/lib/api` | The `Backend` interface (`types.ts`) with two implementations: `http.ts` (web) and `tauri.ts` (desktop). |
