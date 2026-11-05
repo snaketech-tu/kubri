@@ -1,6 +1,6 @@
 # Settings and guard rails
 
-Kubri keeps its own settings in one file. The kubeconfig and the k9s configuration are never written to. Open them with **Settings** in the sidebar, `:settings` in the command palette, or the context settings button beside the context switcher.
+Kubri keeps its own settings in one file. The kubeconfig and the k9s configuration are never written to. Open them with **Settings** in the sidebar, `:settings` in the command palette, or the context settings button beside the context switcher, which holds the settings of the connected context and links to all of them.
 
 ## Where the file is
 
@@ -76,7 +76,7 @@ Releases from before the updater (1.0 and older) only show the notice: install t
 
 The editor loads the kind's schema from the API server (`/openapi/v3`), so it knows custom resources as well as built-in ones:
 
-- **Field help** under the editor explains the field at the cursor, like `kubectl explain`: its type, its description and the fields it can hold.
+- **Field help** under the editor explains the field at the cursor, like `kubectl explain`: its type, its description and the fields it can hold. **Show** above the YAML turns it and the managed fields on or off.
 - Typing a key offers the fields allowed there, required ones first. <kbd>Ctrl</kbd>+<kbd>Space</kbd> opens the list.
 - Field names the schema does not know are underlined. Free-form parts, such as labels or the open parts of a custom resource, are left alone.
 

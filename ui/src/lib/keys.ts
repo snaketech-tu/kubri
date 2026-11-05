@@ -31,3 +31,23 @@ export function forControl(e: KeyboardEvent): boolean {
 	if (el.matches?.('button[role="combobox"]')) return /^([a-z0-9]|Arrow(Up|Down)|Enter| )$/i.test(e.key);
 	return !!el.closest?.('input, textarea, select, [role="combobox"], .cm-editor, [contenteditable="true"]');
 }
+
+/**
+ * Tells when Esc comes twice within `ms`: the way out of a terminal, which takes a single Esc
+ * itself, as vim needs it. Call the result with each key pressed and when.
+ */
+export function escapeTwice(ms = 400): (key: string, at: number) => boolean {
+	let last = -Infinity;
+	return (key, at) => {
+		if (key !== 'Escape') {
+			last = -Infinity;
+			return false;
+		}
+		if (at - last <= ms) {
+			last = -Infinity;
+			return true;
+		}
+		last = at;
+		return false;
+	};
+}

@@ -113,7 +113,7 @@
 			search();
 		}}
 	>
-		<SearchField bind:value={text} bind:input label="Search objects" placeholder="web kind:deploy,svc ns:shop -l tier=front status.phase!=Running ctx:*" key="" />
+		<SearchField bind:value={text} bind:input label="Search objects" placeholder="web kind:deploy,svc ns:shop -l tier=front status.phase!=Running ctx:*" key={text.trim() && text !== searched ? '↵ Enter' : ''} />
 		<button class="btn primary" disabled={busy}>{busy ? 'Searching…' : 'Search'}</button>
 	</form>
 	{#if naming !== null}

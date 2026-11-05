@@ -18,3 +18,21 @@ export function connectHint(error: string): string | null {
 	}
 	return null;
 }
+
+/** A few words for why connecting failed, for lists such as the context switcher. */
+export function connectSummary(error: string): string {
+	const text = error.toLowerCase();
+	if (/certificate|x509|unknown ca|tls handshake|invalid peer/.test(text)) return 'Certificate not trusted';
+	if (/\b401\b|unauthorized|expired|invalid_grant|token has expired|authentication required/.test(text)) return 'Sign-in failed';
+	if (/\b403\b|forbidden/.test(text)) return 'No access';
+	if (/executable .* not found|no such file or directory.*exec|failed to run|exec plugin|getting credentials/.test(text)) return 'Sign-in command failed';
+	if (/connection refused|timed out|timeout|no route to host|network is unreachable|dns|failed to lookup|name or service not known|connection reset|host unreachable/.test(text)) {
+		return 'Unreachable';
+	}
+	return 'Could not connect';
+}
+
+/** Whether connecting failed because the server did not answer, rather than turning Kubri down. */
+export function noAnswer(error: string): boolean {
+	return connectSummary(error) === 'Unreachable';
+}

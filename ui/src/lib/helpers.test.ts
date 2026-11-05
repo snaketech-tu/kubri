@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ContextInfo, ResourceInfo, Row } from './api';
-import { matchResources, suggest } from './commands';
+import { matchResources, namesAction, suggest } from './commands';
 import { age, cpu, isNotFound, memory, workloadPrefix } from './format';
 import { cellTone } from './status';
-import { filterRows, isFaulty, sortRows, toCsv } from './table';
+import { filterRows, hasHealth, isFaulty, sortRows, toCsv } from './table';
 
 function resource(kind: string, plural: string, group = '', shortNames: string[] = []): ResourceInfo {
 	return {
@@ -86,6 +86,29 @@ describe('command palette', () => {
 		expect(suggest(':pu shop', resources, contexts, [])[0].action).toEqual({ type: 'pulses', namespace: 'shop' });
 	});
 
+	it('names each view once and keeps the k9s commands as aliases', () => {
+		for (const [typed, type] of [
+			['overview', 'pulses'],
+			['pulses', 'pulses'],
+			['access', 'rbac'],
+			['rbac', 'rbac'],
+			['checks', 'sanitizer'],
+			['popeye', 'sanitizer']
+		]) {
+			const [first] = suggest(typed, resources, contexts, []);
+			expect(first.action).toEqual({ type, namespace: undefined });
+			expect(['overview', 'access', 'checks']).toContain(first.label);
+		}
+		expect(suggest('popeye shop', resources, contexts, [])[0].label).toBe('checks shop');
+	});
+
+	it('opens the Tools and All kinds pages', () => {
+		expect(suggest('tools', resources, contexts, [])[0].action).toEqual({ type: 'tools' });
+		expect(suggest('kinds', resources, contexts, [])[0].action).toEqual({ type: 'kinds', filter: undefined });
+		expect(suggest(':kinds cert', resources, contexts, [])[0].action).toEqual({ type: 'kinds', filter: 'cert' });
+		expect(suggest('api-resources', resources, contexts, [])[0].action).toEqual({ type: 'kinds', filter: undefined });
+	});
+
 	it('opens xray for the kinds it supports', () => {
 		const [first, ...rest] = suggest('xray deploy kube-system', resources, contexts, []);
 		expect(first.action).toMatchObject({ type: 'xray', namespace: 'kube-system' });
@@ -153,6 +176,22 @@ describe('command palette', () => {
 	it('passes a namespace argument to resource commands', () => {
 		const s = suggest('po kube-system', resources, contexts, []);
 		expect(s[0].action).toMatchObject({ type: 'resource', namespace: 'kube-system' });
+	});
+});
+
+describe('namesAction', () => {
+	it('puts an action first when its verb is typed', () => {
+		expect(namesAction('Restart', 'restart', resources)).toBe(true);
+		expect(namesAction('Scale…', ' Scale ', resources)).toBe(true);
+		expect(namesAction('Copy name', 'copy', resources)).toBe(true);
+	});
+
+	it('leaves kinds, aliases and parts of words alone', () => {
+		expect(namesAction('Events', 'events', resources)).toBe(false);
+		expect(namesAction('Port-forward…', 'po', resources)).toBe(false);
+		expect(namesAction('Restart', 'rest', resources)).toBe(false);
+		expect(namesAction('Copy name', 'copy name', resources)).toBe(false);
+		expect(namesAction('Restart', '', resources)).toBe(false);
 	});
 });
 
@@ -305,5 +344,21 @@ describe('isNotFound', () => {
 	it('recognises the API server wording', () => {
 		expect(isNotFound('pods "x" not found')).toBe(true);
 		expect(isNotFound('forbidden')).toBe(false);
+	});
+});
+
+describe('hasHealth', () => {
+	const columns = (...names: string[]) => names.map((name) => ({ name, type: 'string', format: '', description: '', priority: 0 }));
+
+	it('is true for kinds with a state, readiness or health', () => {
+		expect(hasHealth(columns('Name', 'Ready', 'Status', 'Age'), 'pods')).toBe(true);
+		expect(hasHealth(columns('Name', 'Ready', 'Up-to-date', 'Available'), 'deployments')).toBe(true);
+		expect(hasHealth(columns('Name', 'Health'), 'widgets')).toBe(true);
+		expect(hasHealth(columns('Last Seen', 'Type', 'Reason'), 'events')).toBe(true);
+	});
+
+	it('is false for kinds with nothing to go wrong in their rows', () => {
+		expect(hasHealth(columns('Name', 'Type', 'Data', 'Age'), 'secrets')).toBe(false);
+		expect(hasHealth(columns('Name', 'Class', 'Hosts', 'Address', 'Ports', 'Age'), 'ingresses')).toBe(false);
 	});
 });

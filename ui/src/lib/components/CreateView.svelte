@@ -237,6 +237,7 @@
 <section>
 	<PageHeader
 		crumbs={['Create']}
+		prefix="context"
 		title="Create"
 		subtitle="Objects from a template, a file, a URL or the clipboard, applied like kubectl apply --server-side after a dry run"
 	/>
@@ -262,7 +263,7 @@
 				<button onclick={() => file?.click()}><Icon name="config" size={15} /> Open files…</button>
 				<input bind:this={file} type="file" accept=".yaml,.yml,.json" multiple hidden onchange={openFile} />
 				<button onclick={() => (urlOpen = !urlOpen)} aria-expanded={urlOpen}><Icon name="ingress" size={15} /> From URL…</button>
-				<button onclick={paste}><Icon name="download" size={15} /> Paste</button>
+				<button onclick={paste}><Icon name="clipboard" size={15} /> Paste</button>
 				<span class="spacer"></span>
 				{#if formObject}
 					<button class:on={showForm} aria-pressed={showForm} onclick={() => (showForm = !showForm)} title="A form for the {formObject.kind}"
@@ -358,7 +359,7 @@
 			{#if !results}
 				{#if production}<span class="note"><Icon name="warning" size={14} /> {app.contextName(into)} is a production context</span>{/if}
 				<button class="secondary" onclick={startOver} disabled={busy || !creating.text}>Clear</button>
-				<button class="primary" onclick={() => review()} disabled={busy}>{busy ? 'Checking…' : 'Review'} <kbd>Ctrl+S</kbd></button>
+				<button class="primary" onclick={() => review()} disabled={busy || !creating.text.trim()}>{busy ? 'Checking…' : 'Review'} <kbd>Ctrl+S</kbd></button>
 			{:else if applied}
 				<button class="secondary" onclick={startOver}>Start over</button>
 				<button class="primary" onclick={back}>Back to the YAML</button>

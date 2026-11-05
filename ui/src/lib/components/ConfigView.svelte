@@ -25,8 +25,12 @@
 		['contexts', 'Contexts'],
 		['diffs', 'Dry-run diffs'],
 		['changes', 'What changed'],
+		['recent', 'Recent contexts'],
+		...(app.localTerminal ? ([['terminal', 'Terminal']] as [string, string][]) : []),
 		['appearance', 'Appearance'],
 		['updates', 'Updates'],
+		['agents', 'AI agents'],
+		['explain', 'Explain'],
 		['views', 'Views'],
 		...(config
 			? ([['files', 'k9s files'], ['skins', 'Skin'], ['hotkeys', 'Hotkeys'], ['plugins', 'Plugins'], ['aliases', 'Aliases']] as [string, string][])
@@ -51,6 +55,25 @@
 		const section = app.configSection;
 		if (!section || !config) return;
 		tick().then(() => scroller?.querySelector(`#config-${section}`)?.scrollIntoView({ block: 'start' }));
+	});
+
+	/** The section in view, marked in the list on the left: the last one whose heading is near the top. */
+	let current = $state('contexts');
+	function spy() {
+		if (!scroller) return;
+		const top = scroller.getBoundingClientRect().top + 48;
+		let found = sectionList[0]?.[0] ?? 'contexts';
+		for (const [id] of sectionList) {
+			const heading = scroller.querySelector(`#config-${id}`);
+			if (heading && heading.getBoundingClientRect().top <= top) found = id;
+		}
+		// At the very bottom, the last sections cannot reach the top; the last one is the one in view.
+		if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) found = sectionList.at(-1)?.[0] ?? found;
+		current = found;
+	}
+	$effect(() => {
+		void sectionList;
+		tick().then(spy);
 	});
 
 	async function reload() {
@@ -88,7 +111,7 @@
 
 	// Kubri's own colors in light and dark, and as the system is.
 	const lightTheme: SkinTheme = {
-		vars: { '--bg': '#f6f7fb', '--text': '#20283d', '--accent': '#4b64f4', '--ok': '#1f9d55', '--warn': '#c27c0e', '--bad': '#d64545' },
+		vars: { '--bg': '#f6f7fb', '--text': '#20283d', '--accent': '#4b64f4', '--ok': '#157a42', '--warn': '#9a5f00', '--bad': '#c93a3a' },
 		scheme: 'light'
 	};
 	const darkTheme: SkinTheme = {
@@ -122,10 +145,15 @@
 	<div class="layout">
 	<nav class="sections" aria-label="Sections">
 		{#each sectionList as [id, label] (id)}
-			<button onclick={() => scroller?.querySelector(`#config-${id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>{label}</button>
+			<button
+				aria-current={current === id ? 'location' : undefined}
+				onclick={() => scroller?.querySelector(`#config-${id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })}
+			>
+				{label}
+			</button>
 		{/each}
 	</nav>
-	<div class="scroll" bind:this={scroller}>
+	<div class="scroll" bind:this={scroller} onscroll={spy}>
 		<div class="block">
 			<h2 id="config-contexts">Contexts <span class="count">{app.contexts.length}</span></h2>
 			<p class="muted">
@@ -136,7 +164,9 @@
 					{@const settings = app.contextSettingsOf(ctx.name)}
 					<details class="context" open={ctx.name === app.cluster?.context && app.configSection === 'contexts'}>
 						<summary>
-							<span class="swatch" style:background={settings.color || 'transparent'}></span>
+							{#if settings.color}
+								<span class="swatch" style:background={settings.color} title="Color {settings.color}" aria-hidden="true"></span>
+							{/if}
 							<strong>{app.contextName(ctx.name)}</strong>
 							{#if settings.displayName}<span class="muted small">{ctx.name}</span>{/if}
 							{#if settings.production}<span class="tag bad">production</span>
@@ -630,6 +660,11 @@
 	.sections button:hover {
 		background: var(--surface-2);
 		color: var(--text);
+	}
+	.sections button[aria-current] {
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		color: var(--accent-strong);
+		font-weight: 600;
 	}
 	@media (max-width: 900px) {
 		.layout {

@@ -30,6 +30,8 @@
 		settings:
 			'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1',
 		resource: 'M4 4h16v16H4zM4 9h16M9 9v11',
+		kinds: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 17h6M17 14v6',
+		tools: 'M14.5 6.5a4 4 0 0 0-5.3 5.3L3.5 17.5l3 3 5.7-5.7a4 4 0 0 0 5.3-5.3l-2.6 2.6-2.4-.6-.6-2.4z',
 		bookmark: 'M6 3h12v18l-6-4-6 4z',
 		search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
 		history: 'M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 7v5l3 2',
@@ -57,6 +59,7 @@
 		plus: 'M12 5v14M5 12h14',
 		popout: 'M14 4h6v6M20 4l-8 8M18 14v6H4V6h6',
 		download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
+		clipboard: 'M9 3h6v3H9zM9 4.5H6V21h12V4.5h-3M9 11h6M9 15h4',
 		camera: 'M4 8h3.5L9 5.5h6L16.5 8H20v11H4zM12 16.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
 		keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
 		menu: 'M4 6h16M4 12h16M4 18h16',

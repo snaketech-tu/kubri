@@ -36,6 +36,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/contexts/added", post(add_contexts).delete(remove_context))
         .route("/kubeconfig-files", get(kubeconfig_files))
         .route("/context", put(switch_context))
+        .route("/context/cancel", post(cancel_switch))
         .route(
             "/snapshot",
             post(take_snapshot)
@@ -165,7 +166,7 @@ impl IntoResponse for ApiError {
                 .and_then(|code| StatusCode::from_u16(code).ok())
                 .unwrap_or(StatusCode::BAD_GATEWAY),
             UnknownContext(_) | UnknownResource(_) | NotFound(_) => StatusCode::NOT_FOUND,
-            NoKubeconfig(_) | NotConnected | ContextChanged(_) => StatusCode::CONFLICT,
+            NoKubeconfig(_) | NotConnected | ContextChanged(_) | Cancelled(_) => StatusCode::CONFLICT,
             // A kubeconfig kubectl refuses too, such as one pasted into Add clusters.
             Unsupported(_) | InvalidObject(_) | InvalidKubeconfig(_) => StatusCode::BAD_REQUEST,
             Timeout => StatusCode::GATEWAY_TIMEOUT,
@@ -241,6 +242,11 @@ async fn switch_context(
     Json(req): Json<SwitchContext>,
 ) -> ApiResult<ClusterInfo> {
     Ok(Json(kubri.switch_context(&req.name).await?))
+}
+
+async fn cancel_switch(State(kubri): State<Arc<Kubri>>) -> ApiResult<()> {
+    kubri.cancel_switch().await;
+    Ok(Json(()))
 }
 
 /// The largest snapshot file Kubri opens.

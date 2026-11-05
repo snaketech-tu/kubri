@@ -81,6 +81,10 @@
 		return { text: item.version ? `${how} · ${item.version}` : how, tone: 'ok' };
 	}
 
+	/** Tools the cluster runs, or that the settings point to, as cards; the rest as a short list below. */
+	const present = $derived(app.integrations?.items.filter((i) => i.source !== 'missing' && i.source !== 'off') ?? []);
+	const absent = $derived(app.integrations?.items.filter((i) => i.source === 'missing' || i.source === 'off') ?? []);
+
 	function where(item: Integration): string | null {
 		const e = item.endpoint;
 		if (!e) return null;
@@ -109,76 +113,105 @@
 		{#if !app.integrations}
 			<p class="muted">{checking ? 'Looking for Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager…' : 'Kubri could not look for integrations.'}</p>
 		{:else}
-			<ul class="tools">
-				{#each app.integrations.items as item (item.id)}
-					{@const s = status(item)}
-					{@const about = ABOUT[item.id]}
-					<li>
-						<div class="head">
-							<strong>{item.name}</strong>
-							<span class="status {s.tone}">{s.text}</span>
-						</div>
-						<p class="about">{about?.text}</p>
-						{#if item.source === 'missing' && about?.install}
-							<p class="install"><a href={about.install} target="_blank" rel="noreferrer">How to install {item.name}</a></p>
-						{/if}
-						{#if where(item)}<p class="where">{where(item)}</p>{/if}
-						{#if item.error}<p class="error">{item.error}</p>{/if}
-						{#if item.id === 'grafana' && item.endpoint && !item.error}
-							<div class="kinds">
-								<button class="btn" onclick={() => openTool('grafana', '/')}>Open Grafana</button>
+			{#if present.length}
+				<ul class="tools">
+					{#each present as item (item.id)}
+						{@const s = status(item)}
+						{@const about = ABOUT[item.id]}
+						<li>
+							<div class="head">
+								<strong>{item.name}</strong>
+								<span class="status {s.tone}">{s.text}</span>
 							</div>
-							{#if namespaceRef}
-								<div class="dashboards">
-									<DashboardList target={namespaceRef} title="Grafana for {app.namespace}" empty="Grafana has nothing for {app.namespace}." />
+							<p class="about">{about?.text}</p>
+							{#if where(item)}<p class="where">{where(item)}</p>{/if}
+							{#if item.error}<p class="error">{item.error}</p>{/if}
+							{#if item.id === 'grafana' && item.endpoint && !item.error}
+								<div class="kinds">
+									<button class="btn" onclick={() => openTool('grafana', '/')}>Open Grafana</button>
+								</div>
+								{#if namespaceRef}
+									<div class="dashboards">
+										<DashboardList target={namespaceRef} title="Grafana for {app.namespace}" empty="Grafana has nothing for {app.namespace}." />
+									</div>
+								{/if}
+							{/if}
+							{#if about?.kinds && item.source === 'found'}
+								<div class="kinds">
+									{#each about.kinds.filter((k) => app.resources.some((r) => r.group === k.group && r.plural === k.plural)) as kind (kind.plural)}
+										<button class="btn" onclick={() => openKind(kind.group, kind.plural)}>{kind.label}</button>
+									{/each}
 								</div>
 							{/if}
-						{/if}
-						{#if about?.kinds && item.source === 'found'}
-							<div class="kinds">
-								{#each about.kinds.filter((k) => app.resources.some((r) => r.group === k.group && r.plural === k.plural)) as kind (kind.plural)}
-									<button class="btn" onclick={() => openKind(kind.group, kind.plural)}>{kind.label}</button>
-								{/each}
-							</div>
-						{/if}
-					</li>
-				{/each}
-			</ul>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			{#if absent.length}
+				<div class="absent">
+					<h2>{present.length ? 'Not in this cluster' : 'None of these runs in this cluster'}</h2>
+					<ul>
+						{#each absent as item (item.id)}
+							{@const about = ABOUT[item.id]}
+							<li>
+								<strong>{item.name}</strong>
+								<span class="muted">{about?.text}</span>
+								{#if item.source === 'off'}
+									<span class="muted off">Off</span>
+								{:else if about?.install}
+									<a href={about.install} target="_blank" rel="noreferrer" aria-label="How to install {item.name}">How to install</a>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
 		{/if}
 
 		<form class="settings" onsubmit={save}>
 			<h2>Point elsewhere</h2>
-			<p class="muted">
-				For {app.contextName(context)} only. Leave a field empty to find the tool in the cluster, or type <code>off</code> to turn it off. A
-				URL like <code>http://name.namespace.svc:port</code> reaches that Service through the API server.
-			</p>
+			<p class="muted">For {app.contextName(context)} only. Leave a field empty and Kubri finds the tool in the cluster.</p>
+			<details class="help">
+				<summary>How to fill these in</summary>
+				<p>
+					Type <code>off</code> to turn a tool off. A URL like <code>http://name.namespace.svc:port</code> reaches that Service through the
+					API server.
+				</p>
+				<p>
+					<strong>Grafana URL</strong> is the address only, like <code>https://grafana.example.com</code>. <strong>Logs in Grafana</strong>
+					on a namespace, pod, workload or Service then opens its logs in Grafana’s Explore, and <strong>Grafana…</strong> lists the dashboards
+					that show it, ready to open or copy. Both work also when Grafana needs a login or a client certificate, as your browser opens them.
+				</p>
+				<p>
+					<strong>Loki data source</strong> is the name or UID of the Loki data source in Grafana. Leave it empty unless Kubri picks the wrong
+					one.
+				</p>
+				<p>
+					<strong>Token</strong> lets Kubri list Grafana’s dashboards and find its Loki data source itself. It goes only to a Grafana given by
+					URL.
+				</p>
+			</details>
 			{#each [URLS.prometheus, URLS.loki] as url (url!.key)}
 				<label>
 					<span>{url!.key === 'prometheus' ? 'Prometheus' : 'Loki'} URL</span>
-					<input bind:value={draft[url!.key]} placeholder={url!.example} spellcheck="false" autocomplete="off" />
+					<input bind:value={draft[url!.key]} placeholder="e.g. {url!.example}" spellcheck="false" autocomplete="off" />
 				</label>
 			{/each}
 			<fieldset class="grafana">
 				<legend>Grafana</legend>
 				<label>
 					<span>URL</span>
-					<input bind:value={draft.grafana} placeholder={URLS.grafana!.example} spellcheck="false" autocomplete="off" />
+					<input bind:value={draft.grafana} placeholder="e.g. {URLS.grafana!.example}" spellcheck="false" autocomplete="off" />
 				</label>
-				<p class="muted small">
-					The address only, like <code>https://grafana.example.com</code>. <strong>Logs in Grafana</strong> on a namespace, pod, workload or Service then
-					opens its logs in Grafana’s Explore, and <strong>Grafana…</strong> lists the dashboards that show it, ready to open or copy. Both work
-					also when Grafana needs a login or a client certificate, as your browser opens them.
-				</p>
 				<label>
 					<span>Loki data source</span>
 					<input bind:value={draft.grafanaLogs} placeholder="Found in Grafana, else its default" spellcheck="false" autocomplete="off" />
 				</label>
-				<p class="muted small">The name or UID of the Loki data source in Grafana. Leave it empty unless Kubri picks the wrong one.</p>
 				<label>
 					<span>Token</span>
 					<input type="password" bind:value={draft.grafanaToken} placeholder="A service account token with the Viewer role" autocomplete="off" />
 				</label>
-				<p class="muted small">Lets Kubri list Grafana’s dashboards and find its Loki data source itself. It goes only to a Grafana given by URL, and is kept in Kubri’s settings file.</p>
+				<p class="muted small">Kept in Kubri’s settings file.</p>
 			</fieldset>
 			<div class="actions">
 				<button class="btn primary" type="submit" disabled={!dirty || saving || !context}>{saving ? 'Saving…' : 'Save'}</button>
@@ -286,6 +319,71 @@
 		background: var(--surface-1);
 		font-family: var(--mono);
 		font-size: 12px;
+	}
+	/* Examples, not values: in the text font and lighter, so an empty field does not look filled in. */
+	input::placeholder {
+		color: color-mix(in srgb, var(--text-muted) 75%, transparent);
+		font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+		font-style: italic;
+	}
+	.absent {
+		margin-top: 16px;
+	}
+	.tools + .absent {
+		margin-top: 20px;
+	}
+	.absent:first-child {
+		margin-top: 0;
+	}
+	.absent h2 {
+		margin: 0 0 6px;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.absent ul {
+		margin: 0;
+		padding: 0;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-1);
+		list-style: none;
+	}
+	.absent li {
+		display: grid;
+		grid-template-columns: 120px minmax(0, 1fr) auto;
+		align-items: baseline;
+		gap: 4px 14px;
+		padding: 9px 14px;
+		font-size: 12.5px;
+	}
+	.absent li + li {
+		border-top: 1px solid var(--border-subtle);
+	}
+	.absent a {
+		white-space: nowrap;
+	}
+	@media (max-width: 640px) {
+		.absent li {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+		.absent li .muted:not(.off) {
+			grid-row: 2;
+			grid-column: 1 / -1;
+		}
+	}
+	.help summary {
+		color: var(--accent-strong);
+		font-size: 12.5px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.help p {
+		color: var(--text-muted);
+		font-size: 12px;
+		line-height: 1.5;
 	}
 	.small {
 		margin: 0;

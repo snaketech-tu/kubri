@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { app } from '../state.svelte';
 	import Icon from './Icon.svelte';
+	import { relative } from '../format';
 	import { switcherOrder } from '../places';
+	import { CHECK_AT_MOST, reach, STALE_MS } from '../reach.svelte';
 
 	let query = $state('');
 	let input = $state<HTMLInputElement>();
@@ -26,6 +28,9 @@
 			queueMicrotask(() => input?.focus());
 			// Picks up contexts added to the kubeconfig since Kubri started.
 			app.reloadContexts(true);
+			// So that a context that is down says so before anyone waits for it.
+			const others = app.contexts.map((c) => c.name).filter((name) => name !== app.cluster?.context);
+			if (others.length <= CHECK_AT_MOST) void reach.refresh(others, STALE_MS);
 		}
 	}
 
@@ -85,6 +90,7 @@
 			<ul>
 				{#each filtered as ctx (ctx.name)}
 					{@const settings = app.contextSettingsOf(ctx.name)}
+					{@const known = reach.of[ctx.name]}
 					<li>
 						<button
 							class:active={ctx.name === app.cluster?.context}
@@ -104,6 +110,11 @@
 								{settings.displayName ? `${ctx.name} · ` : ''}{ctx.cluster ?? ''}{ctx.namespace ? ` · ns ${ctx.namespace}` : ''}
 								{#if ctx.isDefault}<span class="badge">default</span>{/if}
 							</span>
+							{#if known && !known.reachable && ctx.name !== app.cluster?.context}
+								<span class="reach" title={known.error ?? ''}>
+									<span class="state bad"></span>{known.summary}, {relative(new Date(known.at).toISOString(), Date.now())}
+								</span>
+							{/if}
 						</button>
 					</li>
 				{:else}
@@ -133,6 +144,23 @@
 </div>
 
 <style>
+	.reach {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-top: 2px;
+		color: var(--bad);
+		font-size: 12px;
+	}
+	.state {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		flex: none;
+	}
+	.state.bad {
+		background: var(--bad);
+	}
 	.warm {
 		width: 7px;
 		height: 7px;

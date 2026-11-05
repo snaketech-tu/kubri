@@ -58,6 +58,10 @@ The Helm view (`:helm`) lists releases from the records Helm keeps in the cluste
 
 Other filters and recursive descent (`..`) are not supported. The choices are kept per kind in Kubri's settings file, so they survive a restart and apply in the desktop app and the browser alike. **Reset** goes back to the kind's [view](VIEWS.md) if it has one, otherwise to the server's columns.
 
+When a list has more columns than fit the window, Kubri leaves out the least important ones first, such as percentages, ages and restarts, and always keeps the name and status. Long names are cut to leave room for the rest. The footer says which columns it left out. **All columns** (<kbd>w</kbd>) shows every column and lets the list scroll sideways, with the name staying in place.
+
+An empty list of a kind you may create offers **Create** right there, and an empty Helm page offers **Install chart**. Kinds without a state, such as Secrets and ConfigMaps, have no **Needs attention** tab.
+
 ### Copy and change many
 
 - Right-click a cell to copy its value, or the whole column as the list shows it.
