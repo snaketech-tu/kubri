@@ -54,6 +54,8 @@ Every action can also be copied as the `kubectl` command that does the same: in 
 
 **Appearance** under Settings (`:appearance`) picks Kubri's own colors: as the system, light or dark, the same choice as the moon and sun button at the top. A k9s skin takes their place while it is on; picking light or dark there, or pressing the button, takes the skin off for that context. See [K9S.md](K9S.md#skins).
 
+**Language** there picks English or German (Deutsch), or follows the system, which is the default. Kubri starts again in the language you pick. In German the words of Kubernetes stay English (Pod, Deployment, Namespace, Node and the other kinds), and so does what the cluster itself says, such as event messages. A text Kubri has no German for yet shows in English.
+
 The desktop app zooms with <kbd>Ctrl +</kbd>, <kbd>Ctrl −</kbd> and <kbd>Ctrl 0</kbd> (<kbd>Cmd</kbd> on macOS), or with the zoom buttons there, from 67% to 200%, and opens at the same level next time. In the browser, its own zoom does the same. Kubri is laid out to work up to 200%: in a narrow window the resource list folds behind a button at the top, and in a short one the page scrolls so lists keep room for their rows.
 
 ## Updates

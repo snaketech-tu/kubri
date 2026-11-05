@@ -18,7 +18,7 @@
 	} = $props();
 </script>
 
-{#each parts(text) as part, i (i)}{#if 'text' in part}{part.text}{:else if part.name in strong}<strong>{strong[part.name]}</strong
-		>{:else if part.name in code}<code>{code[part.name]}</code>{:else if part.name in mono}<span class="mono"
+{#each parts(text) as part, i (i)}{#if 'text' in part}{part.text}{:else if Object.hasOwn(strong, part.name)}<strong>{strong[part.name]}</strong
+		>{:else if Object.hasOwn(code, part.name)}<code>{code[part.name]}</code>{:else if Object.hasOwn(mono, part.name)}<span class="mono"
 			>{mono[part.name]}</span
 		>{:else}{`{${part.name}}`}{/if}{/each}

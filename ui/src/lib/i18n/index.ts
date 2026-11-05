@@ -82,9 +82,9 @@ export function midSentence(name: string): string {
  * put in as it is, never translated.
  */
 export function t(text: string, values?: Record<string, string | number>): string {
-	const message = messages[text] ?? text;
+	const message = Object.hasOwn(messages, text) ? messages[text] : text;
 	if (!values) return message;
-	return message.replace(/\{(\w+)\}/g, (all, name: string) => (name in values ? String(values[name]) : all));
+	return message.replace(/\{(\w+)\}/g, (all, name: string) => (Object.hasOwn(values, name) ? String(values[name]) : all));
 }
 
 /** `one` or `other` by `count`, translated, with `{n}` set to the count: "1 pod", "3 pods". */
