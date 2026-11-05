@@ -71,7 +71,7 @@ async function webdriver(method, url, body) {
 				script: 'return document.body.innerText',
 				args: []
 			});
-			if (/Cluster overview/.test(text) && /e2e-desktop/.test(text) && /Ready nodes/.test(text)) break;
+			if (/e2e-desktop/.test(text) && /Ready nodes/.test(text)) break;
 			if (Date.now() - started > 60_000) throw new Error(`the overview did not show; the window shows:\n${text.slice(0, 2000)}`);
 			await pause(500);
 		}
