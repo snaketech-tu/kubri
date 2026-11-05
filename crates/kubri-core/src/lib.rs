@@ -7,6 +7,7 @@ mod access;
 mod added;
 mod apply;
 mod bench;
+mod capacity;
 mod certmanager;
 mod chosen;
 mod context;
@@ -84,6 +85,7 @@ pub use apply::{ApplyItem, ApplyOutcome, ApplyRequest, fetch_manifest};
 pub use bench::{
     BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
 };
+pub use capacity::{Amounts, Capacity, NodeRoom, QuotaRoom};
 pub use context::{ContextInfo, write_in_cluster_kubeconfig};
 pub use debug::{DebugRequest, DebugSession, DebugSettings};
 pub use error::{Error, Result};
@@ -116,12 +118,12 @@ pub use pulse::{CertificateAlert, EventPulse, KindPulse, Pulse, RecentEvent, Uti
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
-pub use rightsizing::{RightSizing, SizeAdvice, SizeReason};
+pub use rightsizing::{ContainerResources, RightSizing, SizeAdvice, SizeReason};
 pub use sanitizer::{Finding, Issue, Level, SanitizerReport, SanitizerSection};
 pub use search::{FieldTest, SearchHit, SearchProblem, SearchRequest, SearchResult};
 pub use settings::{
     AgentSettings, ColumnSettings, ConnectionSettings, ContextSettings, CustomColumn, DiffSettings,
-    FavoriteForward, SavedSearch, Settings,
+    FavoriteForward, LabelTemplate, SavedSearch, Settings,
 };
 pub use snapshot::SnapshotInfo;
 pub use update::{LatestRelease, latest_release};
@@ -439,6 +441,27 @@ impl Kubri {
             .collect();
         self.update_settings(|s| {
             s.searches = value;
+            Ok(())
+        })
+    }
+
+    /// Replaces the label templates for logs. A context that picks a template no longer there
+    /// falls back to the usual names.
+    pub fn set_label_templates(&self, value: Vec<LabelTemplate>) -> Result<Settings> {
+        let value = value
+            .into_iter()
+            .map(LabelTemplate::normalized)
+            .collect::<Result<Vec<_>>>()?;
+        for (i, t) in value.iter().enumerate() {
+            if value[..i].iter().any(|o| o.name == t.name) {
+                return Err(Error::Unsupported(format!(
+                    "two label templates are named {}",
+                    t.name
+                )));
+            }
+        }
+        self.update_settings(|s| {
+            s.label_templates = value;
             Ok(())
         })
     }
@@ -1488,12 +1511,8 @@ impl Kubri {
                     api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,
                 )
             }
-            Change::Resources {
-                container,
-                requests,
-                limits,
-            } => {
-                let patch = rightsizing::resources_patch(&container, &requests, &limits)?;
+            Change::Resources { containers } => {
+                let patch = rightsizing::resources_patch(&containers)?;
                 (
                     api.get(&obj.name).await?,
                     api.patch(&obj.name, &dry, &Patch::Strategic(patch)).await?,
@@ -1825,8 +1844,14 @@ impl Kubri {
                 }
             }
             MetricsKind::Nodes => {
-                if let Ok(nodes) = typed::list(Api::<Node>::all(client)).await {
+                if let Ok(nodes) = typed::list(Api::<Node>::all(client.clone())).await {
                     metrics::add_node_allocatable(&mut usage, &nodes);
+                }
+                // What the pods on each node request, for the room left. Without the right to
+                // list every pod, the columns stay empty.
+                let scheduled = ListParams::default().fields("spec.nodeName!=");
+                if let Ok(pods) = Api::<Pod>::all(client).list(&scheduled).await {
+                    metrics::add_node_requests(&mut usage, &pods.items);
                 }
             }
         }
@@ -3055,6 +3080,43 @@ mod tests {
                 .await
                 .is_err()
         );
+
+        // A template renames the labels, for collectors that use other names.
+        let template = LabelTemplate {
+            name: " otel ".into(),
+            namespace: "exported_namespace".into(),
+            pod: "k8s_pod_name".into(),
+            container: String::new(),
+        };
+        let wrong = LabelTemplate {
+            namespace: "exported-namespace".into(),
+            ..template.clone()
+        };
+        let err = kubri.set_label_templates(vec![wrong]).unwrap_err().to_string();
+        assert!(err.contains("not a label name"), "{err}");
+        assert!(
+            kubri
+                .set_label_templates(vec![template.clone(), template.clone()])
+                .is_err()
+        );
+        kubri.set_label_templates(vec![template]).unwrap();
+        let mut settings = kubri.settings().context("grafana-logs-test");
+        settings.integrations.labels = "otel".into();
+        kubri.set_context_settings("grafana-logs-test", settings).unwrap();
+        let logs = kubri.grafana_logs(&pod).await.unwrap();
+        assert_eq!(
+            query(&logs),
+            r#"{exported_namespace="shop", k8s_pod_name="web-1"}"#
+        );
+        let logs = kubri
+            .grafana_logs(&object("", "namespaces", None, "shop"))
+            .await
+            .unwrap();
+        assert_eq!(query(&logs), r#"{exported_namespace="shop"}"#);
+        // Once the template is gone, the usual names come back.
+        kubri.set_label_templates(Vec::new()).unwrap();
+        let logs = kubri.grafana_logs(&pod).await.unwrap();
+        assert_eq!(query(&logs), r#"{namespace="shop", pod="web-1"}"#);
     }
 
     fn percent_decode(text: &str) -> String {

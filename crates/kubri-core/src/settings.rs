@@ -218,6 +218,41 @@ pub struct Settings {
     pub connections: ConnectionSettings,
     /// The local terminal's shell, folder and font.
     pub terminal: crate::TerminalSettings,
+    /// Label names for logs, kept once and picked per context on the integrations page.
+    pub label_templates: Vec<LabelTemplate>,
+}
+
+/// The label names a log collector uses for the namespace, pod and container, where they are
+/// not `namespace`, `pod` and `container`, such as `exported_namespace`. Empty keeps the usual.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LabelTemplate {
+    pub name: String,
+    pub namespace: String,
+    pub pod: String,
+    pub container: String,
+}
+
+impl LabelTemplate {
+    /// Trimmed, with a name, and only label names Loki and Prometheus take.
+    pub(crate) fn normalized(mut self) -> Result<Self> {
+        self.name = self.name.trim().to_owned();
+        if self.name.is_empty() {
+            return Err(Error::Unsupported("a label template needs a name".into()));
+        }
+        for label in [&mut self.namespace, &mut self.pod, &mut self.container] {
+            *label = label.trim().to_owned();
+            let mut chars = label.chars();
+            let valid = chars.next().is_none_or(|c| c.is_ascii_alphabetic() || c == '_')
+                && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
+            if !valid {
+                return Err(Error::Unsupported(format!(
+                    "`{label}` is not a label name; use letters, digits and _, like exported_namespace"
+                )));
+            }
+        }
+        Ok(self)
+    }
 }
 
 /// The most recent contexts kept connected when they are not the current one.

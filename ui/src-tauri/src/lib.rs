@@ -309,6 +309,14 @@ fn set_saved_searches(
 }
 
 #[tauri::command]
+fn set_label_templates(
+    kubri: State<'_, Arc<Kubri>>,
+    templates: Vec<kubri_core::LabelTemplate>,
+) -> CommandResult<Settings> {
+    kubri.set_label_templates(templates).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_column_settings(
     kubri: State<'_, Arc<Kubri>>,
     kind: String,
@@ -705,6 +713,11 @@ async fn set_memory_limit(
 }
 
 #[tauri::command]
+async fn capacity(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<kubri_core::Capacity> {
+    kubri.capacity(&target).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn scheduling(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Vec<NodeFit>> {
     kubri.scheduling(&target).await.map_err(|e| e.to_string())
 }
@@ -892,12 +905,10 @@ async fn right_sizing(
 async fn set_resources(
     kubri: State<'_, Arc<Kubri>>,
     target: ObjectRef,
-    container: String,
-    requests: std::collections::BTreeMap<String, String>,
-    limits: std::collections::BTreeMap<String, String>,
+    containers: Vec<kubri_core::ContainerResources>,
 ) -> CommandResult<()> {
     kubri
-        .set_resources(&target, &container, &requests, &limits)
+        .set_resources(&target, &containers)
         .await
         .map_err(|e| e.to_string())
 }
@@ -1290,6 +1301,7 @@ pub fn run() {
             memory_fix,
             set_memory_limit,
             scheduling,
+            capacity,
             service_check,
             apply,
             fetch_manifest,
@@ -1311,6 +1323,7 @@ pub fn run() {
             right_sizing,
             fleet_cluster,
             set_saved_searches,
+            set_label_templates,
             search,
             kubeconfig_files,
             add_kubeconfig_files,

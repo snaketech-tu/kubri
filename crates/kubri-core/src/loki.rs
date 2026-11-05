@@ -48,9 +48,47 @@ fn quoted(text: &str) -> String {
     format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
+/// The label names a log collector gives the namespace, pod and container, as a template in
+/// the settings names them; Kubri's defaults where it gives none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Labels {
+    pub namespace: String,
+    pub pod: String,
+    pub container: String,
+}
+
+impl Default for Labels {
+    fn default() -> Self {
+        Self {
+            namespace: "namespace".into(),
+            pod: "pod".into(),
+            container: "container".into(),
+        }
+    }
+}
+
+impl Labels {
+    /// The names `template` gives, with the defaults for the ones it leaves empty.
+    pub(crate) fn from_template(template: Option<&crate::LabelTemplate>) -> Self {
+        let mut labels = Self::default();
+        if let Some(t) = template {
+            for (name, given) in [
+                (&mut labels.namespace, &t.namespace),
+                (&mut labels.pod, &t.pod),
+                (&mut labels.container, &t.container),
+            ] {
+                if !given.is_empty() {
+                    name.clone_from(given);
+                }
+            }
+        }
+        labels
+    }
+}
+
 /// The stream selector for all lines of a namespace.
-pub(crate) fn namespace_query(namespace: &str) -> String {
-    format!("{{namespace={}}}", quoted(namespace))
+pub(crate) fn namespace_query(namespace: &str, labels: &Labels) -> String {
+    format!("{{{}={}}}", labels.namespace, quoted(namespace))
 }
 
 /// The stream selector for an object's pods, by their names: a pod's own, those a workload's
@@ -62,19 +100,28 @@ pub(crate) fn default_query(
     name: &str,
     selected: Option<&[String]>,
     container: Option<&str>,
+    labels: &Labels,
 ) -> String {
-    let mut matchers = vec![format!("namespace={}", quoted(namespace))];
+    let Labels {
+        namespace: ns_label,
+        pod: pod_label,
+        container: container_label,
+    } = labels;
+    let mut matchers = vec![format!("{ns_label}={}", quoted(namespace))];
     match (kind, selected) {
-        ("Pod", _) => matchers.push(format!("pod={}", quoted(name))),
+        ("Pod", _) => matchers.push(format!("{pod_label}={}", quoted(name))),
         ("Service", Some(pods)) => {
             // Pod names hold only lower-case letters, digits, `-` and `.`, of which `.` is special.
             let names: Vec<String> = pods.iter().map(|p| p.replace('.', "\\\\.")).collect();
-            matchers.push(format!("pod=~\"{}\"", names.join("|")));
+            matchers.push(format!("{pod_label}=~\"{}\"", names.join("|")));
         }
-        _ => matchers.push(format!("pod=~\"{}\"", crate::prometheus::pod_pattern(kind, name))),
+        _ => matchers.push(format!(
+            "{pod_label}=~\"{}\"",
+            crate::prometheus::pod_pattern(kind, name)
+        )),
     }
     if let Some(container) = container.filter(|c| !c.is_empty()) {
-        matchers.push(format!("container={}", quoted(container)));
+        matchers.push(format!("{container_label}={}", quoted(container)));
     }
     format!("{{{}}}", matchers.join(", "))
 }
@@ -98,6 +145,7 @@ pub(crate) async fn query(
     query: &str,
     seconds: u64,
     limit: u32,
+    labels: &Labels,
 ) -> Result<LokiLogs> {
     let end = Timestamp::now().as_nanosecond();
     let start = end - i128::from(seconds) * 1_000_000_000;
@@ -106,13 +154,13 @@ pub(crate) async fn query(
         encode(query)
     );
     let answer = endpoint.get_json(client, &path, None).await?;
-    let mut logs = parse(&answer, limit)?;
+    let mut logs = parse(&answer, limit, labels)?;
     logs.query = query.to_owned();
     logs.source = endpoint.label();
     Ok(logs)
 }
 
-pub(crate) fn parse(answer: &Value, limit: u32) -> Result<LokiLogs> {
+pub(crate) fn parse(answer: &Value, limit: u32, labels: &Labels) -> Result<LokiLogs> {
     if answer.get("status").and_then(Value::as_str) == Some("error") {
         let message = answer
             .get("error")
@@ -136,11 +184,11 @@ pub(crate) fn parse(answer: &Value, limit: u32) -> Result<LokiLogs> {
                 .to_owned()
         };
         let source = LogSource {
-            namespace: label("namespace"),
-            pod: Some(label("pod"))
+            namespace: label(&labels.namespace),
+            pod: Some(label(&labels.pod))
                 .filter(|p| !p.is_empty())
                 .unwrap_or_else(|| label("job")),
-            container: label("container"),
+            container: label(&labels.container),
         };
         let index = match sources.iter().position(|s| *s == source) {
             Some(index) => index,
@@ -191,18 +239,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn queries_with_other_label_names() {
+        let labels = Labels::from_template(Some(&crate::LabelTemplate {
+            name: "otel".into(),
+            namespace: "exported_namespace".into(),
+            pod: String::new(),
+            container: "k8s_container_name".into(),
+        }));
+        assert_eq!(
+            default_query("Pod", "shop", "web-1", None, Some("app"), &labels),
+            "{exported_namespace=\"shop\", pod=\"web-1\", k8s_container_name=\"app\"}"
+        );
+        assert_eq!(namespace_query("shop", &labels), "{exported_namespace=\"shop\"}");
+        let answer = serde_json::json!({ "status": "success", "data": { "result": [
+            { "stream": { "exported_namespace": "shop", "pod": "web-1", "k8s_container_name": "app" },
+              "values": [["1700000000000000000", "hello"]] }
+        ] } });
+        let logs = parse(&answer, 10, &labels).unwrap();
+        assert_eq!(logs.sources[0].namespace, "shop");
+        assert_eq!(logs.sources[0].container, "app");
+    }
+
+    #[test]
     fn queries_from_objects() {
         assert_eq!(
-            default_query("Pod", "shop", "web-1", None, None),
+            default_query("Pod", "shop", "web-1", None, None, &Labels::default()),
             "{namespace=\"shop\", pod=\"web-1\"}"
         );
         assert_eq!(
-            default_query("Deployment", "shop", "web", None, Some("nginx")),
+            default_query(
+                "Deployment",
+                "shop",
+                "web",
+                None,
+                Some("nginx"),
+                &Labels::default()
+            ),
             "{namespace=\"shop\", pod=~\"web-[a-z0-9]{1,10}-[a-z0-9]{5}\", container=\"nginx\"}"
         );
         let pods = ["web-1".to_owned(), "web.2".to_owned()];
         assert_eq!(
-            default_query("Service", "shop", "web", Some(&pods), None),
+            default_query("Service", "shop", "web", Some(&pods), None, &Labels::default()),
             "{namespace=\"shop\", pod=~\"web-1|web\\\\.2\"}"
         );
     }
@@ -218,7 +295,7 @@ mod tests {
                   "values": [["1793300000000000003", "third\n"], ["1793300000000000001", "first"]] }
             ]}
         });
-        let logs = parse(&answer, 3).unwrap();
+        let logs = parse(&answer, 3, &Labels::default()).unwrap();
         assert_eq!(logs.sources.len(), 2);
         assert_eq!(logs.sources[1].pod, "web-1");
         let texts: Vec<&str> = logs.lines.iter().map(|l| l.text.as_str()).collect();

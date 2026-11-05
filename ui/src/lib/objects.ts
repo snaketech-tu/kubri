@@ -1,5 +1,5 @@
 import { access, need } from './access.svelte';
-import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, runGitOps, startPlugin } from './actions';
+import { canDelete, canEdit, canRestart, canScale, copyLines, cordon, portForward, resourcesOf, runGitOps, startPlugin } from './actions';
 import { isCertificates } from './certs';
 import { backend, type AccessCheck, type ObjectRef, type Owner, type ResourceInfo, type TerminalMode } from './api';
 import { hasCharts } from './charts';
@@ -263,6 +263,14 @@ export function objectActions(subject: Subject, options: ActionOptions, writable
 		}
 		if (canRestart(resource)) add('Change', t('Restart…'), ['r'], dialog(() => ({ kind: 'restart', resource, target })), { primary: 4, needs: on('patch'), kubectl: k({ op: 'restart' }) });
 		if (hasImages(resource)) add('Change', t('Set image…'), ['i'], dialog(() => ({ kind: 'image', resource, target })), { needs: on('patch'), kubectl: k({ op: 'image' }) });
+		// The pod template's requests and limits; a pod's are changed on the workload that owns it.
+		const sized = resource.group === 'apps' && ['deployments', 'statefulsets', 'daemonsets'].includes(resource.plural);
+		if (sized || (isPods(resource) && ownerOf(subject))) {
+			add('Change', t('Requests & limits…'), ['Q'], () => void resourcesOf(target), {
+				id: 'resources',
+				...(sized ? { needs: on('patch'), kubectl: k({ op: 'resources', containers: [] }) } : {})
+			});
+		}
 		if (isReplicaSets(resource)) {
 			add('Change', t('Roll back to this…'), ['ctrl+l'], dialog(() => ({ kind: 'rollback', resource, target })), { needs: need('update', { group: 'apps', plural: 'deployments' }, ns), kubectl: k({ op: 'rollback', deployment: ownerOf(subject)?.name }) });
 		}

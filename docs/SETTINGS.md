@@ -39,6 +39,10 @@ Before a change, Kubri asks the API server to run it as a dry run (`dryRun=All`)
 
 Every action can also be copied as the `kubectl` command that does the same: in its dialog under **Same as kubectl**, or with **Copy as kubectl…** in the row menu.
 
+## On start
+
+Kubri starts in the context you used last, unless the kubeconfig's current context changed since. **Settings**, **On start** can make it always start in the kubeconfig's current context. This choice is kept per computer and browser, not in the settings file. See [Several clusters](CLUSTERS.md#starting-where-you-left-off).
+
 ## Recent contexts
 
 `connections.keepRecent` (3 by default, 0 to 5) is how many contexts you switched away from stay connected in the background, so switching back is instant. See [Several clusters](CLUSTERS.md#switching-back-is-instant).

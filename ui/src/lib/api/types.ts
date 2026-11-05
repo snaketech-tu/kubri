@@ -108,6 +108,8 @@ export interface IntegrationSettings {
 	loki: string;
 	/** The Loki data source in Grafana for logs in Explore, by UID or name; found when empty. */
 	grafanaLogs: string;
+	/** The label template the logs use, by name; empty for the usual names. */
+	labels: string;
 }
 
 /** A link with placeholders like `{namespace}` or `{pod}` that an object fills in. */
@@ -277,6 +279,16 @@ export interface Settings {
 	history: HistorySettings;
 	connections: ConnectionSettings;
 	terminal: TerminalSettings;
+	/** Label names for logs, picked per context. */
+	labelTemplates: LabelTemplate[];
+}
+
+/** The label names a log collector uses where they are not namespace, pod and container; empty keeps those. */
+export interface LabelTemplate {
+	name: string;
+	namespace: string;
+	pod: string;
+	container: string;
 }
 
 /** The local terminal's shell, folder and font. */
@@ -505,6 +517,50 @@ export interface MemoryFix {
 	suggested: string;
 }
 
+/** Requests and limits to set on one container; null removes one. */
+export interface ContainerResources {
+	container: string;
+	requests: Record<string, string | null>;
+	limits: Record<string, string | null>;
+}
+
+/** CPU in cores and memory in bytes. */
+export interface Amounts {
+	cpu: number;
+	memory: number;
+}
+
+/** One node's room for a workload's pods. */
+export interface NodeRoom {
+	name: string;
+	/** Whether the workload's pods may run here; `reasons` say why not. */
+	eligible: boolean;
+	reasons: string[];
+	allocatable: Amounts;
+	requested: Amounts;
+	/** What the workload's own pods on this node request, part of `requested`. */
+	own: Amounts;
+	ownPods: number;
+}
+
+/** A ResourceQuota limit on CPU or memory, in cores or bytes. */
+export interface QuotaRoom {
+	name: string;
+	resource: 'requests.cpu' | 'requests.memory' | 'limits.cpu' | 'limits.memory';
+	hard: number;
+	used: number;
+}
+
+/** The room a workload has to grow. */
+export interface Capacity {
+	/** Its replicas, or for a DaemonSet the nodes it wants. */
+	pods: number;
+	/** Null when Kubri may not list nodes; `nodesError` says why. */
+	nodes: NodeRoom[] | null;
+	nodesError: string | null;
+	quotas: QuotaRoom[];
+}
+
 /** Why a node would refuse a pending pod; no reasons where Kubri finds none. */
 export interface NodeFit {
 	node: string;
@@ -629,7 +685,7 @@ export type Change =
 	| { type: 'images'; images: ContainerImage[] }
 	/** One container's memory limit in a workload's pod template. */
 	| { type: 'memory'; container: string; memory: string }
-	| { type: 'resources'; container: string; requests: Record<string, string>; limits: Record<string, string> };
+	| { type: 'resources'; containers: ContainerResources[] };
 
 /** An object now and after a change, without status and fields that change on every write. */
 export interface Preview {
@@ -910,6 +966,8 @@ export interface PortForwardInfo {
 	started: string;
 	connections: number;
 	error: string | null;
+	/** How and when the last connection ended. */
+	lastEnd?: { at: string; by: 'pod' | 'client' | 'error' } | null;
 }
 
 export interface BenchRequest {
@@ -1506,6 +1564,7 @@ export interface Backend {
 	setHistorySettings(settings: HistorySettings): Promise<Settings>;
 	setConnectionSettings(settings: ConnectionSettings): Promise<Settings>;
 	setTerminalSettings(settings: TerminalSettings): Promise<Settings>;
+	setLabelTemplates(templates: LabelTemplate[]): Promise<Settings>;
 	/** What changed, newest first, with the times Kubri was watching. */
 	history(query: HistoryQuery): Promise<HistoryPage>;
 	/** One change with the object before and after it. */
@@ -1586,7 +1645,10 @@ export interface Backend {
 	/** Containers whose requests or limits are far from what they use. */
 	rightSizing(namespace: string | null): Promise<RightSizing>;
 	/** Sets one container's requests and limits in a workload's pod template. */
-	setResources(target: ObjectRef, container: string, requests: Record<string, string>, limits: Record<string, string>): Promise<void>;
+	/** Sets requests and limits of containers in a workload's pod template, in one patch; null removes one. */
+	setResources(target: ObjectRef, containers: ContainerResources[]): Promise<void>;
+	/** The room a workload has on its nodes and in its namespace's quotas. */
+	capacity(target: ObjectRef): Promise<Capacity>;
 	/** The Flux or Argo CD object that manages an object, if any. */
 	managedBy(target: ObjectRef): Promise<Manager | null>;
 	/** The views for custom resource kinds, read again from their files. */
