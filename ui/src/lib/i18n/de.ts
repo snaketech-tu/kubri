@@ -238,6 +238,8 @@ const de: Record<string, string> = {
 	'Kubri stayed on {name}.': 'Kubri bleibt bei {name}.',
 	'Check on the Clusters page': 'Auf der Seite Cluster prüfen',
 	'Choose another context': 'Anderen Kontext wählen',
+	'Connect to {name} instead': 'Stattdessen mit {name} verbinden',
+	'Kubri started in the context you used last. Your kubeconfig names {name}.': 'Kubri ist im zuletzt benutzten Kontext gestartet. Deine kubeconfig nennt {name}.',
 
 	// Times
 	'in {age}': 'in {age}',
@@ -1695,6 +1697,13 @@ const de: Record<string, string> = {
 	'Contexts': 'Kontexte',
 	'Dry-run diffs': 'Diffs aus Probeläufen',
 	'Recent contexts': 'Letzte Kontexte',
+	'On start': 'Beim Start',
+	'Kubri opens the context you used last, where you left it. When your kubeconfig names another current context since then, Kubri follows the kubeconfig.':
+		'Kubri öffnet den Kontext, den du zuletzt benutzt hast, dort, wo du ihn verlassen hast. Nennt deine kubeconfig seitdem einen anderen aktuellen Kontext, folgt Kubri der kubeconfig.',
+	'Connect to': 'Verbinden mit',
+	'The context used last': 'Dem zuletzt benutzten Kontext',
+	"The kubeconfig's current context": 'Dem aktuellen Kontext der kubeconfig',
+	'Context on start': 'Kontext beim Start',
 	'Appearance': 'Darstellung',
 	'Updates': 'Updates',
 	'Views': 'Views',
