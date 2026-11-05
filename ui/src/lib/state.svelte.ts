@@ -300,6 +300,8 @@ class AppState {
 	error = $state<string | null>(null);
 
 	page = $state<Page>('pulses');
+	/** How many rows the list shows, null without a list. */
+	listRows = $state<number | null>(null);
 	/** What the search page searches for, as typed. */
 	searchQuery = $state('');
 	/** What the What changed page shows; replaced as a whole when opened from elsewhere. */

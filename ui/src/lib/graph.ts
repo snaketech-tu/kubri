@@ -235,12 +235,15 @@ export function matches(node: GraphNode, text: string): boolean {
 	return !t || node.name.toLowerCase().includes(t) || node.kind.toLowerCase().includes(t) || node.detail.toLowerCase().includes(t);
 }
 
+/** The smallest zoom at which the names of objects, 12px in the graph, are still 11px on screen. */
+export const READABLE = 11 / 12;
+
 /**
  * The scale and offset that fit `layout` into a view of `width` by `height`; with `across`, only
- * its width, so a tall graph stays readable and is panned down.
+ * its width and never below a readable size, so a wide or tall graph stays readable and is panned.
  */
 export function fit(layout: Pick<Layout, 'width' | 'height'>, width: number, height: number, across = false) {
 	const whole = Math.min(width / layout.width, height / layout.height);
-	const scale = Math.min(1.1, Math.max(across ? 0.45 : 0.15, across ? width / layout.width : whole));
+	const scale = Math.min(1.1, Math.max(across ? READABLE : 0.15, across ? width / layout.width : whole));
 	return { scale, x: Math.max(0, (width - layout.width * scale) / 2), y: 0 };
 }

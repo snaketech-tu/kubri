@@ -3,7 +3,7 @@ import type { ContextInfo, ResourceInfo, Row } from './api';
 import { matchResources, namesAction, suggest } from './commands';
 import { age, cpu, isNotFound, memory, workloadPrefix } from './format';
 import { cellTone } from './status';
-import { filterRows, isFaulty, sortRows, toCsv } from './table';
+import { filterRows, hasHealth, isFaulty, sortRows, toCsv } from './table';
 
 function resource(kind: string, plural: string, group = '', shortNames: string[] = []): ResourceInfo {
 	return {
@@ -344,5 +344,21 @@ describe('isNotFound', () => {
 	it('recognises the API server wording', () => {
 		expect(isNotFound('pods "x" not found')).toBe(true);
 		expect(isNotFound('forbidden')).toBe(false);
+	});
+});
+
+describe('hasHealth', () => {
+	const columns = (...names: string[]) => names.map((name) => ({ name, type: 'string', format: '', description: '', priority: 0 }));
+
+	it('is true for kinds with a state, readiness or health', () => {
+		expect(hasHealth(columns('Name', 'Ready', 'Status', 'Age'), 'pods')).toBe(true);
+		expect(hasHealth(columns('Name', 'Ready', 'Up-to-date', 'Available'), 'deployments')).toBe(true);
+		expect(hasHealth(columns('Name', 'Health'), 'widgets')).toBe(true);
+		expect(hasHealth(columns('Last Seen', 'Type', 'Reason'), 'events')).toBe(true);
+	});
+
+	it('is false for kinds with nothing to go wrong in their rows', () => {
+		expect(hasHealth(columns('Name', 'Type', 'Data', 'Age'), 'secrets')).toBe(false);
+		expect(hasHealth(columns('Name', 'Class', 'Hosts', 'Address', 'Ports', 'Age'), 'ingresses')).toBe(false);
 	});
 });
