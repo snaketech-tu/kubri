@@ -31,13 +31,9 @@ pub enum Change {
         container: String,
         memory: String,
     },
-    /// One container's requests and limits in a workload's pod template.
+    /// Requests and limits of containers in a workload's pod template.
     Resources {
-        container: String,
-        #[serde(default)]
-        requests: std::collections::BTreeMap<String, String>,
-        #[serde(default)]
-        limits: std::collections::BTreeMap<String, String>,
+        containers: Vec<crate::rightsizing::ContainerResources>,
     },
 }
 
