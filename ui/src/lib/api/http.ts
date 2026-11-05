@@ -88,6 +88,7 @@ export const httpBackend: Backend = {
 	addKubeconfigFiles: () => Promise.reject(new Error('In the browser, add contexts from a file instead')),
 	removeKubeconfigFile: () => Promise.reject(new Error('Only the desktop app chooses kubeconfig files')),
 	switchContext: (name) => request('PUT', '/context', { name }),
+	cancelSwitch: () => request('POST', '/context/cancel'),
 	async takeSnapshot(namespace) {
 		const query = namespace ? `?${new URLSearchParams({ namespace })}` : '';
 		const response = await fetch(`/api/snapshot${query}`, { method: 'POST' });

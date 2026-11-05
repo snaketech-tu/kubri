@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { app } from '../state.svelte';
 
-	const STEPS: { title: string; text: string; keys?: string[] }[] = [
+	/** The steps; each points at what it explains when that is on screen. */
+	const STEPS: { title: string; text: string; keys?: string[]; target?: string }[] = [
 		{
 			title: 'Welcome to Kubri',
 			text: 'A quick look at the four things that get you anywhere. It takes half a minute, and Help (?) brings it back.'
@@ -9,21 +10,25 @@
 		{
 			title: 'Find anything with the palette',
 			text: 'Press Ctrl+K or : to jump to a kind, a namespace, a context or an object, or to run an action on the row you chose.',
-			keys: ['Ctrl+K', ':']
+			keys: ['Ctrl+K', ':'],
+			target: '[data-tour="palette"]'
 		},
 		{
 			title: 'Right click for everything',
 			text: 'A right click or the ⋯ button on a row lists every action for it: logs, shell, scale, restart, delete. The action bar above the list shows the common ones.',
-			keys: ['right click']
+			keys: ['right click'],
+			target: 'main tbody tr.row'
 		},
 		{
 			title: 'Keys, if you like them',
 			text: 'Move with j and k, open with Enter, describe with d, logs with l. Press ? any time for all of them; the bar at the bottom shows the ones that work here.',
-			keys: ['j', 'k', 'Enter', '?']
+			keys: ['j', 'k', 'Enter', '?'],
+			target: '[data-tour="keys"]'
 		},
 		{
 			title: 'Read-only keeps you safe',
-			text: 'The switch at the top right turns changes off. Guard rails in the context settings can force it for production clusters.'
+			text: 'This switch turns changes off. Guard rails in the context settings can force it for production clusters.',
+			target: '[data-tour="read-only"]'
 		}
 	];
 
@@ -56,13 +61,66 @@
 	$effect(() => {
 		box?.focus();
 	});
+
+	/** Where the step's element is on screen, or null to show the card in the middle. */
+	let spot = $state<{ left: number; top: number; width: number; height: number } | null>(null);
+	let width = $state(0);
+	let height = $state(0);
+	let viewWidth = $state(0);
+	let viewHeight = $state(0);
+
+	function locate() {
+		const target = STEPS[step].target;
+		const r = target ? document.querySelector(target)?.getBoundingClientRect() : undefined;
+		spot = r && r.width > 0 && r.height > 0 ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+	}
+	$effect(() => {
+		void step;
+		locate();
+	});
+
+	/** The card next to the element: below it when there is room, otherwise above, with an arrow at it. */
+	const placed = $derived.by(() => {
+		if (!spot || !width || !height) return null;
+		const gap = 14;
+		const below = spot.top + spot.height + gap + height <= viewHeight - 8;
+		const left = Math.max(16, Math.min(spot.left + spot.width / 2 - width / 2, viewWidth - width - 16));
+		const top = below ? spot.top + spot.height + gap : Math.max(8, spot.top - gap - height);
+		const arrow = Math.max(20, Math.min(spot.left + spot.width / 2 - left, width - 20));
+		return { left, top, arrow, below };
+	});
 </script>
 
-<svelte:window onkeydowncapture={onkeydown} />
+<svelte:window onkeydowncapture={onkeydown} onresize={locate} bind:innerWidth={viewWidth} bind:innerHeight={viewHeight} />
 
-<div class="backdrop" role="presentation"></div>
-<div class="tour" role="dialog" aria-modal="true" aria-label="Quick tour" tabindex="-1" bind:this={box}>
-	<p class="count">{step + 1} of {STEPS.length}</p>
+<div class="backdrop" class:clear={spot} role="presentation"></div>
+{#if spot}
+	<div
+		class="spot"
+		aria-hidden="true"
+		style:left="{spot.left - 4}px"
+		style:top="{spot.top - 4}px"
+		style:width="{spot.width + 8}px"
+		style:height="{spot.height + 8}px"
+	></div>
+{/if}
+<div
+	class="tour"
+	class:pointing={placed}
+	role="dialog"
+	aria-modal="true"
+	aria-label="Quick tour"
+	tabindex="-1"
+	bind:this={box}
+	bind:offsetWidth={width}
+	bind:offsetHeight={height}
+	style:left={placed ? `${placed.left}px` : null}
+	style:top={placed ? `${placed.top}px` : null}
+>
+	{#if placed}
+		<span class="arrow" class:up={placed.below} class:down={!placed.below} style:left="{placed.arrow}px" aria-hidden="true"></span>
+	{/if}
+	{#if step > 0}<p class="count">{step} of {STEPS.length - 1}</p>{/if}
 	<h2>{STEPS[step].title}</h2>
 	<p>{STEPS[step].text}</p>
 	{#if STEPS[step].keys}
@@ -96,8 +154,42 @@
 		background: var(--surface-1);
 		box-shadow: var(--shadow);
 	}
+	.tour.pointing {
+		transform: none;
+	}
 	.tour:focus {
 		outline: none;
+	}
+	.backdrop.clear {
+		background: none;
+	}
+	/* Lights up the element the step explains; its shadow darkens the rest. */
+	.spot {
+		position: fixed;
+		z-index: 60;
+		border-radius: 10px;
+		outline: 2px solid var(--accent);
+		box-shadow: 0 0 0 9999px rgb(0 0 0 / 40%);
+		pointer-events: none;
+	}
+	.arrow {
+		position: absolute;
+		width: 12px;
+		height: 12px;
+		margin-left: -6px;
+		border: 1px solid var(--border);
+		background: var(--surface-1);
+		transform: rotate(45deg);
+	}
+	.arrow.up {
+		top: -7px;
+		border-right: none;
+		border-bottom: none;
+	}
+	.arrow.down {
+		bottom: -7px;
+		border-top: none;
+		border-left: none;
 	}
 	.count {
 		margin: 0 0 4px;

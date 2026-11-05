@@ -131,7 +131,7 @@
 		crumbs={['Access']}
 		title="Access"
 		count={rbac ? rbac.subjects.length : null}
-		subtitle="RBAC: who may do what, from the role bindings {namespace ? `in ${namespace}` : 'in all namespaces'}"
+		subtitle="Who may do what, from the role bindings {namespace ? `in ${namespace}` : 'in all namespaces'}"
 	>
 		{#snippet tools()}
 			<button class="btn" onclick={() => reloads++} title="Read the bindings again">Reload</button>

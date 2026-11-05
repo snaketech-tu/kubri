@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionFor, grouped, hintOf, keyFromLabel, keyLabel, keyOf, type MenuAction } from './menu';
+import { actionFor, grouped, hintOf, keyFromLabel, keyLabel, keyOf, menuEntries, type MenuAction } from './menu';
 
 const action = (label: string, keys: string[], group = 'View', more: Partial<MenuAction> = {}): MenuAction => ({
 	label,
@@ -88,5 +88,47 @@ describe('keyFromLabel', () => {
 			const press = keyFromLabel(keyLabel(key))!;
 			expect(keyOf({ key: press.key!, ctrlKey: !!press.ctrlKey, metaKey: false } as KeyboardEvent)).toBe(key);
 		}
+	});
+});
+
+describe('menuEntries', () => {
+	const a = (label: string, group: string, more: Partial<MenuAction> = {}): MenuAction => ({
+		label,
+		group,
+		keys: [],
+		run: () => {},
+		...more
+	});
+	const actions = [
+		a('Describe', 'View', { keys: ['d'] }),
+		a('Logs', 'View', { keys: ['l'] }),
+		a('What changed', 'View'),
+		a('Compare…', 'View'),
+		a('Copy name', 'Copy', { keys: ['c'] }),
+		a('Copy namespace', 'Copy'),
+		a('Node vm', 'Go to'),
+		a('Delete…', 'Delete', { danger: true })
+	];
+	const labels = (open: string[]) =>
+		menuEntries(actions, new Set(open)).flatMap(([, entries]) =>
+			entries.map((e) => (e.kind === 'fold' ? `[${e.label}]` : e.nested ? `  ${e.action.label}` : e.action.label))
+		);
+
+	it('folds Copy and the quiet actions of a group, but keeps a lone one', () => {
+		expect(labels([])).toEqual(['Describe', 'Logs', '[More in view…]', '[Copy…]', 'Node vm', 'Delete…']);
+	});
+	it('shows what an open fold holds right under it', () => {
+		expect(labels(['Copy', 'View:more'])).toEqual([
+			'Describe',
+			'Logs',
+			'[More in view…]',
+			'  What changed',
+			'  Compare…',
+			'[Copy…]',
+			'  Copy name',
+			'  Copy namespace',
+			'Node vm',
+			'Delete…'
+		]);
 	});
 });

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
-	import { backend, type LogEvent, type LogLevel, type LogOptions, type LogSource, type ObjectRef } from '../api';
+	import { backend, type KubeObject, type LogEvent, type LogLevel, type LogOptions, type LogSource, type ObjectRef } from '../api';
 	import { copyLines, saveFile } from '../actions';
+	import { containerCause } from '../causes';
 	import { errorMessage } from '../format';
 	import { dropdown } from '../dismiss';
 	import { selectedText } from '../explain';
@@ -26,6 +27,7 @@
 	import { logRanges, sourceLabels, stripAnsi } from '../pods';
 	import { app } from '../state.svelte';
 	import { plainOptions, type SelectOption } from '../select';
+	import CauseCard from './CauseCard.svelte';
 	import Icon from './Icon.svelte';
 	import LogRate from './LogRate.svelte';
 	import Select from './Select.svelte';
@@ -35,7 +37,8 @@
 		containers,
 		previous: startPrevious = false,
 		container: wanted = null,
-		active = false
+		active = false,
+		pod = null
 	}: {
 		target: ObjectRef;
 		containers: string[];
@@ -44,6 +47,8 @@
 		container?: { name: string; previous?: boolean } | null;
 		/** The logs are on screen and take the k9s log keys. */
 		active?: boolean;
+		/** The pod itself, when the logs are of one pod: says why a container has none. */
+		pod?: KubeObject | null;
 	} = $props();
 
 	/** Older lines are dropped beyond this, to keep the view fast. */
@@ -171,12 +176,28 @@
 	});
 	const buckets = $derived(rate(visible, 60, changes));
 
+	/** Why the container shown does not run, from the pod's status: a container that never started has no logs to show. */
+	const cause = $derived.by(() => {
+		if (!pod || previous || loki || app.snapshot) return null;
+		for (const name of container ? [container] : containers) {
+			const found = containerCause(pod, name);
+			if (found) {
+				const s = [...(pod.status?.initContainerStatuses ?? []), ...(pod.status?.containerStatuses ?? [])].find((c: any) => c.name === name);
+				return { container: name, cause: found, reason: s?.state?.waiting?.reason ?? s?.state?.terminated?.reason ?? null, ran: !!s?.lastState?.terminated };
+			}
+		}
+		return null;
+	});
+	const neverStarted = $derived(cause !== null && !cause.ran && !lines.some((l) => l.kind !== 'error'));
+
 	/** Which instance and stream the lines come from, so that a view never passes for another. */
 	const streamState = $derived.by((): { tone: 'warn' | 'ok' | ''; text: string } => {
+		if (neverStarted && cause) return { tone: 'warn', text: `No logs: ${cause.container} never started.` };
 		if (loki) return { tone: '', text: lokiSource ? `History from Loki at ${lokiSource}. These lines do not update.` : 'Asking Loki…' };
 		if (previous) return { tone: 'warn', text: 'Previous container instance, which ended. These lines do not update.' };
 		if (app.snapshot) return { tone: '', text: 'The last lines saved in the snapshot. These lines do not update.' };
 		if (status === 'connecting') return { tone: '', text: 'Connecting to the log stream…' };
+		if (status === 'ended' && follow && cause) return { tone: 'warn', text: `The stream ended because ${cause.container} stopped.` };
 		if (status === 'ended') return { tone: '', text: follow ? 'The stream ended. Reconnect to continue.' : 'Snapshot of the current instance.' };
 		return { tone: 'ok', text: follow ? 'Streaming the current container instance.' : 'Snapshot of the current instance.' };
 	});
@@ -624,7 +645,11 @@
 		{#if dropped}
 			<div class="note">{dropped} older lines were dropped to keep the view fast.</div>
 		{/if}
-		{#if table && names.length}
+		{#if neverStarted && cause}
+			<div class="cause">
+				<CauseCard cause={cause.cause} target={target} object={pod!} container={cause.container} raw={cause.reason} />
+			</div>
+		{:else if table && names.length}
 			<table>
 				<thead>
 					<tr>
@@ -712,12 +737,19 @@
 				{/if}
 			{/each}
 		{/if}
-		{#if status === 'connecting'}
+		{#if neverStarted}
+			<!-- The card says why. -->
+		{:else if status === 'connecting'}
 			<div class="note">Connecting…</div>
 		{:else if visible.length === 0}
 			<div class="note">{filter || minLevel || hiddenPods.size ? 'No lines match.' : 'No log lines yet.'}</div>
 		{/if}
-		{#if status === 'ended'}
+		{#if status === 'ended' && cause && !neverStarted}
+			<div class="cause">
+				<CauseCard cause={cause.cause} target={target} object={pod!} container={cause.container} raw={cause.reason} onprevious={() => (previous = true)} />
+				<button class="again" onclick={() => restarts++}>Reconnect</button>
+			</div>
+		{:else if status === 'ended' && !neverStarted}
 			<div class="note end">
 				{follow && !previous && !loki ? 'The stream ended.' : 'End of log.'}
 				<button onclick={() => restarts++}>{follow && !previous && !loki ? 'Reconnect' : 'Reload'}</button>
@@ -737,6 +769,25 @@
 </div>
 
 <style>
+	.cause {
+		display: grid;
+		justify-items: start;
+		gap: 8px;
+		padding: 16px;
+	}
+	.cause > :global(section) {
+		justify-self: stretch;
+		max-width: 720px;
+	}
+	.again {
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent-strong);
+		font-family: var(--sans);
+		font-size: 12.5px;
+		font-weight: 600;
+	}
 	.container {
 		padding: 3px 8px;
 		border-radius: 5px;

@@ -23,7 +23,7 @@ Settings → AI agents shows the exact command for Claude Code (`claude mcp add 
 | `get_events` | The events about one object. |
 | `get_logs` | The last lines of a pod's log, or of every pod of a workload or Service. |
 | `diagnose_pod` | Why a pod fails: crashing or waiting containers, exit codes, scheduling problems, warning events and the crashed container's last log lines. |
-| `check_problems` | The sanitizer's report with score and grade. |
+| `check_problems` | The report of Checks, with score and grade. |
 | `show_tree` | XRay: workloads down to their pods, containers and what they use. |
 | `can_i` | Whether you may do something, like `kubectl auth can-i`. |
 | `cluster_health` | Pulses: health per kind, usage and recent warnings. |

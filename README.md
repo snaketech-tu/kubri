@@ -44,7 +44,7 @@
     </td>
     <td width="33%" valign="top">
       <b>Keyboard or mouse</b><br>
-      The keys you know from k9s: <kbd>:</kbd> opens the command palette and <kbd>?</kbd> lists every key. Or just click: each action is a button, and a right click on a row shows them all.
+      The keys you know from k9s: <kbd>:</kbd> opens the command palette and <kbd>?</kbd> lists every key. Or just click: the sidebar has the common kinds and tools, with the rest one click away, each action is a button, and a right click on a row shows them all.
     </td>
     <td width="33%" valign="top">
       <b>Desktop or browser</b><br>
@@ -135,7 +135,7 @@ Kubri then sees what its service account may see. [Running Kubri in the browser]
     <td valign="top">
       <b>🧭 Understand the cluster</b>
       <ul>
-        <li>Pulses, XRay, a topology graph and an RBAC matrix</li>
+        <li>An overview of what needs attention, the topology as trees or a graph, and who may do what</li>
         <li>Helm: install, upgrade with a diff, compare revisions, roll back</li>
         <li>Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager, found without setup</li>
         <li>What changed: rollouts, scaling and config changes as a timeline with diffs</li>
