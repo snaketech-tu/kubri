@@ -6,6 +6,7 @@
 	import { app } from '../state.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import SearchField from './SearchField.svelte';
+	import Phrase from './Phrase.svelte';
 
 	let filter = $state(app.kindsFilter);
 	let input = $state<HTMLInputElement>();
@@ -67,9 +68,9 @@
 <svelte:window {onkeydown} />
 
 <section class="page">
-	<PageHeader crumbs={[t('All kinds')]} prefix="context" title="All kinds" count={total} subtitle="Every kind the cluster serves, by API group. Pick one to open its list.">
+	<PageHeader crumbs={[t('All kinds')]} prefix="context" title={t('All kinds')} count={total} subtitle={t('Every kind the cluster serves, by API group. Pick one to open its list.')}>
 		{#snippet tools()}
-			<SearchField bind:value={filter} bind:input label="Find a kind" placeholder="Kind, short name or group…" />
+			<SearchField bind:value={filter} bind:input label={t('Find a kind')} placeholder={t('Kind, short name or group…')} />
 		{/snippet}
 	</PageHeader>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -84,7 +85,7 @@
 							{#if r.shortNames.length || !r.namespaced}
 								<span class="meta">
 									{#if r.shortNames.length}<code>{r.shortNames.join(', ')}</code>{/if}
-									{#if !r.namespaced}<span>cluster-wide</span>{/if}
+									{#if !r.namespaced}<span>{t('cluster-wide')}</span>{/if}
 								</span>
 							{/if}
 						</button>
@@ -92,11 +93,11 @@
 				{/each}
 			</ul>
 		{:else}
-			<p class="none">{total ? `No kind matches "${filter}".` : 'The cluster serves no kinds Kubri can list.'}</p>
+			<p class="none">{total ? t('No kind matches "{filter}".', { filter }) : t('The cluster serves no kinds Kubri can list.')}</p>
 		{/each}
 	</div>
 	{#if filter && shown}
-		<p class="hint"><kbd>Enter</kbd> opens {label(groups[0].kinds[0])}, <kbd>↓</kbd> moves into the list.</p>
+		<p class="hint"><Phrase text={t('{enter} opens {kind}, {down} moves into the list.', { kind: label(groups[0].kinds[0]) })} kbd={{ enter: 'Enter', down: '↓' }} /></p>
 	{/if}
 </section>
 
@@ -183,7 +184,7 @@
 		color: var(--text-muted);
 		font-size: 12px;
 	}
-	kbd {
+	.hint :global(kbd) {
 		padding: 0 5px;
 		border: 1px solid var(--border);
 		border-radius: 4px;

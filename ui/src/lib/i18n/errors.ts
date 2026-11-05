@@ -70,6 +70,7 @@ export const SOURCE_TEXTS: Record<string, string[]> = {
 		'changes are off for this context',
 		'{0}. A local terminal would get around that, so it stays closed.'
 	],
+	'rightsizing.rs': ['Prometheus at {0}, last 7 days', 'metrics-server, now'],
 	'local_terminal.rs': ["kubectl {0} is more than one minor version away from the cluster's {1}; some commands may not work"]
 };
 

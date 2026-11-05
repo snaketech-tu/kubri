@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { backend, type KubeObject, type RenderedView, type ResourceInfo } from '../api';
 	import { certificateStatus } from '../certs';
 	import { gitopsStatus } from '../gitops';
@@ -33,12 +34,12 @@
 </script>
 
 {#if health || sections.length}
-	<div class="summary" aria-label="{resource.kind} view">
+	<div class="summary" aria-label={t('{kind} view', { kind: resource.kind })}>
 		<section class="card {health?.health ?? ''}">
 			{#if health}
 				<h3>
 					<HealthIcon health={health.health} size={11} />
-					{health.health === 'ok' ? 'Healthy' : health.health === 'failed' ? 'Failed' : 'Needs a look'}
+					{health.health === 'ok' ? t('Healthy') : health.health === 'failed' ? t('Failed') : t('Needs a look')}
 				</h3>
 				{#if health.message}<p class="message">{health.message}</p>{/if}
 			{/if}
@@ -51,7 +52,7 @@
 					{/each}
 				</dl>
 			{/each}
-			<p class="source" title="Views are YAML files; see Config → Views">From the view in {view?.source}</p>
+			<p class="source" title={t('Views are YAML files; see Config → Views')}>{t('From the view in {source}', { source: view?.source ?? '' })}</p>
 		</section>
 	</div>
 {/if}

@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import type { Graph, GraphEdge, GraphNode } from './api';
 
 export type GroupBy = 'namespace' | 'app' | 'node';
@@ -100,7 +101,7 @@ export function layoutGraph(graph: Graph, by: GroupBy): Layout {
 
 	// Objects without a group of their own, like a Service when grouping by node, join the
 	// group of what they connect to.
-	const fallback = by === 'namespace' ? 'Cluster' : by === 'app' ? 'Other' : 'Not on a node';
+	const fallback = by === 'namespace' ? t('Cluster') : by === 'app' ? t('Other') : t('Not on a node');
 	const group = new Map(nodes.map((n) => [n.id, groupOf(n, by) ?? fallback]));
 	for (let round = 0; round < 3; round++) {
 		for (const n of nodes) {

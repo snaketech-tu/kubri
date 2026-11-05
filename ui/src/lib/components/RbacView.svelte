@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import { tick } from 'svelte';
 	import { backend, type Grant, type Permissions, type Rbac, type SubjectInfo } from '../api';
 	import { errorMessage } from '../format';
@@ -9,12 +10,13 @@
 	import PageHeader from './PageHeader.svelte';
 	import RulesMatrix from './RulesMatrix.svelte';
 	import SearchField from './SearchField.svelte';
+	import Phrase from './Phrase.svelte';
 
 	const ME = 'me';
 	const KINDS: [SubjectInfo['kind'], string][] = [
-		['User', 'Users'],
-		['Group', 'Groups'],
-		['ServiceAccount', 'Service accounts']
+		['User', t('Users')],
+		['Group', t('Groups')],
+		['ServiceAccount', t('Service accounts')]
 	];
 
 	let rbac = $state<Rbac | null>(null);
@@ -73,7 +75,7 @@
 	}
 
 	function scope(grant: Grant) {
-		return grant.namespace ? `in ${grant.namespace}` : 'cluster-wide';
+		return grant.namespace ? t('in {namespace}', { namespace: grant.namespace }) : t('cluster-wide');
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -130,12 +132,14 @@
 <section>
 	<PageHeader
 		crumbs={[t('Access')]}
-		title="Access"
+		title={t('Access')}
 		count={rbac ? rbac.subjects.length : null}
-		subtitle="Who may do what, from the role bindings {namespace ? `in ${namespace}` : 'in all namespaces'}"
+		subtitle={namespace
+			? t('Who may do what, from the role bindings in {namespace}', { namespace })
+			: t('Who may do what, from the role bindings in all namespaces')}
 	>
 		{#snippet tools()}
-			<button class="btn" onclick={() => reloads++} title="Read the bindings again">Reload</button>
+			<button class="btn" onclick={() => reloads++} title={t('Read the bindings again')}>{t('Reload')}</button>
 		{/snippet}
 	</PageHeader>
 
@@ -143,7 +147,7 @@
 		<div class="notice" role="alert">{error}</div>
 	{/if}
 	{#each rbac?.errors ?? [] as message (message)}
-		<div class="notice" role="alert">Could not list {message}</div>
+		<div class="notice" role="alert">{t('Could not list {message}', { message })}</div>
 	{/each}
 
 	<div class="split">
@@ -152,13 +156,13 @@
 				<SearchField
 					bind:value={filter}
 					bind:input={filterInput}
-					label="Filter subjects"
-					placeholder="Filter subjects, or: can delete pods"
+					label={t('Filter subjects')}
+					placeholder={t('Filter subjects, or: can delete pods')}
 				/>
 			</div>
-			<div class="list" bind:this={list} role="listbox" aria-label="Subjects">
+			<div class="list" bind:this={list} role="listbox" aria-label={t('Subjects')}>
 				<button class="item me" class:active={selectedKey === ME} onclick={() => (selectedKey = ME)} role="option" aria-selected={selectedKey === ME}>
-					<span class="name">You</span>
+					<span class="name">{t('You')}</span>
 					<span class="muted">{me ? `rules in ${me.namespace}` : meError ? 'unknown' : '…'}</span>
 				</button>
 				{#each KINDS as [kind, title] (kind)}
@@ -174,31 +178,37 @@
 								aria-selected={selectedKey === key(s)}
 							>
 								<span class="name">{subjectLabel(s)}</span>
-								{#if isAdmin(s.grants)}<span class="admin">admin</span>{/if}
+								{#if isAdmin(s.grants)}<span class="admin">{t('admin')}</span>{/if}
 								<span class="muted">{s.grants.length}</span>
 							</button>
 						{/each}
 					{/if}
 				{/each}
 				{#if rbac && !visible.length}
-					<p class="muted pad">{filter ? 'No subject matches the filter.' : 'No role bindings.'}</p>
+					<p class="muted pad">{filter ? t('No subject matches the filter.') : t('No role bindings.')}</p>
 				{/if}
 			</div>
 		</div>
 
 		<div class="detail">
 			{#if selectedKey === ME}
-				<h2>You <span class="muted">in {me?.namespace ?? app.namespace ?? 'default'}</span></h2>
-				<p class="muted">What your credentials allow, including cluster-wide rules, as <code>kubectl auth can-i --list</code> shows it.</p>
+				<h2>{t('You')} <span class="muted">{t('in {namespace}', { namespace: me?.namespace ?? app.namespace ?? 'default' })}</span></h2>
+				<p class="muted">
+					<Phrase text={t('What your credentials allow, including cluster-wide rules, as {command} shows it.')} code={{ command: 'kubectl auth can-i --list' }} />
+				</p>
 				{#if meError}
 					<div class="error inline">{meError}</div>
 				{:else if me}
 					{#if me.incomplete}
-						<p class="note">The API server could not list every rule{me.error ? `: ${me.error}` : ''}. You may be allowed more than shown.</p>
+						<p class="note">
+							{me.error
+								? t('The API server could not list every rule: {error}. You may be allowed more than shown.', { error: coreText(me.error) })
+								: t('The API server could not list every rule. You may be allowed more than shown.')}
+						</p>
 					{/if}
 					<RulesMatrix rules={me.rules} />
 				{:else}
-					<p class="muted">Loading…</p>
+					<p class="muted">{t('Loading…')}</p>
 				{/if}
 			{:else if selected}
 				<h2>
@@ -224,16 +234,16 @@
 							<span class="pill" class:cluster={!grant.namespace}>{scope(grant)}</span>
 						</div>
 						{#if grant.roleState === 'missing'}
-							<p class="bad">The {grant.roleKind} does not exist, so this binding grants nothing.</p>
+							<p class="bad">{t('The {roleKind} does not exist, so this binding grants nothing.', { roleKind: grant.roleKind })}</p>
 						{:else if grant.roleState === 'unreadable'}
-							<p class="muted">Roles could not be read, so the rules are unknown.</p>
+							<p class="muted">{t('Roles could not be read, so the rules are unknown.')}</p>
 						{:else}
 							<RulesMatrix rules={grant.rules} />
 						{/if}
 					</div>
 				{/each}
 			{:else}
-				<p class="muted">Pick a subject on the left.</p>
+				<p class="muted">{t('Pick a subject on the left.')}</p>
 			{/if}
 		</div>
 	</div>
@@ -417,7 +427,7 @@
 		border-radius: 6px;
 		background: color-mix(in srgb, var(--warn) 12%, transparent);
 	}
-	code {
+	.muted :global(code) {
 		font-family: var(--mono);
 		font-size: 12px;
 	}

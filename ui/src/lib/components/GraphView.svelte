@@ -135,7 +135,7 @@
 		const ref = node.resource;
 		const resource = ref && findResource(app.resources, ref);
 		if (resource) app.showDetails(resource, { resource: ref, namespace: node.namespace, name: node.name });
-		else app.toast(`${node.kind} ${node.name} is not there`, 'bad');
+		else app.toast(t('{kind} {name} is not there', { kind: node.kind, name: node.name }), 'bad');
 	}
 
 	function openStep(step: PathStep, path: RequestPath) {
@@ -158,30 +158,32 @@
 <section class="page">
 	<PageHeader
 		crumbs={[t('Topology')]}
-		title="Topology"
+		title={t('Topology')}
 		count={graph?.nodes.length}
-		subtitle="How the objects {namespace ? `in ${namespace}` : 'in all namespaces'} connect, from Ingresses to the nodes their pods run on"
+		subtitle={namespace
+			? t('How the objects in {namespace} connect, from Ingresses to the nodes their pods run on', { namespace })
+			: t('How the objects in all namespaces connect, from Ingresses to the nodes their pods run on')}
 	>
-		{#if issues}<span class="tag bad"><HealthIcon health="failed" />{issues} with issues</span>{/if}
+		{#if issues}<span class="tag bad"><HealthIcon health="failed" />{t('{issues} with issues', { issues })}</span>{/if}
 		{#snippet tools()}
-			<div class="segmented" role="group" aria-label="Show as">
-				<button aria-pressed="false" onclick={showTrees} title="A tree for each object (:xray)">Trees</button>
-				<button aria-pressed="true" title="All objects as one graph, with request paths (:graph)">Graph</button>
+			<div class="segmented" role="group" aria-label={t('Show as')}>
+				<button aria-pressed="false" onclick={showTrees} title={t('A tree for each object (:xray)')}>{t('Trees')}</button>
+				<button aria-pressed="true" title={t('All objects as one graph, with request paths (:graph)')}>{t('Graph')}</button>
 			</div>
 		{/snippet}
 	</PageHeader>
 
 	{#if error}
-		<div class="notice" role="alert">Could not build the graph: {error}</div>
+		<div class="notice" role="alert">{t('Could not build the graph: {error}', { error })}</div>
 	{/if}
 	{#if graph?.missing.length}
-		<p class="muted small">Not shown, since they could not be listed: {graph.missing.join(', ')}.</p>
+		<p class="muted small">{t('Not shown, since they could not be listed: {kinds}.', { kinds: graph.missing.join(', ') })}</p>
 	{/if}
 
 	<div class="card">
 		<div class="toolbar">
 			<label>
-				<span>Group by</span>
+				<span>{t('Group by')}</span>
 				<Select
 					bind:value={groupBy}
 					options={[
@@ -192,29 +194,29 @@
 					compact
 				/>
 			</label>
-			<SearchField bind:value={filter} label="Find in the graph" placeholder="Find by name, kind or state…" key="" />
-			<label class="check"><input type="checkbox" bind:checked={problemsOnly} /> Problems</label>
+			<SearchField bind:value={filter} label={t('Find in the graph')} placeholder={t('Find by name, kind or state…')} key="" />
+			<label class="check"><input type="checkbox" bind:checked={problemsOnly} /> {t('Problems')}</label>
 			<span class="grow"></span>
-			<div class="zoom" role="group" aria-label="Zoom">
-				<button class="btn" onclick={() => zoom(1 / 1.25)} aria-label="Zoom out">−</button>
-				<button class="btn" onclick={() => layout && frame && (view = fit(layout, frame.clientWidth, frame.clientHeight))}>Fit</button>
-				<button class="btn" onclick={() => zoom(1.25)} aria-label="Zoom in">+</button>
+			<div class="zoom" role="group" aria-label={t('Zoom')}>
+				<button class="btn" onclick={() => zoom(1 / 1.25)} aria-label={t('Zoom out')}>−</button>
+				<button class="btn" onclick={() => layout && frame && (view = fit(layout, frame.clientWidth, frame.clientHeight))}>{t('Fit')}</button>
+				<button class="btn" onclick={() => zoom(1.25)} aria-label={t('Zoom in')}>+</button>
 			</div>
 		</div>
 
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="frame" bind:this={frame} {onwheel} {onpointerdown} {onpointermove} {onpointerup} onpointercancel={onpointerup}>
 			{#if !graph && !error}
-				<p class="muted center">Reading the objects…</p>
+				<p class="muted center">{t('Reading the objects…')}</p>
 			{:else if layout && !layout.boxes.length}
-				<p class="muted center">Nothing here to draw.</p>
+				<p class="muted center">{t('Nothing here to draw.')}</p>
 			{:else if layout}
-				<svg width="100%" height="100%" role="img" aria-label="Topology graph">
+				<svg width="100%" height="100%" role="img" aria-label={t('Topology graph')}>
 					<g transform="translate({view.x} {view.y}) scale({view.scale})">
 						{#each layout.bands as band (band.label)}
 							<rect class="band" x={band.x} y={band.y} width={band.width} height={band.height} rx="10" />
 							<text class="band-label" x={band.x + 12} y={band.y + 20}>
-								{band.label}{band.issues ? ` · ${band.issues} with issues` : ''}
+								{band.label}{band.issues ? ` · ${t('{issues} with issues', { issues: band.issues })}` : ''}
 							</text>
 						{/each}
 						{#each layout.edges as { edge, d } (edge.from + '>' + edge.to)}
@@ -250,10 +252,10 @@
 					</g>
 				</svg>
 				<div class="legend" aria-hidden="true">
-					<span><i class="line routes"></i>routes to</span>
-					<span><i class="line selects"></i>selects</span>
-					<span><i class="line owns"></i>owns</span>
-					<span><i class="line uses"></i>uses</span>
+					<span><i class="line routes"></i>{t('routes to')}</span>
+					<span><i class="line selects"></i>{t('selects')}</span>
+					<span><i class="line owns"></i>{t('owns')}</span>
+					<span><i class="line uses"></i>{t('uses')}</span>
 				</div>
 			{/if}
 		</div>
@@ -262,8 +264,8 @@
 	{#if graph?.paths.length}
 		<div class="card paths">
 			<h2>
-				Request paths
-				{#if broken}<span class="tag bad"><HealthIcon health="failed" />{broken} broken</span>{/if}
+				{t('Request paths')}
+				{#if broken}<span class="tag bad"><HealthIcon health="failed" />{t('{broken} broken', { broken })}</span>{/if}
 			</h2>
 			<ul>
 				{#each graph.paths as p, i (i)}
@@ -280,7 +282,7 @@
 								{#if j}<span class="link" class:broken={s.health === 'failed'}>→</span>{/if}
 								<button class="step {s.health}" onclick={() => openStep(s, p)} title={s.detail}>
 									<HealthIcon health={s.health} />
-									<span class="muted">{kindTag(s.kind === 'EndpointSlice' ? 'Endpoints' : s.kind)}</span>
+									<span class="muted">{kindTag(s.kind === 'EndpointSlice' ? t('Endpoints') : s.kind)}</span>
 									{s.name}
 								</button>
 							{/each}

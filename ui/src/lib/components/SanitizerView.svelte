@@ -6,7 +6,8 @@
 </script>
 
 <script lang="ts">
-	import { t } from '../i18n';
+	import { plural, t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import { tick, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { backend } from '../api';
@@ -28,9 +29,9 @@
 	import SearchField from './SearchField.svelte';
 
 	const LEVELS: [LevelFilter, string][] = [
-		['info', 'All'],
-		['warning', 'Warnings and errors'],
-		['error', 'Errors']
+		['info', t('All')],
+		['warning', t('Warnings and errors')],
+		['error', t('Errors')]
 	];
 
 	let report = $state.raw<SanitizerReport | null>(null);
@@ -129,7 +130,7 @@
 		const found = targetOf(row);
 		if (!found) return;
 		e.preventDefault();
-		const first = [{ group: 'Findings', label: 'Explain these findings…', keys: [], run: () => explain(row) }];
+		const first = [{ group: 'Findings', label: t('Explain these findings…'), keys: [], run: () => explain(row) }];
 		openObjectMenu(found.resource, found.target, e.clientX, e.clientY, { before: () => (cursorId = row.id), first });
 	}
 
@@ -221,9 +222,6 @@
 		if (handled) e.preventDefault();
 	}
 
-	function label(n: number, one: string, many = `${one}s`) {
-		return `${n} ${n === 1 ? one : many}`;
-	}
 </script>
 
 <svelte:window {onkeydown} />
@@ -231,11 +229,11 @@
 <section>
 	<PageHeader
 		crumbs={[t('Checks')]}
-		title="Checks"
-		subtitle="Common mistakes and risky settings, {namespace ? `in ${namespace}` : 'in all namespaces'}"
+		title={t('Checks')}
+		subtitle={namespace ? t('Common mistakes and risky settings, in {namespace}', { namespace }) : t('Common mistakes and risky settings, in all namespaces')}
 	>
 		{#snippet tools()}
-			<button class="btn" onclick={scan} disabled={scanning} title="Scan again (Shift+R)">{scanning ? 'Scanning…' : 'Scan again'}</button>
+			<button class="btn" onclick={scan} disabled={scanning} title={t('Scan again (Shift+R)')}>{scanning ? t('Scanning…') : t('Scan again')}</button>
 		{/snippet}
 	</PageHeader>
 
@@ -245,34 +243,35 @@
 
 	{#if report && sum}
 		<div class="summary">
-			<div class="grade {gradeTone(report.grade, sum.error)}" aria-label="Grade {report.grade}">{report.grade}</div>
+			<div class="grade {gradeTone(report.grade, sum.error)}" aria-label={t('Grade {grade}', { grade: report.grade })}>{report.grade}</div>
 			<div class="figures">
 				<div class="score"><strong>{report.score}</strong> <span class="muted">/ 100</span></div>
 				<div class="muted">
-					{label(report.sections.length, 'kind')} · {label(sum.objects, 'object')} · scanned {age(new Date(scannedAt).toISOString(), now) || '0s'} ago
+					{plural(report.sections.length, '{n} kind', '{n} kinds')} · {plural(sum.objects, '{n} object', '{n} objects')} ·
+					{t('scanned {age} ago', { age: age(new Date(scannedAt).toISOString(), now) || '0s' })}
 				</div>
 			</div>
 			<div class="counts">
-				<span><LevelIcon level="error" /> {label(sum.error, 'object')} with errors</span>
-				<span><LevelIcon level="warning" /> {label(sum.warning, 'object')} with warnings</span>
+				<span><LevelIcon level="error" /> {plural(sum.error, '{n} object with errors', '{n} objects with errors')}</span>
+				<span><LevelIcon level="warning" /> {plural(sum.warning, '{n} object with warnings', '{n} objects with warnings')}</span>
 			</div>
 			<p class="how muted">
-				Each object scores 1 without warnings or errors, ½ with warnings and 0 with an error. Infos cost nothing.
-				{#if !namespace}Nodes, volumes and cluster roles are included.{/if}
+				{t('Each object scores 1 without warnings or errors, ½ with warnings and 0 with an error. Infos cost nothing.')}
+				{#if !namespace}{t('Nodes, volumes and cluster roles are included.')}{/if}
 			</p>
 		</div>
 	{/if}
 
 	<div class="card">
 		<div class="toolbar">
-			<SearchField bind:value={filter} bind:input={filterInput} label="Filter findings" placeholder="Filter by kind, name or message" />
-			<div class="segmented" role="group" aria-label="Levels shown">
+			<SearchField bind:value={filter} bind:input={filterInput} label={t('Filter findings')} placeholder={t('Filter by kind, name or message')} />
+			<div class="segmented" role="group" aria-label={t('Levels shown')}>
 				{#each LEVELS as [level, text] (level)}
 					<button aria-pressed={min === level} onclick={() => (min = level)}>{text}</button>
 				{/each}
 			</div>
 		</div>
-		<div class="list" bind:this={scroller} role="tree" aria-label="Findings">
+		<div class="list" bind:this={scroller} role="tree" aria-label={t('Findings')}>
 			{#each rows as row, i (row.id)}
 				{#if row.type === 'section'}
 					{@const s = row.section}
@@ -294,17 +293,17 @@
 						<span class="kind-name">{s.kind}</span>
 						{#if s.resource.group}<span class="group">{s.resource.group}</span>{/if}
 						{#if s.score !== null}
-							<span class="meter {scoreTone(s.score)}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={s.score} aria-label="{s.kind} score">
+							<span class="meter {scoreTone(s.score)}" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={s.score} aria-label={t('{kind} score', { kind: s.kind })}>
 								<span class="fill" style:width="{s.score}%"></span>
 							</span>
 							<span class="value">{s.score}</span>
 							<span class="tally">
 								<span class:zero={!s.error}><LevelIcon level="error" /> {s.error}</span>
 								<span class:zero={!s.warning}><LevelIcon level="warning" /> {s.warning}</span>
-								<span class="muted">of {s.total}</span>
+								<span class="muted">{t('of {total}', { total: s.total })}</span>
 							</span>
 						{:else}
-							<span class="failed" title={s.failed}>Could not list: {s.failed}</span>
+							<span class="failed" title={s.failed}>{t('Could not list: {failed}', { failed: coreText(s.failed ?? '') })}</span>
 						{/if}
 					</div>
 				{:else}
@@ -322,7 +321,7 @@
 					>
 						<div class="object">
 							<LevelIcon level={f.level} />
-							<button class="name link" tabindex="-1" onclick={() => openDetails(row)} title="Describe {row.section.kind} {f.name}">
+							<button class="name link" tabindex="-1" onclick={() => openDetails(row)} title={t('Describe {kind} {name}', { kind: row.section.kind, name: f.name })}>
 								{f.namespace && !namespace ? `${f.namespace}/` : ''}{f.name}
 							</button>
 						</div>
@@ -341,11 +340,11 @@
 			{:else}
 				<div class="empty">
 					{#if scanning}
-						Scanning {namespace ?? 'the cluster'}…
+						{namespace ? t('Scanning {namespace}…', { namespace }) : t('Scanning the cluster…')}
 					{:else if report && filter}
-						Nothing matches the filter.
+						{t('Nothing matches the filter.')}
 					{:else if report}
-						Nothing to check {namespace ? `in ${namespace}` : ''}.
+						{namespace ? t('Nothing to check in {namespace}.', { namespace }) : t('Nothing to check.')}
 					{/if}
 				</div>
 			{/each}

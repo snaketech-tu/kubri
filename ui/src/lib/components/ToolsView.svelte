@@ -8,14 +8,14 @@
 	const running = $derived(app.benchmarks.filter((b) => b.state === 'running').length);
 
 	function status(id: string) {
-		if (id === 'portforwards' && app.forwards.length) return `${app.forwards.length} running`;
-		if (id === 'benchmarks' && running) return `${running} running`;
+		if (id === 'portforwards' && app.forwards.length) return t('{n} running', { n: app.forwards.length });
+		if (id === 'benchmarks' && running) return t('{n} running', { n: running });
 		return '';
 	}
 </script>
 
 <section class="page">
-	<PageHeader crumbs={[t('Tools')]} prefix="context" title="Tools" subtitle="Everything beyond the lists. Each tool also opens from the command palette." />
+	<PageHeader crumbs={[t('Tools')]} prefix="context" title={t('Tools')} subtitle={t('Everything beyond the lists. Each tool also opens from the command palette.')} />
 	<ul class="tiles">
 		{#each TOOLS as tool (tool.id)}
 			<li>

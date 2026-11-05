@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import { backend, type RightSizing, type SizeAdvice } from '../api';
 	import { cpu, errorMessage, memory } from '../format';
 	import { app, findResource } from '../state.svelte';
 	import Icon from './Icon.svelte';
 	import PageHeader from './PageHeader.svelte';
+	import Phrase from './Phrase.svelte';
 
 	let found = $state<RightSizing | null>(null);
 	let error = $state<string | null>(null);
@@ -36,21 +38,33 @@
 	});
 
 	function why(a: SizeAdvice): { text: string; tone: 'bad' | 'warn' | '' } {
-		const cpuOrMemory = a.resource === 'cpu' ? 'CPU' : 'memory';
+		const isCpu = a.resource === 'cpu';
 		switch (a.reason) {
 			case 'nearLimit':
-				return a.resource === 'cpu'
-					? { text: 'Close to its CPU limit, so throttled', tone: 'warn' }
-					: { text: 'Close to its memory limit, so at risk of being OOM-killed', tone: 'bad' };
+				return isCpu
+					? { text: t('Close to its CPU limit, so throttled'), tone: 'warn' }
+					: { text: t('Close to its memory limit, so at risk of being OOM-killed'), tone: 'bad' };
 			case 'underRequested':
-				return { text: `Uses more ${cpuOrMemory} than it requests`, tone: 'warn' };
+				return { text: isCpu ? t('Uses more CPU than it requests') : t('Uses more memory than it requests'), tone: 'warn' };
 			case 'overRequested': {
 				const times = a.used > 0 && a.requested ? Math.round(a.requested / a.used) : 0;
-				return { text: times >= 2 ? `Requests ${times}× what it uses` : 'Requests far more than it uses', tone: '' };
+				return { text: times >= 2 ? t('Requests {times}× what it uses', { times }) : t('Requests far more than it uses'), tone: '' };
 			}
 			case 'noRequest':
-				return { text: `Requests no ${cpuOrMemory}, so the scheduler does not count it`, tone: '' };
+				return {
+					text: isCpu ? t('Requests no CPU, so the scheduler does not count it') : t('Requests no memory, so the scheduler does not count it'),
+					tone: ''
+				};
 		}
+	}
+
+	/** How much the container used, and how that was measured. */
+	function usedNote(a: SizeAdvice) {
+		const used = amount(a, a.used);
+		if (!found?.history) return t('it uses {amount} now.', { amount: used });
+		return a.resource === 'cpu'
+			? t('at the 95th percentile it used {amount} over the last week.', { amount: used })
+			: t('at its peak it used {amount} over the last week.', { amount: used });
 	}
 
 	function open(a: SizeAdvice) {
@@ -70,7 +84,7 @@
 			request: a.suggestedRequest ?? a.request ?? '',
 			limit: a.suggestedLimit ?? a.limit ?? '',
 			current: { request: a.request, limit: a.limit },
-			note: `${why(a).text}: ${a.resource === 'cpu' ? 'at the 95th percentile' : 'at its peak'} it used ${amount(a, a.used)}${found?.history ? ' over the last week' : ' now'}.`
+			note: `${why(a).text}: ${usedNote(a)}`
 		};
 	}
 </script>
@@ -78,27 +92,31 @@
 <section class="page">
 	<PageHeader
 		crumbs={[t('Right-sizing')]}
-		title="Right-sizing"
+		title={t('Right-sizing')}
 		count={found?.advice.length}
-		subtitle="Containers that request much more or less than they use, or run close to their limit{namespace ? `, in ${namespace}` : ''}"
+		subtitle={namespace
+			? t('Containers that request much more or less than they use, or run close to their limit, in {namespace}', { namespace })
+			: t('Containers that request much more or less than they use, or run close to their limit')}
 	>
 		{#snippet tools()}
-			<button class="btn" onclick={load} disabled={loading}>{loading ? 'Measuring…' : 'Measure again'}</button>
+			<button class="btn" onclick={load} disabled={loading}>{loading ? t('Measuring…') : t('Measure again')}</button>
 		{/snippet}
 	</PageHeader>
 
 	{#if error}
 		<div class="banner">{error}</div>
 	{:else if !found}
-		<p class="muted">Measuring what containers use…</p>
+		<p class="muted">{t('Measuring what containers use…')}</p>
 	{:else}
 		<p class="source">
-			Use from {found.source}{found.history
-				? ': CPU at the 95th percentile, memory at its peak.'
-				: '. Without Prometheus this is one sample, so Kubri only calls a request too big at four times what is used now.'}
+			{found.history
+				? t('Use from {source}: CPU at the 95th percentile, memory at its peak.', { source: coreText(found.source) })
+				: t('Use from {source}. Without Prometheus this is one sample, so Kubri only calls a request too big at four times what is used now.', { source: coreText(found.source) })}
 			{#if freed.cpu > 0 || freed.memory > 0}
-				Lowering the requests below frees <strong>{[freed.cpu > 0 ? `${cpu(freed.cpu * 1000)} CPU` : '', freed.memory > 0 ? memory(freed.memory) : ''].filter(Boolean).join(' and ')}</strong>
-				for other pods.
+				<Phrase
+					text={t('Lowering the requests below frees {amount} for other pods.')}
+					strong={{ amount: [freed.cpu > 0 ? `${cpu(freed.cpu * 1000)} CPU` : '', freed.memory > 0 ? memory(freed.memory) : ''].filter(Boolean).join(t(' and ')) }}
+				/>
 			{/if}
 		</p>
 		<div class="card">
@@ -107,13 +125,13 @@
 					<table>
 						<thead>
 							<tr>
-								<th>Workload</th>
-								<th>Container</th>
-								<th>Why</th>
-								<th class="numeric">Request</th>
-								<th class="numeric">Limit</th>
-								<th class="numeric">Used</th>
-								<th class="numeric">Suggested</th>
+								<th>{t('Workload')}</th>
+								<th>{t('Container')}</th>
+								<th>{t('Why')}</th>
+								<th class="numeric">{t('Request')}</th>
+								<th class="numeric">{t('Limit')}</th>
+								<th class="numeric">{t('Used')}</th>
+								<th class="numeric">{t('Suggested')}</th>
 								<th></th>
 							</tr>
 						</thead>
@@ -122,25 +140,25 @@
 								{@const reason = why(a)}
 								<tr>
 									<td>
-										<button class="name" onclick={() => open(a)} title="Show its metrics">{a.workload.name}</button>
+										<button class="name" onclick={() => open(a)} title={t('Show its metrics')}>{a.workload.name}</button>
 										<div class="muted small">{a.kind}{namespace ? '' : ` · ${a.workload.namespace}`}</div>
 									</td>
 									<td class="mono">{a.container}</td>
 									<td>
 										<div class="why {reason.tone}">
 											{#if reason.tone}<Icon name={reason.tone === 'bad' ? 'critical' : 'warning'} size={14} />{/if}
-											<span><strong>{a.resource === 'cpu' ? 'CPU' : 'Memory'}</strong> · {reason.text}</span>
+											<span><strong>{a.resource === 'cpu' ? 'CPU' : t('Memory')}</strong> · {reason.text}</span>
 										</div>
 									</td>
 									<td class="numeric mono">{a.request ?? '—'}</td>
 									<td class="numeric mono">{a.limit ?? '—'}</td>
 									<td class="numeric mono">{amount(a, a.used)}</td>
 									<td class="numeric mono suggested">
-										{#if a.suggestedRequest}<span title="Request">{a.suggestedRequest}</span>{/if}
-										{#if a.suggestedLimit}<span title="Limit">limit {a.suggestedLimit}</span>{/if}
+										{#if a.suggestedRequest}<span title={t('Request')}>{a.suggestedRequest}</span>{/if}
+										{#if a.suggestedLimit}<span title={t('Limit')}>{t('limit {suggestedLimit}', { suggestedLimit: a.suggestedLimit })}</span>{/if}
 									</td>
 									<td class="action">
-										{#if !app.readOnly}<button class="btn" onclick={() => review(a)}>Review…</button>{/if}
+										{#if !app.readOnly}<button class="btn" onclick={() => review(a)}>{t('Review…')}</button>{/if}
 									</td>
 								</tr>
 							{/each}
@@ -148,7 +166,7 @@
 					</table>
 				</div>
 			{:else}
-				<p class="empty"><Icon name="ok" size={16} /> Every container requests about what it uses.</p>
+				<p class="empty"><Icon name="ok" size={16} /> {t('Every container requests about what it uses.')}</p>
 			{/if}
 		</div>
 	{/if}

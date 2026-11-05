@@ -1,4 +1,5 @@
 import { plural, t } from './i18n';
+import { coreText } from './i18n/errors';
 import type { FleetCluster, Health, KindPulse } from './api';
 
 /** How a context is doing on the fleet page, and the words for it. */
@@ -54,7 +55,7 @@ export function fleetState(cluster: FleetCluster | null): FleetState {
 
 /** A connection error without the layers of the HTTP client it went through. */
 export function connectError(message: string): string {
-	return message.replace(/^ServiceError: /, '').replace(/client error \(Connect\): /, '').replace(/ \(os error \d+\)/g, '');
+	return coreText(message.replace(/^ServiceError: /, '').replace(/client error \(Connect\): /, '').replace(/ \(os error \d+\)/g, ''));
 }
 
 /** The API server's host, without the scheme. */

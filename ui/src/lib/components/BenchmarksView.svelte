@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { t } from '../i18n';
+	import { parts, plural, t } from '../i18n';
 	import { tick } from 'svelte';
 	import { backend, type BenchInfo } from '../api';
 	import { bytes, duration, failureShare, pathOf, progress, rate, responses, statusTone } from '../bench';
@@ -63,7 +63,7 @@
 	function rerun(run: BenchInfo) {
 		const forward = app.forwards.find((f) => f.id === run.forwardId);
 		if (forward) app.dialog = { kind: 'benchmark', forward, preset: run };
-		else app.toast('Its port-forward is no longer running', 'bad');
+		else app.toast(t('Its port-forward is no longer running'), 'bad');
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -100,14 +100,14 @@
 
 	/** What the forward points at, and the pod it reached when that is a workload or service. */
 	function target(run: BenchInfo) {
-		const t = run.target;
-		if (t.resource.plural === 'pods' && t.name === run.pod) return `pod ${run.pod}`;
-		return `${t.resource.plural}/${t.name} → pod ${run.pod}`;
+		const to = run.target;
+		if (to.resource.plural === 'pods' && to.name === run.pod) return t('pod {pod}', { pod: run.pod });
+		return `${to.resource.plural}/${to.name} → ${t('pod {pod}', { pod: run.pod })}`;
 	}
 
 	function plan(run: BenchInfo) {
-		const amount = run.requests ? `${run.requests.toLocaleString('en-US')} requests` : `${run.durationSecs}s`;
-		return `${run.concurrency} concurrent · ${amount}`;
+		const amount = run.requests ? plural(run.requests, '{n} request', '{n} requests', { n: run.requests.toLocaleString('en-US') }) : `${run.durationSecs}s`;
+		return `${t('{n} concurrent', { n: run.concurrency })} · ${amount}`;
 	}
 </script>
 
@@ -116,18 +116,18 @@
 <section>
 	<PageHeader
 		crumbs={[t('Benchmarks')]}
-		title="Benchmarks"
+		title={t('Benchmarks')}
 		count={runs.length}
-		subtitle="HTTP load tests against port-forwards. Start one from a port-forward with b."
+		subtitle={t('HTTP load tests against port-forwards. Start one from a port-forward with b.')}
 	>
 		{#snippet tools()}
-			<button class="btn" onclick={() => app.showPortForwards()}>Port-forwards</button>
+			<button class="btn" onclick={() => app.showPortForwards()}>{t('Port-forwards')}</button>
 		{/snippet}
 	</PageHeader>
 
 	{#if runs.length}
 		<div class="split">
-			<div class="list" bind:this={list} role="listbox" aria-label="Benchmarks">
+			<div class="list" bind:this={list} role="listbox" aria-label={t('Benchmarks')}>
 				{#each runs as run (run.id)}
 					<button
 						class="run"
@@ -149,7 +149,7 @@
 						{:else if run.results}
 							<span class="line small">
 								<span>{rate(run.results.requestsPerSecond)} req/s · p95 {duration(run.results.percentiles.find((p) => p.percent === 95)?.seconds)}</span>
-								{#if run.state === 'stopped'}<span class="muted">stopped</span>{/if}
+								{#if run.state === 'stopped'}<span class="muted">{t('stopped')}</span>{/if}
 							</span>
 						{/if}
 					</button>
@@ -164,15 +164,14 @@
 						<h2 title={selected.url}>{selected.url}</h2>
 					</div>
 					<p class="muted facts">
-						{target(selected)} · {plan(selected)} · started
-						{age(selected.started, now)} ago
+						{target(selected)} · {plan(selected)} · {t('started {age} ago', { age: age(selected.started, now) })}
 					</p>
 					<div class="actions">
 						{#if selected.state === 'running'}
-							<button class="btn danger" onclick={() => stop(selected)} title="Stop (Ctrl+D)">Stop</button>
+							<button class="btn danger" onclick={() => stop(selected)} title={t('Stop (Ctrl+D)')}>{t('Stop')}</button>
 						{:else}
-							<button class="btn" onclick={() => rerun(selected)} title="Run again (b)">Run again…</button>
-							<button class="btn danger" onclick={() => remove(selected)} title="Remove (Ctrl+D)">Remove</button>
+							<button class="btn" onclick={() => rerun(selected)} title={t('Run again (b)')}>{t('Run again…')}</button>
+							<button class="btn danger" onclick={() => remove(selected)} title={t('Remove (Ctrl+D)')}>{t('Remove')}</button>
 						{/if}
 					</div>
 
@@ -180,9 +179,13 @@
 						<div class="live">
 							<span class="progress big"><span style:width="{progress(selected) * 100}%"></span></span>
 							<span>
-								{selected.completed.toLocaleString('en-US')}{selected.requests ? ` of ${selected.requests.toLocaleString('en-US')}` : ''} requests
-								· {selected.elapsed.toFixed(1)}s{selected.durationSecs ? ` of ${selected.durationSecs}s` : ''}
-								· about {rate(selected.elapsed ? selected.completed / selected.elapsed : 0)} req/s
+								{selected.requests
+									? t('{done} of {total} requests', { done: selected.completed.toLocaleString('en-US'), total: selected.requests.toLocaleString('en-US') })
+									: t('{done} requests', { done: selected.completed.toLocaleString('en-US') })}
+								· {selected.durationSecs
+									? t('{elapsed} of {total}', { elapsed: `${selected.elapsed.toFixed(1)}s`, total: `${selected.durationSecs}s` })
+									: `${selected.elapsed.toFixed(1)}s`}
+								· {t('about {rate} req/s', { rate: rate(selected.elapsed ? selected.completed / selected.elapsed : 0) })}
 							</span>
 						</div>
 					{:else if r}
@@ -190,13 +193,13 @@
 						{@const failed = failureShare(selected)}
 						{@const answered = responses(selected)}
 						<div class="tiles">
-							<div class="tile"><span class="label">Requests per second</span><span class="value">{rate(r.requestsPerSecond)}</span></div>
-							<div class="tile"><span class="label">Average</span><span class="value">{duration(r.average)}</span></div>
-							<div class="tile"><span class="label">Median</span><span class="value">{duration(p(50))}</span></div>
-							<div class="tile"><span class="label">95th percentile</span><span class="value">{duration(p(95))}</span></div>
-							<div class="tile"><span class="label">99th percentile</span><span class="value">{duration(p(99))}</span></div>
+							<div class="tile"><span class="label">{t('Requests per second')}</span><span class="value">{rate(r.requestsPerSecond)}</span></div>
+							<div class="tile"><span class="label">{t('Average')}</span><span class="value">{duration(r.average)}</span></div>
+							<div class="tile"><span class="label">{t('Median')}</span><span class="value">{duration(p(50))}</span></div>
+							<div class="tile"><span class="label">{t('95th percentile')}</span><span class="value">{duration(p(95))}</span></div>
+							<div class="tile"><span class="label">{t('99th percentile')}</span><span class="value">{duration(p(99))}</span></div>
 							<div class="tile" class:bad={failed > 0}>
-								<span class="label">Failed</span>
+								<span class="label">{t('Failed')}</span>
 								<span class="value">{Math.round(failed * 100)}%</span>
 							</div>
 						</div>
@@ -204,15 +207,15 @@
 						<div class="panels">
 							<div class="panel wide">
 								<div class="panel-head">
-									<h3>Response times</h3>
+									<h3>{t('Response times')}</h3>
 									<span class="spacer"></span>
-									<button class="link" onclick={() => (showTable = !showTable)}>{showTable ? 'Chart' : 'Table'}</button>
+									<button class="link" onclick={() => (showTable = !showTable)}>{showTable ? t('Chart') : t('Table')}</button>
 								</div>
 								{#if !r.histogram.length}
-									<p class="muted">No responses to chart.</p>
+									<p class="muted">{t('No responses to chart.')}</p>
 								{:else if showTable}
 									<table>
-										<thead><tr><th>From</th><th>To</th><th class="num">Responses</th><th class="num">Share</th></tr></thead>
+										<thead><tr><th>{t('From')}</th><th>{t('To')}</th><th class="num">{t('Responses')}</th><th class="num">{t('Share')}</th></tr></thead>
 										<tbody>
 											{#each r.histogram as b, i (i)}
 												<tr><td>{duration(b.from)}</td><td>{duration(b.to)}</td><td class="num">{b.count.toLocaleString('en-US')}</td><td class="num">{share(b.count, answered)}</td></tr>
@@ -225,20 +228,20 @@
 							</div>
 
 							<div class="panel">
-								<h3>Percentiles</h3>
+								<h3>{t('Percentiles')}</h3>
 								<table>
 									<tbody>
 										{#each r.percentiles as x (x.percent)}
 											<tr><td>{x.percent}%</td><td class="num">{duration(x.seconds)}</td></tr>
 										{/each}
-										<tr><td>Fastest</td><td class="num">{duration(r.fastest)}</td></tr>
-										<tr><td>Slowest</td><td class="num">{duration(r.slowest)}</td></tr>
+										<tr><td>{t('Fastest')}</td><td class="num">{duration(r.fastest)}</td></tr>
+										<tr><td>{t('Slowest')}</td><td class="num">{duration(r.slowest)}</td></tr>
 									</tbody>
 								</table>
 							</div>
 
 							<div class="panel">
-								<h3>Status codes</h3>
+								<h3>{t('Status codes')}</h3>
 								{#if r.statusCodes.length}
 									<ul class="codes">
 										{#each r.statusCodes as s (s.code)}
@@ -250,10 +253,10 @@
 										{/each}
 									</ul>
 								{:else}
-									<p class="muted">No responses.</p>
+									<p class="muted">{t('No responses.')}</p>
 								{/if}
 								{#if r.errors.length}
-									<h3>Errors</h3>
+									<h3>{t('Errors')}</h3>
 									<ul class="errors">
 										{#each r.errors as err (err.message)}
 											<li><span class="num">{err.count.toLocaleString('en-US')}×</span> {err.message}</li>
@@ -263,13 +266,13 @@
 							</div>
 
 							<div class="panel">
-								<h3>Totals</h3>
+								<h3>{t('Totals')}</h3>
 								<table>
 									<tbody>
-										<tr><td>Requests</td><td class="num">{r.total.toLocaleString('en-US')}</td></tr>
-										<tr><td>Duration</td><td class="num">{duration(r.duration)}</td></tr>
-										<tr><td>Data received</td><td class="num">{bytes(r.bytes)}</td></tr>
-										<tr><td>Per response</td><td class="num">{answered ? bytes(r.bytes / answered) : '—'}</td></tr>
+										<tr><td>{t('Requests')}</td><td class="num">{r.total.toLocaleString('en-US')}</td></tr>
+										<tr><td>{t('Duration')}</td><td class="num">{duration(r.duration)}</td></tr>
+										<tr><td>{t('Data received')}</td><td class="num">{bytes(r.bytes)}</td></tr>
+										<tr><td>{t('Per response')}</td><td class="num">{answered ? bytes(r.bytes / answered) : '—'}</td></tr>
 									</tbody>
 								</table>
 							</div>
@@ -280,10 +283,11 @@
 		</div>
 	{:else}
 		<div class="empty" role="status">
-			<p>No benchmarks yet.</p>
+			<p>{t('No benchmarks yet.')}</p>
 			<p class="muted">
-				Start a port-forward, then press <kbd>b</kbd> on it in <button class="link" onclick={() => app.showPortForwards()}>Port-forwards</button>
-				to send it a burst of HTTP requests and see how fast it answers.
+				{#each parts(t('Start a port-forward, then press {key} on it in {page} to send it a burst of HTTP requests and see how fast it answers.')) as part, i (i)}{#if 'text' in part}{part.text}{:else if part.name === 'key'}<kbd
+							>b</kbd
+						>{:else}<button class="link" onclick={() => app.showPortForwards()}>{t('Port-forwards')}</button>{/if}{/each}
 			</p>
 		</div>
 	{/if}
