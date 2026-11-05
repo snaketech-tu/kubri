@@ -50,6 +50,7 @@ pub fn router(kubri: Arc<Kubri>) -> Router {
         .route("/settings/context", put(set_context_settings))
         .route("/settings/diff", put(set_diff_settings))
         .route("/settings/searches", put(set_saved_searches))
+        .route("/settings/labels", put(set_label_templates))
         .route("/settings/history", put(set_history_settings))
         .route("/settings/connections", put(set_connection_settings))
         .route("/settings/terminal", put(set_terminal_settings))
@@ -332,6 +333,13 @@ async fn set_saved_searches(
     Json(req): Json<Vec<kubri_core::SavedSearch>>,
 ) -> ApiResult<Settings> {
     Ok(Json(kubri.set_saved_searches(req)?))
+}
+
+async fn set_label_templates(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<Vec<kubri_core::LabelTemplate>>,
+) -> ApiResult<Settings> {
+    Ok(Json(kubri.set_label_templates(req)?))
 }
 
 async fn set_terminal_settings(

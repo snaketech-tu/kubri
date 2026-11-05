@@ -5,7 +5,9 @@
 	import { app } from '../state.svelte';
 	import DashboardList from './DashboardList.svelte';
 	import PageHeader from './PageHeader.svelte';
+	import LabelTemplatesDialog from './LabelTemplatesDialog.svelte';
 	import Phrase from './Phrase.svelte';
+	import Select from './Select.svelte';
 
 	/** What each tool adds, and the kinds to open for the operators. */
 	const ABOUT: Record<string, { text: string; install?: string; kinds?: { group: string; plural: string; label: string }[] }> = {
@@ -43,9 +45,10 @@
 	};
 
 	let checking = $state(false);
+	let editingTemplates = $state(false);
 	let saving = $state(false);
 	const context = $derived(app.cluster?.context ?? '');
-	const EMPTY: IntegrationSettings = { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLogs: '' };
+	const EMPTY: IntegrationSettings = { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLogs: '', labels: '' };
 	let draft = $state<IntegrationSettings>({ ...EMPTY });
 	const saved = $derived({ ...EMPTY, ...app.contextSettings.integrations });
 	const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(saved));
@@ -53,6 +56,14 @@
 	$effect(() => {
 		draft = { ...saved };
 	});
+	/** The usual label names, then the templates; one the settings name that is gone stays listed. */
+	const labelOptions = $derived([
+		{ value: '', label: t('Usual: namespace, pod, container') },
+		...app.settings.labelTemplates.map((x) => ({ value: x.name, label: x.name })),
+		...(draft.labels && !app.settings.labelTemplates.some((x) => x.name === draft.labels)
+			? [{ value: draft.labels, label: t('{name} (removed)', { name: draft.labels }) }]
+			: [])
+	]);
 
 	async function check() {
 		checking = true;
@@ -227,6 +238,14 @@
 					</label>
 					<p class="muted small">{t('Kept in Kubri’s settings file.')}</p>
 				</fieldset>
+				<div class="labels">
+					<span id="log-labels">{t('Log label names')}</span>
+					<div class="labels-row">
+						<Select value={draft.labels} options={labelOptions} onchange={(v) => (draft.labels = v)} aria-labelledby="log-labels" />
+						<button type="button" class="btn" onclick={() => (editingTemplates = true)}>{t('Templates…')}</button>
+					</div>
+					<p class="muted small">{t('For logs from Loki and in Grafana, where the collector names labels differently.')}</p>
+				</div>
 				<div class="actions">
 					<button class="btn primary" type="submit" disabled={!dirty || saving || !context}>{saving ? t('Saving…') : t('Save')}</button>
 				</div>
@@ -234,6 +253,16 @@
 		</div>
 	</div>
 </section>
+
+{#if editingTemplates}
+	<LabelTemplatesDialog
+		onclose={(picked) => {
+			editingTemplates = false;
+			// The first template made is likely meant for this context.
+			if (picked && !draft.labels) draft.labels = picked;
+		}}
+	/>
+{/if}
 
 <style>
 	.page {
@@ -275,6 +304,26 @@
 		font-weight: 600;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
+	}
+	.labels {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 4px;
+		margin: 12px 0;
+		font-size: 13px;
+		color: var(--text-muted);
+	}
+	.labels-row {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+	}
+	.labels-row :global(.select) {
+		flex: 1;
+		min-width: 0;
+	}
+	.labels-row .btn {
+		flex: none;
 	}
 	.tools {
 		display: grid;

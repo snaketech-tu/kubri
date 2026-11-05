@@ -106,6 +106,8 @@ export interface IntegrationSettings {
 	loki: string;
 	/** The Loki data source in Grafana for logs in Explore, by UID or name; found when empty. */
 	grafanaLogs: string;
+	/** The label template the logs use, by name; empty for the usual names. */
+	labels: string;
 }
 
 /** A link with placeholders like `{namespace}` or `{pod}` that an object fills in. */
@@ -275,6 +277,16 @@ export interface Settings {
 	history: HistorySettings;
 	connections: ConnectionSettings;
 	terminal: TerminalSettings;
+	/** Label names for logs, picked per context. */
+	labelTemplates: LabelTemplate[];
+}
+
+/** The label names a log collector uses where they are not namespace, pod and container; empty keeps those. */
+export interface LabelTemplate {
+	name: string;
+	namespace: string;
+	pod: string;
+	container: string;
 }
 
 /** The local terminal's shell, folder and font. */
@@ -1550,6 +1562,7 @@ export interface Backend {
 	setHistorySettings(settings: HistorySettings): Promise<Settings>;
 	setConnectionSettings(settings: ConnectionSettings): Promise<Settings>;
 	setTerminalSettings(settings: TerminalSettings): Promise<Settings>;
+	setLabelTemplates(templates: LabelTemplate[]): Promise<Settings>;
 	/** What changed, newest first, with the times Kubri was watching. */
 	history(query: HistoryQuery): Promise<HistoryPage>;
 	/** One change with the object before and after it. */

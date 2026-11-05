@@ -69,6 +69,7 @@ export const tauriBackend: Backend = {
 	setHistorySettings: (settings) => invoke('set_history_settings', { settings }),
 	setConnectionSettings: (settings) => invoke('set_connection_settings', { settings }),
 	setTerminalSettings: (settings) => invoke('set_terminal_settings', { settings }),
+	setLabelTemplates: (templates) => invoke('set_label_templates', { templates }),
 	history: (query) => invoke('history', { query }),
 	historyDetail: (id) => invoke('history_detail', { id }),
 	setColumnSettings: (kind, columns) => invoke('set_column_settings', { kind, columns }),

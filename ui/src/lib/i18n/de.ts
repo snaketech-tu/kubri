@@ -2516,6 +2516,17 @@ const de: Record<string, string> = {
 	'The quota {name} allows {hard} of {resource}; this needs {used}': 'Die Quota {name} erlaubt {hard} von {resource}; das hier braucht {used}',
 	'The suggestion for {n} more container of it is filled in too.': 'Der Vorschlag für {n} weiteren Container davon ist auch eingetragen.',
 	'The suggestions for {n} more containers of it are filled in too.': 'Die Vorschläge für {n} weitere Container davon sind auch eingetragen.',
+	'Usual: namespace, pod, container': 'Üblich: namespace, pod, container',
+	'{name} (removed)': '{name} (entfernt)',
+	'Log label names': 'Label-Namen der Logs',
+	'Templates…': 'Vorlagen…',
+	'For logs from Loki and in Grafana, where the collector names labels differently.': 'Für Logs aus Loki und in Grafana, wenn der Collector die Labels anders nennt.',
+	'Label templates': 'Label-Vorlagen',
+	'Some log collectors give logs other label names, such as exported_namespace. A template names them once; each context picks one on its integrations page. Leave a field empty for the usual name.': 'Manche Log-Collector geben Logs andere Label-Namen, etwa exported_namespace. Eine Vorlage legt sie einmal fest; jeder Kontext wählt eine auf seiner Integrationsseite. Lass ein Feld leer für den üblichen Namen.',
+	'New template': 'Neue Vorlage',
+	'such as OpenTelemetry': 'etwa OpenTelemetry',
+	'Remove {name}': '{name} entfernen',
+	'Add template': 'Vorlage hinzufügen',
 };
 
 export default de;
