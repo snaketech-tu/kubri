@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import type { Bucket } from '../logs';
 	import { shortTime } from '../logs';
 
@@ -25,7 +26,7 @@
 </script>
 
 <div class="rate" bind:clientWidth={width}>
-	<svg width={inner} height={HEIGHT} role="img" aria-label="Log lines over time; click a column to jump to its lines">
+	<svg width={inner} height={HEIGHT} role="img" aria-label={t('Log lines over time; click a column to jump to its lines')}>
 		{#each buckets as b, i (i)}
 			{@const x = i * slot}
 			{@const w = Math.max(1, slot - 1)}

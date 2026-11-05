@@ -25,7 +25,7 @@
 		type ViewLine
 	} from '../logs';
 	import { logRanges, sourceLabels, stripAnsi } from '../pods';
-	import { t } from '../i18n';
+	import { plural, t } from '../i18n';
 	import { app } from '../state.svelte';
 	import { plainOptions, type SelectOption } from '../select';
 	import CauseCard from './CauseCard.svelte';
@@ -61,17 +61,17 @@
 	/** The ranges k9s puts on 0 to 6: tail, head (here everything), then 1m to 1h. */
 	const RANGE_KEYS = ['tail', 'all', '1m', '5m', '15m', '30m', '1h'];
 	const LEVELS: SelectOption<LogLevel | ''>[] = [
-		{ value: '', label: 'All levels' },
-		{ value: 'info', label: 'Info and above' },
-		{ value: 'warn', label: 'Warnings and errors' },
-		{ value: 'error', label: 'Errors only' }
+		{ value: '', label: t('All levels') },
+		{ value: 'info', label: t('Info and above') },
+		{ value: 'warn', label: t('Warnings and errors') },
+		{ value: 'error', label: t('Errors only') }
 	];
 	const LOKI_RANGES: [number, string][] = [
-		[900, 'Last 15 minutes'],
-		[3600, 'Last hour'],
-		[6 * 3600, 'Last 6 hours'],
-		[86400, 'Last day'],
-		[7 * 86400, 'Last 7 days']
+		[900, t('Last 15 minutes')],
+		[3600, t('Last hour')],
+		[6 * 3600, t('Last 6 hours')],
+		[86400, t('Last day')],
+		[7 * 86400, t('Last 7 days')]
 	];
 
 	let container = $state(untrack(() => wanted?.name ?? ''));
@@ -193,14 +193,14 @@
 
 	/** Which instance and stream the lines come from, so that a view never passes for another. */
 	const streamState = $derived.by((): { tone: 'warn' | 'ok' | ''; text: string } => {
-		if (neverStarted && cause) return { tone: 'warn', text: `No logs: ${cause.container} never started.` };
-		if (loki) return { tone: '', text: lokiSource ? `History from Loki at ${lokiSource}. These lines do not update.` : 'Asking Loki…' };
-		if (previous) return { tone: 'warn', text: 'Previous container instance, which ended. These lines do not update.' };
-		if (app.snapshot) return { tone: '', text: 'The last lines saved in the snapshot. These lines do not update.' };
-		if (status === 'connecting') return { tone: '', text: 'Connecting to the log stream…' };
-		if (status === 'ended' && follow && cause) return { tone: 'warn', text: `The stream ended because ${cause.container} stopped.` };
-		if (status === 'ended') return { tone: '', text: follow ? 'The stream ended. Reconnect to continue.' : 'Snapshot of the current instance.' };
-		return { tone: 'ok', text: follow ? 'Streaming the current container instance.' : 'Snapshot of the current instance.' };
+		if (neverStarted && cause) return { tone: 'warn', text: t('No logs: {container} never started.', { container: cause.container }) };
+		if (loki) return { tone: '', text: lokiSource ? t('History from Loki at {source}. These lines do not update.', { source: lokiSource }) : t('Asking Loki…') };
+		if (previous) return { tone: 'warn', text: t('Previous container instance, which ended. These lines do not update.') };
+		if (app.snapshot) return { tone: '', text: t('The last lines saved in the snapshot. These lines do not update.') };
+		if (status === 'connecting') return { tone: '', text: t('Connecting to the log stream…') };
+		if (status === 'ended' && follow && cause) return { tone: 'warn', text: t('The stream ended because {container} stopped.', { container: cause.container }) };
+		if (status === 'ended') return { tone: '', text: follow ? t('The stream ended. Reconnect to continue.') : t('Snapshot of the current instance.') };
+		return { tone: 'ok', text: follow ? t('Streaming the current container instance.') : t('Snapshot of the current instance.') };
 	});
 
 	/** Colors lines by their level, when they name one; lines without one stay plain. */
@@ -296,7 +296,7 @@
 					if (found.limited && found.lines.length)
 						push({
 							source: null,
-							text: `Loki has more lines: these are the newest ${found.lines.length}. Narrow the range or the query for older ones.`,
+							text: t('Loki has more lines: these are the newest {n}. Narrow the range or the query for older ones.', { n: found.lines.length }),
 							time: found.lines[0].time,
 							kind: 'marker'
 						});
@@ -363,7 +363,7 @@
 	/** Steps to the next or previous match; n and N. */
 	function step(by: 1 | -1) {
 		if (!hits.length) {
-			if (filter) app.toast('No lines match', 'bad');
+			if (filter) app.toast(t('No lines match'), 'bad');
 			return;
 		}
 		const n = hits.length;
@@ -388,7 +388,7 @@
 	function explain() {
 		const lines = selectedText(scroller) ?? shownLines().slice(-200).join('\n');
 		if (!lines.trim()) {
-			app.toast('There are no log lines to explain yet', 'bad');
+			app.toast(t('There are no log lines to explain yet'), 'bad');
 			return;
 		}
 		app.explaining = { kind: 'logs', target, container: container || null, lines };
@@ -446,7 +446,7 @@
 					return true;
 				case 's':
 					toggleAutoscroll();
-					app.toast(stick ? 'Autoscroll on' : 'Autoscroll off');
+					app.toast(stick ? t('Autoscroll on') : t('Autoscroll off'));
 					return true;
 				case 'm':
 					mark();
@@ -489,91 +489,91 @@
 <div class="logs">
 	<div class="toolbar">
 		{#if containers.length > 1}
-			<Select bind:value={container} options={[{ value: '', label: 'All containers' }, ...plainOptions(containers)]} title="Container" aria-label="Container" compact />
+			<Select bind:value={container} options={[{ value: '', label: t('All containers') }, ...plainOptions(containers)]} title={t('Container')} aria-label={t('Container')} compact />
 		{:else if containers.length === 1}
-			<span class="container" title="Container">{containers[0]}</span>
+			<span class="container" title={t('Container')}>{containers[0]}</span>
 		{/if}
 		<Select
 			value={loki ? 'loki' : previous ? 'previous' : 'current'}
 			options={[
-				{ value: 'current', label: 'Current instance' },
-				{ value: 'previous', label: 'Previous · ended' },
-				...(app.has('loki') ? [{ value: 'loki', label: 'Loki history' }] : [])
+				{ value: 'current', label: t('Current instance') },
+				{ value: 'previous', label: t('Previous · ended') },
+				...(app.has('loki') ? [{ value: 'loki', label: t('Loki history') }] : [])
 			]}
 			onchange={(value) => {
 				loki = value === 'loki';
 				previous = value === 'previous';
 			}}
-			title="The running container, the one before it, which ended, or the history Loki kept"
-			aria-label="Log source"
+			title={t('The running container, the one before it, which ended, or the history Loki kept')}
+			aria-label={t('Log source')}
 			compact
 		/>
 		{#if loki}
 			<Select
 				bind:value={lokiSeconds}
 				options={LOKI_RANGES.map(([value, label]) => ({ value, label }))}
-				title="How far back to search Loki"
-				aria-label="Time range"
+				title={t('How far back to search Loki')}
+				aria-label={t('Time range')}
 				compact
 			/>
 		{:else}
 			<Select
 				bind:value={range}
 				options={[...RANGES].map(([value, r]) => ({ value, label: r.label }))}
-				title="How far back to start (0–6)"
-				aria-label="Time range"
+				title={t('How far back to start (0–6)')}
+				aria-label={t('Time range')}
 				compact
 			/>
 		{/if}
-		<Select bind:value={minLevel} options={LEVELS} title="Only lines at this level or above" aria-label="Level" compact />
-		<label class="search" title="Search (/). Enter and n go to the next match, Shift+Enter and N to the previous.">
+		<Select bind:value={minLevel} options={LEVELS} title={t('Only lines at this level or above')} aria-label={t('Level')} compact />
+		<label class="search" title={t('Search (/). Enter and n go to the next match, Shift+Enter and N to the previous.')}>
 			<Icon name="search" size={15} />
 			<input
 				bind:this={search}
 				bind:value={filter}
 				onkeydown={onsearchkey}
-				aria-label="Search log lines"
-				placeholder="Search… /regex/ or fields: level>=warn status>=500"
+				aria-label={t('Search log lines')}
+				placeholder={t('Search… /regex/ or fields: level>=warn status>=500')}
 			/>
 			{#if filter}
 				<span class="count" aria-live="polite"
-					>{hits.length ? `${current >= 0 ? `${current + 1} of ` : ''}${hits.length}` : 'No matches'}</span
+					>{hits.length ? (current >= 0 ? t('{current} of {n}', { current: current + 1, n: hits.length }) : hits.length) : t('No matches')}</span
 				>
-				<button class="step" onclick={() => step(-1)} title="Previous match (N)" aria-label="Previous match"
+				<button class="step" onclick={() => step(-1)} title={t('Previous match (N)')} aria-label={t('Previous match')}
 					><Icon name="up" size={14} /></button
 				>
-				<button class="step" onclick={() => step(1)} title="Next match (n)" aria-label="Next match"
+				<button class="step" onclick={() => step(1)} title={t('Next match (n)')} aria-label={t('Next match')}
 					><Icon name="chevron" size={14} /></button
 				>
 			{/if}
 		</label>
 		{#if filter}
-			<label title="Hide the lines that do not match, or keep them and highlight the matches"
-				><input type="checkbox" bind:checked={onlyMatches} /> Only matches</label
+			<label title={t('Hide the lines that do not match, or keep them and highlight the matches')}
+				><input type="checkbox" bind:checked={onlyMatches} /> {t('Only matches')}</label
 			>
 		{/if}
 		{#if !loki}
-			<button class="toggle" class:on={follow} aria-pressed={follow} onclick={() => (follow = !follow)} title="Keep reading new lines as they are written">
-				Follow
+			<button class="toggle" class:on={follow} aria-pressed={follow} onclick={() => (follow = !follow)} title={t('Keep reading new lines as they are written')}>
+				{t('Follow')}
 			</button>
 		{/if}
 		<details class="columns view" {@attach dropdown}>
-			<summary>View</summary>
+			<summary>{t('View')}</summary>
 			<div class="menu">
-				<label title="t"><input type="checkbox" bind:checked={timestamps} /> Timestamps</label>
-				<label title="w"><input type="checkbox" bind:checked={wrap} /> Wrap lines</label>
-				<label title="Count repeated lines and fold stack traces under their first line"
-					><input type="checkbox" bind:checked={fold} /> Fold repeats</label
+				<label title="t"><input type="checkbox" bind:checked={timestamps} /> {t('Timestamps')}</label>
+				<label title="w"><input type="checkbox" bind:checked={wrap} /> {t('Wrap lines')}</label>
+				<label title={t('Count repeated lines and fold stack traces under their first line')}
+					><input type="checkbox" bind:checked={fold} /> {t('Fold repeats')}</label
 				>
 				{#if names.length}
-					<label title="Show JSON and logfmt lines as a table of their fields"
-						><input type="checkbox" bind:checked={table} /> Table of fields</label
+					<label title={t('Show JSON and logfmt lines as a table of their fields')}
+						><input type="checkbox" bind:checked={table} /> {t('Table of fields')}</label
 					>
 				{/if}
-				<label title="Keep the latest line in view (s)"><input type="checkbox" checked={stick} onchange={toggleAutoscroll} /> Autoscroll</label>
+				<label title={t('Keep the latest line in view (s)')}><input type="checkbox" checked={stick} onchange={toggleAutoscroll} /> {t('Autoscroll')}</label>
 			</div>
 		</details>
-		<button class="export" onclick={save} title="Save the shown lines (Ctrl+S)"><Icon name="download" size={15} /> Export</button>
+		<button class="export" onclick={save} title={t('Save the shown lines (Ctrl+S)')}><Icon name="download" size={15} /> {t('Export')}</button>
 	</div>
 	{#if loki}
 		<form
@@ -593,19 +593,19 @@
 				autocomplete="off"
 				placeholder={'{namespace="…", pod=~"…"}'}
 			/>
-			<button type="submit">Run</button>
+			<button type="submit">{t('Run')}</button>
 		</form>
 	{/if}
 	{#if pods.length > 1}
-		<div class="pods" role="group" aria-label="Pods">
-			<span class="muted">Pods</span>
+		<div class="pods" role="group" aria-label={t('Pods')}>
+			<span class="muted">{t('Pods')}</span>
 			{#each pods as pod (pod)}
 				<button
 					class="pod"
 					aria-pressed={!hiddenPods.has(pod)}
 					onclick={() => togglePod(pod)}
 					ondblclick={() => togglePod(pod, true)}
-					title="Show or hide {pod}; double-click to show it alone"
+					title={t('Show or hide {pod}; double-click to show it alone', { pod })}
 				>
 					<span class="dot" style:background={COLORS[pods.indexOf(pod) % COLORS.length]}></span>{pod}
 				</button>
@@ -615,12 +615,12 @@
 	<div class="stream-state {streamState.tone}">
 		<span class="state" role="status">
 			<Icon name={streamState.tone === 'ok' ? 'event' : 'pending'} size={15} />
-			{streamState.text}{stick ? '' : ' Autoscroll is paused.'}
+			{streamState.text}{stick ? '' : ` ${t('Autoscroll is paused.')}`}
 		</span>
 		<span class="buttons">
 			{#if table && names.length}
 				<details class="columns" {@attach dropdown}>
-					<summary>Columns</summary>
+					<summary>{t('Columns')}</summary>
 					<div class="menu">
 						{#each names.slice(0, 40) as name (name)}
 							<label
@@ -628,15 +628,15 @@
 								{name}</label
 							>
 						{/each}
-						{#if picked}<button onclick={() => (picked = null)}>Reset</button>{/if}
+						{#if picked}<button onclick={() => (picked = null)}>{t('Reset')}</button>{/if}
 					</div>
 				</details>
 			{/if}
-			<button onclick={mark} title="Draw a line to tell what comes after it (m)">Mark</button>
-			<button onclick={copy} title="Copy the shown lines (c)">Copy</button>
+			<button onclick={mark} title={t('Draw a line to tell what comes after it (m)')}>{t('Mark')}</button>
+			<button onclick={copy} title={t('Copy the shown lines (c)')}>{t('Copy')}</button>
 			<!-- Pressing keeps the selection, which is what gets explained. -->
-			<button onmousedown={(e) => e.preventDefault()} onclick={explain} title="Explain the selected lines, or the last 200 shown (x)">Explain</button>
-			<button onclick={() => (lines = [])} title="Clear the view (Shift+C)">Clear</button>
+			<button onmousedown={(e) => e.preventDefault()} onclick={explain} title={t('Explain the selected lines, or the last 200 shown (x)')}>{t('Explain')}</button>
+			<button onclick={() => (lines = [])} title={t('Clear the view (Shift+C)')}>{t('Clear')}</button>
 		</span>
 	</div>
 	{#if buckets}
@@ -644,7 +644,7 @@
 	{/if}
 	<div class="body" class:wrap bind:this={scroller} {onscroll}>
 		{#if dropped}
-			<div class="note">{dropped} older lines were dropped to keep the view fast.</div>
+			<div class="note">{plural(dropped, '{n} older line was dropped to keep the view fast.', '{n} older lines were dropped to keep the view fast.')}</div>
 		{/if}
 		{#if neverStarted && cause}
 			<div class="cause">
@@ -654,9 +654,9 @@
 			<table>
 				<thead>
 					<tr>
-						<th>Time</th>
-						<th>Level</th>
-						{#if showSource}<th>Source</th>{/if}
+						<th>{t('Time')}</th>
+						<th>{t('Level')}</th>
+						{#if showSource}<th>{t('Source')}</th>{/if}
 						{#each columns as c (c)}<th>{c}</th>{/each}
 					</tr>
 				</thead>
@@ -674,7 +674,7 @@
 								class:current={hits[current] === line.id}
 								data-id={line.id}
 								onclick={() => window.getSelection()?.isCollapsed !== false && toggle(line.id)}
-								title="Click to show the whole line"
+								title={t('Click to show the whole line')}
 							>
 								<td class="time" title={line.time}>{shortTime(line.time)}</td>
 								<td>{line.level ?? ''}</td>
@@ -713,13 +713,13 @@
 						class:current={hits[current] === line.id}
 						data-id={line.id}
 					>
-						{@render textLine(line)}{#if row.count > 1}<span class="times" title="The same line {row.count} times in a row"
+						{@render textLine(line)}{#if row.count > 1}<span class="times" title={t('The same line {count} times in a row', { count: row.count })}
 								>× {row.count}</span
 							>{/if}{#if line.fields && line.text.trimStart().startsWith('{')}<button
 								class="fold"
 								onclick={() => toggle(line.id)}
 								aria-expanded={open.has(line.id)}
-								title="Show the fields of this line">{open.has(line.id) ? 'Hide fields' : '{…}'}</button
+								title={t('Show the fields of this line')}>{open.has(line.id) ? t('Hide fields') : '{…}'}</button
 							>{/if}
 					</div>
 					{#if line.fields && open.has(line.id) && !row.more.length}
@@ -732,7 +732,7 @@
 							{/each}
 						{/if}
 						<button class="fold more-toggle" onclick={() => toggle(line.id)} aria-expanded={open.has(line.id)}>
-							{open.has(line.id) ? 'Fold' : `… ${row.more.length} more ${row.more.length === 1 ? 'line' : 'lines'}`}
+							{open.has(line.id) ? t('Fold') : plural(row.more.length, '… {n} more line', '… {n} more lines')}
 						</button>
 					{/if}
 				{/if}
@@ -741,31 +741,31 @@
 		{#if neverStarted}
 			<!-- The card says why. -->
 		{:else if status === 'connecting'}
-			<div class="note">Connecting…</div>
+			<div class="note">{t('Connecting…')}</div>
 		{:else if visible.length === 0}
-			<div class="note">{filter || minLevel || hiddenPods.size ? 'No lines match.' : 'No log lines yet.'}</div>
+			<div class="note">{filter || minLevel || hiddenPods.size ? t('No lines match.') : t('No log lines yet.')}</div>
 		{/if}
 		{#if status === 'ended' && cause && !neverStarted}
 			<div class="cause">
 				<CauseCard cause={cause.cause} target={target} object={pod!} container={cause.container} raw={cause.reason} onprevious={() => (previous = true)} />
-				<button class="again" onclick={() => restarts++}>Reconnect</button>
+				<button class="again" onclick={() => restarts++}>{t('Reconnect')}</button>
 			</div>
 		{:else if status === 'ended' && !neverStarted}
 			<div class="note end">
-				{follow && !previous && !loki ? 'The stream ended.' : 'End of log.'}
-				<button onclick={() => restarts++}>{follow && !previous && !loki ? 'Reconnect' : 'Reload'}</button>
+				{follow && !previous && !loki ? t('The stream ended.') : t('End of log.')}
+				<button onclick={() => restarts++}>{follow && !previous && !loki ? t('Reconnect') : t('Reload')}</button>
 			</div>
 		{/if}
 	</div>
 	<div class="foot">
 		<span>{shownCount} {shownCount === 1 ? 'line' : 'lines'}{shownCount !== total ? ` of ${total}` : ''}</span>
 		<span
-			>{loki ? 'Loki history' : previous ? 'Previous instance' : 'Current instance'} · {app.snapshot ? 'snapshot' : status === 'streaming' ? 'live' : status}</span
+			>{loki ? t('Loki history') : previous ? t('Previous instance') : t('Current instance')} · {app.snapshot ? t('snapshot') : status === 'streaming' ? t('live') : status === 'ended' ? t('ended') : t('connecting')}</span
 		>
 	</div>
 
 	{#if !stick}
-		<button class="jump" onclick={jumpToEnd}>↓ Latest</button>
+		<button class="jump" onclick={jumpToEnd}>{t('↓ Latest')}</button>
 	{/if}
 </div>
 

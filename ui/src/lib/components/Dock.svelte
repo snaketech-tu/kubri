@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { contextOf, dock, type DockSession } from '../dock.svelte';
 	import { app } from '../state.svelte';
 	import DockPane from './DockPane.svelte';
@@ -11,16 +12,21 @@
 	const shown = (id: number) => !dock.minimized && (id === dock.active || id === dock.beside);
 
 	function label(s: DockSession) {
-		if (s.kind === 'local') return s.namespace ? `Terminal · ${s.namespace}` : 'Terminal';
+		if (s.kind === 'local') return s.namespace ? `${t('Terminal')} · ${s.namespace}` : t('Terminal');
 		return s.container ? `${s.target.name} · ${s.container}` : s.target.name;
 	}
 
 	function title(s: DockSession, other: string | null) {
 		if (s.kind === 'local') {
-			return `Terminal on this computer: kubectl and helm use ${app.contextName(s.context)}, ${s.namespace ? `namespace ${s.namespace}` : "the context's own namespace"}`;
+			const context = app.contextName(s.context);
+			return s.namespace
+				? t('Terminal on this computer: kubectl and helm use {context}, namespace {namespace}', { context, namespace: s.namespace })
+				: t("Terminal on this computer: kubectl and helm use {context}, in the context's own namespace", { context });
 		}
-		const what = `${s.kind === 'logs' ? 'Logs' : 'Shell'} of ${s.resource.kind} ${s.target.namespace ? `${s.target.namespace}/` : ''}${label(s)}`;
-		return `${what}${s.previous ? ' (previous instance)' : ''}${other ? ` in ${app.contextName(other)}` : ''}`;
+		const values = { kind: s.resource.kind, name: `${s.target.namespace ? `${s.target.namespace}/` : ''}${label(s)}` };
+		const what = s.kind === 'logs' ? t('Logs of {kind} {name}', values) : t('Shell in {kind} {name}', values);
+		const previous = s.previous ? ` (${t('previous instance')})` : '';
+		return other ? t('{what} in {context}', { what: what + previous, context: app.contextName(other) }) : what + previous;
 	}
 
 	/**
@@ -95,7 +101,7 @@
 	class="dock"
 	class:right
 	class:minimized={dock.minimized}
-	aria-label="Workspace"
+	aria-label={t('Workspace')}
 	bind:this={section}
 	style:--dock-size={dock.size ? `${dock.size}px` : null}
 >
@@ -106,16 +112,16 @@
 			class="resize"
 			role="separator"
 			aria-orientation={right ? 'vertical' : 'horizontal'}
-			aria-label="Resize the workspace"
+			aria-label={t('Resize the workspace')}
 			tabindex="0"
-			title="Drag to resize, double-click for the default size"
+			title={t('Drag to resize, double-click for the default size')}
 			{onpointerdown}
 			ondblclick={() => (dock.size = 0)}
 			onkeydown={onresizekey}
 		></div>
 	{/if}
 	<div class="bar">
-		<div class="tabs" role="tablist" aria-label="Logs, shells and terminals">
+		<div class="tabs" role="tablist" aria-label={t('Logs, shells and terminals')}>
 			{#each dock.sessions as s (s.id)}
 				{@const on = shown(s.id)}
 				{@const other = chipContext(s)}
@@ -135,9 +141,9 @@
 							>
 						{/if}
 						<span>{label(s)}</span>
-						{#if s.kind !== 'local' && s.previous}<em>previous</em>{/if}
+						{#if s.kind !== 'local' && s.previous}<em>{t('previous')}</em>{/if}
 					</button>
-					<button class="close" onclick={() => dock.close(s.id)} title="Close" aria-label="Close {label(s)}">
+					<button class="close" onclick={() => dock.close(s.id)} title={t('Close')} aria-label={t('Close {name}', { name: label(s) })}>
 						<Icon name="close" size={13} />
 					</button>
 				</div>
@@ -151,22 +157,22 @@
 					aria-pressed={dock.beside !== null}
 					disabled={dock.sessions.length < 2}
 					onclick={() => dock.toggleSplit()}
-					title={dock.beside !== null ? 'Show one at a time' : 'Show two side by side'}
-					aria-label="Side by side"><Icon name="split" size={16} /></button
+					title={dock.beside !== null ? t('Show one at a time') : t('Show two side by side')}
+					aria-label={t('Side by side')}><Icon name="split" size={16} /></button
 				>
 				<button
 					class="icon"
 					onclick={() => (dock.side = dock.side === 'bottom' ? 'right' : 'bottom')}
-					title={dock.side === 'bottom' ? 'Dock at the right' : 'Dock at the bottom'}
-					aria-label={dock.side === 'bottom' ? 'Dock at the right' : 'Dock at the bottom'}
+					title={dock.side === 'bottom' ? t('Dock at the right') : t('Dock at the bottom')}
+					aria-label={dock.side === 'bottom' ? t('Dock at the right') : t('Dock at the bottom')}
 					><Icon name={dock.side === 'bottom' ? 'dockRight' : 'dockBottom'} size={16} /></button
 				>
 			{/if}
 			<button
 				class="icon"
 				onclick={() => (dock.minimized = !dock.minimized)}
-				title={dock.minimized ? 'Show the workspace' : 'Minimize to the task bar; logs and shells keep running'}
-				aria-label={dock.minimized ? 'Show the workspace' : 'Minimize'}
+				title={dock.minimized ? t('Show the workspace') : t('Minimize to the task bar; logs and shells keep running')}
+				aria-label={dock.minimized ? t('Show the workspace') : t('Minimize')}
 				aria-expanded={!dock.minimized}><Icon name={dock.minimized ? 'up' : 'chevron'} size={16} /></button
 			>
 		</div>

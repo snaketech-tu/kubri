@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { age } from '../format';
 	import { app } from '../state.svelte';
 
@@ -35,12 +36,12 @@
 
 <!-- A side panel, not a dialog: the list stays in view and usable next to it. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<aside class="panel" aria-label="Activity in this session" tabindex="-1" bind:this={box} {onkeydown}>
+<aside class="panel" aria-label={t('Activity in this session')} tabindex="-1" bind:this={box} {onkeydown}>
 	<header>
-		<h2>Activity <span class="n">{app.activity.length}</span></h2>
-		<button onclick={close} aria-label="Close">×</button>
+		<h2>{t('Activity')} <span class="n">{app.activity.length}</span></h2>
+		<button onclick={close} aria-label={t('Close')}>×</button>
 	</header>
-	<p class="muted">Every change made from Kubri since it started. Undo is offered where Kubernetes allows it.</p>
+	<p class="muted">{t('Every change made from Kubri since it started. Undo is offered where Kubernetes allows it.')}</p>
 	{#if app.activity.length}
 		<ul>
 			{#each app.activity as entry (entry.id)}
@@ -51,15 +52,15 @@
 						<span class="where">{entry.context}</span>
 					</span>
 					{#if entry.undone}
-						<span class="muted">Undone</span>
+						<span class="muted">{t('Undone')}</span>
 					{:else if entry.undo}
-						<button class="undo" onclick={() => app.undoActivity(entry.id)}>Undo</button>
+						<button class="undo" onclick={() => app.undoActivity(entry.id)}>{t('Undo')}</button>
 					{/if}
 				</li>
 			{/each}
 		</ul>
 	{:else}
-		<p class="empty">Nothing yet. Changes you make, such as scaling or deleting, are listed here.</p>
+		<p class="empty">{t('Nothing yet. Changes you make, such as scaling or deleting, are listed here.')}</p>
 	{/if}
 </aside>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { untrack } from 'svelte';
 	import { backend, type ObjectRef, type TerminalMode } from '../api';
 	import { mountTerminal, TERMINAL_BACKGROUND } from '../terminal';
@@ -37,7 +38,8 @@
 		const [to, wantedContainer, wantedMode] = [target, container, mode];
 		return mountTerminal(element, (term) => {
 			status = 'connecting';
-			term.write(`\x1b[2m${wantedMode === 'shell' ? 'Starting a shell' : 'Attaching'} in ${to.name}…\x1b[0m\r\n`);
+			const starting = wantedMode === 'shell' ? t('Starting a shell in {name}…', { name: to.name }) : t('Attaching to {name}…', { name: to.name });
+			term.write(`\x1b[2m${starting}\x1b[0m\r\n`);
 			return backend.openTerminal(
 				to,
 				{ container: wantedContainer || null, mode: wantedMode, cols: term.cols, rows: term.rows },
@@ -64,7 +66,7 @@
 <div class="terminal" style:--terminal-bg={TERMINAL_BACKGROUND}>
 	<div class="toolbar">
 		{#if containers.length > 1}
-			<Select bind:value={container} options={[{ value: '', label: 'Default container' }, ...plainOptions(containers)]} title="Container" compact />
+			<Select bind:value={container} options={[{ value: '', label: 'Default container' }, ...plainOptions(containers)]} title={t('Container')} compact />
 		{/if}
 		<Select
 			bind:value={mode}
@@ -72,14 +74,14 @@
 				{ value: 'shell', label: 'Shell' },
 				{ value: 'attach', label: 'Attach' }
 			]}
-			title="Run a new shell, or connect to the container's main process"
+			title={t('Run a new shell, or connect to the container\'s main process')}
 			compact
 		/>
 		<span class="status" class:open={status === 'open'} class:exited={status === 'exited'}>
-			{status === 'open' ? `Connected to ${connectedTo}` : status === 'exited' ? 'Ended' : 'Connecting…'}
+			{status === 'open' ? `Connected to ${connectedTo}` : status === 'exited' ? t('Ended') : t('Connecting…')}
 		</span>
 		<span class="spacer"></span>
-		<button onclick={() => restarts++}>{status === 'exited' ? 'Reconnect' : 'Restart'}</button>
+		<button onclick={() => restarts++}>{status === 'exited' ? t('Reconnect') : t('Restart')}</button>
 	</div>
 	<div class="screen"><div class="host" bind:this={element}></div></div>
 </div>

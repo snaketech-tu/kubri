@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { duration, ticks } from '../bench';
 
 	let { buckets, total }: { buckets: { from: number; to: number; count: number }[]; total: number } = $props();
@@ -42,7 +43,7 @@
 </script>
 
 <div class="chart" bind:clientWidth={width}>
-	<svg width={width} height={HEIGHT} role="img" aria-label="Response time distribution of {total} responses">
+	<svg width={width} height={HEIGHT} role="img" aria-label={t('Response time distribution of {total} responses', { total })}>
 		{#each yTicks as t (t)}
 			<line class="grid" x1={PAD.left} x2={PAD.left + plotW} y1={y(t)} y2={y(t)} />
 			<text class="axis" x={PAD.left - 6} y={y(t)} dy="0.32em" text-anchor="end">{compact(t)}</text>

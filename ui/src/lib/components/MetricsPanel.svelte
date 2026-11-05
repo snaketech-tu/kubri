@@ -4,6 +4,8 @@
 </script>
 
 <script lang="ts">
+	import { midSentence, t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import { backend, type Charts, type ObjectRef } from '../api';
 	import { RANGES } from '../charts';
 	import { errorMessage } from '../format';
@@ -52,7 +54,7 @@
 
 	function copy(query: string) {
 		navigator.clipboard.writeText(query).then(
-			() => app.toast('Copied the PromQL query'),
+			() => app.toast(t('Copied the PromQL query')),
 			(err) => app.toast(errorMessage(err), 'bad')
 		);
 	}
@@ -67,7 +69,7 @@
 	{/if}
 	{#if prometheus}
 		<div class="bar">
-			<div class="ranges" role="group" aria-label="Time range">
+			<div class="ranges" role="group" aria-label={t('Time range')}>
 				{#each RANGES as range (range.seconds)}
 					<button class:active={seconds === range.seconds} aria-pressed={seconds === range.seconds} onclick={() => (seconds = range.seconds)}>
 						{range.label}
@@ -75,7 +77,7 @@
 				{/each}
 			</div>
 			<span class="source">
-				{#if loading && !charts}Asking Prometheus…{:else if charts}From Prometheus at {charts.source}{/if}
+				{#if loading && !charts}{t('Asking Prometheus…')}{:else if charts}{t('From Prometheus at {source}', { source: charts.source })}{/if}
 			</span>
 		</div>
 
@@ -85,30 +87,30 @@
 
 		{#if charts}
 			{#if !charts.charts.length}
-				<p class="muted">Prometheus has no data for {target.name} in this range. It may be newer than that, or Prometheus may not collect cAdvisor metrics.</p>
+				<p class="muted">{t('Prometheus has no data for {name} in this range. It may be newer than that, or Prometheus may not collect cAdvisor metrics.', { name: target.name })}</p>
 			{/if}
 			<div class="grid">
 				{#each charts.charts as chart (chart.id)}
 					<section>
 						<TimeChart {chart} start={charts.start} end={charts.end} step={charts.step} markers={charts.markers} />
-						<button class="link" onclick={() => copy(chart.query)} title={chart.query}>Copy PromQL</button>
+						<button class="link" onclick={() => copy(chart.query)} title={chart.query}>{t('Copy PromQL')}</button>
 					</section>
 				{/each}
 			</div>
 			{#if charts.markers.length}
 				<div class="markers">
-					<strong>In this range</strong>
+					<strong>{t('In this range')}</strong>
 					<ul>
 						{#each charts.markers as marker (marker.at + marker.label)}
-							<li><span class="at">{time(marker.at)}</span> {marker.label}</li>
+							<li><span class="at">{time(marker.at)}</span> {coreText(marker.label)}</li>
 						{/each}
 					</ul>
 				</div>
 			{/if}
 			{#if charts.missing.length}
 				<p class="muted note">
-					No data for {charts.missing.join(', ').toLowerCase()}.
-					{#if charts.missing.includes('Container restarts')}Restarts come from kube-state-metrics.{/if}
+					{t('No data for {charts}.', { charts: charts.missing.map((name) => midSentence(coreText(name))).join(', ') })}
+					{#if charts.missing.includes('Container restarts')}{t('Restarts come from kube-state-metrics.')}{/if}
 				</p>
 			{/if}
 		{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	import { HISTORY_MS, type Sample } from '../pulse';
 
 	let {
@@ -42,9 +43,9 @@
 
 	function agoText(at: number) {
 		const seconds = Math.round((now - at) / 1000);
-		if (seconds < 5) return 'now';
-		if (seconds < 60) return `${seconds}s ago`;
-		return seconds < 600 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s ago` : `${Math.round(seconds / 60)}m ago`;
+		if (seconds < 5) return t('now');
+		if (seconds < 60) return t('{age} ago', { age: `${seconds}s` });
+		return t('{age} ago', { age: seconds < 600 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${Math.round(seconds / 60)}m` });
 	}
 
 	// The crosshair snaps to the nearest sample; the pointer never has to hit the line.
@@ -63,7 +64,7 @@
 <!-- The latest value is also written out next to the chart, so hovering only adds history. -->
 <div class="spark" bind:clientWidth={width} {onpointermove} onpointerleave={() => (hover = null)} role="presentation">
 	{#if samples.length > 1 && width}
-		<svg {width} height={HEIGHT} role="img" aria-label="{label}, last {minutes} minutes">
+		<svg {width} height={HEIGHT} role="img" aria-label={t('{label}, last {minutes} minutes', { label, minutes })}>
 			<line class="base" x1={PAD} x2={width - PAD} y1={HEIGHT - PAD} y2={HEIGHT - PAD} />
 			<path class="area" d={area} />
 			<path class="line" d={line} />
@@ -77,12 +78,12 @@
 				<strong>{format(samples[hover].value)}</strong>
 				<span>{agoText(samples[hover].at)}</span>
 			{:else}
-				<span>Last {minutes} minutes</span>
-				<span>now</span>
+				<span>{t('Last {minutes} minutes', { minutes })}</span>
+				<span>{t('now')}</span>
 			{/if}
 		</div>
 	{:else}
-		<div class="waiting" style:height={`${HEIGHT + 18}px`}>The trend appears after a few updates.</div>
+		<div class="waiting" style:height={`${HEIGHT + 18}px`}>{t('The trend appears after a few updates.')}</div>
 	{/if}
 </div>
 

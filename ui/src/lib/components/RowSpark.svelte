@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { t } from '../i18n';
 	let { values, label }: { values: number[]; label: string } = $props();
 
 	const W = 44;
@@ -12,7 +13,7 @@
 </script>
 
 {#if values.length >= 3}
-	<svg class="spark" width={W} height={H} viewBox="0 0 {W} {H}" role="img" aria-label="{label}, last {values.length} readings">
+	<svg class="spark" width={W} height={H} viewBox="0 0 {W} {H}" role="img" aria-label={t('{label}, last {n} readings', { label, n: values.length })}>
 		<path {d} fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round" />
 	</svg>
 {/if}

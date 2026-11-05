@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import de from './de';
-import { CHECK_FORMATS, coreText, CORE_TEXTS, ERROR_FORMATS, NOTICE_FORMATS } from './errors';
+import { CHECK_FORMATS, coreText, CORE_TEXTS, ERROR_FORMATS, NOTICE_FORMATS, SOURCE_TEXTS } from './errors';
 import { parts, plural, systemLanguage, t, useLanguage } from '.';
 
 const SRC = new URL('../..', import.meta.url).pathname;
@@ -33,7 +33,9 @@ function used(): Map<string, string> {
 		}
 	}
 	// Texts from the core are translated as they arrive.
-	for (const text of [...ERROR_FORMATS, ...CHECK_FORMATS, ...NOTICE_FORMATS, ...CORE_TEXTS]) texts.set(text, 'errors.ts');
+	for (const text of [...ERROR_FORMATS, ...CHECK_FORMATS, ...NOTICE_FORMATS, ...CORE_TEXTS, ...Object.values(SOURCE_TEXTS).flat()]) {
+		texts.set(text, 'errors.ts');
+	}
 	return texts;
 }
 
@@ -111,6 +113,15 @@ describe('i18n', () => {
 		expect(notices.length + 1).toBe(NOTICE_FORMATS.length);
 	});
 
+	it('knows the texts of the core charts and local terminal', () => {
+		for (const [file, texts] of Object.entries(SOURCE_TEXTS)) {
+			const rust = readFileSync(new URL(`../../../../crates/kubri-core/src/${file}`, import.meta.url), 'utf8');
+			for (const text of texts) {
+				for (const piece of text.split(/\{\d\}/).filter(Boolean)) expect(rust, `${text} in ${file}`).toContain(piece);
+			}
+		}
+	});
+
 	it('cuts a text at its names, for values in bold', () => {
 		expect(parts('Restart {name} now?')).toEqual([{ text: 'Restart ' }, { name: 'name' }, { text: ' now?' }]);
 		expect(parts('{n} of {total}')).toEqual([{ name: 'n' }, { text: ' of ' }, { name: 'total' }]);
@@ -127,6 +138,9 @@ describe('i18n', () => {
 		expect(coreText('not allowed: needs `delete` on `pods` in `shop`')).toBe('nicht erlaubt: braucht `delete` auf `pods` in `shop`');
 		expect(coreText('not allowed: needs `patch` on `deployments.apps/scale`')).toBe('nicht erlaubt: braucht `patch` auf `deployments.apps/scale`');
 		expect(coreText('pods "web" not found')).toBe('pods "web" not found');
+		expect(coreText('This context is set read-only in Kubri. A local terminal would get around that, so it stays closed.')).toBe(
+			'Dieser Kontext ist in Kubri schreibgeschützt. Ein lokales Terminal würde das umgehen, deshalb bleibt es zu.'
+		);
 	});
 
 	it('only takes texts written out, so the test above sees them', () => {
