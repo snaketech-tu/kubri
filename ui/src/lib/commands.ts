@@ -18,6 +18,8 @@ export type Action =
 	| { type: 'context'; name: string }
 	| { type: 'namespace'; name: string }
 	| { type: 'portforwards' }
+	| { type: 'tools' }
+	| { type: 'kinds'; filter?: string }
 	| { type: 'pulses'; namespace?: string }
 	| { type: 'xray'; resource: ResourceInfo; namespace?: string }
 	| { type: 'rbac'; namespace?: string }
@@ -53,12 +55,14 @@ export interface Suggestion {
 const CONTEXT_COMMANDS = ['ctx', 'context', 'contexts'];
 const NAMESPACE_COMMANDS = ['ns', 'namespace', 'namespaces'];
 const PORT_FORWARD_COMMANDS = ['pf', 'portforward', 'portforwards'];
-const PULSE_COMMANDS = ['pu', 'pulse', 'pulses'];
+const PULSE_COMMANDS = ['overview', 'pu', 'pulse', 'pulses'];
 const XRAY_COMMANDS = ['xray'];
-const RBAC_COMMANDS = ['rbac', 'policy', 'subjects'];
+const RBAC_COMMANDS = ['access', 'rbac', 'policy', 'subjects'];
 const HELM_COMMANDS = ['helm', 'hm', 'chart', 'charts'];
 const NEW_COMMANDS = ['new', 'create', 'apply'];
-const SANITIZER_COMMANDS = ['popeye', 'pop', 'sanitizer', 'sanitize'];
+const SANITIZER_COMMANDS = ['checks', 'check', 'popeye', 'pop', 'sanitizer', 'sanitize'];
+const TOOLS_COMMANDS = ['tools', 'tool'];
+const KINDS_COMMANDS = ['kinds', 'api-resources'];
 const BENCH_COMMANDS = ['be', 'bench', 'benchmark', 'benchmarks'];
 const INTEGRATION_COMMANDS = ['integrations', 'integration', 'prometheus', 'grafana', 'loki'];
 const SIZING_COMMANDS = ['rightsizing', 'rightsize', 'sizing'];
@@ -267,16 +271,17 @@ function builtins(
 	};
 	if (PORT_FORWARD_COMMANDS.includes(cmd)) return [portForwards];
 
+	// The views go by one name; the k9s commands still lead there.
 	const pulses = (namespace?: string): Suggestion => ({
-		label: namespace ? `pulses ${namespace}` : 'pulses',
-		detail: 'Cluster overview: health, warnings, CPU and memory',
+		label: namespace ? `overview ${namespace}` : 'overview',
+		detail: 'Overview: health, warnings, CPU and memory · also :pulses',
 		action: { type: 'pulses', namespace }
 	});
 	if (PULSE_COMMANDS.includes(cmd)) return [pulses(rest[0])];
 
 	const rbac = (namespace?: string): Suggestion => ({
-		label: namespace ? `rbac ${namespace}` : 'rbac',
-		detail: 'Who may do what: users, groups, service accounts and your own rights',
+		label: namespace ? `access ${namespace}` : 'access',
+		detail: 'Access: who may do what, and your own rights · also :rbac',
 		action: { type: 'rbac', namespace }
 	});
 	if (RBAC_COMMANDS.includes(cmd)) return [rbac(rest[0])];
@@ -289,8 +294,8 @@ function builtins(
 	if (HELM_COMMANDS.includes(cmd)) return [helm(rest[0])];
 
 	const sanitizer = (namespace?: string): Suggestion => ({
-		label: namespace ? `popeye ${namespace}` : 'popeye',
-		detail: 'Sanitizer: problems and risky settings, scored like Popeye',
+		label: namespace ? `checks ${namespace}` : 'checks',
+		detail: 'Checks: common mistakes and risky settings, scored · also :popeye',
 		action: { type: 'sanitizer', namespace }
 	});
 	if (SANITIZER_COMMANDS.includes(cmd)) return [sanitizer(rest[0])];
@@ -315,6 +320,16 @@ function builtins(
 		action: { type: 'rightsizing' }
 	};
 	if (SIZING_COMMANDS.includes(cmd)) return [sizing];
+
+	const tools: Suggestion = { label: 'tools', detail: 'Every tool beyond the lists, with its command', action: { type: 'tools' } };
+	if (TOOLS_COMMANDS.includes(cmd)) return [tools];
+
+	const kinds: Suggestion = {
+		label: arg ? `kinds ${arg}` : 'kinds',
+		detail: 'Every kind the cluster serves, to find one and open its list',
+		action: { type: 'kinds', filter: arg || undefined }
+	};
+	if (KINDS_COMMANDS.includes(cmd)) return [kinds];
 
 	const fleet: Suggestion = {
 		label: 'fleet',
@@ -341,7 +356,7 @@ function builtins(
 
 	const graph = (namespace?: string): Suggestion => ({
 		label: namespace ? `graph ${namespace}` : 'graph',
-		detail: 'XRay graph: how objects connect, and the request paths of Ingresses',
+		detail: 'Topology as one graph: how objects connect, and the request paths of Ingresses',
 		action: { type: 'graph', namespace }
 	});
 	if (GRAPH_COMMANDS.includes(cmd)) return [graph(rest[0])];
@@ -380,7 +395,7 @@ function builtins(
 		return (kind ? matchResources(kind, roots) : roots).map(
 			(r): Suggestion => ({
 				label: `xray ${resourceLabel(r)}${namespace ? ` ${namespace}` : ''}`,
-				detail: `How ${r.kind}s depend on pods, config and volumes`,
+				detail: `Topology of ${r.kind}s: how they depend on pods, config and volumes`,
 				action: { type: 'xray', resource: r, namespace }
 			})
 		);
@@ -465,6 +480,8 @@ function builtins(
 	if (cmd && BENCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(benchmarks);
 	if (cmd.length > 1 && INTEGRATION_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(integrations);
 	if (cmd.length > 2 && SIZING_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(sizing);
+	if (cmd.length > 2 && TOOLS_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(tools);
+	if (cmd.length > 1 && KINDS_COMMANDS.some((c) => c.startsWith(cmd))) extra.push({ ...kinds, label: 'kinds' });
 	if (cmd.length > 1 && FLEET_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(fleet);
 	if (terminal && cmd.length > 1 && TERMINAL_COMMANDS.some((c) => c.startsWith(cmd))) extra.push(terminals[0]);
 	if (cmd.length > 1 && SEARCH_COMMANDS.some((c) => c.startsWith(cmd))) extra.push({ ...search, label: 'search' });

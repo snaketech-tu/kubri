@@ -42,6 +42,8 @@
 	import RbacView from '#lib/components/RbacView.svelte';
 	import ResourceView from '#lib/components/ResourceView.svelte';
 	import SanitizerView from '#lib/components/SanitizerView.svelte';
+	import ToolsView from '#lib/components/ToolsView.svelte';
+	import KindsView from '#lib/components/KindsView.svelte';
 	import IntegrationsView from '#lib/components/IntegrationsView.svelte';
 	import RightSizingView from '#lib/components/RightSizingView.svelte';
 	import FleetView from '#lib/components/FleetView.svelte';
@@ -286,6 +288,9 @@
 				...panel,
 				['?', 'help']
 			] as [string, string][];
+		}
+		if (app.page === 'kinds') {
+			return [[':', 'command'], ['/', 'find'], ['j/k', 'move'], ['enter', 'open'], ['?', 'help']] as [string, string][];
 		}
 		if (app.page === 'rbac') {
 			return [[':', 'command'], ['/', 'filter'], ['j/k', 'move'], ...panel, ['?', 'help']] as [string, string][];
@@ -620,6 +625,12 @@
 					{:else if app.page === 'integrations'}
 						{#key app.cluster?.context}
 							<IntegrationsView />
+						{/key}
+					{:else if app.page === 'tools'}
+						<ToolsView />
+					{:else if app.page === 'kinds'}
+						{#key app.cluster?.context}
+							<KindsView />
 						{/key}
 					{:else if app.page === 'rightsizing'}
 						{#key `${app.cluster?.context}/${app.namespace}`}
@@ -1280,11 +1291,19 @@
 			display: none;
 		}
 	}
-	/* A narrow window keeps the sidebar as a rail of icons; the labels are in the tooltips. */
-	@media (min-width: 721px) and (max-width: 1100px) {
+	/* A small laptop window keeps the labels in a narrower sidebar. */
+	@media (min-width: 901px) and (max-width: 1100px) {
+		.shell {
+			grid-template-columns: 184px minmax(0, 1fr);
+		}
+	}
+	/* Below that the sidebar is a rail of icons; the labels are in the tooltips. */
+	@media (min-width: 721px) and (max-width: 900px) {
 		.shell {
 			grid-template-columns: 56px minmax(0, 1fr);
 		}
+	}
+	@media (min-width: 721px) and (max-width: 1100px) {
 		.mode {
 			font-size: 0;
 			gap: 0;

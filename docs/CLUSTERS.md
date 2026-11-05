@@ -18,7 +18,7 @@ Kubri keeps the 3 most recent contexts this way, each for up to 30 minutes after
 
 ## Clusters
 
-**Clusters** (`:fleet`, first in the sidebar) shows every context in your kubeconfig on one page, without connecting Kubri to any of them:
+**Clusters** (`:fleet`, in the sidebar under Overview) shows every context in your kubeconfig on one page, without connecting Kubri to any of them:
 
 - whether its API server answers, its version and how long it took
 - nodes, pods and workloads (Deployments, StatefulSets and DaemonSets), healthy out of all

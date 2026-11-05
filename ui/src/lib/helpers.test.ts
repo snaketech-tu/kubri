@@ -86,6 +86,29 @@ describe('command palette', () => {
 		expect(suggest(':pu shop', resources, contexts, [])[0].action).toEqual({ type: 'pulses', namespace: 'shop' });
 	});
 
+	it('names each view once and keeps the k9s commands as aliases', () => {
+		for (const [typed, type] of [
+			['overview', 'pulses'],
+			['pulses', 'pulses'],
+			['access', 'rbac'],
+			['rbac', 'rbac'],
+			['checks', 'sanitizer'],
+			['popeye', 'sanitizer']
+		]) {
+			const [first] = suggest(typed, resources, contexts, []);
+			expect(first.action).toEqual({ type, namespace: undefined });
+			expect(['overview', 'access', 'checks']).toContain(first.label);
+		}
+		expect(suggest('popeye shop', resources, contexts, [])[0].label).toBe('checks shop');
+	});
+
+	it('opens the Tools and All kinds pages', () => {
+		expect(suggest('tools', resources, contexts, [])[0].action).toEqual({ type: 'tools' });
+		expect(suggest('kinds', resources, contexts, [])[0].action).toEqual({ type: 'kinds', filter: undefined });
+		expect(suggest(':kinds cert', resources, contexts, [])[0].action).toEqual({ type: 'kinds', filter: 'cert' });
+		expect(suggest('api-resources', resources, contexts, [])[0].action).toEqual({ type: 'kinds', filter: undefined });
+	});
+
 	it('opens xray for the kinds it supports', () => {
 		const [first, ...rest] = suggest('xray deploy kube-system', resources, contexts, []);
 		expect(first.action).toMatchObject({ type: 'xray', namespace: 'kube-system' });

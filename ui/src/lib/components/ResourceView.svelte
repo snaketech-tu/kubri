@@ -774,7 +774,7 @@
 <section>
 	<header>
 		<nav class="crumbs" aria-label="Breadcrumb">
-			<button onclick={() => app.showPulses()} title="Cluster overview">{app.contextName(app.cluster?.context ?? '')}</button>
+			<button onclick={() => app.showPulses()} title="Overview">{app.contextName(app.cluster?.context ?? '')}</button>
 			<Icon name="next" size={12} />
 			<span>{!resource.namespaced ? 'cluster-wide' : app.namespace === ALL_NAMESPACES ? 'all namespaces' : app.namespace}</span>
 			<Icon name="next" size={12} />

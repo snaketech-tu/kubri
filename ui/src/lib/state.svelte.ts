@@ -51,6 +51,8 @@ import { recentObjects, remember, type RecentObject } from './search';
 import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu, MenuAction } from './menu';
 import { applyScheme, applyTheme, resolveColor, storeSkin, storedScheme, storedSkin, type Scheme } from './skin';
+import { xrayResources } from './xray';
+import type { ToolId } from './nav';
 
 export const ALL_NAMESPACES = '';
 
@@ -186,7 +188,9 @@ export const PAGES = [
 	'fleet',
 	'search',
 	'changes',
-	'config'
+	'config',
+	'tools',
+	'kinds'
 ] as const;
 
 export type Page = (typeof PAGES)[number];
@@ -300,8 +304,10 @@ class AppState {
 	searchQuery = $state('');
 	/** What the What changed page shows; replaced as a whole when opened from elsewhere. */
 	changesFilter = $state<ChangesFilter>({});
-	/** The kind the XRay page starts its trees from. */
+	/** The kind the Topology trees start from. */
 	xrayResource = $state<ResourceInfo | null>(null);
+	/** What the All kinds page starts filtered by, as `:kinds cert` asks. */
+	kindsFilter = $state('');
 	#details = $state<Details | null>(null);
 	get details() {
 		return this.#details;
@@ -1125,6 +1131,12 @@ class AppState {
 			case 'rightsizing':
 				this.showRightSizing();
 				break;
+			case 'tools':
+				this.showTools();
+				break;
+			case 'kinds':
+				this.showKinds(action.filter);
+				break;
 			case 'fleet':
 				this.showFleet();
 				break;
@@ -1294,6 +1306,46 @@ class AppState {
 		this.details = null;
 	}
 
+	/** Every tool beyond the lists, on one page. */
+	showTools() {
+		if (drafts.block(() => this.showTools())) return;
+		this.page = 'tools';
+		this.details = null;
+	}
+
+	/** Opens a tool of the sidebar or the Tools page. */
+	showTool(id: ToolId) {
+		switch (id) {
+			case 'xray': {
+				const resource = this.xrayResource ?? xrayResources(this.resources)[0];
+				if (resource) this.showXray(resource);
+				break;
+			}
+			case 'changes':
+				return this.showChanges();
+			case 'helm':
+				return this.showHelm();
+			case 'portforwards':
+				return this.showPortForwards();
+			case 'rbac':
+				return this.showRbac();
+			case 'sanitizer':
+				return this.showSanitizer();
+			case 'rightsizing':
+				return this.showRightSizing();
+			case 'benchmarks':
+				return this.showBenchmarks();
+		}
+	}
+
+	/** Every kind the cluster serves, to find one by name. */
+	showKinds(filter = '') {
+		if (drafts.block(() => this.showKinds(filter))) return;
+		this.page = 'kinds';
+		this.details = null;
+		this.kindsFilter = filter;
+	}
+
 	/** Containers whose requests or limits are far from what they use. */
 	showRightSizing() {
 		if (drafts.block(() => this.showRightSizing())) return;
@@ -1301,7 +1353,7 @@ class AppState {
 		this.details = null;
 	}
 
-	/** The cluster overview, optionally switching namespace like `:pulses kube-system`. */
+	/** The Overview, optionally switching namespace like `:pulses kube-system`. */
 	showPulses(namespace?: string) {
 		if (drafts.block(() => this.showPulses(namespace))) return;
 		this.page = 'pulses';

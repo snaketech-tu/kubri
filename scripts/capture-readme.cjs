@@ -122,7 +122,7 @@ const tree = ['api','emails','frontend','payments','worker'].map((app,i) => ({id
     await page.goto(base);
     await page.getByRole('button',{name:'Overview :pulses',exact:true}).click();
 
-    await page.getByRole('heading',{name:'Cluster overview',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'Overview',exact:true}).waitFor();
     await page.getByLabel(`Version ${version}`,{exact:true}).waitFor();
     await page.locator('.signal').first().waitFor();
     for(let i=0;i<8;i++)await Promise.all([page.waitForResponse(r=>new URL(r.url()).pathname==='/api/pulse'),page.clock.fastForward(10000)]);
@@ -146,7 +146,7 @@ const tree = ['api','emails','frontend','payments','worker'].map((app,i) => ({id
     await shot('logs-previous.png');
     await page.getByRole('button',{name:'Use light colors',exact:true}).click();
     await page.getByRole('button',{name:'Close',exact:true}).click();
-    await page.getByRole('button',{name:'Topology XRay',exact:true}).click();
+    await page.getByRole('button',{name:'Topology',exact:true}).click();
     await page.locator('.row').first().waitFor();
     await shot('xray.png');
     await page.getByRole('button',{name:'Pods',exact:true}).click();
