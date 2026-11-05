@@ -54,3 +54,9 @@ The plan for 1.1 to 1.4 is in [IMPLEMENTATION-PLAN-UX.md](IMPLEMENTATION-PLAN-UX
 - 1.2 One place for each thing: fewer duplicate actions, breadcrumbs that are a path, a sidebar grouped by task, a clearer header, narrow windows.
 - 1.3 Say it plainly: plain warning texts, honest health bars, list tones for throttling, actions that fit the object, simpler logs toolbar.
 - 1.4 What was missing: pins and recents, actions in the palette, session activity with undo, related objects, rollout history, trends in lists, a first-run tour.
+
+## Next: 1.9
+
+The plan is in [IMPLEMENTATION-PLAN-1.9.md](IMPLEMENTATION-PLAN-1.9.md).
+
+- 1.9 Smoother everyday work: start in the last context and view, port-forwards that stay open, limits in the pod list, and one dialog for requests and limits with the room the nodes still have.
