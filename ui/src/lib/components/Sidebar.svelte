@@ -5,7 +5,7 @@
 	import { NAV_SECTIONS, SIDEBAR_TOOLS, TOOLS, pluralKind, toolOf } from '../nav';
 	import { samePin } from '../pins';
 	import { t } from '../i18n';
-	import { app, sameResource } from '../state.svelte';
+	import { app, favoriteLabel, sameResource } from '../state.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 
 	// Resources are sorted with the core group first, so core events win over events.k8s.io.
@@ -132,6 +132,24 @@
 							<span class="hint">{entry.command}</span>
 						{/if}
 					</button>
+					{#if entry.id === 'portforwards'}
+						{#each app.favoritesHere as favorite (favoriteLabel(favorite))}
+							{@const on = !!app.runningFavorite(favorite)}
+							{@const busy = app.switchingFavorites.includes(favorite)}
+							<button
+								class="favorite"
+								class:on
+								aria-pressed={on}
+								aria-busy={busy}
+								onclick={() => app.switchFavorite(favorite)}
+								title="{favoriteLabel(favorite)}{favorite.address ? ` · ${favorite.address}` : ''} · {on ? t('Click to stop') : t('Click to start')}"
+							>
+								<span class="dot" aria-hidden="true"></span>
+								<span class="label">{favorite.target.name}</span>
+								<span class="hint">{busy ? '…' : `:${favorite.localPort}`}</span>
+							</button>
+						{/each}
+					{/if}
 				{/each}
 				<button class:active={otherTool} aria-current={here(otherTool)} onclick={() => app.showTools()} title="{t('Every tool, with what it does')} (:tools)">
 					<Icon name="tools" />
@@ -207,6 +225,27 @@
 {/snippet}
 
 <style>
+	.favorite .hint {
+		font-family: var(--mono);
+	}
+	/* The local port tells favorites apart while the sidebar has room for it. */
+	@media (min-width: 1101px) {
+		.favorite .hint {
+			display: inline;
+		}
+	}
+	.favorite .dot {
+		flex: none;
+		width: 8px;
+		height: 8px;
+		margin: 0 6px;
+		border: 1.5px solid var(--text-muted);
+		border-radius: 50%;
+	}
+	.favorite.on .dot {
+		border-color: var(--ok);
+		background: var(--ok);
+	}
 	.pin {
 		position: relative;
 		display: flex;
@@ -470,6 +509,7 @@
 		.bottom,
 		.shade,
 		h3,
+		hr,
 		.hint {
 			display: none;
 		}

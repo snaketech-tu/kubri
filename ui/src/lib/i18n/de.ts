@@ -659,7 +659,6 @@ const de: Record<string, string> = {
 	'Started {n} favorite port-forwards': '{n} favorisierte Port-Forwards gestartet',
 	'{name} did not start: {error}': '{name} ist nicht gestartet: {error}',
 	'{name} is no longer a favorite': '{name} ist kein Favorit mehr',
-	'{name} starts whenever Kubri connects to {context}': '{name} startet, sobald Kubri sich mit {context} verbindet',
 
 	// Dialogs
 	'Expected key=value, got “{line}”': 'Erwartet: key=value, steht da: „{line}“',
@@ -2050,15 +2049,15 @@ const de: Record<string, string> = {
 	'Conns': 'Verb.',
 	'Open in the browser (o)': 'Im Browser öffnen (o)',
 	'Copy URL (c)': 'URL kopieren (c)',
-	'A favorite: starts whenever Kubri connects to this context (s)': 'Ein Favorit: startet, sobald Kubri sich mit diesem Kontext verbindet (s)',
-	'Keep as a favorite that starts with Kubri (s)': 'Als Favorit behalten, der mit Kubri startet (s)',
+	'A favorite: start it again with one click from the sidebar (s)': 'Ein Favorit: mit einem Klick in der Seitenleiste wieder starten (s)',
+	'Keep as a favorite to start with one click (s)': 'Als Favorit behalten, um ihn mit einem Klick zu starten (s)',
 	'Favorite': 'Favorit',
 	'HTTP benchmark (b)': 'HTTP-Benchmark (b)',
 	'Benchmark': 'Benchmark',
 	'No port-forwards running.': 'Keine Port-Forwards aktiv.',
 	'Select a pod, deployment or service and press {key} to start one.': 'Wähle einen Pod, ein Deployment oder einen Service und drücke {key}, um einen zu starten.',
 	'Start a port-forward…': 'Port-Forward starten…',
-	'Favorites not running in {context}': 'Favoriten, die in {context} nicht laufen',
+	'Favorites in {context}': 'Favoriten in {context}',
 	'Forget this favorite': 'Diesen Favoriten vergessen',
 	'{n} running': '{n} aktiv',
 
@@ -2540,6 +2539,16 @@ const de: Record<string, string> = {
 	'{name} is no longer a production namespace': '{name} ist kein Produktions-Namespace mehr',
 	'Production namespace': 'Produktions-Namespace',
 	'AI agents never change a production namespace': 'KI-Agenten ändern nie einen Produktions-Namespace',
+	'Start it again with one click under Port-forwards in the sidebar': 'Mit einem Klick unter Port-Forwards in der Seitenleiste wieder starten',
+	'Keep as a favorite': 'Als Favorit behalten',
+	'Stopped': 'Gestoppt',
+	'Start it whenever Kubri connects to this context': 'Starten, sobald Kubri sich mit diesem Kontext verbindet',
+	'Start on connect': 'Beim Verbinden starten',
+	'Stopping…': 'Stoppe…',
+	'Click to stop': 'Klicken zum Stoppen',
+	'Click to start': 'Klicken zum Starten',
+	'Stopped {name}': '{name} gestoppt',
+	'{name} is a favorite: start it with one click under Port-forwards in the sidebar': '{name} ist ein Favorit: mit einem Klick unter Port-Forwards in der Seitenleiste starten',
 };
 
 export default de;

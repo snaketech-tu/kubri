@@ -222,13 +222,15 @@ export interface Charts {
 	missing: string[];
 }
 
-/** A port-forward that starts whenever Kubri connects to its context, on the same local port. */
+/** A port-forward kept to start again on the same local port, with one click or on connect. */
 export interface FavoriteForward {
 	target: ObjectRef;
 	remotePort: number;
 	localPort: number;
 	/** Empty for 127.0.0.1. */
 	address: string;
+	/** Starts whenever Kubri connects to its context. */
+	startOnConnect: boolean;
 }
 
 export interface FavoriteStart {

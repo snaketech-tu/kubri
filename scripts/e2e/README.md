@@ -1,7 +1,7 @@
 # End-to-end tests
 
 The web app's main flows, in a real browser against a real cluster: lists and filters, context
-switching and the browser's Back, logs, a shell, a port-forward, editing YAML, scaling, restarting
+switching and the browser's Back, logs, a shell, a port-forward and a favorite one, editing YAML, scaling, restarting
 and deleting, read-only mode, snapshots, and MCP. A second check starts the desktop app on Linux
 and waits for it to show the overview. CI runs both on every pull request (`.github/workflows/ci.yml`,
 jobs **End-to-end** and **Desktop start**).

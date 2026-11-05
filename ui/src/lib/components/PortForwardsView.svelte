@@ -6,8 +6,7 @@
 	import { backend, type PortForwardInfo } from '../api';
 	import { age, errorMessage } from '../format';
 	import { lastEnd } from '../forwards';
-	import { app, favoriteLabel, isForwardOf } from '../state.svelte';
-	import type { FavoriteForward } from '../api';
+	import { app, favoriteLabel } from '../state.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import Phrase from './Phrase.svelte';
 
@@ -25,30 +24,6 @@
 	});
 
 	const forwards = $derived(app.forwards);
-	/** The connected context's favorites that are not running. */
-	const stopped = $derived(
-		(app.cluster ? app.contextSettingsOf(app.cluster.context).forwards ?? [] : []).filter(
-			(f) => !forwards.some((r) => r.context === app.cluster?.context && isForwardOf(f, r))
-		)
-	);
-	let starting = $state<FavoriteForward | null>(null);
-
-	async function start(f: FavoriteForward) {
-		starting = f;
-		try {
-			await backend.startPortForward({
-				target: { ...f.target, context: app.cluster?.context },
-				remotePort: f.remotePort,
-				localPort: f.localPort,
-				address: f.address || null
-			});
-			await app.refreshForwards();
-		} catch (err) {
-			app.toast(t('{name} did not start: {error}', { name: favoriteLabel(f), error: errorMessage(err) }), 'bad');
-		} finally {
-			starting = null;
-		}
-	}
 	const cursor = $derived.by(() => {
 		const i = forwards.findIndex((f) => f.id === cursorId);
 		return i === -1 ? 0 : i;
@@ -178,7 +153,7 @@
 											class:on={favorite}
 											aria-pressed={favorite}
 											onclick={() => app.toggleFavorite(f)}
-											title={favorite ? t('A favorite: starts whenever Kubri connects to this context (s)') : t('Keep as a favorite that starts with Kubri (s)')}
+											title={favorite ? t('A favorite: start it again with one click from the sidebar (s)') : t('Keep as a favorite to start with one click (s)')}
 										>
 											{favorite ? '★' : '☆'} {t('Favorite')}
 										</button>
@@ -197,16 +172,25 @@
 					<button class="btn" onclick={choose}>{t('Start a port-forward…')}</button>
 				</div>
 			{/if}
-			{#if stopped.length}
+			{#if app.favoritesHere.length}
 				<div class="favorites">
-					<h3>{t('Favorites not running in {context}', { context: app.cluster ? app.contextName(app.cluster.context) : '' })}</h3>
+					<h3>{t('Favorites in {context}', { context: app.cluster ? app.contextName(app.cluster.context) : '' })}</h3>
 					<ul>
-						{#each stopped as f (favoriteLabel(f))}
+						{#each app.favoritesHere as f (favoriteLabel(f))}
+							{@const on = !!app.runningFavorite(f)}
+							{@const busy = app.switchingFavorites.includes(f)}
 							<li>
+								<span class="dot" class:on title={on ? t('Running') : t('Stopped')}></span>
 								<span class="mono">{f.address || '127.0.0.1'}:{f.localPort}</span>
 								<span class="mono muted">→ {f.target.resource.plural}/{f.target.name}:{f.remotePort}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</span>
 								<span class="buttons">
-									<button class="btn small" onclick={() => start(f)} disabled={starting === f}>{starting === f ? t('Starting…') : t('Start')}</button>
+									<label class="check" title={t('Start it whenever Kubri connects to this context')}>
+										<input type="checkbox" checked={f.startOnConnect} onchange={(e) => app.setStartOnConnect(f, e.currentTarget.checked)} />
+										{t('Start on connect')}
+									</label>
+									<button class="btn small" class:danger={on} onclick={() => app.switchFavorite(f)} disabled={busy}>
+										{busy ? (on ? t('Stopping…') : t('Starting…')) : on ? t('Stop') : t('Start')}
+									</button>
 									<button class="btn small" onclick={() => app.removeFavorite(f)} title={t('Forget this favorite')}>{t('Remove')}</button>
 								</span>
 							</li>
@@ -261,8 +245,33 @@
 		align-items: center;
 		gap: 12px;
 	}
+	.favorites li {
+		flex-wrap: wrap;
+	}
 	.favorites .buttons {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 		margin-left: auto;
+	}
+	.favorites .dot {
+		flex: none;
+		width: 8px;
+		height: 8px;
+		border: 1.5px solid var(--text-muted);
+		border-radius: 50%;
+	}
+	.favorites .dot.on {
+		border-color: var(--ok);
+		background: var(--ok);
+	}
+	.check {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-muted);
+		font-size: 12px;
+		white-space: nowrap;
 	}
 	.star.on {
 		color: var(--accent-strong);

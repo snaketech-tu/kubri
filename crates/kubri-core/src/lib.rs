@@ -2266,13 +2266,14 @@ impl Kubri {
         portforward::start(&self.forwards, session.info.context.clone(), request, destination).await
     }
 
-    /// Starts the connected context's favorite port-forwards that are not running yet, and
-    /// says which could not start.
+    /// Starts the connected context's favorite port-forwards that start on connect and are not
+    /// running yet, and says which could not start.
     pub async fn start_favorite_forwards(&self) -> Result<Vec<FavoriteStart>> {
         let context = self.session().await?.info.context.clone();
         let running = self.port_forwards();
         let mut out = Vec::new();
-        for favorite in self.settings().context(&context).forwards {
+        let favorites = self.settings().context(&context).forwards;
+        for favorite in favorites.into_iter().filter(|f| f.start_on_connect) {
             let already = running
                 .iter()
                 .any(|f| f.context == context && favorite.matches(f));
