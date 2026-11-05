@@ -1,0 +1,96 @@
+# Objects the end-to-end tests work with, in the namespace e2e.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: e2e
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: e2e
+  labels:
+    app: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: web
+          image: busybox:1.36
+          command: ["sh", "-c", "echo hello from web > /tmp/index.html; echo web started; httpd -f -p 8080 -h /tmp"]
+          ports:
+            - containerPort: 8080
+              name: http
+        - name: sidecar
+          image: busybox:1.36
+          command: ["sh", "-c", "i=0; while true; do i=$((i+1)); echo sidecar line $i; sleep 1; done"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: e2e
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: settings
+  namespace: e2e
+data:
+  mode: test
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  namespace: e2e
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: db
+          image: busybox:1.36
+          command: ["sh", "-c", "echo db ready; sleep 1000000"]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: agent
+  namespace: e2e
+spec:
+  selector:
+    matchLabels:
+      app: agent
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: agent
+          image: busybox:1.36
+          command: ["sh", "-c", "echo agent ready; sleep 1000000"]

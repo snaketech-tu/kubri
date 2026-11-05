@@ -824,13 +824,16 @@ impl Kubri {
     }
 
     pub async fn contexts(&self) -> Result<ContextList> {
+        let cluster = self.cluster().await;
         let contexts = match &*self.kubeconfig.read().await {
             Ok(kubeconfig) => context::list_contexts(kubeconfig, &added::names()),
+            // A snapshot opened at start needs no kubeconfig: it shows with no context to switch to.
+            Err(_) if cluster.as_ref().is_some_and(|c| c.snapshot.is_some()) => Vec::new(),
             Err(err) => return Err(Error::NoKubeconfig(err.clone())),
         };
         Ok(ContextList {
             contexts,
-            cluster: self.cluster().await,
+            cluster,
             warm: self.warm_contexts().await,
         })
     }
@@ -3135,6 +3138,29 @@ contexts: [{name: eks, context: {cluster: c, user: u}}]
         // A file that does not open leaves the snapshot open.
         assert_eq!(
             kubri.cluster().await.map(|c| c.context).as_deref(),
+            Some("prod (snapshot)")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_snapshot_opens_without_a_kubeconfig() {
+        let kubri = Kubri::with_kubeconfig(Err("there is no kubeconfig at ~/.kube/config".into()));
+        assert!(matches!(kubri.contexts().await, Err(Error::NoKubeconfig(_))));
+        let file = serde_json::json!({
+            "format": "kubri-snapshot", "version": 1,
+            "info": { "context": "prod", "server": "https://prod", "kubernetes": "v1.33.5",
+                      "namespace": "shop", "taken": 1_793_000_000_000_i64, "kubri": "1.6.2",
+                      "objects": 0, "logs": 0, "leftOut": [] },
+            "resources": [], "lists": {}, "logs": {}
+        });
+        kubri
+            .open_snapshot(file.to_string().as_bytes(), None)
+            .await
+            .unwrap();
+        let list = kubri.contexts().await.unwrap();
+        assert!(list.contexts.is_empty());
+        assert_eq!(
+            list.cluster.map(|c| c.context).as_deref(),
             Some("prod (snapshot)")
         );
     }
