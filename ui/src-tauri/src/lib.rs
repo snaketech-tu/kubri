@@ -1135,24 +1135,49 @@ pub fn run() {
         shell_env::print();
         return;
     }
-    // Over stdio, stdout belongs to the protocol.
+    let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    // `kubri lint …` and `kubri snapshot …` run in the terminal, without a window.
+    let command = kubri_cli::requested(&args);
+    #[cfg(windows)]
+    if command {
+        attach_console();
+    }
+    // Over stdio, stdout belongs to the protocol. A command only says what went wrong.
+    let filter = if command {
+        "warn,kube_client=error"
+    } else {
+        "kubri_desktop_lib=info,kubri_core=info"
+    };
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "kubri_desktop_lib=info,kubri_core=info".into()),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| filter.into()))
         .with_writer(std::io::stderr)
         .init();
     // Before Kubri reads KUBECONFIG, and before Tauri starts any threads.
     #[cfg(unix)]
     shell_env::load();
 
-    if std::env::args().skip(1).any(|a| a == "--mcp") {
+    if command {
+        std::process::exit(kubri_cli::run(args).into());
+    }
+    if args.iter().skip(1).any(|a| a == "--mcp") {
         agents::serve_stdio();
         return;
     }
 
     let kubri = Arc::new(Kubri::load());
+    // `kubri FILE.kubri` or `kubri open FILE`: start with that snapshot open.
+    if let Some(path) = kubri_cli::file_to_open(&args) {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+        let opened = match std::fs::read(&path) {
+            Ok(bytes) => {
+                tauri::async_runtime::block_on(kubri.open_snapshot(&bytes, name)).map_err(|e| e.to_string())
+            }
+            Err(err) => Err(err.to_string()),
+        };
+        if let Err(err) = opened {
+            tracing::error!("cannot open the snapshot {}: {err}", path.display());
+        }
+    }
     kubri.record_changes();
     kubri.allow_local_terminal();
     let read_only = read_only_requested();
@@ -1306,6 +1331,15 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Kubri");
+}
+
+/// A release build on Windows has no console of its own; a command writes to the one it was
+/// started from.
+#[cfg(windows)]
+fn attach_console() {
+    use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+    // SAFETY: AttachConsole only takes a process id; failing leaves the process as it was.
+    unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
 }
 
 #[cfg(test)]

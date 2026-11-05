@@ -1,0 +1,80 @@
+name: Kubri lint
+description: Check a Kubernetes namespace or cluster for problems and risky settings with Kubri's sanitizer.
+author: SnakeTech
+branding:
+  icon: check-circle
+  color: blue
+inputs:
+  kubeconfig:
+    description: The kubeconfig file. Defaults to KUBECONFIG, or ~/.kube/config.
+    required: false
+    default: ''
+  context:
+    description: The context to check; the kubeconfig's current one when empty.
+    required: false
+    default: ''
+  namespace:
+    description: The namespace to check; the context's namespace when empty.
+    required: false
+    default: ''
+  all-namespaces:
+    description: Check the whole cluster, with nodes, volumes and cluster roles.
+    required: false
+    default: 'false'
+  format:
+    description: text, json or sarif.
+    required: false
+    default: sarif
+  output:
+    description: The file to write the report to.
+    required: false
+    default: kubri.sarif
+  fail-on:
+    description: Fail when an object has a problem of this level or worse, error, warning or never.
+    required: false
+    default: error
+  min-score:
+    description: Fail when the score is below this, from 0 to 100.
+    required: false
+    default: ''
+  version:
+    description: The Kubri version, a tag of ghcr.io/snaketech-tu/kubri.
+    required: false
+    default: latest
+runs:
+  using: composite
+  steps:
+    - name: Run kubri lint
+      shell: bash
+      env:
+        INPUT_KUBECONFIG: ${{ inputs.kubeconfig }}
+        INPUT_CONTEXT: ${{ inputs.context }}
+        INPUT_NAMESPACE: ${{ inputs.namespace }}
+        INPUT_ALL: ${{ inputs.all-namespaces }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_MIN_SCORE: ${{ inputs.min-score }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        config="${INPUT_KUBECONFIG:-${KUBECONFIG:-$HOME/.kube/config}}"
+        config="${config%%:*}"
+        if [ ! -f "$config" ]; then
+          echo "::error::No kubeconfig at $config. Set the kubeconfig input or KUBECONFIG."
+          exit 2
+        fi
+        args=(lint --format "$INPUT_FORMAT" --fail-on "$INPUT_FAIL_ON")
+        [ -n "$INPUT_CONTEXT" ] && args+=(--context "$INPUT_CONTEXT")
+        [ -n "$INPUT_NAMESPACE" ] && args+=(--namespace "$INPUT_NAMESPACE")
+        [ "$INPUT_ALL" = "true" ] && args+=(--all-namespaces)
+        [ -n "$INPUT_MIN_SCORE" ] && args+=(--min-score "$INPUT_MIN_SCORE")
+        # The host network reaches clusters on the runner itself, such as kind or k3s.
+        status=0
+        docker run --rm --network host \
+          --mount "type=bind,src=$(realpath "$config"),dst=/kube/config,readonly" \
+          -e KUBECONFIG=/kube/config \
+          "ghcr.io/snaketech-tu/kubri:$INPUT_VERSION" "${args[@]}" > "$INPUT_OUTPUT" || status=$?
+        if [ "$INPUT_FORMAT" = "text" ]; then cat "$INPUT_OUTPUT"; fi
+        echo "Report: $INPUT_OUTPUT"
+        exit "$status"
