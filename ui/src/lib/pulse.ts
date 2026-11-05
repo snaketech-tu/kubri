@@ -1,9 +1,10 @@
 import type { KindPulse, RecentEvent, Utilization } from './api';
+import { t } from './i18n';
 
 const KIND_LABELS: Record<string, string> = {
-	HorizontalPodAutoscaler: 'Autoscalers',
-	PersistentVolumeClaim: 'Volume claims',
-	PersistentVolume: 'Volumes'
+	HorizontalPodAutoscaler: t('Autoscalers'),
+	PersistentVolumeClaim: t('Volume claims'),
+	PersistentVolume: t('Volumes')
 };
 
 /** The plural name a pulse tile shows. */
@@ -84,15 +85,15 @@ export function attentionItems(events: RecentEvent[]): AttentionItem[] {
  */
 export function shortMessage(reason: string, message: string): string {
 	const back = /^Back-off restarting failed container\s+"?([^\s"]+)"?/i.exec(message);
-	if (back) return `Container ${back[1]} keeps restarting`;
+	if (back) return t('Container {name} keeps restarting', { name: back[1] });
 	const pull = /(?:Failed to pull image|Error: ErrImagePull|ImagePullBackOff).*?"([^"]+)"/i.exec(message);
-	if (pull) return `Cannot pull image ${pull[1]}`;
+	if (pull) return t('Cannot pull image {image}', { image: pull[1] });
 	if (/^Back-off pulling image\s+"([^"]+)"/i.test(message)) {
-		return `Cannot pull image ${/"([^"]+)"/.exec(message)?.[1] ?? ''}`;
+		return t('Cannot pull image {image}', { image: /"([^"]+)"/.exec(message)?.[1] ?? '' });
 	}
-	if (/OOMKilled/i.test(message) || reason === 'OOMKilling') return `Ran out of memory and was stopped`;
+	if (/OOMKilled/i.test(message) || reason === 'OOMKilling') return t('Ran out of memory and was stopped');
 	const nodes = /^(0\/\d+ nodes are available)/.exec(message);
-	if (nodes) return `Cannot be scheduled: ${nodes[1]}`;
+	if (nodes) return t('Cannot be scheduled: {nodes}', { nodes: nodes[1] });
 	const first = message.split(/(?<=\.)\s/)[0].replace(/\.$/, '');
 	return first.length > 140 ? `${first.slice(0, 137)}…` : first;
 }

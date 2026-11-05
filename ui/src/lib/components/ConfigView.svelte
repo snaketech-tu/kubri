@@ -9,6 +9,7 @@
 	import { forControl } from '../keys';
 	import { resolveColor, type Scheme } from '../skin';
 	import { app } from '../state.svelte';
+	import { LANGUAGES, languageSetting, setLanguage, t, type LanguageSetting } from '../i18n';
 	import AgentSettings from './AgentSettings.svelte';
 	import ExplainSettings from './ExplainSettings.svelte';
 	import ContextSettingsForm from './ContextSettingsForm.svelte';
@@ -393,6 +394,17 @@
 				{:else}
 					<span class="muted small">Your browser's zoom (<kbd>Ctrl +</kbd>, <kbd>Ctrl −</kbd>), which it keeps for this page</span>
 				{/if}
+			</div>
+			<div class="zoom">
+				<span>{t('Language')}</span>
+				<Select
+					value={languageSetting()}
+					options={[{ value: 'system' as LanguageSetting, label: t('As the system') }, ...LANGUAGES]}
+					onchange={(value) => setLanguage(value)}
+					aria-label={t('Language')}
+					compact
+				/>
+				<span class="muted small">{t('Kubri starts again in the language you pick.')}</span>
 			</div>
 		</div>
 
