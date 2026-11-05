@@ -37,13 +37,14 @@ pub struct ContextSettings {
     /// AI agents connected over MCP may change this context, each change confirmed in Kubri.
     /// Production contexts never allow it.
     pub agent_writes: bool,
-    /// Port-forwards that start when Kubri connects to this context.
+    /// Port-forwards kept to start with one click, some of them whenever Kubri connects.
     pub forwards: Vec<FavoriteForward>,
     /// Where Prometheus, Grafana and Loki are, when not found on their own.
     pub integrations: crate::IntegrationSettings,
 }
 
-/// A port-forward to start whenever Kubri connects to its context, on the same local port.
+/// A port-forward kept to start again on the same local port, with one click or whenever Kubri
+/// connects to its context.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FavoriteForward {
@@ -54,6 +55,14 @@ pub struct FavoriteForward {
     /// Where to listen; empty for 127.0.0.1.
     #[serde(default)]
     pub address: String,
+    /// Starts whenever Kubri connects to the context. Favorites kept before this choice existed
+    /// did, so a missing value means yes.
+    #[serde(default = "yes")]
+    pub start_on_connect: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl FavoriteForward {
@@ -387,6 +396,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(favorite.address, "");
+        assert!(favorite.start_on_connect);
         let mut prod = settings.context("prod");
         prod.forwards.push(favorite);
         settings.set_context("prod", prod).unwrap();

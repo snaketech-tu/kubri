@@ -1697,6 +1697,57 @@ class AppState {
 		return this.contextSettingsOf(forward.context).forwards?.find((f) => isForwardOf(f, forward));
 	}
 
+	/** The connected context's favorite port-forwards. */
+	get favoritesHere(): FavoriteForward[] {
+		return this.cluster ? (this.contextSettingsOf(this.cluster.context).forwards ?? []) : [];
+	}
+
+	/** The running forward of a favorite of the connected context, if it runs. */
+	runningFavorite(favorite: FavoriteForward): PortForwardInfo | undefined {
+		return this.forwards.find((f) => f.context === this.cluster?.context && isForwardOf(favorite, f));
+	}
+
+	/** Favorites being started or stopped, so a second click waits for the first. */
+	switchingFavorites = $state.raw<FavoriteForward[]>([]);
+
+	/** Starts a favorite of the connected context, or stops it if it runs. */
+	async switchFavorite(favorite: FavoriteForward) {
+		const context = this.cluster?.context;
+		if (!context || this.switchingFavorites.includes(favorite)) return;
+		this.switchingFavorites = [...this.switchingFavorites, favorite];
+		let running: PortForwardInfo | undefined;
+		try {
+			await this.refreshForwards();
+			running = this.runningFavorite(favorite);
+			if (running) {
+				await backend.stopPortForward(running.id);
+				this.toast(t('Stopped {name}', { name: favoriteLabel(favorite) }));
+			} else {
+				const f = await backend.startPortForward({
+					target: { ...favorite.target, context },
+					remotePort: favorite.remotePort,
+					localPort: favorite.localPort,
+					address: favorite.address || null
+				});
+				this.toast(t('Forwarding {local} to {pod}', { local: `${f.address}:${f.localPort}`, pod: `${f.pod}:${f.podPort}` }));
+			}
+		} catch (err) {
+			this.toast(running ? errorMessage(err) : t('{name} did not start: {error}', { name: favoriteLabel(favorite), error: errorMessage(err) }), 'bad');
+		} finally {
+			this.switchingFavorites = this.switchingFavorites.filter((f) => f !== favorite);
+			await this.refreshForwards();
+		}
+	}
+
+	/** Whether a favorite of the connected context starts whenever Kubri connects. */
+	async setStartOnConnect(favorite: FavoriteForward, startOnConnect: boolean) {
+		const context = this.cluster?.context;
+		if (!context) return;
+		const settings = this.contextSettingsOf(context);
+		const forwards = (settings.forwards ?? []).map((f) => (f === favorite ? { ...f, startOnConnect } : f));
+		await this.setContextSettings(context, { ...settings, forwards });
+	}
+
 	/** Keeps a running forward as a favorite of its context, or forgets it. */
 	async toggleFavorite(forward: PortForwardInfo) {
 		const settings = this.contextSettingsOf(forward.context);
@@ -1711,14 +1762,15 @@ class AppState {
 						target,
 						remotePort: forward.remotePort,
 						localPort: forward.localPort,
-						address: forward.address === '127.0.0.1' ? '' : forward.address
+						address: forward.address === '127.0.0.1' ? '' : forward.address,
+						startOnConnect: false
 					}
 				];
 		if (await this.setContextSettings(forward.context, { ...settings, forwards })) {
 			this.toast(
 			known
 				? t('{name} is no longer a favorite', { name: favoriteLabel(known) })
-				: t('{name} starts whenever Kubri connects to {context}', { name: favoriteLabel(forwards.at(-1)!), context: this.contextName(forward.context) })
+				: t('{name} is a favorite: start it with one click under Port-forwards in the sidebar', { name: favoriteLabel(forwards.at(-1)!) })
 		);
 		}
 	}

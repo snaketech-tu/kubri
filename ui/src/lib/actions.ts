@@ -189,11 +189,13 @@ export async function saveFile(name: string, text: string) {
 	}
 }
 
-export async function startPortForward(request: PortForwardRequest) {
+/** Starts a port-forward, and with `keep` also keeps it as a favorite of its context. */
+export async function startPortForward(request: PortForwardRequest, keep = false) {
 	try {
 		const f = await backend.startPortForward(request);
 		app.toast(t('Forwarding {local} to {pod}', { local: `${f.address}:${f.localPort}`, pod: `${f.pod}:${f.podPort}` }));
-		app.refreshForwards();
+		await app.refreshForwards();
+		if (keep && !app.favoriteOf(f)) await app.toggleFavorite(f);
 		return true;
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');

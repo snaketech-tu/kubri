@@ -187,6 +187,43 @@ describe('port-forward', () => {
 	});
 });
 
+describe('favorite port-forwards', () => {
+	check('keeps a forward as a favorite that starts and stops with one click', async () => {
+		const port = await h.freePort();
+		const answers = async () => {
+			try {
+				return (await (await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) })).text()).includes('hello from web');
+			} catch {
+				return false;
+			}
+		};
+		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods', filter: 'web' });
+		await page.keyboard.press('Shift+F');
+		const dialog = page.getByRole('dialog', { name: 'Port-forward' });
+		await dialog.getByRole('spinbutton', { name: 'Local port' }).fill(String(port));
+		await dialog.getByRole('checkbox', { name: 'Keep as a favorite' }).check();
+		await dialog.getByRole('button', { name: 'Start', exact: true }).click();
+		await dialog.waitFor({ state: 'hidden' });
+		await h.until(answers, { message: `an answer on port ${port}` });
+
+		const favorite = page.getByRole('navigation', { name: 'Cluster navigation' }).getByRole('button', { name: new RegExp(`:${port}$`) });
+		await favorite.waitFor();
+		await h.until(async () => (await favorite.getAttribute('aria-pressed')) === 'true', { message: 'the favorite shown running' });
+		await favorite.click();
+		await h.until(async () => (await favorite.getAttribute('aria-pressed')) === 'false', { message: 'the favorite shown stopped' });
+		await h.until(async () => !(await answers()), { message: `port ${port} to close` });
+		await favorite.click();
+		await h.until(answers, { message: `port ${port} to answer again` });
+
+		await h.command(page, 'pf');
+		const kept = page.getByRole('listitem').filter({ hasText: `:${port}` });
+		await kept.getByRole('button', { name: 'Stop', exact: true }).click();
+		await kept.getByRole('button', { name: 'Start', exact: true }).waitFor();
+		await kept.getByRole('button', { name: 'Remove', exact: true }).click();
+		await favorite.waitFor({ state: 'detached' });
+	});
+});
+
 describe('changes', () => {
 	check('edits YAML with a reviewed diff', async () => {
 		h.kubectl('patch', 'configmap', 'settings', '-n', 'e2e', '--type=merge', '-p', '{"data":{"mode":"test"}}');

@@ -119,6 +119,7 @@
 	let localPort = $state<number | null>(null);
 	// k9s `portForwardAddress`, or K9S_DEFAULT_PF_ADDRESS.
 	let address = $state(untrack(() => app.k9s?.portForwardAddress) ?? '127.0.0.1');
+	let keepForward = $state(false);
 
 	// Image: the containers as they are, and the images typed in.
 	let images = $state<ContainerImage[] | null>(null);
@@ -373,7 +374,7 @@
 						remotePort,
 						localPort: localPort || null,
 						address: address.trim() || null
-					});
+					}, keepForward);
 					break;
 				case 'benchmark': {
 					const whole = (n: number | null, what: string, max: number) => {
@@ -954,6 +955,10 @@
 		{#if address.trim() && !['127.0.0.1', 'localhost', '::1'].includes(address.trim())}
 			<p class="warn">{t('Other machines on your network will be able to reach this port.')}</p>
 		{/if}
+		<label class="row" title={t('Start it again with one click under Port-forwards in the sidebar')}>
+			<input type="checkbox" bind:checked={keepForward} />
+			{t('Keep as a favorite')}
+		</label>
 		{#if !backend.desktop}
 			<p class="muted">{t('The port opens on the computer kubri-server runs on.')}</p>
 		{/if}
