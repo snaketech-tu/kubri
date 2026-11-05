@@ -72,3 +72,55 @@ export function toggled(settings: ColumnSettings, column: Arrangeable, show: boo
 		shown: show && column.wideOnly ? [...without(settings.shown), column.label] : without(settings.shown)
 	};
 }
+
+/** A column as the fitting sees it: how much it matters, and about how wide it is. */
+export interface FitColumn {
+	label: string;
+	/** Higher stays longer; Infinity always stays. */
+	rank: number;
+	width: number;
+}
+
+/**
+ * How much a column matters when the list is narrow: the name and the state always stay, then
+ * readiness, the namespace and what the pods use; ages, restarts and the rest go first.
+ */
+export function columnRank(label: string, kind: 'namespace' | 'cell' | 'metric', isName = false): number {
+	if (isName) return Infinity;
+	if (kind === 'namespace') return 85;
+	const name = label.toLowerCase();
+	if (/^(status|phase|state|health)$/.test(name)) return Infinity;
+	if (kind === 'metric') return name === 'cpu' || name === 'mem' ? 70 : 40;
+	if (name === 'ready') return 90;
+	if (/^(type|reason)$/.test(name)) return 80;
+	if (/^(message|object)$/.test(name)) return 75;
+	if (name === 'restarts') return 60;
+	if (name === 'age' || name === 'last seen') return 55;
+	return 50;
+}
+
+/** About how wide a column is, from its title and the longest of `texts`, as the list draws them. */
+export function columnWidth(label: string, texts: string[], options: { mono?: boolean; icon?: boolean; max?: number } = {}): number {
+	// Average glyph widths of the list's fonts: 13px text, 12.5px code, 12px titles with a sort arrow.
+	const perChar = options.mono ? 7.6 : 7.1;
+	const longest = texts.reduce((n, t) => Math.max(n, t.length), 0);
+	const body = longest * perChar + (options.icon ? 21 : 0);
+	const title = label.length * 6.9 + 14;
+	return Math.min(Math.max(body, title), options.max ?? 420) + 16;
+}
+
+/** The labels of the columns to leave out so the rest fit in `room`, lowest rank and rightmost first. */
+export function overflowing(columns: FitColumn[], room: number): string[] {
+	let total = columns.reduce((n, c) => n + c.width, 0);
+	const droppable = columns
+		.map((c, at) => ({ ...c, at }))
+		.filter((c) => Number.isFinite(c.rank))
+		.sort((a, b) => a.rank - b.rank || b.at - a.at);
+	const dropped = new Set<number>();
+	for (const c of droppable) {
+		if (total <= room) break;
+		dropped.add(c.at);
+		total -= c.width;
+	}
+	return columns.filter((_, at) => dropped.has(at)).map((c) => c.label);
+}

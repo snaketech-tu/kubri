@@ -81,6 +81,8 @@ describe('sanitizer', () => {
 			'bad'
 		]);
 		expect([scoreTone(95), scoreTone(60), scoreTone(10)]).toEqual(['ok', 'warn', 'bad']);
+		// A good score with objects in error still needs a look.
+		expect([gradeTone('B', 5), gradeTone('F', 5), gradeTone('A', 0)]).toEqual(['warn', 'bad', 'ok']);
 	});
 });
 

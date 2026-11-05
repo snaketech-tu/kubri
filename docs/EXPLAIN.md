@@ -1,6 +1,6 @@
 # Explain
 
-**Explain** asks a model of your choice what a pod, an event, some log lines, a sanitizer finding or a failed action means, and shows the answer beside it. It uses your own API key. Until you pick a provider in **Settings → Explain** (or `:explain`), Kubri sends nothing anywhere.
+**Explain** asks a model of your choice what a pod, an event, some log lines, a finding of Checks or a failed action means, and shows the answer beside it. It uses your own API key. Until you pick a provider in **Settings → Explain** (or `:explain`), Kubri sends nothing anywhere.
 
 ## Setting it up
 
@@ -19,7 +19,7 @@ The key never goes into the settings file and is never shown again. The desktop 
 | --- | --- |
 | Any object, such as a crash-looping pod, an Event or a Deployment | **Explain…** in the action bar or row menu, or <kbd>Shift</kbd>+<kbd>E</kbd>. On pods it sits in the action bar once Explain is set up. |
 | Logs | Select lines and press **Explain** (or <kbd>x</kbd>). Without a selection, the last 200 shown lines go. |
-| Sanitizer | <kbd>Shift</kbd>+<kbd>E</kbd> on a finding, or **Explain these findings…** in its menu. |
+| Checks | <kbd>Shift</kbd>+<kbd>E</kbd> on a finding, or **Explain these findings…** in its menu. |
 | A failed action | **Explain…** beside the error in the action's dialog. |
 
 Kubri gathers what it knows first: the object's YAML, for a pod its likely problem, warning events and the last log lines of failing containers, for other objects their events, and for an Event the object it is about. The panel shows **exactly what will be sent**, to which provider, model and address, and nothing leaves Kubri before you press **Send**. The answer appears in the same panel, with **Copy answer** and **Ask again**.

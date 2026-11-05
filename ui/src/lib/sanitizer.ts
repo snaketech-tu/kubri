@@ -9,9 +9,13 @@ export function atLeast(level: Level, min: LevelFilter) {
 	return RANK[level] >= RANK[min];
 }
 
-/** A, B: fine; C to E: needs work; F: bad. The letter is the label, the tone repeats it. */
-export function gradeTone(grade: string): 'ok' | 'warn' | 'bad' {
-	return grade <= 'B' ? 'ok' : grade === 'F' ? 'bad' : 'warn';
+/**
+ * A, B: fine; C to E: needs work; F: bad. The letter is the label, the tone repeats it. Objects
+ * with errors never look fine, whatever the score.
+ */
+export function gradeTone(grade: string, errors = 0): 'ok' | 'warn' | 'bad' {
+	const tone = grade <= 'B' ? 'ok' : grade === 'F' ? 'bad' : 'warn';
+	return tone === 'ok' && errors > 0 ? 'warn' : tone;
 }
 
 export function scoreTone(score: number): 'ok' | 'warn' | 'bad' {

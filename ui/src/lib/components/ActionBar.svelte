@@ -8,7 +8,8 @@
 		children,
 		marked = false,
 		hints = true,
-		compact = false
+		compact = false,
+		max = 6
 	}: {
 		actions: MenuAction[];
 		/** What the actions work on, shown first. */
@@ -19,16 +20,19 @@
 		hints?: boolean;
 		/** Without a frame, as in the details panel, whose header names the object. */
 		compact?: boolean;
+		/** How many buttons the bar shows before the rest go under More. */
+		max?: number;
 	} = $props();
 
-	/** How many buttons the bar shows before the rest go under More. */
-	const BUTTONS = 6;
+	// A narrow bar keeps to one or two lines: fewer buttons, the rest under More.
+	let width = $state(Infinity);
+	const room = $derived(width < 480 ? Math.min(max, 2) : width < 720 ? Math.min(max, 4) : max);
 
 	const buttons = $derived(
 		actions
 			.filter((a) => a.primary !== undefined && !a.danger)
 			.sort((a, b) => a.primary! - b.primary!)
-			.slice(0, BUTTONS)
+			.slice(0, room)
 	);
 	const dangerous = $derived(actions.filter((a) => a.primary !== undefined && a.danger));
 	const more = $derived(actions.filter((a) => !buttons.includes(a) && !dangerous.includes(a)));
@@ -42,7 +46,7 @@
 	}
 </script>
 
-<div class="bar" class:marked class:compact role="toolbar" aria-label="Actions">
+<div class="bar" class:marked class:compact role="toolbar" aria-label="Actions" bind:clientWidth={width}>
 	{#if children}<span class="subject">{@render children()}</span>{/if}
 	{#each buttons as action, i (i)}
 		{@render button(action)}
@@ -96,6 +100,7 @@
 	}
 	.subject {
 		max-width: 320px;
+		line-height: 28px;
 		padding: 0 8px 0 4px;
 		overflow: hidden;
 		text-overflow: ellipsis;

@@ -10,13 +10,15 @@ You also land where you left: the same page, kind, namespace, filter, row under 
 
 The context switcher (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>) lists the previous context first, so <kbd>Enter</kbd> goes back to it, and marks kept contexts with a green dot. `:ctx -` in the command palette does the same, like `cd -`. `:ctx prod` switches to `prod`; `:ctx` alone opens Clusters, where you pick one.
 
+While Kubri connects, the page you were on stays, dimmed, under a card with the time so far, the server's address, and **Cancel** (<kbd>Esc</kbd>), which keeps you where you were. Kubri gives up after 15 seconds. When a cluster does not answer, the card names the server and suggests checking the network or VPN, with **Try again** and **Check on the Clusters page**; for other failures, such as credentials the cluster turned down, it says what to try. The switcher shows contexts that failed lately, from connecting or from the Clusters page, such as "Unreachable, 2m ago". Opening it checks contexts not checked for five minutes, when there are at most 20.
+
 Logs and shells in the workspace keep running when you switch. A tab from another context shows that context's name, in red for production, so a shell in production is not mistaken for one in staging. Tabs close only when their context is removed from the kubeconfig, or when you leave a snapshot.
 
 Kubri keeps the 3 most recent contexts this way, each for up to 30 minutes after you left it. Set the number, from 0 (off) to 5, with `connections.keepRecent` in the [settings](SETTINGS.md). Nothing runs for a kept context: no lists, no recording of changes. When the kubeconfig is read again, a kept context whose context, cluster or user entry changed is dropped.
 
 ## Clusters
 
-**Clusters** (`:fleet`, first in the sidebar) shows every context in your kubeconfig on one page, without connecting Kubri to any of them:
+**Clusters** (`:fleet`, in the sidebar under Overview) shows every context in your kubeconfig on one page, without connecting Kubri to any of them:
 
 - whether its API server answers, its version and how long it took
 - nodes, pods and workloads (Deployments, StatefulSets and DaemonSets), healthy out of all
@@ -26,6 +28,8 @@ Kubri keeps the 3 most recent contexts this way, each for up to 30 minutes after
 Contexts are checked six at a time, each with its own ten-second limit, so a cluster that is down shows as **Unreachable** without holding up the others. Clusters that fail or cannot be reached are tinted red, those that need a look amber, and a line above the cards counts both. The page checks again every minute while it is open, with the connections it made the first time, so a context that signs in by running a command, like `aws`, does not run it at every check. Your user needs `list` on nodes, pods and the workload kinds across the cluster to see the counts; without it the card says the cluster is reachable but that nothing may be listed.
 
 Clicking a cluster connects Kubri to it and opens its overview. The overview starts with what the card showed: the health line, the API server and version, ready nodes, pods and workloads, and how much CPU and memory pods request and use. When Kubri cannot connect at start, the welcome screen has **See all clusters** to find one that works.
+
+Below the overview, **Other contexts** shows up to eight of your other contexts with what Kubri last learned about them: healthy or how many pods fail, or that the API server did not answer, and when. A ring instead of a dot means it did not answer. Clicking one switches to it. Contexts not checked in the last five minutes are checked when the overview opens, if you have at most 20.
 
 ## Adding clusters
 

@@ -9,7 +9,7 @@ Kubri finds the tools most clusters run and uses them without setup. Open **Inte
 | Loki | A Service like `loki`, `loki-gateway` or `loki-read` | Log history beyond a pod's lifetime, in the log workspace. |
 | Flux | The `kustomize.toolkit.fluxcd.io` or `helm.toolkit.fluxcd.io` API group | State, revision and managed objects of Kustomizations, HelmReleases and sources; reconcile, suspend and resume. |
 | Argo CD | The `argoproj.io` Applications | Sync state, health and managed objects of Applications; sync, refresh and auto-sync. |
-| cert-manager | The `cert-manager.io` API group | Expiry and readiness of Certificates in their list, the overview and the sanitizer; renew now. |
+| cert-manager | The `cert-manager.io` API group | Expiry and readiness of Certificates in their list, the Overview and Checks; renew now. |
 
 Kubri reaches Prometheus, Grafana and Loki through the API server's service proxy, with your kubeconfig's credentials, so nothing has to be exposed or port-forwarded. Your user needs `get` on `services/proxy` in their namespace, which cluster admins have. Only opening Grafana in the browser needs a port-forward, which Kubri starts the first time and keeps under Port-forwards.
 
@@ -112,7 +112,7 @@ Kubri judges a Certificate the way it judges a Deployment:
 - **Failed** when it is expired, not ready, or in the last week (or sixth) of its lifetime.
 - **Warning** in the last three weeks (or third) of its lifetime, past the point cert-manager renews by default, or when it was never issued.
 
-Short-lived certificates are judged by their lifetime, so a 24-hour certificate is fine with 20 hours left. The overview (`:pulses`) counts Certificates under Resource health and lists the ones that need a look, failed first, then the soonest to expire. The sanitizer has a Certificate section with the same findings.
+Short-lived certificates are judged by their lifetime, so a 24-hour certificate is fine with 20 hours left. The Overview (`:pulses`) counts Certificates under Resource health and lists the ones that need a look, failed first, then the soonest to expire. The sanitizer has a Certificate section with the same findings.
 
 **Renew now** (<kbd>r</kbd>) has cert-manager issue a Certificate again, as `cmctl renew` does, by adding an `Issuing` condition. It needs `patch` on `certificates/status`.
 
