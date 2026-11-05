@@ -187,6 +187,8 @@ describe('budget', () => {
 			'The quota team allows 2.0Gi of requests.memory; this needs 3.0Gi',
 			'The quota team needs a limit on cpu for every container'
 		]);
+		// Missing before too: a LimitRange may fill it in, so no warning.
+		expect(budget(capacity, size(0.1, 0.5 * GI), size(0.1, 0.5 * GI), none).warnings).toEqual([]);
 	});
 });
 

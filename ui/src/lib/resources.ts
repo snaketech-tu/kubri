@@ -299,7 +299,10 @@ export function budget(capacity: Capacity, before: Amounts, after: Amounts, limi
 		const [part, m] = q.resource.split('.') as ['requests' | 'limits', Measure];
 		const per = part === 'requests' ? { b: before[m], a: after[m] } : { b: limits.before[m], a: limits.after[m] };
 		if (per.a === null) {
-			warnings.push({ level: 'bad', text: t('The quota {name} needs a limit on {resource} for every container', { name: q.name, resource: m }) });
+			// Only when this change removes one: a LimitRange may give the missing limits a default.
+			if (per.b !== null) {
+				warnings.push({ level: 'bad', text: t('The quota {name} needs a limit on {resource} for every container', { name: q.name, resource: m }) });
+			}
 			continue;
 		}
 		const used = q.used - (per.b ?? 0) * pods + per.a * pods;
