@@ -103,7 +103,7 @@ pub(crate) fn memory_patch(container: &str, memory: &str) -> Result<Value> {
 
 /// What a pod asks for: CPU in cores and memory in bytes, as the scheduler counts it, with init
 /// containers counted one at a time.
-fn pod_requests(pod: &Pod) -> (f64, f64) {
+pub(crate) fn pod_requests(pod: &Pod) -> (f64, f64) {
     let Some(spec) = &pod.spec else { return (0.0, 0.0) };
     let of = |c: &Container, what: &str| {
         quantity(c.resources.as_ref().and_then(|r| r.requests.as_ref()?.get(what)))

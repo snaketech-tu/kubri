@@ -101,6 +101,8 @@
 	}
 
 	const percent = (used: number, of: number | null | undefined) => (of ? Math.round((used / of) * 100) : null);
+	const free = (of: number | undefined, requested: number | undefined) =>
+		of === undefined || requested === undefined ? null : Math.max(0, of - requested);
 	const CPU: MetricColumn = { label: 'CPU', index: -2, wide: false, value: (u) => u.cpu, format: 'cpu' };
 	const MEM: MetricColumn = { label: 'Mem', index: -3, wide: false, value: (u) => u.memory, format: 'memory' };
 	// As in k9s: usage against what the containers request and may use at most, and for nodes
@@ -117,7 +119,10 @@
 		CPU,
 		{ label: '%CPU', index: -8, wide: false, value: (u) => percent(u.cpu, u.allocatable?.cpu), format: 'percent', threshold: 'cpu' },
 		MEM,
-		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' }
+		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' },
+		// The room left for new pods: what the node gives to pods minus what its pods request.
+		{ label: 'CPU free', index: -14, wide: false, value: (u) => free(u.allocatable?.cpu, u.requests?.cpu), format: 'cpu' },
+		{ label: 'Mem free', index: -15, wide: false, value: (u) => free(u.allocatable?.memory, u.requests?.memory), format: 'memory' }
 	];
 
 	/** Empty cells, `<none>` and `None` all read as a dash. */

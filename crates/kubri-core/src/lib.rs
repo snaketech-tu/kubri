@@ -1798,8 +1798,14 @@ impl Kubri {
                 }
             }
             MetricsKind::Nodes => {
-                if let Ok(nodes) = typed::list(Api::<Node>::all(client)).await {
+                if let Ok(nodes) = typed::list(Api::<Node>::all(client.clone())).await {
                     metrics::add_node_allocatable(&mut usage, &nodes);
+                }
+                // What the pods on each node request, for the room left. Without the right to
+                // list every pod, the columns stay empty.
+                let scheduled = ListParams::default().fields("spec.nodeName!=");
+                if let Ok(pods) = Api::<Pod>::all(client).list(&scheduled).await {
+                    metrics::add_node_requests(&mut usage, &pods.items);
                 }
             }
         }
