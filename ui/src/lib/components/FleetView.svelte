@@ -3,6 +3,7 @@
 	import { connectError, eachLimited, fleetState, serverHost, workloads } from '../fleet';
 	import { cpu, errorMessage, memory, relative } from '../format';
 	import { meterTone } from '../pulse';
+	import { reach } from '../reach.svelte';
 	import { app } from '../state.svelte';
 	import AddContextsDialog from './AddContextsDialog.svelte';
 	import HealthIcon from './HealthIcon.svelte';
@@ -44,8 +45,10 @@
 				try {
 					found[name] = await backend.fleetCluster(name);
 					delete failed[name];
+					reach.record(name, found[name]);
 				} catch (err) {
 					failed[name] = errorMessage(err);
+					reach.failed(name, failed[name]);
 				}
 			});
 			checked = now = Date.now();

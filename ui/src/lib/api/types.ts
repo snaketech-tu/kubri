@@ -5,6 +5,8 @@ import type { KindSchema } from '../schema';
 export interface ContextInfo {
 	name: string;
 	cluster: string | null;
+	/** The API server's address, as the kubeconfig names it. */
+	server?: string | null;
 	user: string | null;
 	namespace: string | null;
 	isDefault: boolean;
@@ -1456,6 +1458,8 @@ export interface Backend {
 	/** Stops reading a file chosen in Kubri. Desktop only. */
 	removeKubeconfigFile(path: string): Promise<ContextList>;
 	switchContext(name: string): Promise<ClusterInfo>;
+	/** Stops waiting for a switch under way; the current connection stays. */
+	cancelSwitch(): Promise<void>;
 	/** Saves a namespace, or the whole cluster for null, to a snapshot file. Returns where the
 	 * desktop app saved it; the browser downloads it and returns null. */
 	takeSnapshot(namespace: string | null): Promise<string | null>;

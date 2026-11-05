@@ -64,7 +64,7 @@ mod xray;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -193,6 +193,9 @@ struct Session {
 pub struct Kubri {
     kubeconfig: RwLock<Result<Kubeconfig, String>>,
     session: RwLock<Option<Arc<Session>>>,
+    /// Counts switches and cancels: a connection only becomes the current one if nothing came
+    /// after the switch that made it.
+    switches: AtomicU64,
     forwards: std::sync::Mutex<portforward::Forwards>,
     benchmarks: std::sync::Mutex<bench::Benchmarks>,
     /// Started read-only, whatever the k9s configuration says.
@@ -317,6 +320,7 @@ impl Kubri {
         Self {
             kubeconfig: RwLock::new(kubeconfig),
             session: RwLock::new(None),
+            switches: AtomicU64::new(0),
             forwards: Default::default(),
             benchmarks: Default::default(),
             read_only: AtomicBool::new(false),
@@ -919,6 +923,7 @@ impl Kubri {
     /// A context used a moment ago is taken from the connections kept warm, after a quick
     /// check that it still answers; switching to the current context always connects afresh.
     pub async fn switch_context(&self, context: &str) -> Result<ClusterInfo> {
+        let ticket = self.switches.fetch_add(1, Ordering::SeqCst) + 1;
         let current = self.session.read().await.clone();
         let again = current.as_ref().is_some_and(|s| s.info.context == context);
         let kept = if again {
@@ -930,7 +935,19 @@ impl Kubri {
             Some(session) => (session, true),
             None => (Arc::new(self.connect(context).await?), false),
         };
-        *self.session.write().await = Some(session.clone());
+        {
+            let mut slot = self.session.write().await;
+            // Cancelled, or another switch started meanwhile: the current connection stays.
+            if self.switches.load(Ordering::SeqCst) != ticket {
+                drop(slot);
+                // Kept, so that switching there later is instant.
+                if !again {
+                    self.keep_warm(session).await;
+                }
+                return Err(Error::Cancelled(context.to_owned()));
+            }
+            *slot = Some(session.clone());
+        }
         if let Some(left) = current.filter(|_| !again) {
             self.keep_warm(left).await;
         }
@@ -943,6 +960,14 @@ impl Kubri {
         }
         self.restart_recorder(&session).await;
         Ok(info)
+    }
+
+    /// Stops waiting for a switch under way: the connection it makes is dropped, and the
+    /// current one stays. Without a switch under way, it does nothing.
+    pub async fn cancel_switch(&self) {
+        // Under the lock, so that a switch either sees this or has finished before it.
+        let _slot = self.session.write().await;
+        self.switches.fetch_add(1, Ordering::SeqCst);
     }
 
     /// Runs discovery again for the connected context and returns its resource types. A
@@ -2613,6 +2638,33 @@ mod tests {
             Err(Error::UnknownContext(_))
         ));
         assert_eq!(current_context(&kubri).await, "a");
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_switch_keeps_the_current_connection() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let (a, _) = fake_session("a", 200);
+        let (b, _) = fake_session("b", 200);
+        *kubri.session.write().await = Some(a);
+        kubri.keep_warm(b).await;
+
+        // The cancel lands while the switch waits for the lock, as if it came mid-connect.
+        let slot = kubri.session.write().await;
+        let switching = kubri.switch_context("b");
+        let cancelling = async {
+            tokio::task::yield_now().await;
+            drop(slot);
+            kubri.cancel_switch().await;
+        };
+        let (switched, ()) = tokio::join!(switching, cancelling);
+        assert!(matches!(switched, Err(Error::Cancelled(name)) if name == "b"));
+        assert_eq!(current_context(&kubri).await, "a");
+        // The connection it made is kept for later.
+        assert_eq!(kubri.warm_contexts().await, ["b"]);
+        // A cancel with nothing under way changes nothing.
+        kubri.cancel_switch().await;
+        assert!(kubri.switch_context("b").await.is_ok());
+        assert_eq!(current_context(&kubri).await, "b");
     }
 
     #[tokio::test]
