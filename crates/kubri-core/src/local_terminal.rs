@@ -261,12 +261,12 @@ pub(crate) fn open(
 
 /// The `PATH` the shell gets: this process's, which the desktop app filled from the login
 /// shell at startup.
-fn path_var() -> OsString {
+pub(crate) fn path_var() -> OsString {
     std::env::var_os("PATH").unwrap_or_default()
 }
 
 /// The first `program` on `path`, as the shell would find it.
-fn find_program(program: &str, path: &OsString) -> Option<PathBuf> {
+pub(crate) fn find_program(program: &str, path: &OsString) -> Option<PathBuf> {
     let names: Vec<String> = if cfg!(windows) {
         vec![
             format!("{program}.exe"),

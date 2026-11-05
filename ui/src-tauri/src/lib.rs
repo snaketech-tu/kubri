@@ -186,6 +186,13 @@ async fn take_snapshot(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) 
         .map(|path| path.display().to_string())
 }
 
+/// Leaves the open snapshot for no context, when there is none to go back to.
+#[tauri::command]
+async fn close_snapshot(kubri: State<'_, Arc<Kubri>>) -> CommandResult<()> {
+    kubri.close_snapshot().await;
+    Ok(())
+}
+
 /// Opens a snapshot file sent as the raw request body, its name in the `x-name` header.
 #[tauri::command]
 async fn open_snapshot(
@@ -439,6 +446,27 @@ async fn local_terminal_open(
 ) -> CommandResult<u32> {
     let terminal = kubri
         .open_local_terminal(&options)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(register(&terminals, terminal, on_event))
+}
+
+#[tauri::command]
+async fn local_clusters(kubri: State<'_, Arc<Kubri>>) -> CommandResult<kubri_core::LocalClusters> {
+    Ok(kubri.local_clusters().await)
+}
+
+/// Makes a cluster with kind or k3d in a terminal; it is written to and closed like
+/// [`terminal_open`].
+#[tauri::command]
+async fn local_cluster_create(
+    kubri: State<'_, Arc<Kubri>>,
+    terminals: State<'_, Arc<Terminals>>,
+    request: kubri_core::LocalClusterRequest,
+    on_event: Channel<InvokeResponseBody>,
+) -> CommandResult<u32> {
+    let terminal = kubri
+        .create_local_cluster(&request)
         .await
         .map_err(|e| e.to_string())?;
     Ok(register(&terminals, terminal, on_event))
@@ -1196,6 +1224,7 @@ pub fn run() {
             cancel_switch,
             take_snapshot,
             open_snapshot,
+            close_snapshot,
             resources,
             refresh_resources,
             preview,
@@ -1211,6 +1240,8 @@ pub fn run() {
             set_terminal_settings,
             local_terminal_info,
             local_terminal_open,
+            local_clusters,
+            local_cluster_create,
             history,
             history_detail,
             set_column_settings,
