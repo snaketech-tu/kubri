@@ -1,4 +1,5 @@
 import type { Reference } from './api';
+import { t } from './i18n';
 
 /** `3 Deployments`, `1 Ingress`: a count with the kind, plural when needed. */
 export function counted(n: number, kind: string): string {
@@ -14,8 +15,8 @@ export function summarizeUsers(refs: Reference[]): string {
 		entry.n++;
 		counts.set(key, entry);
 	}
-	const parts = [...counts.values()].map((c) => `${counted(c.n, c.kind)}${c.how ? ` for ${c.how}` : ''}`);
-	return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : (parts[0] ?? '');
+	const parts = [...counts.values()].map((c) => (c.how ? t('{kinds} for {how}', { kinds: counted(c.n, c.kind), how: c.how }) : counted(c.n, c.kind)));
+	return parts.length > 1 ? t('{list} and {last}', { list: parts.slice(0, -1).join(', '), last: parts.at(-1)! }) : (parts[0] ?? '');
 }
 
 export interface Related {

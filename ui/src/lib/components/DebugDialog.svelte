@@ -4,6 +4,8 @@
 	import { backend, type DebugRequest } from '../api';
 	import { errorMessage } from '../format';
 	import { app, findResource, type Dialog } from '../state.svelte';
+	import { t } from '../i18n';
+	import Phrase from './Phrase.svelte';
 	import { plainOptions } from '../select';
 	import Select from './Select.svelte';
 
@@ -53,7 +55,7 @@
 	async function start(e: SubmitEvent) {
 		e.preventDefault();
 		if (app.cluster?.context !== context) {
-			error = 'The context changed since this dialog opened. Close it and start again.';
+			error = t('The context changed since this dialog opened. Close it and start again.');
 			return;
 		}
 		busy = true;
@@ -76,7 +78,7 @@
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	aria-label={d.on === 'node' ? 'Node shell' : 'Debug'}
+	aria-label={d.on === 'node' ? t('Node shell') : t('Debug')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
@@ -85,55 +87,54 @@
 >
 	<form onsubmit={start}>
 		{#if d.on === 'node'}
-			<h2>Shell on node {d.target.name}</h2>
+			<h2>{t('Shell on node {name}', { name: d.target.name })}</h2>
 			<div class="warning" role="note">
-				<strong>This shell has full control of the node.</strong> Kubri starts a privileged pod on the node that shares
-				its processes, network and files, and opens a shell in them. Anything you do there acts on the node itself. The pod
-				is removed when the shell ends.
+				<strong>{t('This shell has full control of the node.')}</strong>
+				{t('Kubri starts a privileged pod on the node that shares its processes, network and files, and opens a shell in them. Anything you do there acts on the node itself. The pod is removed when the shell ends.')}
 			</div>
 			<label>
-				<span>Image</span>
+				<span>{t('Image')}</span>
 				<input bind:value={image} required spellcheck="false" />
 			</label>
-			<p class="hint">Needs <code>sh</code> and <code>nsenter</code>, which busybox has.</p>
+			<p class="hint"><Phrase text={t('Needs {sh} and {nsenter}, which busybox has.')} code={{ sh: 'sh', nsenter: 'nsenter' }} /></p>
 			<label>
-				<span>Namespace</span>
+				<span>{t('Namespace')}</span>
 				<input bind:value={namespace} spellcheck="false" />
 			</label>
-			<p class="hint">Where the pod runs. It needs a namespace that allows privileged pods.</p>
+			<p class="hint">{t('Where the pod runs. It needs a namespace that allows privileged pods.')}</p>
 		{:else}
-			<h2>Debug {d.target.name}</h2>
-			<div class="ways" role="radiogroup" aria-label="How to debug">
+			<h2>{t('Debug {name}', { name: d.target.name })}</h2>
+			<div class="ways" role="radiogroup" aria-label={t('How to debug')}>
 				<label class:active={way === 'ephemeral'}>
 					<input type="radio" name="way" value="ephemeral" bind:group={way} />
-					<strong>Debug container</strong>
-					<span>A container with your tools joins the pod and sees the processes of the container you pick. Works for images without a shell, such as distroless ones.</span>
+					<strong>{t('Debug container')}</strong>
+					<span>{t('A container with your tools joins the pod and sees the processes of the container you pick. Works for images without a shell, such as distroless ones.')}</span>
 				</label>
 				<label class:active={way === 'copy'}>
 					<input type="radio" name="way" value="copy" bind:group={way} />
-					<strong>Debug copy</strong>
-					<span>A copy of the pod in which the container sleeps instead of running its command, for crash loops. The copy gets no labels, so it takes no traffic, and stays until you delete it.</span>
+					<strong>{t('Debug copy')}</strong>
+					<span>{t('A copy of the pod in which the container sleeps instead of running its command, for crash loops. The copy gets no labels, so it takes no traffic, and stays until you delete it.')}</span>
 				</label>
 			</div>
 			{#if containers.length > 1}
 				<label>
-					<span>Container</span>
+					<span>{t('Container')}</span>
 					<Select bind:value={container} options={plainOptions(containers)} mono />
 				</label>
 			{/if}
 			{#if way === 'ephemeral'}
 				<label>
-					<span>Image</span>
+					<span>{t('Image')}</span>
 					<input bind:value={image} required spellcheck="false" />
 				</label>
-				<p class="hint">Kubri remembers the image you use. Debug containers stay in the pod until it is replaced.</p>
+				<p class="hint">{t('Kubri remembers the image you use. Debug containers stay in the pod until it is replaced.')}</p>
 			{/if}
 		{/if}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		<div class="buttons">
-			<button type="button" class="secondary" onclick={close} disabled={busy}>Cancel</button>
+			<button type="button" class="secondary" onclick={close} disabled={busy}>{t('Cancel')}</button>
 			<button type="submit" class="primary" disabled={busy}>
-				{busy ? 'Starting…' : d.on === 'node' ? 'Open node shell' : way === 'copy' ? 'Create copy' : 'Start debug container'}
+				{busy ? t('Starting…') : d.on === 'node' ? t('Open node shell') : way === 'copy' ? t('Create copy') : t('Start debug container')}
 			</button>
 		</div>
 	</form>
@@ -228,7 +229,7 @@
 		color: var(--bad);
 		overflow-wrap: anywhere;
 	}
-	code {
+	.hint :global(code) {
 		font-family: var(--mono);
 	}
 	.buttons {

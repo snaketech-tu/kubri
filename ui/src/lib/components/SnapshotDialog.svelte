@@ -3,6 +3,7 @@
 	import { isTauri } from '@tauri-apps/api/core';
 	import { untrack } from 'svelte';
 	import { app, type Dialog } from '../state.svelte';
+	import { t } from '../i18n';
 	import { plainOptions } from '../select';
 	import Icon from './Icon.svelte';
 	import Select from './Select.svelte';
@@ -43,63 +44,63 @@
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	aria-label="Snapshots"
+	aria-label={t('Snapshots')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
 		close();
 	}}
 >
-	<h2>Snapshots</h2>
+	<h2>{t('Snapshots')}</h2>
 	<p class="muted">
-		A snapshot saves what Kubri shows to one file. It opens in Kubri on any computer, without access to the cluster, read-only and
-		labeled as a snapshot: for "send me what you see".
+		{t('A snapshot saves what Kubri shows to one file. It opens in Kubri on any computer, without access to the cluster, read-only and labeled as a snapshot: for “send me what you see”.')}
 	</p>
 
 	<section>
-		<h3>Save a snapshot</h3>
+		<h3>{t('Save a snapshot')}</h3>
 		{#if app.snapshot}
-			<p class="muted">This is a snapshot already. Switch to a context to save one.</p>
+			<p class="muted">{t('This is a snapshot already. Switch to a context to save one.')}</p>
 		{:else}
-			<div class="scope" role="radiogroup" aria-label="What to save">
+			<div class="scope" role="radiogroup" aria-label={t('What to save')}>
 				<label>
 					<input type="radio" bind:group={scope} value="namespace" />
-					Namespace
-					<Select bind:value={namespace} options={plainOptions(namespaces)} disabled={scope !== 'namespace'} aria-label="Namespace" compact style="max-width: 260px" />
+					{t('Namespace')}
+					<Select bind:value={namespace} options={plainOptions(namespaces)} disabled={scope !== 'namespace'} aria-label={t('Namespace')} compact style="max-width: 260px" />
 				</label>
 				<label>
 					<input type="radio" bind:group={scope} value="cluster" />
-					The whole cluster
+					{t('The whole cluster')}
 				</label>
 			</div>
 			<ul class="contents">
 				<li>
-					Every type you may list{scope === 'namespace' ? ' in the namespace, with nodes, storage and cluster roles' : ''}, with the
-					columns of the lists, so the Overview, Topology and Checks work on it
+					{scope === 'namespace'
+						? t('Every type you may list in the namespace, with nodes, storage and cluster roles, with the columns of the lists, so the Overview, Topology and Checks work on it')
+						: t('Every type you may list, with the columns of the lists, so the Overview, Topology and Checks work on it')}
 				</li>
-				<li>Events, and the last 500 log lines of up to 300 containers</li>
-				<li>Secrets with their keys but without values; Helm releases without their values and manifests</li>
+				<li>{t('Events, and the last 500 log lines of up to 300 containers')}</li>
+				<li>{t('Secrets with their keys but without values; Helm releases without their values and manifests')}</li>
 			</ul>
 			<div class="buttons">
 				<button class="primary" onclick={save}>
 					<Icon name="download" size={15} />
-					{desktop ? 'Save to Downloads' : 'Download'}
+					{desktop ? t('Save to Downloads') : t('Download')}
 				</button>
 			</div>
 		{/if}
 	</section>
 
 	<section>
-		<h3>Open a snapshot</h3>
-		<p class="muted">It takes the place of the cluster until you switch to a context.</p>
+		<h3>{t('Open a snapshot')}</h3>
+		<p class="muted">{t('It takes the place of the cluster until you switch to a context.')}</p>
 		<div class="buttons">
-			<button onclick={() => picker?.click()}>Open a file…</button>
+			<button onclick={() => picker?.click()}>{t('Open a file…')}</button>
 			<input bind:this={picker} type="file" accept=".kubri,.gz,.json" hidden onchange={(e) => open(e.currentTarget.files?.[0])} />
 		</div>
 	</section>
 
 	<div class="buttons end">
-		<button onclick={close}>Close</button>
+		<button onclick={close}>{t('Close')}</button>
 	</div>
 </dialog>
 

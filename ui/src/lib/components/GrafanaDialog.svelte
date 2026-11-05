@@ -2,6 +2,7 @@
 	import { lightDismiss } from '../dismiss';
 	import { untrack } from 'svelte';
 	import { app, type Dialog } from '../state.svelte';
+	import { t } from '../i18n';
 	import DashboardList from './DashboardList.svelte';
 
 	let { dialog }: { dialog: Extract<Dialog, { kind: 'grafana' }> } = $props();
@@ -29,22 +30,22 @@
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	aria-label="Grafana for {target.name}"
+	aria-label={t('Grafana for {name}', { name: target.name })}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
 		close();
 	}}
 >
-	<h2>Grafana for {target.name}</h2>
+	<h2>{t('Grafana for {name}', { name: target.name })}</h2>
 	<DashboardList
 		{target}
-		title="Open in Grafana"
-		empty="Grafana has nothing for this object."
+		title={t('Open in Grafana')}
+		empty={t('Grafana has nothing for this object.')}
 	/>
 	<div class="buttons">
-		<button class="secondary" onclick={setUp}>Grafana settings…</button>
-		<button class="primary" onclick={close}>Close</button>
+		<button class="secondary" onclick={setUp}>{t('Grafana settings…')}</button>
+		<button class="primary" onclick={close}>{t('Close')}</button>
 	</div>
 </dialog>
 

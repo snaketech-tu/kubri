@@ -837,6 +837,102 @@ const de: Record<string, string> = {
 	// Dialogs
 	'{n} pod left running': '{n} Pod läuft weiter',
 	'{n} pods left running': '{n} Pods laufen weiter',
+
+	// Not allowed
+	'{action} is allowed now': '{action} ist jetzt erlaubt',
+	'Still not allowed': 'Immer noch nicht erlaubt',
+	'Not allowed': 'Nicht erlaubt',
+	'{action} is not allowed': '{action} ist nicht erlaubt',
+	'Kubernetes does not let you {action} {name}.': 'Kubernetes lässt dich {name} nicht {action}.',
+	'RBAC needs {check}, and none of your roles grant it.': 'RBAC braucht {check}, und keine deiner Rollen erlaubt das.',
+	'The cluster knows you as {user}, in the group {groups}.': 'Der Cluster kennt dich als {user}, in der Gruppe {groups}.',
+	'The cluster knows you as {user}, in the groups {groups}.': 'Der Cluster kennt dich als {user}, in den Gruppen {groups}.',
+	'The cluster knows you as {user}.': 'Der Cluster kennt dich als {user}.',
+	'The cluster does not say who it takes you for.': 'Der Cluster sagt nicht, für wen er dich hält.',
+	'A role that would allow it, to send to an admin': 'Eine Rolle, die es erlauben würde, zum Weitergeben an einen Admin',
+	'Copy YAML': 'YAML kopieren',
+	'Who may do this?': 'Wer darf das?',
+	'Check again': 'Erneut prüfen',
+
+	// Copy as kubectl
+	'Copy as kubectl': 'Als kubectl kopieren',
+	'What Kubri does on {name}, as commands for a terminal or a runbook. Values you choose in a dialog, like the number of replicas, show in capitals.': 'Was Kubri mit {name} tut, als Befehle für ein Terminal oder ein Runbook. Werte, die du in einem Dialog wählst, etwa die Zahl der Replicas, stehen in Großbuchstaben.',
+
+	// Unsaved YAML
+	'Keep your YAML changes?': 'YAML-Änderungen behalten?',
+	'Your changes have not been saved. Save them before continuing, or keep editing.': 'Deine Änderungen sind nicht gespeichert. Speichere sie, bevor du weitermachst, oder bearbeite weiter.',
+	'Saving did not work. Keep editing to see why, or discard your changes.': 'Speichern hat nicht geklappt. Bearbeite weiter, um zu sehen, warum, oder verwirf deine Änderungen.',
+	'Keep editing': 'Weiter bearbeiten',
+	'Discard changes': 'Änderungen verwerfen',
+	'Saving…': 'Speichere…',
+	'Save and continue': 'Speichern und weiter',
+
+	// Snapshots
+	'Snapshots': 'Snapshots',
+	'A snapshot saves what Kubri shows to one file. It opens in Kubri on any computer, without access to the cluster, read-only and labeled as a snapshot: for “send me what you see”.': 'Ein Snapshot speichert, was Kubri zeigt, in einer Datei. Sie öffnet sich in Kubri auf jedem Rechner, ohne Zugang zum Cluster, schreibgeschützt und als Snapshot gekennzeichnet: für „schick mir, was du siehst“.',
+	'Save a snapshot': 'Snapshot speichern',
+	'This is a snapshot already. Switch to a context to save one.': 'Das ist schon ein Snapshot. Wechsle in einen Kontext, um einen zu speichern.',
+	'What to save': 'Was gespeichert wird',
+	'The whole cluster': 'Der ganze Cluster',
+	'Every type you may list in the namespace, with nodes, storage and cluster roles, with the columns of the lists, so the Overview, Topology and Checks work on it': 'Jeder Typ, den du im Namespace auflisten darfst, dazu Nodes, Speicher und ClusterRoles, mit den Spalten der Listen, damit Übersicht, Topologie und Prüfungen darauf funktionieren',
+	'Every type you may list, with the columns of the lists, so the Overview, Topology and Checks work on it': 'Jeder Typ, den du auflisten darfst, mit den Spalten der Listen, damit Übersicht, Topologie und Prüfungen darauf funktionieren',
+	'Events, and the last 500 log lines of up to 300 containers': 'Events und die letzten 500 Log-Zeilen von bis zu 300 Containern',
+	'Secrets with their keys but without values; Helm releases without their values and manifests': 'Secrets mit ihren Schlüsseln, aber ohne Werte; Helm-Releases ohne ihre Values und Manifeste',
+	'Save to Downloads': 'In Downloads speichern',
+	'Download': 'Herunterladen',
+	'Open a snapshot': 'Snapshot öffnen',
+	'It takes the place of the cluster until you switch to a context.': 'Er tritt an die Stelle des Clusters, bis du in einen Kontext wechselst.',
+	'Open a file…': 'Datei öffnen…',
+
+	// Debug
+	'The context changed since this dialog opened. Close it and start again.': 'Der Kontext hat sich geändert, seit dieser Dialog offen ist. Schließe ihn und fang neu an.',
+	'Node shell': 'Node-Shell',
+	'Debug': 'Debuggen',
+	'Shell on node {name}': 'Shell auf Node {name}',
+	'This shell has full control of the node.': 'Diese Shell hat volle Kontrolle über den Node.',
+	'Kubri starts a privileged pod on the node that shares its processes, network and files, and opens a shell in them. Anything you do there acts on the node itself. The pod is removed when the shell ends.': 'Kubri startet einen privilegierten Pod auf dem Node, der dessen Prozesse, Netzwerk und Dateien teilt, und öffnet darin eine Shell. Alles, was du dort tust, wirkt auf den Node selbst. Der Pod wird entfernt, wenn die Shell endet.',
+	'Image': 'Image',
+	'Needs {sh} and {nsenter}, which busybox has.': 'Braucht {sh} und {nsenter}, die busybox hat.',
+	'Where the pod runs. It needs a namespace that allows privileged pods.': 'Wo der Pod läuft. Der Namespace muss privilegierte Pods erlauben.',
+	'Debug {name}': '{name} debuggen',
+	'How to debug': 'Wie debuggen',
+	'Debug container': 'Debug-Container',
+	'A container with your tools joins the pod and sees the processes of the container you pick. Works for images without a shell, such as distroless ones.': 'Ein Container mit deinen Werkzeugen kommt in den Pod und sieht die Prozesse des gewählten Containers. Geht auch bei Images ohne Shell, etwa distroless.',
+	'Debug copy': 'Debug-Kopie',
+	'A copy of the pod in which the container sleeps instead of running its command, for crash loops. The copy gets no labels, so it takes no traffic, and stays until you delete it.': 'Eine Kopie des Pods, in der der Container schläft, statt seinen Befehl auszuführen, für Crash-Loops. Die Kopie bekommt keine Labels, also keinen Traffic, und bleibt, bis du sie löschst.',
+	'Container': 'Container',
+	'Kubri remembers the image you use. Debug containers stay in the pod until it is replaced.': 'Kubri merkt sich das Image. Debug-Container bleiben im Pod, bis er ersetzt wird.',
+	'Starting…': 'Starte…',
+	'Open node shell': 'Node-Shell öffnen',
+	'Create copy': 'Kopie erstellen',
+	'Start debug container': 'Debug-Container starten',
+
+	// Compare
+	'Compare': 'Vergleichen',
+	'Compare {kind} {name}': '{kind} {name} vergleichen',
+	'This': 'Dies',
+	'With': 'Mit',
+	'Name': 'Name',
+	'Comparing…': 'Vergleiche…',
+	'Include status': 'Status einbeziehen',
+	'lines differ, from this to {where}': 'Zeilen unterscheiden sich, von hier zu {where}',
+	'The same, apart from what each copy keeps of its own, such as its namespace, version and timestamps.': 'Gleich, bis auf das, was jede Kopie für sich hat, etwa Namespace, Version und Zeitstempel.',
+
+	// Grafana
+	'Grafana for {name}': 'Grafana für {name}',
+	'Open in Grafana': 'In Grafana öffnen',
+	'Grafana has nothing for this object.': 'Grafana hat nichts zu diesem Objekt.',
+	'Grafana settings…': 'Grafana-Einstellungen…',
+
+	// Diffs
+	'lines, as the API server would store it': 'Zeilen, wie der API-Server es speichern würde',
+	'No changes: the API server would store the object as it is.': 'Keine Änderungen: Der API-Server würde das Objekt so speichern, wie es ist.',
+	'{n} unchanged line': '{n} unveränderte Zeile',
+	'{n} unchanged lines': '{n} unveränderte Zeilen',
+
+	// Dialogs
+	'{kinds} for {how}': '{kinds} für {how}',
+	'{list} and {last}': '{list} und {last}',
 };
 
 export default de;

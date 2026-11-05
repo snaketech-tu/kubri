@@ -3,6 +3,8 @@
 	import { untrack } from 'svelte';
 	import { copyLines } from '../actions';
 	import { app, type Dialog } from '../state.svelte';
+	import { t } from '../i18n';
+	import Phrase from './Phrase.svelte';
 
 	let { dialog }: { dialog: Extract<Dialog, { kind: 'kubectl' }> } = $props();
 	// Read once: the dialog closes by clearing it.
@@ -24,31 +26,33 @@
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	aria-label="Copy as kubectl"
+	aria-label={t('Copy as kubectl')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
 		close();
 	}}
 >
-	<h2>Copy as kubectl</h2>
+	<h2>{t('Copy as kubectl')}</h2>
 	<p class="muted">
-		What Kubri does on <strong>{title}</strong>, as commands for a terminal or a runbook. Values you choose in a dialog, like the
-		number of replicas, show in capitals.
+		<Phrase
+			text={t('What Kubri does on {name}, as commands for a terminal or a runbook. Values you choose in a dialog, like the number of replicas, show in capitals.')}
+			strong={{ name: title }}
+		/>
 	</p>
 	<ul>
 		{#each commands as { label, command } (label)}
 			<li>
 				<div class="head">
 					<span>{label}</span>
-					<button class="small" onclick={() => copyLines([command])}>Copy</button>
+					<button class="small" onclick={() => copyLines([command])}>{t('Copy')}</button>
 				</div>
 				<pre>{command}</pre>
 			</li>
 		{/each}
 	</ul>
 	<div class="buttons">
-		<button class="primary" onclick={close}>Close</button>
+		<button class="primary" onclick={close}>{t('Close')}</button>
 	</div>
 </dialog>
 

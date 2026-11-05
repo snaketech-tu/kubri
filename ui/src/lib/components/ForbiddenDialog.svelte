@@ -6,6 +6,8 @@
 	import { grantYaml } from '../rbac';
 	import { untrack } from 'svelte';
 	import { app, type Dialog } from '../state.svelte';
+	import { plural, t } from '../i18n';
+	import Phrase from './Phrase.svelte';
 
 	let { dialog }: { dialog: Extract<Dialog, { kind: 'forbidden' }> } = $props();
 	// Read once: the dialog closes by clearing it.
@@ -47,10 +49,10 @@
 		await access.refresh();
 		checking = false;
 		if (access.allowed(check) !== false) {
-			app.toast(`${action} is allowed now`);
+			app.toast(t('{action} is allowed now', { action }));
 			close();
 		} else {
-			app.toast('Still not allowed', 'bad');
+			app.toast(t('Still not allowed'), 'bad');
 		}
 	}
 </script>
@@ -58,38 +60,45 @@
 <dialog
 	{@attach lightDismiss}
 	class="dialog"
-	aria-label="Not allowed"
+	aria-label={t('Not allowed')}
 	bind:this={box}
 	oncancel={(e) => {
 		e.preventDefault();
 		close();
 	}}
 >
-	<h2>{action} is not allowed</h2>
+	<h2>{t('{action} is not allowed', { action })}</h2>
 	<p>
-		{#if target}Kubernetes does not let you {action.toLowerCase()} <strong>{target.name}</strong>.{/if}
-		RBAC needs <code>{describeCheck(check).replaceAll('`', '')}</code>, and none of your roles grant it.
+		{#if target}<Phrase text={t('Kubernetes does not let you {action} {name}.', { action: action.toLowerCase() })} strong={{ name: target.name }} />{/if}
+		<Phrase text={t('RBAC needs {check}, and none of your roles grant it.')} code={{ check: describeCheck(check).replaceAll('`', '') }} />
 	</p>
 	<p class="muted">
-		{#if identity}
-			The cluster knows you as <code>{identity.username}</code>{#if identity.groups.length}, in
-				{identity.groups.length === 1 ? 'the group' : 'the groups'}
-				{#each identity.groups as group, i (group)}{i ? ', ' : ''}<code>{group}</code>{/each}{/if}.
+		{#if identity?.groups.length}
+			{@const [head, tail] = plural(
+				identity.groups.length,
+				'The cluster knows you as {user}, in the group {groups}.',
+				'The cluster knows you as {user}, in the groups {groups}.'
+			).split('{groups}')}
+			<Phrase text={head} code={{ user: identity.username }} />{#each identity.groups as group, i (group)}{i ? ', ' : ''}<code
+					>{group}</code
+				>{/each}{tail}
+		{:else if identity}
+			<Phrase text={t('The cluster knows you as {user}.')} code={{ user: identity.username }} />
 		{:else}
-			The cluster does not say who it takes you for.
+			{t('The cluster does not say who it takes you for.')}
 		{/if}
 	</p>
 	<div class="grant">
 		<div class="grant-head">
-			<span>A role that would allow it, to send to an admin</span>
-			<button class="small" onclick={() => copyLines([yaml])}>Copy YAML</button>
+			<span>{t('A role that would allow it, to send to an admin')}</span>
+			<button class="small" onclick={() => copyLines([yaml])}>{t('Copy YAML')}</button>
 		</div>
 		<pre>{yaml}</pre>
 	</div>
 	<div class="buttons">
-		<button class="secondary" onclick={whoMay}>Who may do this?</button>
-		<button class="secondary" onclick={again} disabled={checking}>{checking ? 'Checking…' : 'Check again'}</button>
-		<button class="primary" onclick={close}>Close</button>
+		<button class="secondary" onclick={whoMay}>{t('Who may do this?')}</button>
+		<button class="secondary" onclick={again} disabled={checking}>{checking ? t('Checking…') : t('Check again')}</button>
+		<button class="primary" onclick={close}>{t('Close')}</button>
 	</div>
 </dialog>
 

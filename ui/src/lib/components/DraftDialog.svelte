@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { lightDismiss } from '../dismiss';
 	import { drafts } from '../navigation.svelte';
+	import { t } from '../i18n';
 	let box = $state<HTMLDialogElement>();
 	$effect(() => {
 		if (drafts.pending) box?.showModal();
@@ -17,16 +18,16 @@
 	}}
 	aria-labelledby="draft-title"
 >
-	<h2 id="draft-title">Keep your YAML changes?</h2>
-	<p>Your changes have not been saved. Save them before continuing, or keep editing.</p>
+	<h2 id="draft-title">{t('Keep your YAML changes?')}</h2>
+	<p>{t('Your changes have not been saved. Save them before continuing, or keep editing.')}</p>
 	{#if drafts.failed}
-		<p class="failed" role="alert">Saving did not work. Keep editing to see why, or discard your changes.</p>
+		<p class="failed" role="alert">{t('Saving did not work. Keep editing to see why, or discard your changes.')}</p>
 	{/if}
 	<div class="buttons">
-		<button disabled={drafts.saving} onclick={() => (drafts.pending = null)}>Keep editing</button>
-		<button disabled={drafts.saving} onclick={() => drafts.proceed('discard')}>Discard changes</button>
+		<button disabled={drafts.saving} onclick={() => (drafts.pending = null)}>{t('Keep editing')}</button>
+		<button disabled={drafts.saving} onclick={() => drafts.proceed('discard')}>{t('Discard changes')}</button>
 		<button class="primary" disabled={drafts.saving} onclick={() => drafts.proceed('save')}
-			>{drafts.saving ? 'Saving…' : 'Save and continue'}</button
+			>{drafts.saving ? t('Saving…') : t('Save and continue')}</button
 		>
 	</div>
 </dialog>
