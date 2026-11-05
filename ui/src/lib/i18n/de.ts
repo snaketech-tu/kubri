@@ -1915,6 +1915,7 @@ const de: Record<string, string> = {
 	'Grafana for {namespace}': 'Grafana für {namespace}',
 	'Grafana has nothing for {namespace}.': 'Grafana hat nichts für {namespace}.',
 	'Not in this cluster': 'Nicht in diesem Cluster',
+	'In this cluster': 'In diesem Cluster',
 	'None of these runs in this cluster': 'Keins davon läuft in diesem Cluster',
 	'How to install {name}': 'So installierst du {name}',
 	'How to install': 'Installation',
