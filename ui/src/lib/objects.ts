@@ -10,6 +10,7 @@ import { canSuspendFlux, isArgoApp, isFlux } from './gitops';
 import { openGrafanaLogs } from './integrations';
 import { parseShortcut, pluginApplies, shortcutLabel } from './k9s';
 import { kubectlCommand, type KubectlOp } from './kubectl';
+import { t } from './i18n';
 import { actionFor, type MenuAction } from './menu';
 import {
 	canPortForward,
@@ -59,12 +60,12 @@ export function canDrill(resource: ResourceInfo): boolean {
 
 /** What Enter shows for this kind, or null where Enter only describes. */
 export function drillLabel(resource: ResourceInfo): string | null {
-	if (isNamespaces(resource)) return 'Show pods';
-	if (isCRDs(resource)) return 'Show objects';
+	if (isNamespaces(resource)) return t('Show pods');
+	if (isCRDs(resource)) return t('Show objects');
 	if (isPods(resource) || !canDrill(resource)) return null;
-	if (isCronJobs(resource)) return 'Show jobs';
+	if (isCronJobs(resource)) return t('Show jobs');
 	const pods = ['services', 'replicationcontrollers', 'nodes', 'deployments', 'replicasets', 'statefulsets', 'daemonsets', 'jobs'];
-	return pods.includes(resource.plural) ? 'Show pods' : 'Open';
+	return pods.includes(resource.plural) ? t('Show pods') : t('Open');
 }
 
 /**
@@ -112,7 +113,7 @@ export function ownerOf(subject: Subject) {
 export function jumpToOwner(subject: Subject) {
 	const owner = ownerOf(subject);
 	if (!owner) {
-		app.toast(`${subject.target.name} has no owner`, 'bad');
+		app.toast(t('{name} has no owner', { name: subject.target.name }), 'bad');
 		return;
 	}
 	const group = owner.apiVersion.includes('/') ? owner.apiVersion.split('/')[0] : '';
@@ -120,7 +121,7 @@ export function jumpToOwner(subject: Subject) {
 	const version = owner.apiVersion.split('/').pop();
 	const kind = kinds.find((r) => r.version === version) ?? kinds[0];
 	if (!kind) {
-		app.toast(`The cluster does not serve ${owner.kind}`, 'bad');
+		app.toast(t('The cluster does not serve {kind}', { kind: owner.kind }), 'bad');
 		return;
 	}
 	app.openAt(kind, subject.target.namespace, owner.name);
@@ -134,7 +135,7 @@ export async function showReplicaSets(target: ObjectRef) {
 		const uid = (await backend.getObject(target)).metadata.uid;
 		if (!uid) return;
 		app.open(replicasets, target.namespace ?? undefined, '', {
-			title: `ReplicaSets of Deployment ${target.name}`,
+			title: t('ReplicaSets of Deployment {name}', { name: target.name }),
 			scope: {},
 			ownerUid: uid
 		});
@@ -187,126 +188,126 @@ export function objectActions(subject: Subject, options: ActionOptions, writable
 
 	const drillTo = drillLabel(resource);
 	if (drillTo && options.enter && !(subject.selectorless && isServices(resource))) add('View', drillTo, [], options.enter, { hint: 'enter', primary: 1 });
-	add('View', 'Describe', ['d'], show('describe'), { primary: 5, id: 'describe', needs: on('get'), kubectl: k({ op: 'describe' }) });
-	add('View', 'YAML', ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get'), kubectl: k({ op: 'yaml' }) });
+	add('View', t('Describe'), ['d'], show('describe'), { primary: 5, id: 'describe', needs: on('get'), kubectl: k({ op: 'describe' }) });
+	add('View', t('YAML'), ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get'), kubectl: k({ op: 'yaml' }) });
 	const logs = isPods(resource) ? on('get', 'log') : need('get', pods, ns, { subresource: 'log' });
-	if (hasCharts(resource) && (app.has('prometheus') || app.has('grafana'))) add('View', 'Metrics', ['m'], show('metrics'), { primary: 9, id: 'metrics' });
+	if (hasCharts(resource) && (app.has('prometheus') || app.has('grafana'))) add('View', t('Metrics'), ['m'], show('metrics'), { primary: 9, id: 'metrics' });
 	// Any object: its logs in Explore, the dashboards that fit it, and Grafana's search by name.
 	const grafana = app.contextSettings.integrations?.grafana;
 	if ((grafana && grafana !== 'off') || app.has('grafana')) {
 		const here = { ...target, context: app.cluster?.context };
-		if (ns || (!resource.group && resource.plural === 'namespaces')) add('View', 'Logs in Grafana', [], () => openGrafanaLogs(here), { id: 'grafana-logs' });
-		add('View', 'Grafana…', [], dialog(() => ({ kind: 'grafana', target: here })), { id: 'grafana' });
+		if (ns || (!resource.group && resource.plural === 'namespaces')) add('View', t('Logs in Grafana'), [], () => openGrafanaLogs(here), { id: 'grafana-logs' });
+		add('View', t('Grafana…'), [], dialog(() => ({ kind: 'grafana', target: here })), { id: 'grafana' });
 	}
-	if (hasLogs(resource)) add('View', 'Logs', ['l'], show('logs'), { primary: 2, id: 'logs', needs: logs, kubectl: k({ op: 'logs', workload: !isPods(resource) }) });
+	if (hasLogs(resource)) add('View', t('Logs'), ['l'], show('logs'), { primary: 2, id: 'logs', needs: logs, kubectl: k({ op: 'logs', workload: !isPods(resource) }) });
 	const keep = (kind: 'logs' | 'shell', extra: { previous?: boolean; mode?: TerminalMode } = {}) => () =>
 		dock.add({ kind, resource, target: { ...target, context: app.cluster?.context }, ...extra });
-	if (hasLogs(resource)) add('View', 'Logs in workspace', [], keep('logs'), { needs: logs });
-	if (isPods(resource)) add('View', 'Previous logs', ['p'], show('logs', { previous: true }), { id: 'previous', needs: logs, kubectl: k({ op: 'logs', previous: true }) });
-	if (isSecrets(resource)) add('View', 'Decode', ['x'], show('describe', { decoded: true }), { needs: on('get'), kubectl: k({ op: 'decode' }) });
-	if (hasUsers(resource)) add('View', 'Used by', ['u'], show('describe'), { id: 'usedBy' });
-	add('View', 'What changed', [], () => app.showChanges({ namespace: target.namespace ?? undefined, kind: resource.kind, name: target.name }), { id: 'changes' });
+	if (hasLogs(resource)) add('View', t('Logs in workspace'), [], keep('logs'), { needs: logs });
+	if (isPods(resource)) add('View', t('Previous logs'), ['p'], show('logs', { previous: true }), { id: 'previous', needs: logs, kubectl: k({ op: 'logs', previous: true }) });
+	if (isSecrets(resource)) add('View', t('Decode'), ['x'], show('describe', { decoded: true }), { needs: on('get'), kubectl: k({ op: 'decode' }) });
+	if (hasUsers(resource)) add('View', t('Used by'), ['u'], show('describe'), { id: 'usedBy' });
+	add('View', t('What changed'), [], () => app.showChanges({ namespace: target.namespace ?? undefined, kind: resource.kind, name: target.name }), { id: 'changes' });
 	{
 		const pin = app.pinFor(resource, target);
-		add('View', app.isPinned(pin) ? 'Unpin from sidebar' : 'Pin to sidebar', [], () => app.togglePin(pin), { id: 'pin' });
+		add('View', app.isPinned(pin) ? t('Unpin from sidebar') : t('Pin to sidebar'), [], () => app.togglePin(pin), { id: 'pin' });
 	}
-	add('View', 'Compare…', [], dialog(() => ({ kind: 'compare', resource, target })), { id: 'compare', needs: on('get') });
+	add('View', t('Compare…'), [], dialog(() => ({ kind: 'compare', resource, target })), { id: 'compare', needs: on('get') });
 	// In the action bar once a model is set up; until then the menus lead to the settings.
 	const explaining = app.settings.explain.provider !== 'none' ? { primary: isPods(resource) ? 4 : 9 } : {};
-	add('View', 'Explain…', ['E'], () => (app.explaining = { kind: 'object', target }), { id: 'explain', needs: on('get'), ...explaining });
+	add('View', t('Explain…'), ['E'], () => (app.explaining = { kind: 'object', target }), { id: 'explain', needs: on('get'), ...explaining });
 
 	if (isPods(resource) && writable) {
-		add('Connect', 'Shell', ['s'], show('shell', { mode: 'shell' }), { primary: 3, id: 'shell', needs: on('create', 'exec'), kubectl: k({ op: 'shell' }) });
-		add('Connect', 'Shell in workspace', [], keep('shell', { mode: 'shell' }), { needs: on('create', 'exec') });
-		add('Connect', 'Attach', ['a'], show('shell', { mode: 'attach' }), { id: 'attach', needs: on('create', 'attach'), kubectl: k({ op: 'attach' }) });
-		add('Connect', 'Debug…', ['D'], dialog(() => ({ kind: 'debug', on: 'pod', target })), { id: 'debug', needs: on('patch', 'ephemeralcontainers'), kubectl: k({ op: 'debug' }) });
+		add('Connect', t('Shell'), ['s'], show('shell', { mode: 'shell' }), { primary: 3, id: 'shell', needs: on('create', 'exec'), kubectl: k({ op: 'shell' }) });
+		add('Connect', t('Shell in workspace'), [], keep('shell', { mode: 'shell' }), { needs: on('create', 'exec') });
+		add('Connect', t('Attach'), ['a'], show('shell', { mode: 'attach' }), { id: 'attach', needs: on('create', 'attach'), kubectl: k({ op: 'attach' }) });
+		add('Connect', t('Debug…'), ['D'], dialog(() => ({ kind: 'debug', on: 'pod', target })), { id: 'debug', needs: on('patch', 'ephemeralcontainers'), kubectl: k({ op: 'debug' }) });
 	}
 	if (isNodes(resource) && writable) {
-		add('Connect', 'Node shell…', ['D'], dialog(() => ({ kind: 'debug', on: 'node', target })), { id: 'nodeShell', needs: need('create', pods, 'default'), kubectl: k({ op: 'nodeShell' }) });
+		add('Connect', t('Node shell…'), ['D'], dialog(() => ({ kind: 'debug', on: 'node', target })), { id: 'nodeShell', needs: need('create', pods, 'default'), kubectl: k({ op: 'nodeShell' }) });
 	}
 	if (canPortForward(resource)) {
 		const forward = isPods(resource) ? on('create', 'portforward') : need('create', pods, ns, { subresource: 'portforward' });
-		add('Connect', 'Port-forward…', ['F'], () => void portForward(resource, target), { primary: 8, needs: forward, kubectl: k({ op: 'portForward' }) });
+		add('Connect', t('Port-forward…'), ['F'], () => void portForward(resource, target), { primary: 8, needs: forward, kubectl: k({ op: 'portForward' }) });
 	}
 
 	if (writable) {
 		if (isNodes(resource)) {
-			if (subject.cordoned !== true) add('Change', 'Cordon', ['c'], () => void cordon(target.name, true), { primary: 4, needs: on('patch'), kubectl: k({ op: 'cordon' }) });
-			if (subject.cordoned !== false) add('Change', 'Uncordon', ['u'], () => void cordon(target.name, false), { primary: 4, needs: on('patch'), kubectl: k({ op: 'uncordon' }) });
-			add('Change', 'Drain…', ['r'], dialog(() => ({ kind: 'drain', resource, target })), { primary: 4, needs: on('patch'), kubectl: k({ op: 'drain', options: { ignoreDaemonsets: true } }) });
+			if (subject.cordoned !== true) add('Change', t('Cordon'), ['c'], () => void cordon(target.name, true), { primary: 4, needs: on('patch'), kubectl: k({ op: 'cordon' }) });
+			if (subject.cordoned !== false) add('Change', t('Uncordon'), ['u'], () => void cordon(target.name, false), { primary: 4, needs: on('patch'), kubectl: k({ op: 'uncordon' }) });
+			add('Change', t('Drain…'), ['r'], dialog(() => ({ kind: 'drain', resource, target })), { primary: 4, needs: on('patch'), kubectl: k({ op: 'drain', options: { ignoreDaemonsets: true } }) });
 		}
 		if (isCronJobs(resource)) {
-			add('Change', 'Trigger now…', ['t'], dialog(() => ({ kind: 'trigger', resource, target })), { primary: 4, needs: need('create', { group: 'batch', plural: 'jobs' }, ns), kubectl: k({ op: 'trigger' }) });
+			add('Change', t('Trigger now…'), ['t'], dialog(() => ({ kind: 'trigger', resource, target })), { primary: 4, needs: need('create', { group: 'batch', plural: 'jobs' }, ns), kubectl: k({ op: 'trigger' }) });
 			const suspend = !subject.suspended;
-			add('Change', suspend ? 'Suspend…' : 'Resume…', ['s'], dialog(() => ({ kind: 'suspend', resource, target, suspend })), { needs: on('patch'), kubectl: k({ op: 'suspend', suspend }) });
+			add('Change', suspend ? t('Suspend…') : t('Resume…'), ['s'], dialog(() => ({ kind: 'suspend', resource, target, suspend })), { needs: on('patch'), kubectl: k({ op: 'suspend', suspend }) });
 		}
 		if (isFlux(resource)) {
-			add('Change', 'Reconcile', ['r'], () => void runGitOps(target, 'reconcile'), { primary: 4, needs: on('patch') });
+			add('Change', t('Reconcile'), ['r'], () => void runGitOps(target, 'reconcile'), { primary: 4, needs: on('patch') });
 			if (canSuspendFlux(resource)) {
 				const action = subject.suspended ? 'resume' : 'suspend';
-				add('Change', subject.suspended ? 'Resume…' : 'Suspend…', ['s'], dialog(() => ({ kind: 'gitops', resource, target, action })), { needs: on('patch') });
+				add('Change', subject.suspended ? t('Resume…') : t('Suspend…'), ['s'], dialog(() => ({ kind: 'gitops', resource, target, action })), { needs: on('patch') });
 			}
 		}
 		if (isArgoApp(resource)) {
-			add('Change', 'Sync…', ['s'], dialog(() => ({ kind: 'gitops', resource, target, action: 'sync' })), { primary: 4, needs: on('patch') });
-			add('Change', 'Refresh', ['r'], () => void runGitOps(target, 'refresh'), { needs: on('patch') });
-			add('Change', 'Auto-sync…', ['t'], dialog(() => ({ kind: 'gitops', resource, target, action: 'autoSync' })), { needs: on('patch') });
+			add('Change', t('Sync…'), ['s'], dialog(() => ({ kind: 'gitops', resource, target, action: 'sync' })), { primary: 4, needs: on('patch') });
+			add('Change', t('Refresh'), ['r'], () => void runGitOps(target, 'refresh'), { needs: on('patch') });
+			add('Change', t('Auto-sync…'), ['t'], dialog(() => ({ kind: 'gitops', resource, target, action: 'autoSync' })), { needs: on('patch') });
 		}
 		if (isCertificates(resource)) {
 			const status = need('patch', resource, ns, { subresource: 'status', name: target.name });
-			add('Change', 'Renew now…', ['r'], dialog(() => ({ kind: 'renew', resource, target })), { primary: 4, needs: status });
+			add('Change', t('Renew now…'), ['r'], dialog(() => ({ kind: 'renew', resource, target })), { primary: 4, needs: status });
 		}
-		if (canEdit(resource)) add('Change', 'Edit', ['e'], show('yaml', { editing: true }), { primary: 7, id: 'edit', needs: on('update'), kubectl: k({ op: 'edit' }) });
+		if (canEdit(resource)) add('Change', t('Edit'), ['e'], show('yaml', { editing: true }), { primary: 7, id: 'edit', needs: on('update'), kubectl: k({ op: 'edit' }) });
 		if (canScale(resource) && !isPods(resource)) {
-			add('Change', 'Scale…', ['s'], dialog(() => ({ kind: 'scale', resource, target })), { primary: 4, needs: on('patch', 'scale'), kubectl: k({ op: 'scale' }) });
+			add('Change', t('Scale…'), ['s'], dialog(() => ({ kind: 'scale', resource, target })), { primary: 4, needs: on('patch', 'scale'), kubectl: k({ op: 'scale' }) });
 		}
-		if (canRestart(resource)) add('Change', 'Restart…', ['r'], dialog(() => ({ kind: 'restart', resource, target })), { primary: 4, needs: on('patch'), kubectl: k({ op: 'restart' }) });
-		if (hasImages(resource)) add('Change', 'Set image…', ['i'], dialog(() => ({ kind: 'image', resource, target })), { needs: on('patch'), kubectl: k({ op: 'image' }) });
+		if (canRestart(resource)) add('Change', t('Restart…'), ['r'], dialog(() => ({ kind: 'restart', resource, target })), { primary: 4, needs: on('patch'), kubectl: k({ op: 'restart' }) });
+		if (hasImages(resource)) add('Change', t('Set image…'), ['i'], dialog(() => ({ kind: 'image', resource, target })), { needs: on('patch'), kubectl: k({ op: 'image' }) });
 		if (isReplicaSets(resource)) {
-			add('Change', 'Roll back to this…', ['ctrl+l'], dialog(() => ({ kind: 'rollback', resource, target })), { needs: need('update', { group: 'apps', plural: 'deployments' }, ns), kubectl: k({ op: 'rollback', deployment: ownerOf(subject)?.name }) });
+			add('Change', t('Roll back to this…'), ['ctrl+l'], dialog(() => ({ kind: 'rollback', resource, target })), { needs: need('update', { group: 'apps', plural: 'deployments' }, ns), kubectl: k({ op: 'rollback', deployment: ownerOf(subject)?.name }) });
 		}
 		if (resource.verbs.includes('patch')) {
-			add('Change', 'Labels & annotations…', ['L'], dialog(() => ({ kind: 'labels', resource, target })), { needs: on('patch'), kubectl: k({ op: 'labels' }) });
+			add('Change', t('Labels & annotations…'), ['L'], dialog(() => ({ kind: 'labels', resource, target })), { needs: on('patch'), kubectl: k({ op: 'labels' }) });
 		}
-		if (resource.verbs.includes('create') && resource.kind !== 'Event') add('Change', 'Clone to…', [], () => void cloneTo(target));
+		if (resource.verbs.includes('create') && resource.kind !== 'Event') add('Change', t('Clone to…'), [], () => void cloneTo(target));
 	}
 
 	const nodes = findResource(app.resources, { group: '', version: 'v1', plural: 'nodes' });
 	const node = subject.node;
-	if (node && node !== '<none>' && nodes) add('Go to', `Node ${node}`, ['o'], () => app.openAt(nodes, null, node));
+	if (node && node !== '<none>' && nodes) add('Go to', t('Node {name}', { name: node }), ['o'], () => app.openAt(nodes, null, node));
 	const owner = ownerOf(subject);
 	if (owner) add('Go to', `${owner.kind} ${owner.name}`, ['J'], () => jumpToOwner(subject));
 	if (resource.group === 'apps' && resource.plural === 'deployments') {
 		add('Go to', 'ReplicaSets', ['z'], () => void showReplicaSets(target));
 	}
 	if (isNamespaces(resource)) {
-		add('Go to', `Switch to ${target.name}`, ['u'], () => {
+		add('Go to', t('Switch to {name}', { name: target.name }), ['u'], () => {
 			app.namespace = target.name;
-			app.toast(`Namespace ${target.name}`);
+			app.toast(t('Namespace {name}', { name: target.name }));
 		});
 	} else if (target.namespace && target.namespace !== options.namespace) {
 		const ns = target.namespace;
-		add('Go to', `Switch to namespace ${ns}`, ['W'], () => (app.namespace = ns));
+		add('Go to', t('Switch to namespace {name}', { name: ns }), ['W'], () => (app.namespace = ns));
 	}
 
 	const chosen = options.chosen?.length ? options.chosen : [target];
 	const several = chosen.length > 1;
-	add('Copy', several ? `Copy ${chosen.length} names` : 'Copy name', ['c'], () =>
+	add('Copy', several ? t('Copy {n} names', { n: chosen.length }) : t('Copy name'), ['c'], () =>
 		copyLines(
-			chosen.map((t) => t.name),
-			['name', 'names']
+			chosen.map((c) => c.name),
+			(n) => t('Copied {n} names', { n })
 		)
 	);
 	if (resource.namespaced) {
-		add('Copy', several ? 'Copy namespaces' : 'Copy namespace', ['n'], () =>
+		add('Copy', several ? t('Copy namespaces') : t('Copy namespace'), ['n'], () =>
 			copyLines(
-				[...new Set(chosen.map((t) => t.namespace ?? ''))],
-				['namespace', 'namespaces']
+				[...new Set(chosen.map((c) => c.namespace ?? ''))],
+				(n) => t('Copied {n} namespaces', { n })
 			)
 		);
 	}
 
-	add('Copy', 'Copy as kubectl…', [], () => {
+	add('Copy', t('Copy as kubectl…'), [], () => {
 		const commands = out.filter((a) => a.kubectl).map((a) => ({ label: a.label.replace(/…$/, ''), command: a.kubectl! }));
 		app.dialog = { kind: 'kubectl', title: target.name, commands };
 	});
@@ -326,7 +327,7 @@ export function objectActions(subject: Subject, options: ActionOptions, writable
 
 	if (writable) out.push(...(options.extraDanger ?? []));
 	if (writable && canDelete(resource)) {
-		const label = several ? `Delete ${chosen.length}…` : 'Delete…';
+		const label = several ? t('Delete {n}…', { n: chosen.length }) : t('Delete…');
 		const run = dialog(() => ({ kind: 'delete', resource, targets: chosen }));
 		// For several objects, the cursor's stands for all: they share a kind and mostly a namespace.
 		add('Delete', label, ['ctrl+d', 'Delete'], run, { danger: true, primary: 0, needs: on('delete'), kubectl: k({ op: 'delete', targets: chosen }) });
@@ -383,7 +384,7 @@ export function openObjectMenu(
 	const actions = objectActions(subject, { show, enter });
 	// With the other places to go, after viewing and changing it.
 	const at = actions.findIndex((a) => !['View', 'Connect', 'Change'].includes(a.group));
-	const list = { group: 'Go to', label: `Show in ${resource.kind} list`, keys: [], run: () => app.openAt(resource, target.namespace, target.name) };
+	const list = { group: 'Go to', label: t('Show in the {kind} list', { kind: resource.kind }), keys: [], run: () => app.openAt(resource, target.namespace, target.name) };
 	actions.splice(at === -1 ? actions.length : at, 0, list);
 	before?.();
 	app.menu = { actions: [...first, ...actions], x, y, hints: false };

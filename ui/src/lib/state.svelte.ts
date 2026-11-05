@@ -41,6 +41,8 @@ import {
 } from './api';
 import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
+import { plural, t } from './i18n';
+import { coreText } from './i18n/errors';
 import { readOnlyReason } from './guard';
 import { applyZoom, storedZoom } from './appearance';
 import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } from './releases';
@@ -394,7 +396,7 @@ class AppState {
 		try {
 			await entry.undo();
 			this.activity = this.activity.map((a) => (a.id === id ? { ...a, undone: true } : a));
-			this.toast(`Undone: ${entry.text}`);
+			this.toast(t('Undone: {what}', { what: entry.text }));
 		} catch (err) {
 			this.toast(errorMessage(err), 'bad');
 		}
@@ -662,7 +664,7 @@ class AppState {
 	/** Unlocks a locked context for 15 minutes. */
 	async unlock() {
 		if (drafts.block(() => this.unlock())) return;
-		if (await this.#askGuard(() => backend.unlock())) this.toast('Unlocked for 15 minutes');
+		if (await this.#askGuard(() => backend.unlock())) this.toast(t('Unlocked for 15 minutes'));
 	}
 
 	async lock() {
@@ -673,7 +675,7 @@ class AppState {
 	/** Says why an action that changes the cluster did nothing, and how to allow it where that is possible. */
 	explainReadOnly(action: string) {
 		const what = action.replace(/…$/, '');
-		this.toast(`${what} is not available: ${readOnlyReason(this.guard, this.contextSettings.readOnly, this.k9s?.readOnly ?? false)}`, 'bad');
+		this.toast(t('{action} is not available: {reason}', { action: what, reason: readOnlyReason(this.guard, this.contextSettings.readOnly, this.k9s?.readOnly ?? false) }), 'bad');
 	}
 
 	/** The header's lock button: read-only on and off, or a locked context unlocked and locked. */
@@ -709,7 +711,7 @@ class AppState {
 
 	setZoom(zoom: number) {
 		this.zoom = zoom;
-		applyZoom(zoom).catch((err) => this.toast(`Could not zoom: ${errorMessage(err)}`, 'bad'));
+		applyZoom(zoom).catch((err) => this.toast(t('Could not zoom: {error}', { error: errorMessage(err) }), 'bad'));
 	}
 
 	/** Whether Kubri asks GitHub for new releases when it starts. */
@@ -856,12 +858,12 @@ class AppState {
 
 	/** Saves a namespace, or the whole cluster, to a snapshot file. */
 	async takeSnapshot(namespace: string | null) {
-		this.toast(`Saving a snapshot of ${namespace ? `namespace ${namespace}` : 'the cluster'}…`);
+		this.toast(namespace ? t('Saving a snapshot of namespace {name}…', { name: namespace }) : t('Saving a snapshot of the cluster…'));
 		try {
 			const path = await backend.takeSnapshot(namespace);
-			if (path) this.toast(`Saved ${path}`);
+			if (path) this.toast(t('Saved {name}', { name: path }));
 		} catch (err) {
-			this.toast(`Could not save the snapshot: ${errorMessage(err)}`, 'bad');
+			this.toast(t('Could not save the snapshot: {error}', { error: errorMessage(err) }), 'bad');
 		}
 	}
 
@@ -869,7 +871,7 @@ class AppState {
 	async openSnapshot(file: File) {
 		if (drafts.block(() => this.openSnapshot(file))) return;
 		if (this.dialog || this.connecting) {
-			this.toast('Finish the current action before opening a snapshot', 'bad');
+			this.toast(t('Finish the current action before opening a snapshot'), 'bad');
 			return;
 		}
 		this.connecting = file.name;
@@ -895,7 +897,7 @@ class AppState {
 		if (drafts.block(() => this.switchContext(name))) return;
 		// A dialog was reviewed against the current context; it must not run against the next one.
 		if (this.dialog || this.connecting) {
-			this.toast('Finish the current action before switching contexts', 'bad');
+			this.toast(t('Finish the current action before switching contexts'), 'bad');
 			return;
 		}
 		// The view stays, dimmed, while connecting; it keeps its place for when it comes back.
@@ -934,7 +936,11 @@ class AppState {
 		void cancelling.then(() => {
 			if (this.#cancelling === cancelling) this.#cancelling = null;
 		});
-		this.toast(this.cluster ? `Stopped connecting to ${name}; still on ${this.contextName(this.cluster.context)}` : `Stopped connecting to ${name}`);
+		this.toast(
+			this.cluster
+				? t('Stopped connecting to {name}; still on {current}', { name, current: this.contextName(this.cluster.context) })
+				: t('Stopped connecting to {name}', { name })
+		);
 	}
 
 	/** Shows a resource list, optionally switching namespace, like k9s `:pods kube-system`. */
@@ -952,7 +958,7 @@ class AppState {
 	drill(drill: Drill) {
 		const resource = findResource(this.resources, drill.resource);
 		if (!resource) {
-			this.toast(`The cluster does not serve ${drill.resource.plural}`, 'bad');
+			this.toast(t('The cluster does not serve {kind}', { kind: drill.resource.plural }), 'bad');
 			return;
 		}
 		const scope = { title: drill.title, scope: drill.scope, ownerUid: drill.ownerUid };
@@ -961,7 +967,9 @@ class AppState {
 		// What belongs to an object lives in its namespace, so the list needs it. Say so, and how to undo it.
 		if (drill.namespace && before !== drill.namespace) {
 			this.toast(
-				`Showing ${drill.namespace} only. Back returns to ${before === ALL_NAMESPACES ? 'all namespaces' : before}.`
+				before === ALL_NAMESPACES
+					? t('Showing {name} only. Back returns to all namespaces.', { name: drill.namespace })
+					: t('Showing {name} only. Back returns to {before}.', { name: drill.namespace, before })
 			);
 		}
 	}
@@ -1052,7 +1060,7 @@ class AppState {
 		if (!address) return;
 		if (address.context !== context) {
 			// Switching here would switch everyone who uses this server.
-			this.toast(`This address is for ${address.context}; switch to that context to open it`);
+			this.toast(t('This address is for {context}; switch to that context to open it', { context: address.context }));
 			return;
 		}
 		const resource = address.resource && findResource(this.resources, address.resource);
@@ -1089,7 +1097,7 @@ class AppState {
 					if (this.cluster?.context !== action.context) return;
 					resource = findResource(this.resources, action.resource);
 					if (!resource) {
-						this.toast(`${action.context} has no ${action.resource.plural}`, 'bad');
+						this.toast(t('{context} has no {kind}', { context: action.context, kind: action.resource.plural }), 'bad');
 						return;
 					}
 				}
@@ -1098,7 +1106,7 @@ class AppState {
 			}
 			case 'context': {
 				const name = action.name === '-' ? this.previousContext : action.name;
-				if (!name) this.toast('There is no previous context yet', 'bad');
+				if (!name) this.toast(t('There is no previous context yet'), 'bad');
 				else if (name !== this.cluster?.context) await this.switchContext(name);
 				break;
 			}
@@ -1237,14 +1245,14 @@ class AppState {
 		const was = this.isPinned(pin);
 		this.pins = togglePinIn(this.pins, pin);
 		savePins(this.pins);
-		this.toast(was ? `Unpinned ${pin.name || pin.kind}` : `Pinned ${pin.name || pin.kind} to the sidebar`);
+		this.toast(was ? t('Unpinned {name}', { name: pin.name || pin.kind }) : t('Pinned {name} to the sidebar', { name: pin.name || pin.kind }));
 	}
 
 	/** Opens a pin or a recent object: the list of a kind, a namespace's pods, or an object in its list. */
 	openPin(pin: RecentObject) {
 		const resource = findResource(this.resources, { group: pin.group, version: pin.version, plural: pin.plural });
 		if (!resource) {
-			this.toast(`The cluster does not serve ${pin.plural}`, 'bad');
+			this.toast(t('The cluster does not serve {kind}', { kind: pin.plural }), 'bad');
 			return;
 		}
 		if (!pin.name) {
@@ -1271,7 +1279,7 @@ class AppState {
 		}
 		const resource = findResource(this.resources, target.resource);
 		if (!resource) {
-			this.toast(`${this.cluster?.context ?? 'This cluster'} has no ${kind}`, 'bad');
+			this.toast(this.cluster ? t('{context} has no {kind}', { context: this.cluster.context, kind }) : t('This cluster has no {kind}', { kind }), 'bad');
 			return;
 		}
 		this.showDetails(resource, { resource: refOf(resource), namespace: target.namespace, name: target.name });
@@ -1457,7 +1465,7 @@ class AppState {
 			}
 		} catch (err) {
 			this.k9s = null;
-			this.toast(`Could not read the k9s configuration: ${errorMessage(err)}`, 'bad');
+			this.toast(t('Could not read the k9s configuration: {error}', { error: errorMessage(err) }), 'bad');
 		} finally {
 			this.starting = false;
 		}
@@ -1555,11 +1563,11 @@ class AppState {
 	openLocalTerminal(another = false) {
 		const cluster = this.cluster;
 		if (!cluster || cluster.snapshot) {
-			this.toast(cluster ? 'A snapshot has no cluster for kubectl to talk to' : 'Connect to a context to open a terminal', 'bad');
+			this.toast(cluster ? t('A snapshot has no cluster for kubectl to talk to') : t('Connect to a context to open a terminal'), 'bad');
 			return;
 		}
 		if (!this.localTerminal) {
-			this.toast('The local terminal is off here, as it would run on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it.', 'bad');
+			this.toast(t('The local terminal is off here, as it would run on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it.'), 'bad');
 			return;
 		}
 		dock.local(cluster.context, this.namespace === ALL_NAMESPACES ? null : this.namespace, another);
@@ -1583,7 +1591,7 @@ class AppState {
 		this.askLocalTerminal();
 		this.resources = resources;
 		const closed = dock.keepContexts([...this.contexts.map((c) => c.name), cluster.context]);
-		if (closed) this.toast(`Closed ${closed} workspace ${closed === 1 ? 'tab' : 'tabs'} of a context that is gone`);
+		if (closed) this.toast(plural(closed, 'Closed {n} workspace tab of a context that is gone', 'Closed {n} workspace tabs of a context that is gone'));
 		this.namespace = cluster.snapshot
 			? (cluster.snapshot.namespace ?? ALL_NAMESPACES)
 			: this.contextSettingsOf(cluster.context).namespace || ALL_NAMESPACES;
@@ -1673,9 +1681,9 @@ class AppState {
 		this.refreshForwards();
 		const failed = results.filter((r) => r.error);
 		const started = results.length - failed.length;
-		if (started) this.toast(`Started ${started} favorite ${started === 1 ? 'port-forward' : 'port-forwards'}`);
+		if (started) this.toast(plural(started, 'Started {n} favorite port-forward', 'Started {n} favorite port-forwards'));
 		for (const { favorite, error } of failed) {
-			this.toast(`${favoriteLabel(favorite)} did not start: ${error}`, 'bad');
+			this.toast(t('{name} did not start: {error}', { name: favoriteLabel(favorite), error: coreText(error ?? '') }), 'bad');
 		}
 	}
 
@@ -1702,7 +1710,11 @@ class AppState {
 					}
 				];
 		if (await this.setContextSettings(forward.context, { ...settings, forwards })) {
-			this.toast(known ? `${favoriteLabel(known)} is no longer a favorite` : `${favoriteLabel(forwards.at(-1)!)} starts whenever Kubri connects to ${this.contextName(forward.context)}`);
+			this.toast(
+			known
+				? t('{name} is no longer a favorite', { name: favoriteLabel(known) })
+				: t('{name} starts whenever Kubri connects to {context}', { name: favoriteLabel(forwards.at(-1)!), context: this.contextName(forward.context) })
+		);
 		}
 	}
 

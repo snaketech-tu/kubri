@@ -1,5 +1,6 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { backend, type AccessCheck, type ResourceRef } from './api';
+import { t } from './i18n';
 
 /** Checks asked together, after the UI asked for them in one go. */
 const BATCH_DELAY = 30;
@@ -29,7 +30,9 @@ export function need(
 export function describeCheck(check: AccessCheck): string {
 	let resource = check.group ? `${check.resource}.${check.group}` : check.resource;
 	if (check.subresource) resource += `/${check.subresource}`;
-	return check.namespace ? `\`${check.verb}\` on \`${resource}\` in \`${check.namespace}\`` : `\`${check.verb}\` on \`${resource}\``;
+	return check.namespace
+		? t('`{0}` on `{1}` in `{2}`', { 0: check.verb, 1: resource, 2: check.namespace })
+		: t('`{0}` on `{1}`', { 0: check.verb, 1: resource });
 }
 
 /**
@@ -67,7 +70,7 @@ class Access {
 
 	/** Why `check` is refused, or null while it is allowed or not known to be refused. */
 	denial(check: AccessCheck): string | null {
-		return this.allowed(check) === false ? `Needs ${describeCheck(check).replaceAll('`', '')}` : null;
+		return this.allowed(check) === false ? t('Needs {check}', { check: describeCheck(check).replaceAll('`', '') }) : null;
 	}
 
 	/** Asks again for everything, as after a role may have changed. */

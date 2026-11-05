@@ -61,9 +61,20 @@ function startLanguage(): Language {
 export const language: Language = startLanguage();
 let messages = MESSAGES[language];
 
+let current: Language = language;
+
 /** For tests: show `lang` from now on. */
 export function useLanguage(lang: Language) {
 	messages = MESSAGES[lang];
+	current = lang;
+}
+
+/**
+ * A name such as "Pods" or "View" inside a sentence: English writes it small ("3 of 5 pods"),
+ * German keeps its capital ("3 von 5 Pods").
+ */
+export function midSentence(name: string): string {
+	return current === 'en' ? name.toLowerCase() : name;
 }
 
 /**

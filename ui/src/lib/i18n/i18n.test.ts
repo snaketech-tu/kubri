@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import de from './de';
-import { coreText, CORE_TEXTS, ERROR_FORMATS } from './errors';
+import { CHECK_FORMATS, coreText, CORE_TEXTS, ERROR_FORMATS, NOTICE_FORMATS } from './errors';
 import { plural, systemLanguage, t, useLanguage } from '.';
 
 const SRC = new URL('../..', import.meta.url).pathname;
@@ -33,7 +33,7 @@ function used(): Map<string, string> {
 		}
 	}
 	// Texts from the core are translated as they arrive.
-	for (const text of [...ERROR_FORMATS, ...CORE_TEXTS]) texts.set(text, 'errors.ts');
+	for (const text of [...ERROR_FORMATS, ...CHECK_FORMATS, ...NOTICE_FORMATS, ...CORE_TEXTS]) texts.set(text, 'errors.ts');
 	return texts;
 }
 
@@ -90,6 +90,27 @@ describe('i18n', () => {
 		expect([...formats, ...inKubeMessage].sort()).toEqual([...ERROR_FORMATS].sort());
 	});
 
+	it('knows how the core names a check', () => {
+		const rust = readFileSync(new URL('../../../../crates/kubri-core/src/access.rs', import.meta.url), 'utf8');
+		const formats = [...rust.matchAll(/format!\("(`\{\}` on [^"]*)"/g)].map((m) => {
+			let i = 0;
+			return m[1].replace(/\{\w*\}/g, () => `{${i++}}`);
+		});
+		expect(formats).toEqual(CHECK_FORMATS);
+	});
+
+	it('knows the notices above a list', () => {
+		const rust = readFileSync(new URL('../../../../crates/kubri-core/src/lib.rs', import.meta.url), 'utf8');
+		const numbered = (format: string) => {
+			let i = 0;
+			return format.replace(/\{\w*\}/g, () => `{${i++}}`);
+		};
+		const notices = [...rust.matchAll(/let notice = format!\(\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => numbered(m[1]));
+		expect(notices).toEqual(NOTICE_FORMATS.slice(0, notices.length));
+		expect(rust).toContain('format!("{} and {} more"');
+		expect(notices.length + 1).toBe(NOTICE_FORMATS.length);
+	});
+
 	it('translates errors from the core, values and all', () => {
 		useLanguage('de');
 		expect(coreText('not connected to a cluster, select a context first')).toBe('nicht mit einem Cluster verbunden, wähle zuerst einen Kontext');
@@ -97,6 +118,8 @@ describe('i18n', () => {
 		expect(coreText('Kubri is read-only (this context is set read-only in Kubri), so it does not change the cluster')).toBe(
 			'Kubri ist schreibgeschützt (dieser Kontext ist in Kubri schreibgeschützt) und ändert den Cluster daher nicht'
 		);
+		expect(coreText('not allowed: needs `delete` on `pods` in `shop`')).toBe('nicht erlaubt: braucht `delete` auf `pods` in `shop`');
+		expect(coreText('not allowed: needs `patch` on `deployments.apps/scale`')).toBe('nicht erlaubt: braucht `patch` auf `deployments.apps/scale`');
 		expect(coreText('pods "web" not found')).toBe('pods "web" not found');
 	});
 

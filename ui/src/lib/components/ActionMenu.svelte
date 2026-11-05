@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { actionFor, hintOf, keyOf, menuEntries, type Menu, type MenuAction } from '../menu';
+	import { actionFor, groupTitle, hintOf, keyOf, menuEntries, type Menu, type MenuAction } from '../menu';
+	import { t } from '../i18n';
 	import { app } from '../state.svelte';
 
 	let { menu }: { menu: Menu } = $props();
@@ -129,7 +130,7 @@
 >
 	{#each groups as [group, entries], g (g)}
 		{#if g > 0}<div class="separator" role="separator"></div>{/if}
-		{#if group}<div class="group" aria-hidden="true">{group}</div>{/if}
+		{#if group}<div class="group" aria-hidden="true">{groupTitle(group)}</div>{/if}
 		{#each entries as entry (entry.kind === 'fold' ? `fold:${entry.id}` : `${entry.nested}:${entry.action.label}`)}
 			{#if entry.kind === 'fold'}
 				<button
@@ -156,7 +157,7 @@
 					class:danger={action.danger}
 					class:refused={action.disabled}
 					aria-disabled={action.disabled ? 'true' : undefined}
-					title={action.disabled ? `${action.disabled}. Choose it for details.` : undefined}
+					title={action.disabled ? t('{reason}. Choose it for details.', { reason: action.disabled }) : undefined}
 					onclick={() => run(action)}
 					onmouseenter={(e) => {
 						active = flat.indexOf(entry);
@@ -164,7 +165,7 @@
 					}}
 				>
 					<span>{action.label}</span>
-					{#if action.disabled}<span class="lock" aria-label="not allowed">⊘</span>{/if}
+					{#if action.disabled}<span class="lock" aria-label={t('not allowed')}>⊘</span>{/if}
 					{#if hint}<kbd>{hint}</kbd>{/if}
 				</button>
 			{/if}

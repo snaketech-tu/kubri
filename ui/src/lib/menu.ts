@@ -1,3 +1,5 @@
+import { midSentence, t } from './i18n';
+
 /** Something to do on an object, offered as a button, in a menu and on a key. */
 export interface MenuAction {
 	label: string;
@@ -7,7 +9,10 @@ export interface MenuAction {
 	keys: string[];
 	/** Shown instead of the first key, for keys a view handles itself, like Enter. */
 	hint?: string;
-	/** Where the menu lists it: actions of a group stay together, in the order given. */
+	/**
+	 * Where the menu lists it: actions of a group stay together, in the order given. In English,
+	 * as views tell groups apart by it; `groupTitle` gives the heading.
+	 */
 	group: string;
 	/** Changes or removes something that cannot simply be brought back. */
 	danger?: boolean;
@@ -81,6 +86,28 @@ export function keyFromLabel(label: string): KeyboardEventInit | null {
 	return [...label].length === 1 ? { key: label } : null;
 }
 
+/** A group's heading in the UI's language. */
+export function groupTitle(group: string): string {
+	const titles: Record<string, string> = {
+		View: t('View'),
+		Connect: t('Connect'),
+		Change: t('Change'),
+		'Go to': t('Go to'),
+		Copy: t('Copy'),
+		Plugins: t('Plugins'),
+		Delete: t('Delete'),
+		Marked: t('Marked'),
+		Tree: t('Tree'),
+		Findings: t('Findings')
+	};
+	return titles[group] ?? group;
+}
+
+/** "More in view…". */
+function moreIn(group: string) {
+	return t('More in {group}…', { group: midSentence(groupTitle(group)) });
+}
+
 /** Groups the menu folds into one line, as their actions are rarely what one comes for. */
 const FOLDED = new Set(['Copy', 'Go to']);
 
@@ -101,10 +128,10 @@ export function menuEntries(actions: MenuAction[], open: ReadonlySet<string>): [
 			...(open.has(id) ? inside.map((action) => ({ kind: 'action' as const, action, nested: true })) : [])
 		];
 		const plain = (list: MenuAction[]) => list.map((action) => ({ kind: 'action' as const, action, nested: false }));
-		if (FOLDED.has(group) && list.length > 1) return [group, fold(group, `${group}…`, list)];
+		if (FOLDED.has(group) && list.length > 1) return [group, fold(group, `${groupTitle(group)}…`, list)];
 		const quiet = list.filter((a) => !a.keys.length && a.primary === undefined && !a.danger);
 		if (quiet.length < 2) return [group, plain(list)];
 		const loud = list.filter((a) => !quiet.includes(a));
-		return [group, [...plain(loud), ...fold(`${group}:more`, group ? `More in ${group.toLowerCase()}…` : 'More…', quiet)]];
+		return [group, [...plain(loud), ...fold(`${group}:more`, group ? moreIn(group) : t('More…'), quiet)]];
 	});
 }

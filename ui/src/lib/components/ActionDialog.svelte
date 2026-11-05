@@ -1170,7 +1170,7 @@
 			<summary>Same as <code>{commandLine.split(' ')[0]}</code></summary>
 			<div class="command-row">
 				<pre>{commandLine}</pre>
-				<button class="copy" onclick={() => copyLines([commandLine], ['command', 'commands'])}>Copy</button>
+				<button class="copy" onclick={() => copyLines([commandLine])}>Copy</button>
 			</div>
 		</details>
 	{/if}

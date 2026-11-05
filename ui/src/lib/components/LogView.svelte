@@ -25,6 +25,7 @@
 		type ViewLine
 	} from '../logs';
 	import { logRanges, sourceLabels, stripAnsi } from '../pods';
+	import { t } from '../i18n';
 	import { app } from '../state.svelte';
 	import { plainOptions, type SelectOption } from '../select';
 	import CauseCard from './CauseCard.svelte';
@@ -380,7 +381,7 @@
 	}
 
 	function copy() {
-		copyLines(shownLines(), ['line', 'lines']);
+		copyLines(shownLines(), (n) => t('Copied {n} lines', { n }));
 	}
 
 	/** Asks the model about the selected lines, or else the last 200 shown. */

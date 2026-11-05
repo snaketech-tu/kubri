@@ -26,6 +26,19 @@ export const ERROR_FORMATS = [
 	'the cluster did not accept the credentials in the kubeconfig ({0})'
 ];
 
+/**
+ * How the core names what a check needs, as `describe` in `crates/kubri-core/src/access.rs` does:
+ * "`delete` on `pods` in `shop`". The UI words its own checks the same way.
+ */
+export const CHECK_FORMATS = ['`{0}` on `{1}` in `{2}`', '`{0}` on `{1}`'];
+
+/** What the core says above a list it shows only in part, in `crates/kubri-core/src/lib.rs`. */
+export const NOTICE_FORMATS = [
+	"Showing the namespaces this context's settings name: {0}",
+	'You may not list {0} in all namespaces; showing {1}',
+	'{0} and {1} more'
+];
+
 /** Whole texts the core sends, such as why a context is read-only. */
 export const CORE_TEXTS = [
 	'this is a snapshot: it shows what was saved and cannot change anything',
@@ -44,9 +57,10 @@ export const CORE_TEXTS = [
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const PATTERNS = ERROR_FORMATS.map((format) => ({
+// The longer of the check formats first, as the shorter would match it too.
+const PATTERNS = [...ERROR_FORMATS, ...CHECK_FORMATS, ...NOTICE_FORMATS].map((format) => ({
 	format,
-	pattern: new RegExp(`^${escape(format).replace('\\{0\\}', '([\\s\\S]+?)')}$`)
+	pattern: new RegExp(`^${escape(format).replace(/\\\{\d\\\}/g, '([\\s\\S]+?)')}$`)
 }));
 
 /** A text from the core in the UI's language, where Kubri knows it. */
@@ -54,7 +68,7 @@ export function coreText(text: string): string {
 	if (CORE_TEXTS.includes(text)) return t(text);
 	for (const { format, pattern } of PATTERNS) {
 		const match = text.match(pattern);
-		if (match) return t(format, match[1] === undefined ? undefined : { 0: coreText(match[1]) });
+		if (match) return t(format, Object.fromEntries(match.slice(1).map((value, i) => [i, coreText(value)])));
 	}
 	return text;
 }

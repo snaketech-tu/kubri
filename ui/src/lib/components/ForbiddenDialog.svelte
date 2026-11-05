@@ -82,7 +82,7 @@
 	<div class="grant">
 		<div class="grant-head">
 			<span>A role that would allow it, to send to an admin</span>
-			<button class="small" onclick={() => copyLines([yaml], ['YAML', 'YAML'])}>Copy YAML</button>
+			<button class="small" onclick={() => copyLines([yaml])}>Copy YAML</button>
 		</div>
 		<pre>{yaml}</pre>
 	</div>

@@ -41,7 +41,7 @@
 			<li>
 				<div class="head">
 					<span>{label}</span>
-					<button class="small" onclick={() => copyLines([command], ['command', 'commands'])}>Copy</button>
+					<button class="small" onclick={() => copyLines([command])}>Copy</button>
 				</div>
 				<pre>{command}</pre>
 			</li>

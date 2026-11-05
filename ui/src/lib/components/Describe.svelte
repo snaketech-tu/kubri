@@ -304,7 +304,7 @@
 							<span class="muted">binary, {d.bytes} {d.bytes === 1 ? 'byte' : 'bytes'}</span>
 						{:else}
 							<span class="value">{d.text}</span>
-							<button class="copy" onclick={() => copyLines([d.text ?? ''], ['value', 'values'])} title="Copy the value">Copy</button>
+							<button class="copy" onclick={() => copyLines([d.text ?? ''])} title="Copy the value">Copy</button>
 						{/if}
 					</dd>
 				{/each}
