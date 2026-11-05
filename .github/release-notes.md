@@ -1,12 +1,10 @@
 ## What's new
 
-- **Try Kubri without a cluster:** without a kubeconfig, **Open the demo** opens a small shop that comes with the app, and **Start a cluster…** makes one on this computer with kind or k3d.
-- **Why a container does not run:** for an image that cannot be pulled, a missing Secret, out of memory, a crash loop or a pod with no room, Kubri says what is wrong in one sentence and offers the action that helps.
-- **A clearer layout:** a new sidebar with one name per view, lists that fit the window (**All columns** with <kbd>w</kbd>), an object's actions in one place, and a card with **Cancel** while a context connects.
-- **Roll back StatefulSets and DaemonSets** to an earlier revision, like Deployments.
-- **Command line:** `kubri lint` and `kubri snapshot` run the checks and save snapshots in CI pipelines, with SARIF for GitHub code scanning.
-- **Web app:** the unused Prometheus query route is gone, so signed-in users can no longer run their own PromQL through the server.
-- **Fixes:** drain checks that it may evict pods before it cordons the node; read-only says the real reason; status colors in light mode have more contrast; a snapshot opens without a kubeconfig.
+- **Kubri in German:** **Language** under Settings → Appearance picks English, German or the system's language. The words of Kubernetes, such as Pod and Deployment, stay English.
+- **A Kubri for your team:** kubri-server signs people in with your OpenID Connect provider, each person works with their own Kubernetes permissions, and every change goes to an audit log. A Helm chart installs it; see [A Kubri for your team](https://github.com/snaketech-tu/kubri/blob/main/docs/TEAMS.md).
+- **Feedback from the app:** `:feedback` and the links in the help open a GitHub issue with your version filled in.
+- **Coming from k9s:** a [new page](https://github.com/snaketech-tu/kubri/blob/main/docs/FROM-K9S.md) covers the first few minutes.
+- **Fix:** closing a shell in Kubri ends the shell in the container too.
 
 ## Install
 
