@@ -480,3 +480,448 @@ fn form_encode(value: &str) -> String {
 fn random() -> String {
     crate::auth::random_token()
 }
+
+#[cfg(test)]
+mod tests {
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use axum::body::Body;
+    use axum::extract::{Form, State};
+    use axum::http::{HeaderMap, Request, StatusCode, header};
+    use axum::response::{IntoResponse, Response};
+    use axum::routing::{get, post};
+    use axum::{Extension, Json, Router};
+    use jsonwebtoken::{EncodingKey, Header};
+    use ring::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair};
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    use super::*;
+    use crate::auth::{Auth, Caller};
+
+    /// What the fake provider puts in its tokens, and how it behaves.
+    struct Behavior {
+        audience: String,
+        nonce: Option<String>,
+        email_verified: bool,
+        groups: Vec<&'static str>,
+        /// Seconds the ID tokens last; negative for already expired.
+        lifetime: i64,
+        symmetric: bool,
+        refuse_refresh: bool,
+        issuer: Option<String>,
+    }
+
+    impl Default for Behavior {
+        fn default() -> Self {
+            Self {
+                audience: "kubri".into(),
+                nonce: None,
+                email_verified: true,
+                groups: vec!["devs", "system:masters"],
+                lifetime: 3600,
+                symmetric: false,
+                refuse_refresh: false,
+                issuer: None,
+            }
+        }
+    }
+
+    struct Grant {
+        nonce: String,
+        challenge: String,
+        redirect_uri: String,
+    }
+
+    /// An OpenID Connect provider for tests: it hands out codes on request and signs ID
+    /// tokens with ES256.
+    struct Fake {
+        issuer: String,
+        pkcs8: Vec<u8>,
+        jwk: Value,
+        codes: Mutex<HashMap<String, Grant>>,
+        behavior: Mutex<Behavior>,
+        refreshes: AtomicUsize,
+        issued: AtomicUsize,
+    }
+
+    impl Fake {
+        async fn start() -> Arc<Fake> {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr: SocketAddr = listener.local_addr().unwrap();
+            let rng = ring::rand::SystemRandom::new();
+            let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng)
+                .unwrap()
+                .as_ref()
+                .to_vec();
+            let pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &pkcs8, &rng).unwrap();
+            let point = pair.public_key().as_ref();
+            let jwk = json!({
+                "kty": "EC", "crv": "P-256", "kid": "k1", "alg": "ES256", "use": "sig",
+                "x": URL_SAFE_NO_PAD.encode(&point[1..33]),
+                "y": URL_SAFE_NO_PAD.encode(&point[33..65]),
+            });
+            let fake = Arc::new(Fake {
+                issuer: format!("http://{addr}"),
+                pkcs8,
+                jwk,
+                codes: Default::default(),
+                behavior: Default::default(),
+                refreshes: AtomicUsize::new(0),
+                issued: AtomicUsize::new(0),
+            });
+            let app = Router::new()
+                .route("/.well-known/openid-configuration", get(discovery))
+                .route("/keys", get(keys))
+                .route("/token", post(token))
+                .with_state(fake.clone());
+            tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            fake
+        }
+
+        fn behave(&self, change: impl FnOnce(&mut Behavior)) {
+            change(&mut self.behavior.lock().unwrap());
+        }
+
+        fn id_token(&self, nonce: Option<&str>) -> String {
+            let behavior = self.behavior.lock().unwrap();
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+            let n = self.issued.fetch_add(1, Ordering::Relaxed);
+            let mut claims = json!({
+                "iss": self.issuer,
+                "aud": behavior.audience,
+                "sub": "alice-sub",
+                "iat": now,
+                "exp": now + behavior.lifetime,
+                "email": "alice@example.com",
+                "email_verified": behavior.email_verified,
+                "groups": behavior.groups,
+                "n": n,
+            });
+            if let Some(nonce) = behavior.nonce.as_deref().or(nonce) {
+                claims["nonce"] = json!(nonce);
+            }
+            if behavior.symmetric {
+                let header = Header::new(Algorithm::HS256);
+                return jsonwebtoken::encode(&header, &claims, &EncodingKey::from_secret(b"k1")).unwrap();
+            }
+            let mut header = Header::new(Algorithm::ES256);
+            header.kid = Some("k1".into());
+            jsonwebtoken::encode(&header, &claims, &EncodingKey::from_ec_der(&self.pkcs8)).unwrap()
+        }
+    }
+
+    async fn discovery(State(fake): State<Arc<Fake>>) -> Json<Value> {
+        let issuer = fake.behavior.lock().unwrap().issuer.clone();
+        Json(json!({
+            "issuer": issuer.unwrap_or_else(|| fake.issuer.clone()),
+            "authorization_endpoint": format!("{}/auth", fake.issuer),
+            "token_endpoint": format!("{}/token", fake.issuer),
+            "jwks_uri": format!("{}/keys", fake.issuer),
+            "scopes_supported": ["openid", "email", "profile", "groups", "offline_access"],
+        }))
+    }
+
+    async fn keys(State(fake): State<Arc<Fake>>) -> Json<Value> {
+        Json(json!({ "keys": [fake.jwk] }))
+    }
+
+    async fn token(
+        State(fake): State<Arc<Fake>>,
+        headers: HeaderMap,
+        Form(form): Form<HashMap<String, String>>,
+    ) -> Response {
+        let refused = |error: &str| (StatusCode::BAD_REQUEST, Json(json!({ "error": error }))).into_response();
+        let basic = base64::engine::general_purpose::STANDARD.encode("kubri:s%C3%A9cret");
+        if headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) != Some(&format!("Basic {basic}")) {
+            return refused("invalid_client");
+        }
+        match form.get("grant_type").map(String::as_str) {
+            Some("authorization_code") => {
+                let code = form.get("code").cloned().unwrap_or_default();
+                let Some(grant) = fake.codes.lock().unwrap().remove(&code) else {
+                    return refused("invalid_grant");
+                };
+                let verifier = form.get("code_verifier").cloned().unwrap_or_default();
+                let challenge =
+                    URL_SAFE_NO_PAD.encode(ring::digest::digest(&ring::digest::SHA256, verifier.as_bytes()));
+                if challenge != grant.challenge || form.get("redirect_uri") != Some(&grant.redirect_uri) {
+                    return refused("invalid_grant");
+                }
+                Json(json!({
+                    "id_token": fake.id_token(Some(&grant.nonce)),
+                    "refresh_token": "refresh-1",
+                    "access_token": "a",
+                    "token_type": "Bearer",
+                }))
+                .into_response()
+            }
+            Some("refresh_token") => {
+                if fake.behavior.lock().unwrap().refuse_refresh || form.get("refresh_token").is_none() {
+                    return refused("invalid_grant");
+                }
+                let n = fake.refreshes.fetch_add(1, Ordering::Relaxed) + 2;
+                Json(json!({
+                    "id_token": fake.id_token(None),
+                    "refresh_token": format!("refresh-{n}"),
+                }))
+                .into_response()
+            }
+            _ => refused("unsupported_grant_type"),
+        }
+    }
+
+    fn config(fake: &Fake) -> Config {
+        Config {
+            issuer: fake.issuer.clone(),
+            client_id: "kubri".into(),
+            client_secret: Some("sécret".into()),
+            name: "Fake".into(),
+            scopes: vec![],
+            username_claim: "email".into(),
+            username_prefix: String::new(),
+            groups_claim: "groups".into(),
+            groups_prefix: String::new(),
+            allowed_groups: vec![],
+            keep_tokens: false,
+            ca_file: None,
+        }
+    }
+
+    fn kubri(config: Config) -> Router {
+        let auth = Arc::new(Auth::with_oidc(Oidc::new(config).unwrap(), Duration::from_secs(3600), None));
+        let who = |Extension(caller): Extension<Caller>| async move {
+            let person = caller.person.map(|p| format!("{} {:?}", p.name, p.groups));
+            format!("{}|{}", person.unwrap_or_default(), caller.token.as_deref().unwrap_or(""))
+        };
+        let api = Router::new()
+            .route("/who", get(who))
+            .layer(axum::middleware::from_fn_with_state(auth.clone(), crate::auth::require))
+            .merge(crate::auth::router(auth));
+        Router::new().nest("/api", api)
+    }
+
+    fn request(uri: &str, cookie: Option<&str>) -> Request<Body> {
+        let mut request = Request::get(uri).header(header::HOST, "kubri.test");
+        if let Some(cookie) = cookie {
+            request = request.header(header::COOKIE, cookie);
+        }
+        request.body(Body::empty()).unwrap()
+    }
+
+    fn cookies(response: &Response) -> Vec<String> {
+        response
+            .headers()
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_owned())
+            .collect()
+    }
+
+    fn location(response: &Response) -> String {
+        response.headers()[header::LOCATION].to_str().unwrap().to_owned()
+    }
+
+    /// Starts signing in and returns the provider's URL and the cookie binding the browser.
+    async fn start(app: &Router) -> (reqwest::Url, String) {
+        let response = app.clone().oneshot(request("/api/auth/login", None)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER, "{:?}", response.headers());
+        let url = reqwest::Url::parse(&location(&response)).unwrap();
+        (url, cookies(&response).remove(0))
+    }
+
+    fn param(url: &reqwest::Url, name: &str) -> String {
+        url.query_pairs().find(|(k, _)| k == name).map(|(_, v)| v.into_owned()).unwrap_or_default()
+    }
+
+    /// The provider lets the person in and sends the browser back.
+    async fn come_back(app: &Router, fake: &Fake, url: &reqwest::Url, cookie: &str) -> Response {
+        let code = format!("code-{}", param(url, "state"));
+        fake.codes.lock().unwrap().insert(
+            code.clone(),
+            Grant {
+                nonce: param(url, "nonce"),
+                challenge: param(url, "code_challenge"),
+                redirect_uri: param(url, "redirect_uri"),
+            },
+        );
+        let uri = format!("/api/auth/callback?code={code}&state={}", param(url, "state"));
+        app.clone().oneshot(request(&uri, Some(cookie))).await.unwrap()
+    }
+
+    /// Signs in and returns the session cookie, or the error the sign-in page shows.
+    async fn sign_in(app: &Router, fake: &Fake) -> Result<String, String> {
+        let (url, cookie) = start(app).await;
+        let response = come_back(app, fake, &url, &cookie).await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let to = location(&response);
+        match to.strip_prefix("/?") {
+            Some(query) => Err(reqwest::Url::parse(&format!("http://x/?{query}"))
+                .unwrap()
+                .query_pairs()
+                .next()
+                .unwrap()
+                .1
+                .into_owned()),
+            None => {
+                assert_eq!(to, "/");
+                Ok(cookies(&response)
+                    .into_iter()
+                    .find(|c| c.starts_with("kubri_session="))
+                    .unwrap())
+            }
+        }
+    }
+
+    async fn text(app: &Router, uri: &str, cookie: &str) -> (StatusCode, String) {
+        let response = app.clone().oneshot(request(uri, Some(cookie))).await.unwrap();
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), 1 << 20).await.unwrap();
+        (status, String::from_utf8_lossy(&body).into_owned())
+    }
+
+    #[tokio::test]
+    async fn people_sign_in_with_their_provider() {
+        let fake = Fake::start().await;
+        let app = kubri(config(&fake));
+        let (url, cookie) = start(&app).await;
+        assert!(url.as_str().starts_with(&format!("{}/auth?", fake.issuer)));
+        assert_eq!(param(&url, "redirect_uri"), "http://kubri.test/api/auth/callback");
+        assert_eq!(param(&url, "scope"), "openid email profile groups");
+        assert_eq!(param(&url, "code_challenge_method"), "S256");
+        assert!(cookie.starts_with("kubri_oidc="));
+
+        let session = sign_in(&app, &fake).await.unwrap();
+        let (status, who) = text(&app, "/api/who", &session).await;
+        assert_eq!(status, StatusCode::OK);
+        // Groups Kubernetes keeps for itself are left out.
+        assert_eq!(who, r#"alice@example.com ["devs"]|"#);
+        let (_, state) = text(&app, "/api/session", &session).await;
+        let state: Value = serde_json::from_str(&state).unwrap();
+        assert_eq!(state["method"], "oidc");
+        assert_eq!(state["provider"], "Fake");
+        assert_eq!(state["person"]["name"], "alice@example.com");
+
+        let logout = Request::post("/api/logout")
+            .header(header::COOKIE, &session)
+            .body(Body::empty())
+            .unwrap();
+        app.clone().oneshot(logout).await.unwrap();
+        assert_eq!(text(&app, "/api/who", &session).await.0, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn a_sign_in_must_come_back_to_the_browser_that_started_it() {
+        let fake = Fake::start().await;
+        let app = kubri(config(&fake));
+        let (url, _) = start(&app).await;
+        let (_, other) = start(&app).await;
+        let response = come_back(&app, &fake, &url, &other).await;
+        assert!(location(&response).contains("another+browser"), "{}", location(&response));
+
+        // A state works once.
+        let (url, cookie) = start(&app).await;
+        let response = come_back(&app, &fake, &url, &cookie).await;
+        assert_eq!(location(&response), "/");
+        let response = come_back(&app, &fake, &url, &cookie).await;
+        assert!(location(&response).contains("already+used"), "{}", location(&response));
+
+        // The provider's own refusal reaches the page.
+        let response = app
+            .clone()
+            .oneshot(request(
+                "/api/auth/callback?error=access_denied&error_description=Not%20today",
+                Some(&cookie),
+            ))
+            .await
+            .unwrap();
+        assert!(location(&response).contains("Not+today"), "{}", location(&response));
+    }
+
+    #[tokio::test]
+    async fn only_valid_tokens_for_kubri_and_this_sign_in_let_anyone_in() {
+        let fake = Fake::start().await;
+        let app = kubri(config(&fake));
+        let refused = |error: &str, why: &str| assert!(error.contains(why), "{error}");
+
+        fake.behave(|b| b.audience = "someone-else".into());
+        refused(&sign_in(&app, &fake).await.unwrap_err(), "InvalidAudience");
+        fake.behave(|b| *b = Behavior::default());
+
+        fake.behave(|b| b.nonce = Some("other".into()));
+        refused(&sign_in(&app, &fake).await.unwrap_err(), "nonce");
+        fake.behave(|b| *b = Behavior::default());
+
+        fake.behave(|b| b.lifetime = -3600);
+        refused(&sign_in(&app, &fake).await.unwrap_err(), "ExpiredSignature");
+        fake.behave(|b| *b = Behavior::default());
+
+        fake.behave(|b| b.email_verified = false);
+        refused(&sign_in(&app, &fake).await.unwrap_err(), "not verified");
+        fake.behave(|b| *b = Behavior::default());
+
+        fake.behave(|b| b.symmetric = true);
+        refused(&sign_in(&app, &fake).await.unwrap_err(), "does not accept");
+        fake.behave(|b| *b = Behavior::default());
+
+        let mut only_admins = config(&fake);
+        only_admins.allowed_groups = vec!["admins".into()];
+        refused(&sign_in(&kubri(only_admins), &fake).await.unwrap_err(), "none of the groups");
+
+        let mut prefixed = config(&fake);
+        prefixed.username_prefix = "oidc:".into();
+        prefixed.groups_prefix = "oidc:".into();
+        let app = kubri(prefixed);
+        let session = sign_in(&app, &fake).await.unwrap();
+        // With a prefix, even system:masters is safe to pass on.
+        assert_eq!(
+            text(&app, "/api/who", &session).await.1,
+            r#"oidc:alice@example.com ["oidc:devs", "oidc:system:masters"]|"#
+        );
+    }
+
+    #[tokio::test]
+    async fn the_issuer_must_be_the_one_configured() {
+        let fake = Fake::start().await;
+        fake.behave(|b| b.issuer = Some("https://elsewhere.example.com".into()));
+        let app = kubri(config(&fake));
+        let response = app.clone().oneshot(request("/api/auth/login", None)).await.unwrap();
+        assert!(location(&response).contains("elsewhere.example.com"), "{}", location(&response));
+    }
+
+    #[tokio::test]
+    async fn passed_on_tokens_are_refreshed_before_they_expire() {
+        let fake = Fake::start().await;
+        let mut config = config(&fake);
+        config.keep_tokens = true;
+        let app = kubri(config);
+        let (url, _) = start(&app).await;
+        assert_eq!(param(&url, "scope"), "openid email profile groups offline_access");
+
+        // Tokens that last a minute are due for a refresh at once.
+        fake.behave(|b| b.lifetime = 60);
+        let session = sign_in(&app, &fake).await.unwrap();
+        let first = text(&app, "/api/who", &session).await.1;
+        assert_eq!(fake.refreshes.load(Ordering::Relaxed), 1);
+        let token = first.split('|').nth(1).unwrap().to_owned();
+        assert!(!token.is_empty());
+
+        // Long-lived tokens are kept as they are.
+        fake.behave(|b| b.lifetime = 3600);
+        let session = sign_in(&app, &fake).await.unwrap();
+        let before = text(&app, "/api/who", &session).await.1;
+        let after = text(&app, "/api/who", &session).await.1;
+        assert_eq!(before, after);
+        assert_eq!(fake.refreshes.load(Ordering::Relaxed), 1);
+
+        // A token that expired and cannot be refreshed ends the session.
+        fake.behave(|b| {
+            b.lifetime = -30;
+            b.refuse_refresh = true;
+        });
+        let session = sign_in(&app, &fake).await.unwrap();
+        assert_eq!(text(&app, "/api/who", &session).await.0, StatusCode::UNAUTHORIZED);
+    }
+}
