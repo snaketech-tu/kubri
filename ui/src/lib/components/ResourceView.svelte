@@ -400,9 +400,9 @@
 		return value === null || value === undefined ? null : String(value);
 	}
 
-	/** CPU or memory, for the pod list's columns of what pods use, which also show their limit. */
+	/** CPU or memory, for the columns of what pods and nodes use, which also show their limit or allocatable. */
 	function usageColumn(column: DisplayColumn): Measure | null {
-		if (column.kind !== 'metric' || !isPods(resource)) return null;
+		if (column.kind !== 'metric' || !metricsKind) return null;
 		return column.label === 'CPU' ? 'cpu' : column.label === 'Mem' ? 'memory' : null;
 	}
 
@@ -986,7 +986,7 @@
 			bind:clientWidth={room}
 			onscroll={() => (scrollTop = scroller?.scrollTop ?? 0)}
 		>
-			<table class:stale={table.stale} class:roomy={metricsKind === 'nodes'} aria-rowcount={windowed ? rows.length + 1 : undefined} style:--check-width="{checkWidth}px">
+			<table class:stale={table.stale} aria-rowcount={windowed ? rows.length + 1 : undefined} style:--check-width="{checkWidth}px">
 				<thead>
 					<tr>
 						<th class="check" bind:offsetWidth={checkWidth}></th>
@@ -1489,30 +1489,6 @@
 	}
 	th.numeric .sort {
 		flex-direction: row-reverse;
-	}
-	/* Nodes are few and each row carries many readings, so their rows get more room. */
-	table.roomy {
-		font-size: 14px;
-	}
-	table.roomy th:not(.check, .more) {
-		padding: 0 12px;
-	}
-	table.roomy .sort {
-		padding: 11px 0;
-	}
-	table.roomy tr:not(.spacer) > td {
-		height: 54px;
-	}
-	table.roomy tr:not(.spacer) > td:not(.check, .more) {
-		padding: 6px 12px;
-	}
-	table.roomy td.name {
-		font-size: 13.5px;
-	}
-	table.roomy .fill {
-		left: 12px;
-		right: 12px;
-		bottom: 8px;
 	}
 	.spacer td {
 		height: auto;
