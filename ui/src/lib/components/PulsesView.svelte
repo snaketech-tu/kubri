@@ -307,6 +307,7 @@
 						{:else}
 							{#each attention as item (`${item.kind}/${item.namespace}/${item.name}`)}
 								{@const when = age(item.event.lastSeen, app.snapshot?.taken ?? now)}
+								{@const pods = item.objects.filter((o) => o.resource.plural === 'pods')}
 								{@const line = lastLines[logKey(item)]}
 								<button class="signal" onclick={() => openEvent(item.event)}>
 									<span class="mark {item.severity}"
@@ -329,9 +330,9 @@
 										{/if}
 										<span class="where">
 											<span><code>{item.kind}</code>{item.namespace ? ` · ${item.namespace}` : ''}</span>
-											{#if item.objects.length > 1 || item.objects[0].name !== item.name}
-												<span title={item.objects.map((o) => o.name).join('\n')}
-													>{plural(item.objects.length, '{n} pod affected', '{n} pods affected')}</span
+											{#if pods.length && item.kind !== 'Pod'}
+												<span title={pods.map((o) => o.name).join('\n')}
+													>{plural(pods.length, '{n} pod affected', '{n} pods affected')}</span
 												>
 											{/if}
 											<span title={t('{n} warnings since they began', { n: item.count })}
