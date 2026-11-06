@@ -19,8 +19,8 @@ Kubri keeps its own settings in one file. The kubeconfig and the k9s configurati
 | Display name | Shown instead of the context's name in the switcher, the header and the status bar. |
 | Label | A word such as `Staging` beside the name. Kubri never guesses it from the name. |
 | Color | Tints the header and marks the context in the switcher. |
-| Production | Shows a banner, and dangerous actions, such as deleting, draining or uninstalling a Helm release, ask you to type the object's name (or the context's, for bulk actions) first. |
-| Production namespaces | For a context that is not production as a whole: these namespaces get the same care. A banner shows while one is picked, dangerous actions on objects in them ask you to type the name, Helm and Create say so, and AI agents never change anything there. The namespace picker marks them, and **Mark as production** in a namespace's menu adds one. |
+| Production | Shows a red stripe over the header and a Production badge beside the context name, and dangerous actions, such as deleting, draining or uninstalling a Helm release, ask you to type the object's name (or the context's, for bulk actions) first. |
+| Production namespaces | For a context that is not production as a whole: these namespaces get the same care. While one is picked, a red stripe and a Production badge beside the namespace show it, dangerous actions on objects in them ask you to type the name, Helm and Create say so, and AI agents never change anything there. See [Production namespaces](#production-namespaces). |
 | Read-only | Kubri never changes this cluster until you turn it off. |
 | Locked | Starts read-only. **Unlock** in the header allows changes for 15 minutes, then the context locks again. |
 | Namespace | The namespace shown after connecting, instead of all namespaces. |
@@ -28,6 +28,27 @@ Kubri keeps its own settings in one file. The kubeconfig and the k9s configurati
 | Integrations | Where Prometheus, Grafana and Loki are, when Kubri should not find them itself, a Grafana token, and the Loki data source in Grafana for logs in Explore (`grafanaLogs`, its name or UID). Set on the Integrations page. See [Integrations](INTEGRATIONS.md). |
 
 Read-only and locked contexts are enforced in the core, not only hidden in the interface, so plugins and the API refuse changes too. Pressing the key of a change there, such as <kbd>e</kbd> or <kbd>Ctrl</kbd>+<kbd>D</kbd>, says why it is not available instead of doing nothing. Starting Kubri with `--read-only` (or `KUBRI_READ_ONLY=true`) and `readOnly` in the k9s configuration still apply on top.
+
+## Production namespaces
+
+In a context that is not production as a whole, single namespaces can be. You never have to type their names:
+
+- **In the Namespaces list**, the **Production** column has a shield in every row. Click it to mark the namespace, or click it again to unmark it. With several rows marked, **Mark as production** in the action bar marks them all.
+- **In the namespace picker**, point at a namespace and click its shield, or press <kbd>Shift</kbd>+<kbd>Enter</kbd>. A red shield means production.
+- **In the context settings**, tick the namespaces in the list.
+
+Rules also cover namespaces made later. Add them in the context settings:
+
+| Rule | Example | Marks |
+| --- | --- | --- |
+| Name pattern | `*-prod`, `prod-*` | Namespaces whose names match. `*` stands for any text. |
+| Label | `env=production` | Namespaces with these labels. A rule can need several, joined by commas, and also takes `key!=value`, `key` and `!key`. |
+
+The settings show which namespaces the rules match now. A namespace a rule marks shows the rule in the list and the picker, and is changed in the rules, not one by one.
+
+When namespaces look like production, by a word such as `prod` or `live` in their name or a label such as `env=production`, the Namespaces list asks once whether to mark them or keep the rule that found them. Kubri never marks a namespace by itself. **Do not ask again** hides the question for that context.
+
+AI agents are kept out of every namespace these rules mark. Kubri's core reads a namespace's labels before an agent changes something there, and treats it as production when it may not read them.
 
 ## Permissions
 

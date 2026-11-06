@@ -143,7 +143,7 @@ pub(crate) fn renew_patch(cert: &Value, now: &str) -> Value {
 impl Kubri {
     /// Asks cert-manager to issue the Certificate `target` again now.
     pub async fn renew_certificate(&self, target: &ObjectRef) -> Result<()> {
-        self.ensure_writable_in(target.namespace.as_deref()).await?;
+        self.ensure_writable_in(target.scope()).await?;
         let session = self.object_session(target).await?;
         session.ensure_may("patch", target, "status").await?;
         let api = session.api(&target.resource, target.namespace.as_deref())?;

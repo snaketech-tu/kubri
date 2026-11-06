@@ -170,6 +170,10 @@
 	$effect(() => {
 		if (!limited) app.namespaces = namespaces.rows.map((r) => r.name).sort();
 	});
+	// Their labels, for production namespaces marked by a label rule.
+	$effect(() => {
+		app.namespaceLabels = Object.fromEntries(namespaces.rows.map((r) => [r.name, r.labels]));
+	});
 
 	// Someone who may not list namespaces still gets the ones the kubeconfig and settings name.
 	$effect(() => {
@@ -467,6 +471,7 @@
 	class:maximized={app.details && app.maximized}
 	class:inspecting={app.details}
 	class:tinted={accent}
+	class:production={!!app.cluster && (app.production || app.productionNamespace)}
 	class:nav-open={navOpen}
 	style:--context-color={accent}
 	style:--sidebar-width={app.sidebarWidth ? `${app.sidebarWidth}px` : null}
@@ -592,23 +597,6 @@
 			{/if}
 		</header>
 
-		{#if app.cluster && app.production}
-			<div class="production-banner" role="note">
-				<Icon name="warning" size={15} />
-				<span>
-					<strong>{t('Production')}</strong> · {app.contextName(app.cluster.context)} ·
-					{app.readOnly ? t('changes are off') : t('changes go live; deleting asks you to type the name')}
-				</span>
-			</div>
-		{:else if app.cluster && app.productionNamespace}
-			<div class="production-banner" role="note">
-				<Icon name="warning" size={15} />
-				<span>
-					<strong>{t('Production namespace')}</strong> · {app.namespace} ·
-					{app.readOnly ? t('changes are off') : t('changes go live; deleting asks you to type the name')}
-				</span>
-			</div>
-		{/if}
 		{#if app.snapshot}
 			{@const snapshot = app.snapshot}
 			<div class="snapshot-banner" role="note">
@@ -1003,14 +991,9 @@
 		box-shadow: inset 0 3px 0 var(--context-color);
 		background: color-mix(in srgb, var(--context-color) 6%, var(--surface-1));
 	}
-	.production-banner {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 6px 20px;
-		background: color-mix(in srgb, var(--bad) 14%, var(--surface-1));
-		color: var(--bad);
-		font-size: 12.5px;
+	/* Production, as a red stripe over the header; the badge beside the context or namespace says it. */
+	.shell.production header {
+		box-shadow: inset 0 3px 0 var(--bad);
 	}
 	.snapshot-banner {
 		display: flex;

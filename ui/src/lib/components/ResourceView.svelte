@@ -10,7 +10,9 @@
 	import { limitShare, limitSuffix, limitsHint, type Measure } from '../limits';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, refusedAction, type ActionOptions, type Subject } from '../objects';
-	import { isNodes, isPods, isServices } from '../pods';
+	import { isNamespaces, isNodes, isPods, isServices } from '../pods';
+	import { suggestions } from '../production';
+	import ProductionSuggestions from './ProductionSuggestions.svelte';
 	import { ALL_NAMESPACES, app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
 	import { filterRows, hasHealth, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
@@ -153,7 +155,37 @@
 		| { kind: 'namespace'; label: string; index: -1 }
 		| { kind: 'cell'; label: string; index: number; age: boolean; name: boolean; custom: boolean }
 		| ({ kind: 'metric' } & MetricColumn)
+		| { kind: 'production'; label: string; index: typeof PRODUCTION }
 	) & { wideOnly: boolean };
+
+	/** The index the Production column of namespaces sorts by. */
+	const PRODUCTION = -20;
+	/** Namespaces show which ones get production's care, in a context that is not production as a whole. */
+	const marksProduction = $derived(isNamespaces(resource) && !!app.cluster && !app.cluster.snapshot && !app.production);
+
+	function readLocal(key: string): string | null {
+		try {
+			return localStorage.getItem(key);
+		} catch {
+			return null;
+		}
+	}
+	function writeLocal(key: string, value: string) {
+		try {
+			localStorage.setItem(key, value);
+		} catch {
+			// Asks again after a reload.
+		}
+	}
+
+	/** Namespaces that look like production and are not marked, until the user says not to ask again. */
+	let hintDismissed = $state(false);
+	$effect(() => {
+		hintDismissed = !!app.cluster && readLocal(`kubri.productionHint.${app.cluster.context}`) === 'off';
+	});
+	const productionHints = $derived(
+		marksProduction && !hintDismissed ? suggestions(app.contextSettings, table.rows.map((r) => ({ name: r.name, labels: r.labels }))) : []
+	);
 
 	/** Every column the list can show, in their own order, before the settings and the wide view. */
 	const allColumns = $derived.by(() => {
@@ -167,6 +199,7 @@
 			}
 			// A custom column comes back named by its path.
 			const custom = c.format === 'jsonpath' ? columnSettings.custom.find((x) => x.path === c.name) : undefined;
+			if (isAge && marksProduction) out.push({ kind: 'production', label: 'Production', index: PRODUCTION, wideOnly: false });
 			out.push({
 				kind: 'cell',
 				label: isAge ? 'Age' : (custom?.name ?? c.name),
@@ -243,6 +276,11 @@
 
 	const rows = $derived.by(() => {
 		const filtered = filterRows(scoped, filter);
+		if (sort.column === PRODUCTION && marksProduction) {
+			const marked = (r: Row) => (app.productionRuleOf(r.name, r.labels) ? 0 : 1);
+			const sorted = [...filtered].sort((a, b) => marked(a) - marked(b) || a.name.localeCompare(b.name));
+			return sort.descending ? sorted.reverse() : sorted;
+		}
 		const metric = columns.find((c) => c.kind === 'metric' && c.index === sort.column);
 		if (metric?.kind === 'metric') {
 			const value = (r: Row) => {
@@ -429,6 +467,10 @@
 		switch (column.kind) {
 			case 'namespace':
 				return row.namespace ?? '';
+			case 'production': {
+				const rule = app.productionRuleOf(row.name, row.labels);
+				return !rule ? '' : rule.by === 'name' ? t('Yes') : rule.rule;
+			}
 			case 'metric': {
 				const value = metricValue(row, column);
 				if (value === null || value === undefined) return '—';
@@ -601,6 +643,18 @@
 			{ group: 'Marked', label: t('Mark all'), keys: ['ctrl+a'], primary: 0, run: () => rows.forEach((r) => selection.add(r.key)) },
 			{ group: 'Marked', label: t('Unmark all'), keys: ['ctrl+\\'], primary: 0, run: () => selection.clear() }
 		);
+		if (marksProduction) {
+			// A setting in Kubri, so also when changes are off. Names a rule marks stay as they are.
+			const rules = chosen.map((r) => app.productionRuleOf(r.name, r.labels));
+			const unmarked = chosen.filter((_, i) => !rules[i]).map((r) => r.name);
+			const named = chosen.filter((_, i) => rules[i]?.by === 'name').map((r) => r.name);
+			if (unmarked.length) {
+				out.push({ group: 'Change', label: t('Mark {n} as production', { n: unmarked.length }), keys: [], primary: 0, run: () => void app.setProductionNamespace(unmarked, true) });
+			}
+			if (named.length) {
+				out.push({ group: 'Change', label: t('Unmark {n} as production', { n: named.length }), keys: [], primary: 0, run: () => void app.setProductionNamespace(named, false) });
+			}
+		}
 		if (writable && canScale(resource) && !isPods(resource)) {
 			out.push({
 				group: 'Change',
@@ -954,6 +1008,18 @@
 		</div>
 	{/if}
 
+	{#if productionHints.length && app.cluster}
+		{@const context = app.cluster.context}
+		<ProductionSuggestions
+			{context}
+			suggestions={productionHints}
+			ondismiss={() => {
+				hintDismissed = true;
+				writeLocal(`kubri.productionHint.${context}`, 'off');
+			}}
+		/>
+	{/if}
+
 	<div class="card">
 		<div class="toolbar">
 			<label class="search">
@@ -1091,7 +1157,34 @@
 									class:numeric={column.kind === 'metric'}
 									class:limited={measure && limitSuffix(usage, measure)}
 								>
-									{#if column.kind === 'cell' && column.name}
+									{#if column.kind === 'production'}
+										{@const rule = app.productionRuleOf(row.name, row.labels)}
+										{@const byRule = !!rule && rule.by !== 'name'}
+										<button
+											class="production"
+											class:on={!!rule}
+											class:ruled={byRule}
+											aria-pressed={!!rule}
+											title={byRule
+												? t('Production by the rule {rule}. Change it in the context settings.', { rule: rule!.rule })
+												: rule
+													? t('Production: a red marker, typed names before deleting, and no changes by AI agents. Click to unmark.')
+													: t('Mark {name} as production', { name: row.name })}
+											onclick={(e) => {
+												e.stopPropagation();
+												if (byRule) {
+													app.toast(t('Production by the rule {rule}. Change it in the context settings.', { rule: rule!.rule }));
+													return;
+												}
+												const names = selection.has(row.key) && selection.size > 1 ? chosenRows().map((r) => r.name) : [row.name];
+												void app.setProductionNamespace(names, !rule);
+											}}
+											ondblclick={(e) => e.stopPropagation()}
+										>
+											<Icon name="shield" size={13} />
+											{#if rule}<span>{rule.by === 'name' ? t('Production') : rule.rule}</span>{:else}<span class="mark">{t('Mark')}</span>{/if}
+										</button>
+									{:else if column.kind === 'cell' && column.name}
 										<button
 											class="open"
 											title={t('Describe {name}', { name: row.name })}
@@ -1184,6 +1277,48 @@
 </section>
 
 <style>
+	button.production {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		max-width: 100%;
+		padding: 2px 9px 2px 7px;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		background: none;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 500;
+		white-space: nowrap;
+	}
+	button.production span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	/* Unmarked rows show only the shield until the row is pointed at, so the column stays calm. */
+	button.production .mark {
+		opacity: 0;
+	}
+	tr:hover button.production .mark,
+	tr.cursor button.production .mark,
+	button.production:focus-visible .mark {
+		opacity: 1;
+	}
+	button.production:not(.on):hover {
+		border-color: var(--border);
+		color: var(--text);
+	}
+	button.production.on {
+		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
+		color: var(--bad);
+	}
+	button.production.ruled {
+		background: none;
+		border-color: color-mix(in srgb, var(--bad) 30%, var(--border));
+	}
+	button.production.on:not(.ruled):hover {
+		border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+	}
 	.choose {
 		font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 		font-size: 13px;

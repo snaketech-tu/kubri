@@ -677,6 +677,14 @@ async fn list_contexts(kubri: &Kubri) -> Result<String, String> {
         }
         if s.production {
             notes.push("production".into());
+        } else if !s.production_namespaces.is_empty() || !s.production_labels.is_empty() {
+            let rules: Vec<String> = (s.production_namespaces.iter().cloned())
+                .chain(s.production_labels.iter().map(|l| format!("label {l}")))
+                .collect();
+            notes.push(format!(
+                "production namespaces, never changed by agents: {}",
+                rules.join(", ")
+            ));
         }
         notes.push(
             if s.agent_writes && !s.production && !s.read_only {
