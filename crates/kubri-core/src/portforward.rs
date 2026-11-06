@@ -15,8 +15,14 @@
 //!   closes it, or until the pod has sent nothing for [`AFTER_CLIENT_DONE`].
 //! - A ping every [`PING_EVERY`] keeps quiet connections alive through load balancers and
 //!   proxies in front of the API server, which drop connections that look idle.
+//!
+//! A local client that leaves without sending anything, such as a check whether the port is
+//! open, gives the pod its connection back after [`AFTER_SILENT_CLIENT`]. Servers like MariaDB
+//! reset a connection that never signs in, and that reset is not reported as the forward's
+//! error when its client is gone anyway.
 
 use std::collections::HashMap;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -35,6 +41,10 @@ use tokio_tungstenite::tungstenite::{self, Message};
 pub(crate) const PING_EVERY: Duration = Duration::from_secs(20);
 /// How long the stream stays open for the pod's answer once the local client stopped sending.
 pub(crate) const AFTER_CLIENT_DONE: Duration = Duration::from_secs(15);
+/// The same, for a client that never sent anything, such as a check whether the port is open.
+/// It asked nothing, so it waits for nothing; the pod gets its connection back quickly, before
+/// a server such as MariaDB gives up on it and resets it.
+const AFTER_SILENT_CLIENT: Duration = Duration::from_secs(1);
 
 use crate::{Error, ObjectRef, Result};
 
@@ -164,8 +174,8 @@ pub(crate) async fn start(
     destination: Destination,
 ) -> Result<PortForwardInfo> {
     let address = request.address.clone().unwrap_or_else(|| "127.0.0.1".to_owned());
-    let listener = TcpListener::bind((address.as_str(), request.local_port.unwrap_or(0))).await?;
-    let local_port = listener.local_addr()?.port();
+    let listeners = listen(&address, request.local_port.unwrap_or(0)).await?;
+    let local_port = listeners[0].local_addr()?.port();
 
     let mut guard = forwards.lock().unwrap();
     guard.next_id += 1;
@@ -185,19 +195,52 @@ pub(crate) async fn start(
         error: None,
         last_end: None,
     }));
-    let task = tokio::spawn(serve(listener, destination, Arc::clone(&info)));
+    let task = tokio::spawn(serve(listeners, destination, Arc::clone(&info)));
     let snapshot = info.lock().unwrap().clone();
     guard.active.insert(id, Forward { info, task });
     tracing::info!(id, pod = %snapshot.pod, port = snapshot.pod_port, local_port, "port-forward started");
     Ok(snapshot)
 }
 
-async fn serve(listener: TcpListener, destination: Destination, info: Arc<Mutex<PortForwardInfo>>) {
+/// Listens on `address`. Like kubectl, `localhost` means both loopback addresses, 127.0.0.1
+/// and ::1: a client may try either, and a forward on only one of them refuses the other. ::1
+/// is left out where the system has no IPv6.
+async fn listen(address: &str, port: u16) -> Result<Vec<TcpListener>> {
+    if address != "localhost" {
+        return Ok(vec![TcpListener::bind((address, port)).await?]);
+    }
+    let first = TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await?;
+    // A free port picked for 127.0.0.1 is used for ::1 too.
+    let picked = first.local_addr()?.port();
+    let mut listeners = vec![first];
+    match TcpListener::bind((Ipv6Addr::LOCALHOST, picked)).await {
+        Ok(second) => listeners.push(second),
+        // Something else listens on the port asked for: clients trying ::1 would reach it.
+        Err(err) if err.kind() == std::io::ErrorKind::AddrInUse && port != 0 => return Err(err.into()),
+        Err(err) => tracing::debug!(%err, "port-forward listens on 127.0.0.1 only"),
+    }
+    Ok(listeners)
+}
+
+/// Waits for the next connection on any of the listeners.
+async fn accept(listeners: &[TcpListener]) -> std::io::Result<(TcpStream, std::net::SocketAddr)> {
+    std::future::poll_fn(|cx| {
+        for listener in listeners {
+            if let std::task::Poll::Ready(accepted) = listener.poll_accept(cx) {
+                return std::task::Poll::Ready(accepted);
+            }
+        }
+        std::task::Poll::Pending
+    })
+    .await
+}
+
+async fn serve(listeners: Vec<TcpListener>, destination: Destination, info: Arc<Mutex<PortForwardInfo>>) {
     // Dropping the set when the forward is stopped closes every open connection.
     let mut connections = JoinSet::new();
     loop {
         tokio::select! {
-            accepted = listener.accept() => match accepted {
+            accepted = accept(&listeners) => match accepted {
                 Ok((mut socket, peer)) => {
                     let client = destination.api.clone().into_client();
                     let namespace = destination.namespace.clone();
@@ -298,7 +341,10 @@ where
     let mut buffer = vec![0u8; 32 * 1024];
     // The first frame on each channel only names the port.
     let mut named = [false, false];
+    let mut client_sent = false;
     let mut client_done = false;
+    // Once the client stopped sending: how long the pod may stay quiet before the end.
+    let mut wait = after_done;
     let mut ping = tokio::time::interval_at(tokio::time::Instant::now() + ping_every, ping_every);
     // Once the client stopped sending: when the pod last sent something.
     let quiet = tokio::time::sleep(after_done);
@@ -309,9 +355,13 @@ where
                 Ok(0) => {
                     // A half-close, or the client went away: wait for what the pod still sends.
                     client_done = true;
-                    quiet.as_mut().reset(tokio::time::Instant::now() + after_done);
+                    if !client_sent {
+                        wait = after_done.min(AFTER_SILENT_CLIENT);
+                    }
+                    quiet.as_mut().reset(tokio::time::Instant::now() + wait);
                 }
                 Ok(n) => {
+                    client_sent = true;
                     let mut frame = Vec::with_capacity(n + 1);
                     frame.push(0);
                     frame.extend_from_slice(&buffer[..n]);
@@ -323,7 +373,7 @@ where
             },
             message = from_pod.next() => match message {
                 None | Some(Ok(Message::Close(_))) => break Ok(EndedBy::Pod),
-                Some(Err(e)) => break Err(Failure::Copy(e.to_string())),
+                Some(Err(e)) => break failed(e.to_string(), client_done, &mut writer),
                 Some(Ok(Message::Binary(frame))) => {
                     let Some((&channel, mut data)) = frame.split_first() else { continue };
                     let channel = usize::from(channel);
@@ -338,14 +388,15 @@ where
                         continue;
                     }
                     if channel == 1 {
-                        break Err(Failure::Copy(String::from_utf8_lossy(data).trim().to_owned()));
+                        let message = String::from_utf8_lossy(data).trim().to_owned();
+                        break failed(message, client_done, &mut writer);
                     }
                     if writer.write_all(data).await.is_err() {
                         // The client is gone for good.
                         break Ok(EndedBy::Client);
                     }
                     if client_done {
-                        quiet.as_mut().reset(tokio::time::Instant::now() + after_done);
+                        quiet.as_mut().reset(tokio::time::Instant::now() + wait);
                     }
                 }
                 Some(Ok(_)) => {}
@@ -362,6 +413,25 @@ where
     let _ = writer.shutdown().await;
     let _ = to_pod.close().await;
     result
+}
+
+/// How a connection ends on an error from the pod's side. Once the local client has stopped
+/// sending, it may be gone for good, and a server then often resets the connection nobody
+/// answers on: MariaDB does when a client leaves before it signed in. That is no failure of the
+/// forward. The client counts as gone when writing nothing to it fails, as it does once its
+/// socket was reset because Kubri passed something on after it closed. A client that only
+/// stopped sending still waits for the answer, and the error is its connection's.
+fn failed<W: AsyncWrite + Unpin>(
+    message: String,
+    client_done: bool,
+    writer: &mut W,
+) -> Result<EndedBy, Failure> {
+    use futures::FutureExt;
+    if client_done && matches!(writer.write(&[]).now_or_never(), Some(Err(_))) {
+        tracing::debug!(%message, "port-forward: the pod ended a connection whose client is gone");
+        return Ok(EndedBy::Client);
+    }
+    Err(Failure::Copy(message))
 }
 
 /// Maps a Service port to the port its pods listen on. Named target ports are looked up
@@ -532,6 +602,79 @@ mod tests {
             Err(Failure::Copy(message)) => assert_eq!(message, "connection refused"),
             _ => panic!("expected the error"),
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_client_that_sent_nothing_does_not_hold_the_pod() {
+        // A check whether the port is open: connect, then close.
+        let (mut client, mut pod, task) = relaying(Duration::from_secs(3600), Duration::from_secs(30)).await;
+        name_port(&mut pod).await;
+        client.shutdown().await.unwrap();
+        let started = tokio::time::Instant::now();
+        let pod_side = tokio::spawn(async move { while pod.next().await.is_some() {} });
+        assert!(matches!(task.await.unwrap(), Ok(EndedBy::Client)));
+        assert!(started.elapsed() <= AFTER_SILENT_CLIENT);
+        pod_side.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_pod_resetting_a_connection_whose_client_is_gone_is_no_failure() {
+        let (mut client, mut pod, task) = relaying(PING_EVERY, AFTER_CLIENT_DONE).await;
+        name_port(&mut pod).await;
+        client.write_all(b"hello").await.unwrap();
+        assert_eq!(next_data(&mut pod).await, b"\0hello");
+        drop(client);
+        let mut frame = vec![1];
+        frame.extend_from_slice(b"read: connection reset by peer");
+        pod.send(Message::binary(frame)).await.unwrap();
+        assert!(matches!(task.await.unwrap(), Ok(EndedBy::Client)));
+    }
+
+    #[tokio::test]
+    async fn a_client_waiting_for_the_answer_sees_the_error() {
+        let (mut client, mut pod, task) = relaying(PING_EVERY, AFTER_CLIENT_DONE).await;
+        name_port(&mut pod).await;
+        client.write_all(b"hello").await.unwrap();
+        client.shutdown().await.unwrap();
+        assert_eq!(next_data(&mut pod).await, b"\0hello");
+        let mut frame = vec![1];
+        frame.extend_from_slice(b"read: connection reset by peer");
+        pod.send(Message::binary(frame)).await.unwrap();
+        match task.await.unwrap() {
+            Err(Failure::Copy(message)) => assert_eq!(message, "read: connection reset by peer"),
+            _ => panic!("expected the error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn localhost_listens_on_both_loopback_addresses() {
+        let listeners = listen("localhost", 0).await.unwrap();
+        let port = listeners[0].local_addr().unwrap().port();
+        assert_eq!(listeners[0].local_addr().unwrap().ip(), Ipv4Addr::LOCALHOST);
+        let ipv6 = std::net::TcpListener::bind((Ipv6Addr::LOCALHOST, 0)).is_ok();
+        assert_eq!(listeners.len(), if ipv6 { 2 } else { 1 });
+        for listener in &listeners {
+            assert_eq!(listener.local_addr().unwrap().port(), port);
+        }
+        // Both addresses reach the forward.
+        let accepting = tokio::spawn(async move {
+            for _ in 0..listeners.len() {
+                accept(&listeners).await.unwrap();
+            }
+        });
+        TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await.unwrap();
+        if ipv6 {
+            TcpStream::connect((Ipv6Addr::LOCALHOST, port)).await.unwrap();
+        }
+        accepting.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn localhost_refuses_a_port_in_use() {
+        let taken = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = taken.local_addr().unwrap().port();
+        assert!(listen("localhost", port).await.is_err());
+        assert!(listen("127.0.0.1", port).await.is_err());
     }
 
     fn pod(name: &str, created: &str, ready: bool) -> Pod {

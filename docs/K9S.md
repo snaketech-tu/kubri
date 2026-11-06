@@ -36,7 +36,7 @@ Kubri takes these settings from `k9s:` in `config.yaml`:
 | `thresholds.cpu`, `thresholds.memory` | `warn` and `critical` percentages that color the %CPU and %Mem columns. |
 | `logger.tail`, `logger.sinceSeconds` | Where the log view starts: the last lines, or the last seconds when `sinceSeconds` is above 0. |
 | `logger.textWrap`, `logger.showTime`, `logger.disableAutoscroll` | Wrapping, timestamps and following new lines in the log view. |
-| `portForwardAddress` | The address port-forwards listen on; `K9S_DEFAULT_PF_ADDRESS` wins over it. |
+| `portForwardAddress` | The address port-forwards listen on; `K9S_DEFAULT_PF_ADDRESS` wins over it. `localhost` listens on both 127.0.0.1 and ::1, like kubectl. |
 
 ## Jumps
 
