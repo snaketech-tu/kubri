@@ -6,7 +6,8 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { canDelete, canRestart, canScale, copyLines, saveFile } from '../actions';
 	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
-	import { age, cpu, memory, relative } from '../format';
+	import { age, cpu, cpuText, memory, memoryText, relative } from '../format';
+	import { units } from '../units.svelte';
 	import { limitShare, limitSuffix, limitsHint, type Measure } from '../limits';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, refusedAction, type ActionOptions, type Subject } from '../objects';
@@ -126,9 +127,9 @@
 	const POD_METRICS: MetricColumn[] = [
 		CPU,
 		MEM,
-		{ label: 'CPU / request', index: -4, wide: false, value: (u) => percent(u.cpu, u.requests?.cpu), format: 'percent', threshold: 'cpu' },
+		{ label: 'CPU / request', index: -4, wide: true, value: (u) => percent(u.cpu, u.requests?.cpu), format: 'percent', threshold: 'cpu' },
 		{ label: 'CPU / limit', index: -5, wide: true, value: (u) => percent(u.cpu, u.limits?.cpu), format: 'percent', threshold: 'cpu' },
-		{ label: 'Memory / request', index: -6, wide: false, value: (u) => percent(u.memory, u.requests?.memory), format: 'percent', threshold: 'memory' },
+		{ label: 'Memory / request', index: -6, wide: true, value: (u) => percent(u.memory, u.requests?.memory), format: 'percent', threshold: 'memory' },
 		{ label: 'Memory / limit', index: -7, wide: true, value: (u) => percent(u.memory, u.limits?.memory), format: 'percent', threshold: 'memory' },
 		// What the pod spec sets, summed over the containers; a limit only when every container has one.
 		{ label: 'CPU request', index: -10, wide: true, value: (u) => u.requests?.cpu, format: 'cpu' },
@@ -138,12 +139,13 @@
 	];
 	const NODE_METRICS: MetricColumn[] = [
 		CPU,
-		{ label: '%CPU', index: -8, wide: false, value: (u) => percent(u.cpu, u.allocatable?.cpu), format: 'percent', threshold: 'cpu' },
+		{ label: '%CPU', index: -8, wide: true, value: (u) => percent(u.cpu, u.allocatable?.cpu), format: 'percent', threshold: 'cpu' },
 		MEM,
-		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' },
-		// The room left for new pods: what the node gives to pods minus what its pods request.
-		{ label: 'CPU free', index: -14, wide: false, value: (u) => free(u.allocatable?.cpu, u.requests?.cpu), format: 'cpu' },
-		{ label: 'Mem free', index: -15, wide: false, value: (u) => free(u.allocatable?.memory, u.requests?.memory), format: 'memory' }
+		{ label: '%Mem', index: -9, wide: true, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' },
+		// The room left for new pods: what the node gives to pods minus what its pods request. Not
+		// "free": that would read as not used, and these count requests, used or not.
+		{ label: 'CPU left', index: -14, wide: false, value: (u) => free(u.allocatable?.cpu, u.requests?.cpu), format: 'cpu' },
+		{ label: 'Mem left', index: -15, wide: false, value: (u) => free(u.allocatable?.memory, u.requests?.memory), format: 'memory' }
 	];
 
 	/** Empty cells, `<none>` and `None` all read as a dash. */
@@ -221,7 +223,8 @@
 	});
 	const statusIndex = $derived(table.columns.findIndex((c) => /^(status|phase)$/i.test(c.name)));
 	const isRunning = (r: Row) => statusIndex !== -1 && r.cells[statusIndex] === 'Running';
-	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r)));
+	/** Pods at their CPU or memory limit need a look too, though they run. */
+	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r) || strains(r).length > 0));
 	/** Kinds with a state, readiness or health; Secrets or Ingresses have nothing to need attention. */
 	const healthy = $derived(hasHealth(table.columns, resource.plural));
 	const running = $derived(isPods(resource) ? owned.filter(isRunning) : []);
@@ -361,7 +364,7 @@
 			resource: refOf(resource),
 			target: current ? target(current) : null,
 			release: null,
-			columns: current ? columns.map((c) => ({ name: c.label, value: cellText(current, c) })) : [],
+			columns: current ? columns.map((c) => ({ name: c.label, value: cellText(current, c, true) })) : [],
 			filter
 		});
 		app.focus = focus;
@@ -438,8 +441,10 @@
 
 	/** Sorts by a metrics-server column, such as `CPU` or `%Mem/R`, when the list shows it. */
 	function sortByMetric(label: string) {
-		const column = columns.find((c) => c.kind === 'metric' && c.label === label);
+		const column = allColumns.find((c) => c.kind === 'metric' && c.label === label);
 		if (!column) return false;
+		// A column only the wide view shows, like the share of a request.
+		if (column.wideOnly && !columns.includes(column)) wide = true;
 		sortBy(column.index, true);
 		return true;
 	}
@@ -463,7 +468,8 @@
 		return u ? column.value(u) : null;
 	}
 
-	function cellText(row: Row, column: DisplayColumn): string {
+	/** A cell as the list shows it; `raw` keeps amounts as kubectl writes them, for the CSV. */
+	function cellText(row: Row, column: DisplayColumn, raw = false): string {
 		switch (column.kind) {
 			case 'namespace':
 				return row.namespace ?? '';
@@ -474,7 +480,8 @@
 			case 'metric': {
 				const value = metricValue(row, column);
 				if (value === null || value === undefined) return '—';
-				return column.format === 'cpu' ? cpu(value) : column.format === 'memory' ? memory(value) : `${value}%`;
+				if (column.format === 'cpu') return raw ? cpu(value) : cpuText(value);
+				return column.format === 'memory' ? (raw ? memory(value) : memoryText(value)) : `${value}%`;
 			}
 			case 'cell': {
 				if (column.age) return age(row.created, app.snapshot?.taken ?? now);
@@ -522,11 +529,41 @@
 		return null;
 	}
 
+	/**
+	 * What a pod's status leaves out: that it runs at its CPU limit and is throttled, or close to
+	 * its memory limit and may be stopped. Shown as a word after the status.
+	 */
+	function strains(row: Row): { label: string; hint: string }[] {
+		if (!isPods(resource)) return [];
+		const out: { label: string; hint: string }[] = [];
+		const cpuStrain = pressure(row, 'cpu');
+		if (cpuStrain?.tone === 'bad') out.push({ label: t('throttled'), hint: cpuStrain.hint });
+		const memoryStrain = pressure(row, 'memory');
+		if (memoryStrain?.tone === 'bad') out.push({ label: t('near memory limit'), hint: memoryStrain.hint });
+		return out;
+	}
+
+	/** What a column's title means, where its name alone does not say. */
+	function headerHint(column: DisplayColumn): string | undefined {
+		if (column.kind !== 'metric') return undefined;
+		if (column.label === 'CPU left' || column.label === 'Mem left') {
+			return t('What the node can still give to new pods: what it has for pods, minus what its pods request, used or not');
+		}
+		if (column.format === 'cpu' && !units.kubectl) return t('In cores');
+		return undefined;
+	}
+
 	/** Colors status cells, and percentages by the k9s thresholds. */
 	function tone(row: Row, column: DisplayColumn, text: string): Tone {
 		// A pod that finished is not "0 of 1 ready"; that is how it ends.
 		if (column.kind === 'cell' && /^ready$/i.test(column.label) && /^(Completed|Succeeded)$/.test(cell(row, 'Status') ?? '')) {
 			return '';
+		}
+		// A pod's readiness takes the color of its status, so a crashing pod is red in both.
+		if (column.kind === 'cell' && /^ready$/i.test(column.label) && isPods(resource)) {
+			const ready = cellTone(column.label, text);
+			if (ready === 'ok' || ready === '') return ready;
+			return cellTone('Status', cell(row, 'Status') ?? '') === 'bad' ? 'bad' : 'warn';
 		}
 		if (column.kind === 'cell') return cellTone(column.label, text);
 		if (column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')) {
@@ -582,7 +619,7 @@
 
 	function exportCsv() {
 		const header = columns.map((c) => c.label);
-		const lines = rows.map((r) => columns.map((c) => cellText(r, c)));
+		const lines = rows.map((r) => columns.map((c) => cellText(r, c, true)));
 		const stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15);
 		saveFile(`${resource.plural}${ns ? `-${ns}` : ''}-${stamp}.csv`, toCsv(header, lines));
 	}
@@ -1085,7 +1122,7 @@
 								class:sorted={sort.column === column.index}
 								aria-sort={sort.column === column.index ? (sort.descending ? 'descending' : 'ascending') : 'none'}
 							>
-								<button class="sort" onclick={() => sortBy(column.index)}>
+								<button class="sort" onclick={() => sortBy(column.index)} title={headerHint(column)}>
 									{shownLabel(column)}
 									<span class="arrow" aria-hidden="true">
 										{sort.column === column.index ? (sort.descending ? '↓' : '↑') : '↕'}
@@ -1194,7 +1231,11 @@
 											}}>{text}</button
 										>
 									{:else if icon}
-										<span class="status"><Icon name={icon} size={15} />{text}</span>
+										<span class="status"
+											><Icon name={icon} size={15} />{text}{#each strains(row) as strain (strain.label)}<span class="strain" title={strain.hint}
+													>{strain.label}</span
+												>{/each}</span
+										>
 									{:else if column.kind === 'cell' && column.label === 'Message'}
 										<span class="clamp" title={text}>{text}</span>
 									{:else if column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')}
@@ -1786,6 +1827,15 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
+	}
+	.strain {
+		padding: 0 6px;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--bad) 14%, transparent);
+		color: var(--bad);
+		font-size: 11.5px;
+		font-weight: 600;
+		white-space: nowrap;
 	}
 	.muted {
 		color: var(--text-muted);

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ContextInfo, ResourceInfo, Row } from './api';
 import { matchResources, namesAction, suggest } from './commands';
-import { age, cpu, imageParts, isNotFound, memory, workloadPrefix } from './format';
+import { age, bytes, cores, cpu, cpuText, imageParts, isNotFound, memory, memoryText, workloadPrefix } from './format';
+import { setKubectlUnits } from './units.svelte';
 import { cellTone } from './status';
 import { filterRows, hasHealth, isFaulty, sortRows, toCsv } from './table';
 
@@ -218,6 +219,7 @@ describe('status colors', () => {
 		expect(cellTone('Status', 'Pending')).toBe('warn');
 		expect(cellTone('Ready', '1/2')).toBe('warn');
 		expect(cellTone('Ready', '2/2')).toBe('ok');
+		expect(cellTone('Ready', '0/2')).toBe('bad');
 		expect(cellTone('Name', 'Running')).toBe('');
 		expect(cellTone('Type', 'Warning')).toBe('warn');
 		expect(cellTone('Type', 'Normal')).toBe('');
@@ -372,5 +374,23 @@ describe('imageParts', () => {
 	it('cuts a digest short', () => {
 		const digest = '4f2a9c1be07d5e8a3c6b1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c';
 		expect(imageParts(`nginx:1.27@sha256:${digest}`).join('')).toBe('nginx:1.27@sha256:4f2a9c1be07d…');
+	});
+});
+
+describe('readable amounts', () => {
+	it('shows CPU in cores with the decimals a small amount needs', () => {
+		expect([0, 2, 100, 250, 1500, 4000, 12_400].map(cores)).toEqual(['0', '<0.01', '0.1', '0.25', '1.5', '4', '12']);
+	});
+
+	it('shows memory in binary units with a space', () => {
+		expect([512, 393_216, 13 * 1024 ** 2, 1.94 * 1024 ** 3].map(bytes)).toEqual(['512 B', '384 KiB', '13 MiB', '1.9 GiB']);
+	});
+
+	it('follows the choice of kubectl units', () => {
+		setKubectlUnits(true);
+		expect([cpuText(250), memoryText(512 * 1024 ** 2)]).toEqual(['250m', '512Mi']);
+		setKubectlUnits(false);
+		expect([cpuText(250), memoryText(512 * 1024 ** 2)]).toEqual(['0.25', '512 MiB']);
+		expect([cpuText(1000, true), cpuText(1030, true), cpuText(1500, true)]).toEqual(['1 core', '1 core', '1.5 cores']);
 	});
 });

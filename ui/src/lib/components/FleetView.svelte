@@ -2,7 +2,7 @@
 	import { t } from '../i18n';
 	import { backend, type FleetCluster, type KindPulse } from '../api';
 	import { connectError, eachLimited, fleetState, serverHost, workloads } from '../fleet';
-	import { cpu, errorMessage, memory, relative } from '../format';
+	import { cpuText, errorMessage, memoryText, relative } from '../format';
 	import { meterTone } from '../pulse';
 	import { reach } from '../reach.svelte';
 	import { app } from '../state.svelte';
@@ -164,8 +164,8 @@
 						</span>
 						{#if c.cpu && c.memory}
 							{@const usage = [
-								['CPU requested', c.cpu, (v: number) => cpu(v)],
-								['Memory requested', c.memory, (v: number) => memory(v)]
+								['CPU requested', c.cpu, (v: number) => cpuText(v, true)],
+								['Memory requested', c.memory, (v: number) => memoryText(v)]
 							] as const}
 							<span class="meters">
 								{#each usage as [label, [requested, capacity], format] (label)}

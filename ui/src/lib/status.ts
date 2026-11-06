@@ -17,7 +17,8 @@ export function cellTone(column: string, value: unknown): Tone {
 	if (name === 'type' && value === 'Warning') return 'warn';
 	if (name === 'ready' && /^\d+\/\d+$/.test(value)) {
 		const [ready, total] = value.split('/').map(Number);
-		return ready === total ? 'ok' : 'warn';
+		// None ready is down, as the overview counts it; some ready is a warning.
+		return ready === total ? 'ok' : ready === 0 ? 'bad' : 'warn';
 	}
 	if (!['status', 'phase', 'state', 'ready', 'available', 'conditions'].includes(name)) return '';
 	if (BAD.test(value)) return 'bad';

@@ -8,8 +8,8 @@ const pod = (more: Partial<Usage> = {}): Usage => ({ namespace: 'shop', name: 'w
 describe('limits in the pod list', () => {
 	it('shows the limit after the use, and how full it is', () => {
 		const usage = pod({ requests: { cpu: 100, memory: 256 * MI }, limits: { cpu: 500, memory: 512 * MI } });
-		expect(limitSuffix(usage, 'cpu')).toBe('/ 500m');
-		expect(limitSuffix(usage, 'memory')).toBe('/ 512Mi');
+		expect(limitSuffix(usage, 'cpu')).toBe('/ 0.5');
+		expect(limitSuffix(usage, 'memory')).toBe('/ 512 MiB');
 		expect(limitShare(usage, 'cpu')).toBeCloseTo(0.24);
 		expect(limitShare(pod({ cpu: 900, limits: { cpu: 500 } }), 'cpu')).toBe(1);
 	});
@@ -22,8 +22,8 @@ describe('limits in the pod list', () => {
 	});
 
 	it('names request and limit in the tooltip', () => {
-		expect(limitsHint(pod({ requests: { cpu: 100 }, limits: { cpu: 500 } }), 'cpu')).toBe('Uses 120m, requests 100m, may use at most 500m');
-		expect(limitsHint(pod(), 'memory')).toBe('Uses 300Mi, requests nothing. Not every container has a limit, so there is no maximum.');
+		expect(limitsHint(pod({ requests: { cpu: 100 }, limits: { cpu: 500 } }), 'cpu')).toBe('Uses 0.12 cores, requests 0.1 cores, may use at most 0.5 cores');
+		expect(limitsHint(pod(), 'memory')).toBe('Uses 300 MiB, requests nothing. Not every container has a limit, so there is no maximum.');
 	});
 });
 
@@ -32,10 +32,10 @@ describe('room on a node in the node list', () => {
 
 	it('shows what the node can give to pods after its use, and how full it is', () => {
 		const usage = node({ requests: { cpu: 400, memory: 544 * MI }, allocatable: { cpu: 4000, memory: 16 * 1024 * MI } });
-		expect(limitSuffix(usage, 'cpu')).toBe('/ 4000m');
-		expect(limitSuffix(usage, 'memory')).toBe('/ 16Gi');
+		expect(limitSuffix(usage, 'cpu')).toBe('/ 4');
+		expect(limitSuffix(usage, 'memory')).toBe('/ 16 GiB');
 		expect(limitShare(usage, 'cpu')).toBeCloseTo(0.073);
-		expect(limitsHint(usage, 'cpu')).toBe('The node uses 292m of the 4000m it can give to pods; its pods request 400m');
+		expect(limitsHint(usage, 'cpu')).toBe('The node uses 0.29 cores of the 4 cores it can give to pods; its pods request 0.4 cores');
 	});
 
 	it('shows nothing when the node does not say what it can give', () => {

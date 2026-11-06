@@ -9,7 +9,7 @@
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
 	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization, type WaitingPod } from '../api';
-	import { age, errorMessage, memory, relative } from '../format';
+	import { age, cpuText, errorMessage, memoryText as memory, relative } from '../format';
 	import { fleetState, serverHost, workloads } from '../fleet';
 	import { attentionTitle } from '../causes';
 	import { attentionItems, fill, kindLabel, meterTone, record, restartingContainer, room, shortMessage, splitKinds, type AttentionItem } from '../pulse';
@@ -170,11 +170,9 @@
 		else app.toast(t('{kind} {name} cannot be opened here', { kind: event.objectKind, name: event.object.name }), 'bad');
 	}
 
-	/** CPU in cores, and below a tenth of one in millicores, so a small use does not read 0.0. */
+	/** CPU in cores, or in millicores for those who chose kubectl's units. */
 	function cores(millicores: number) {
-		if (millicores > 0 && millicores < 100) return `${Math.max(1, Math.round(millicores))}m`;
-		const value = millicores / 1000;
-		return t('{n} cores', { n: value < 10 ? value.toFixed(1) : Math.round(value) });
+		return cpuText(millicores, true);
 	}
 
 	const percent = (value: number) => `${Math.round(value * 100)}%`;
