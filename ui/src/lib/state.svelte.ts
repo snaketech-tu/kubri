@@ -474,6 +474,8 @@ class AppState {
 	 * every pod for its counts, just before the `defaultView` replaces it.
 	 */
 	starting = $state(true);
+	/** Whether the first look at the kubeconfig is done, so the start page does not flash before it. */
+	loaded = $state(false);
 	/** Set by the current view: what it has under the cursor. */
 	focus: (() => Focus) | null = null;
 
@@ -871,6 +873,8 @@ class AppState {
 			}
 		} catch (err) {
 			this.error = errorMessage(err);
+		} finally {
+			this.loaded = true;
 		}
 	}
 

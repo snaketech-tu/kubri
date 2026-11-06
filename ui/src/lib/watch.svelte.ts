@@ -110,6 +110,8 @@ export class LiveMetrics {
 	available = $state(false);
 	error = $state<string | null>(null);
 	updated = $state(0);
+	/** Whether metrics-server answered the first poll, with readings or an error. */
+	answered = $state(false);
 	/** The last readings of each row, for the small trend next to CPU and memory. */
 	trails = $state.raw(new Map<string, { cpu: number[]; memory: number[] }>());
 
@@ -119,6 +121,7 @@ export class LiveMetrics {
 		this.available = false;
 		this.error = null;
 		this.updated = 0;
+		this.answered = false;
 		let stopped = false;
 		// A slow answer must not overlap the next poll.
 		let polling = false;
@@ -145,6 +148,7 @@ export class LiveMetrics {
 				if (!stopped) this.error = errorMessage(err);
 			} finally {
 				polling = false;
+				if (!stopped) this.answered = true;
 			}
 		};
 		poll();
