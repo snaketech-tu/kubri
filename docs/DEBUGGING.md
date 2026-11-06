@@ -57,6 +57,6 @@ When something does not run, Kubri says why in one plain sentence, such as "cart
 | Pending for CPU or memory | **Change CPU request…** or **Change memory request…** on the owning workload. **Why not each node?** lists per node what rules it out: not ready, cordoned, taints, the node selector, required node affinity, CPU, memory and the pod count. Pod affinity, topology spread and volumes are left to the scheduler's own message. |
 | Autoscaler without metrics | What is missing: Kubernetes' metrics API, or a CPU or memory request on the pods, with **Change CPU request…** for the latter. |
 
-The overview's **Needs attention** uses the same plain headlines, such as "web gets no metrics", with the reasons Kubernetes gives below them.
+The overview's **Needs attention** uses the same plain headlines, such as "web gets no metrics", with one entry per workload: the warnings of a Deployment's pods show once, under the Deployment's name, with how many pods are affected. For a container that keeps restarting it shows the last log line of the run that ended, which often names the cause. The reasons Kubernetes gives are in the tooltip, and **Recent warnings** below lists the warnings as Kubernetes words them when you unfold it.
 
 A Service whose pods do not get traffic gets a summary too: no pod matches its selector (with the pods that nearly match and the labels that differ), no matching pod is ready, or the pods lack a named target port.

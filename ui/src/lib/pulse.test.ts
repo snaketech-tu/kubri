@@ -40,6 +40,20 @@ describe('attention items', () => {
 		]);
 	});
 
+	it('groups the pods of one workload and names the workload', () => {
+		const deployment = { kind: 'Deployment', object: { resource: { group: 'apps', version: 'v1', plural: 'deployments' }, namespace: 'payments', name: 'checkout' } };
+		const items = attentionItems([
+			{ ...event('checkout-1', 'BackOff', 1, 5), workload: deployment },
+			{ ...event('checkout-2', 'BackOff', 2, 4), workload: deployment },
+			{ ...event('checkout-2', 'Unhealthy', 3), workload: deployment },
+			event('ledger', 'FailedScheduling', 4)
+		]);
+		expect(items).toHaveLength(2);
+		expect(items[0]).toMatchObject({ kind: 'Deployment', name: 'checkout', namespace: 'payments', count: 10, reasons: ['BackOff', 'Unhealthy'] });
+		expect(items[0].objects.map((o) => o.name)).toEqual(['checkout-1', 'checkout-2']);
+		expect(items[1]).toMatchObject({ kind: 'Pod', name: 'ledger', objects: [{ name: 'ledger' }] });
+	});
+
 	it('keeps objects of the same name in different namespaces apart', () => {
 		const other = { ...event('emails', 'BackOff', 1), object: { resource: pods, namespace: 'mail', name: 'emails' } };
 		expect(attentionItems([event('emails', 'BackOff', 2), other])).toHaveLength(2);

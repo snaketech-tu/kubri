@@ -1,4 +1,4 @@
-import type { KindPulse, RecentEvent, Utilization } from './api';
+import type { KindPulse, ObjectRef, RecentEvent, Utilization } from './api';
 import { t } from './i18n';
 
 const KIND_LABELS: Record<string, string> = {
@@ -65,10 +65,16 @@ export function record(history: Sample[], value: number | null, at: number): Sam
 	return value === null ? kept : [...kept, { at, value }];
 }
 
-/** One object that warnings point at, however many warnings there were. */
+/** One workload, or one object without a workload, that warnings point at, however many there were. */
 export interface AttentionItem {
-	/** The latest warning about the object. */
+	/** The latest warning about it. */
 	event: RecentEvent;
+	/** What the item is about: the workload when the warnings came from its pods. */
+	kind: string;
+	name: string;
+	namespace: string | null;
+	/** The objects the warnings are about, such as the workload's pods, latest first. */
+	objects: ObjectRef[];
 	/** Every reason given, latest first. */
 	reasons: string[];
 	/** How often the warnings came, together. */
@@ -82,19 +88,34 @@ export interface AttentionItem {
  */
 const CRITICAL = /BackOff|CrashLoop|OOM|Evicted|ImagePull|ErrImage|Error|^Failed(Create|Mount|AttachVolume)?$/;
 
-/** Warnings grouped by the object they are about, the ones that mean an outage first. */
+const refKey = ({ resource, namespace, name }: ObjectRef) => `${resource.group}/${resource.plural}/${namespace ?? ''}/${name}`;
+
+/**
+ * Warnings grouped by the workload their pods belong to, or by the object they are about,
+ * the ones that mean an outage first.
+ */
 export function attentionItems(events: RecentEvent[]): AttentionItem[] {
 	const items = new Map<string, AttentionItem>();
 	const latest = [...events].sort((a, b) => (b.lastSeen ?? '').localeCompare(a.lastSeen ?? ''));
 	for (const event of latest) {
-		const { resource, namespace, name } = event.object;
-		const key = `${resource.group}/${resource.plural}/${namespace ?? ''}/${name}`;
+		const about = event.workload ?? { kind: event.objectKind, object: event.object };
+		const key = refKey(about.object);
 		const severity = CRITICAL.test(event.reason) ? 'critical' : 'warning';
 		const item = items.get(key);
 		if (!item) {
-			items.set(key, { event, reasons: [event.reason], count: event.count, severity });
+			items.set(key, {
+				event,
+				kind: about.kind,
+				name: about.object.name,
+				namespace: about.object.namespace ?? null,
+				objects: [event.object],
+				reasons: [event.reason],
+				count: event.count,
+				severity
+			});
 			continue;
 		}
+		if (!item.objects.some((o) => refKey(o) === refKey(event.object))) item.objects.push(event.object);
 		if (!item.reasons.includes(event.reason)) item.reasons.push(event.reason);
 		item.count += event.count;
 		if (severity === 'critical') item.severity = 'critical';
@@ -103,14 +124,19 @@ export function attentionItems(events: RecentEvent[]): AttentionItem[] {
 	return [...items.values()].sort((a, b) => rank(a) - rank(b));
 }
 
+/** The container a "Back-off restarting failed container" warning names. */
+export function restartingContainer(message: string): string | null {
+	return /^Back-off restarting failed container\s+"?([^\s"]+)"?/i.exec(message)?.[1] ?? null;
+}
+
 /**
  * A kubelet text in plain words. The original stays in the tooltip. Unknown texts are cut at
  * the first sentence and at 140 characters. How often it came is shown beside it: that counts
  * the warnings, not restarts or pulls, and since the event began rather than in the last hour.
  */
 export function shortMessage(reason: string, message: string): string {
-	const back = /^Back-off restarting failed container\s+"?([^\s"]+)"?/i.exec(message);
-	if (back) return t('Container {name} keeps restarting', { name: back[1] });
+	const back = restartingContainer(message);
+	if (back) return t('Container {name} keeps restarting', { name: back });
 	const pull = /(?:Failed to pull image|Error: ErrImagePull|ImagePullBackOff).*?"([^"]+)"/i.exec(message);
 	if (pull) return t('Cannot pull image {image}', { image: pull[1] });
 	if (/^Back-off pulling image\s+"([^"]+)"/i.test(message)) {
