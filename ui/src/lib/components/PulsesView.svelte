@@ -8,11 +8,12 @@
 <script lang="ts">
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
-	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization } from '../api';
+	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization, type WaitingPod } from '../api';
 	import { age, cpuText, errorMessage, memoryText as memory, relative } from '../format';
 	import { fleetState, serverHost, workloads } from '../fleet';
 	import { attentionTitle } from '../causes';
-	import { attentionItems, fill, kindLabel, meterTone, record, shortMessage, splitKinds } from '../pulse';
+	import { attentionItems, fill, kindLabel, meterTone, record, restartingContainer, room, shortMessage, splitKinds, type AttentionItem } from '../pulse';
+	import { lastLogLine } from '../lastlog';
 	import { app, findResource } from '../state.svelte';
 	import { plural, t } from '../i18n';
 	import HealthIcon from './HealthIcon.svelte';
@@ -121,6 +122,7 @@
 
 	const kindGroups = $derived(splitKinds(pulse?.kinds ?? []));
 	let showHealthy = $state(false);
+	let showRecent = $state(false);
 	const shownKinds = $derived(showHealthy ? [...kindGroups.problems, ...kindGroups.healthy] : kindGroups.problems);
 
 	/** What arrow keys move between and Enter opens: the cards on top, then the kinds. */
@@ -135,6 +137,23 @@
 	const KIND_TILES = 5;
 
 	const attention = $derived(attentionItems(pulse?.events.recent ?? []));
+
+	/** The last words of containers that keep restarting, by pod and container. */
+	let lastLines = $state<Record<string, string | null>>({});
+	const asked = new Set<string>();
+	const logKey = (item: AttentionItem) =>
+		`${app.cluster?.context}/${item.event.object.namespace}/${item.event.object.name}/${restartingContainer(item.event.message)}`;
+	$effect(() => {
+		for (const item of attention) {
+			const container = restartingContainer(item.event.message);
+			const key = logKey(item);
+			if (!container || item.event.objectKind !== 'Pod' || asked.has(key)) continue;
+			asked.add(key);
+			lastLogLine({ ...item.event.object, context: app.cluster?.context }, container).then((line) => {
+				if (line) lastLines[key] = line;
+			});
+		}
+	});
 	const scopeText = $derived(namespace ? t('Namespace {name}', { name: namespace }) : t('All namespaces'));
 	const clusterText = $derived(
 		app.cluster ? [serverHost(app.cluster.server), app.cluster.version].filter(Boolean).join(' · ') : ''
@@ -157,6 +176,12 @@
 	}
 
 	const percent = (value: number) => `${Math.round(value * 100)}%`;
+
+	/** The waiting pods, one per line, for the tooltip. */
+	function waitingTitle(waiting: WaitingPod[], resource: 'cpu' | 'memory', format: (v: number) => string) {
+		const lines = waiting.map((w) => `${w.object.namespace ? `${w.object.namespace}/` : ''}${w.object.name}: ${format(w[resource])}`);
+		return [t('Waiting for a node:'), ...lines].join('\n');
+	}
 
 	const KIND_ICONS: Record<string, IconName> = {
 		Pod: 'pod',
@@ -236,11 +261,11 @@
 				</p>
 			</div>
 			<div class="state">
-				{#if health?.health}
-					<span class="health" role="status"><HealthIcon health={health.health} size={11} />{health.summary}</span>
-				{/if}
+				<!-- One line: the cards below count pods and workloads, so it says what needs a look. -->
 				{#if attention.length}
-					<span class="tag warn"><Icon name="warning" size={14} />{plural(attention.length, '{n} needs attention', '{n} need attention')}</span>
+					<span class="tag warn" role="status"><Icon name="warning" size={14} />{plural(attention.length, '{n} needs attention', '{n} need attention')}</span>
+				{:else if health?.health}
+					<span class="health" role="status"><HealthIcon health={health.health} size={11} />{health.summary}</span>
 				{/if}
 				{#if updated}
 					<span class="live" title={t('Refreshes every {seconds} seconds', { seconds: REFRESH_MS / 1000 })}>
@@ -263,8 +288,8 @@
 				{@render countCard(0, t('Healthy pods'), 'pod', pods, namespace ? t('In {namespace}', { namespace }) : t('All namespaces'))}
 				{@render countCard(1, t('Ready nodes'), 'node', nodes, t('Cluster-wide'))}
 				{@render countCard(2, t('Ready workloads'), 'deployment', work ?? undefined, namespace ? t('In {namespace}', { namespace }) : t('All namespaces'))}
-				{@render usageCard(3, t('CPU utilization'), 'benchmark', pulse.cpu, cores)}
-				{@render usageCard(4, t('Memory utilization'), 'volume', pulse.memory, memory)}
+				{@render usageCard(3, t('CPU'), 'benchmark', pulse.cpu, cores, 'cpu')}
+				{@render usageCard(4, t('Memory'), 'volume', pulse.memory, memory, 'memory')}
 			</div>
 
 			<div class="columns">
@@ -273,7 +298,7 @@
 						<div class="card-head">
 							<div>
 								<h2 id="attention-title">{t('Needs attention')} <span class="n">{attention.length}</span></h2>
-								<p>{t('Warnings of the last hour, one entry per object.')}</p>
+								<p>{t('Warnings of the last hour, one entry per workload.')}</p>
 							</div>
 							<button class="link" onclick={() => openList({ group: '', version: 'v1', plural: 'events' })}>
 								{t('All events')} <Icon name="arrow" size={15} />
@@ -284,28 +309,39 @@
 						{:else if attention.length === 0}
 							<p class="empty"><Icon name="ok" size={16} /> {namespace ? t('Nothing needs a look in namespace {name}.', { name: namespace }) : t('Nothing needs a look in all namespaces.')}</p>
 						{:else}
-							{#each attention as item (`${item.event.object.namespace}/${item.event.object.name}/${item.event.objectKind}`)}
+							{#each attention as item (`${item.kind}/${item.namespace}/${item.name}`)}
+								{@const when = age(item.event.lastSeen, app.snapshot?.taken ?? now)}
+								{@const pods = item.objects.filter((o) => o.resource.plural === 'pods')}
+								{@const line = lastLines[logKey(item)]}
 								<button class="signal" onclick={() => openEvent(item.event)}>
 									<span class="mark {item.severity}"
 										><Icon name={item.severity === 'critical' ? 'critical' : 'warning'} /></span
 									>
 									<span class="copy">
 										<span class="headline">
-											<strong>{attentionTitle(item.event.object.name, item.reasons, item.event.message)}</strong>
+											<strong>{attentionTitle(item.name, item.reasons, item.event.message)}</strong>
 											<span class="tag {item.severity === 'critical' ? 'bad' : 'warn'}">
 												{item.severity === 'critical' ? t('Critical') : t('Warning')}
 											</span>
 										</span>
-										<span class="message" title={item.event.message}
-											><code class="reasons">{item.reasons.join(', ')}</code> {shortMessage(item.event.reason, item.event.message)}</span
+										<span class="message" title="{item.reasons.join(', ')}: {item.event.message}"
+											>{shortMessage(item.event.reason, item.event.message)}</span
 										>
-										<span class="where">
-											<code
-												>{item.event.objectKind}
-												{item.event.object.namespace ? `${item.event.object.namespace} / ` : ''}{item.event.object
-													.name}</code
+										{#if line}
+											<span class="last-log" title={t('From the log of the run that ended')}
+												>{t('Last log line:')} <code>{line}</code></span
 											>
-											<span>{item.count}× · {age(item.event.lastSeen, app.snapshot?.taken ?? now) ? t('{age} ago', { age: age(item.event.lastSeen, app.snapshot?.taken ?? now) }) : t('just now')}</span>
+										{/if}
+										<span class="where">
+											<span><code>{item.kind}</code>{item.namespace ? ` · ${item.namespace}` : ''}</span>
+											{#if pods.length && item.kind !== 'Pod'}
+												<span title={pods.map((o) => o.name).join('\n')}
+													>{plural(pods.length, '{n} pod affected', '{n} pods affected')}</span
+												>
+											{/if}
+											<span title={t('{n} warnings since they began', { n: item.count })}
+												>{when ? t('{age} ago', { age: when }) : t('just now')}</span
+											>
 										</span>
 									</span>
 									<span class="go">{t('Investigate')} <Icon name="arrow" size={15} /></span>
@@ -316,10 +352,20 @@
 
 					<section class="card" aria-labelledby="events-title">
 						<div class="card-head">
-							<h2 id="events-title">{t('Recent warnings')}</h2>
-							<span class="muted">{t('{warnings} warnings · {normal} normal, last hour', { warnings: pulse.events.warning, normal: pulse.events.normal })}</span>
+							<div>
+								<h2 id="events-title">{t('Recent warnings')}</h2>
+								<p>{t('{warnings} warnings · {normal} normal, last hour', { warnings: pulse.events.warning, normal: pulse.events.normal })}</p>
+							</div>
+							{#if pulse.events.recent.length}
+								<!-- The same warnings as above, as Kubernetes words them: folded, for those who want them. -->
+								<button class="link" aria-expanded={showRecent} onclick={() => (showRecent = !showRecent)}>
+									{showRecent ? t('Hide') : t('Show')}
+								</button>
+							{/if}
 						</div>
-						{#if pulse.events.recent.length}
+						{#if pulse.events.recent.length && !showRecent}
+							<!-- Folded. -->
+						{:else if pulse.events.recent.length}
 							<ul class="events">
 								{#each pulse.events.recent.slice(0, RECENT) as event, i (i)}
 									<li>
@@ -446,37 +492,41 @@
 	</button>
 {/snippet}
 
-{#snippet usageCard(index: number, label: string, icon: IconName, u: Utilization, format: (v: number) => string)}
-	{@const level = fill(u)}
+{#snippet usageCard(index: number, label: string, icon: IconName, u: Utilization, format: (v: number) => string, resource: 'cpu' | 'memory')}
+	{@const r = room(u)}
+	{@const waiting = (pulse?.waiting ?? []).filter((w) => w[resource] > 0)}
 	<button
 		class="kpi"
 		class:cursor={keyboard && cursor === index}
 		data-tile={index}
 		onclick={() => activate(index)}
-		title={namespace ? t('Open pods') : t('Open nodes')}
+		title={r?.reserved != null
+			? t('Reserved is what running pods ask for: the scheduler sets it aside, used or not. A new pod starts only where enough is left.')
+			: namespace
+				? t('Open pods')
+				: t('Open nodes')}
 	>
 		<span class="kpi-label">{label}<Icon name={icon} /></span>
-		{#if level && u.capacity}
-			<span class="kpi-value">{Math.round(level.value * 100)}<small>%{level.measured ? '' : ` ${t('requested')}`}</small></span>
+		{#if r}
+			<span class="kpi-value">{Math.round(r.value * 100)}<small>% {r.reserved !== null ? t('reserved') : t('used')}</small></span>
 			<span class="kpi-note">
-				{#if level.measured && u.used !== null}
-					{t('{used} used of {capacity}', { used: format(u.used), capacity: format(u.capacity) })}
+				{#if r.reserved !== null}
+					{t('{reserved} of {capacity} reserved', { reserved: format(r.reserved), capacity: format(r.capacity) })}
 				{:else}
-					{t('{requested} of {capacity}', { requested: format(u.requested ?? 0), capacity: format(u.capacity) })} · {t('no metrics-server')}
+					{t('{used} used of {capacity}', { used: format(r.used ?? 0), capacity: format(r.capacity) })}
 				{/if}
 			</span>
-			{#if level.measured && u.requested !== null}
-				{@const over = u.requested > u.capacity}
-				<span
-					class="kpi-note requested"
-					class:over
-					title={over
-						? t('Pods request {requested} of {capacity}: those that do not fit wait as Pending', { requested: format(u.requested), capacity: format(u.capacity) })
-						: undefined}
-				>
-					<strong>{percent(u.requested / u.capacity)}</strong> {t('requested')} · {over
-						? t('more than the nodes hold')
-						: format(u.requested)}
+			{#if r.reserved !== null}
+				<span class="kpi-note">
+					{r.used !== null ? t('{used} in use right now', { used: format(r.used) }) : t('Use not measured: no metrics-server')}
+				</span>
+			{/if}
+			{#if r.short && waiting.length}
+				<span class="kpi-note short" title={waitingTitle(waiting, resource, format)}>
+					<Icon name="warning" size={13} />
+					{waiting.length === 1
+						? t('{name} cannot start: it asks for {amount}', { name: waiting[0].object.name, amount: format(waiting[0][resource]) })
+						: t('{n} pods cannot start: they ask for {amount}', { n: waiting.length, amount: format(r.waiting) })}
 				</span>
 			{/if}
 			<span
@@ -484,20 +534,15 @@
 				role="meter"
 				aria-valuemin="0"
 				aria-valuemax="100"
-				aria-valuenow={Math.round(level.value * 100)}
-				aria-label="{label} {level.measured ? t('used') : t('requested')}"
+				aria-valuenow={Math.round(r.value * 100)}
+				aria-label="{label} {r.reserved !== null ? t('reserved') : t('used')}"
 			>
 				<span
-					class="fill {meterTone(level.value) === 'accent' ? '' : meterTone(level.value)}"
-					style:width={percent(Math.min(level.value, 1))}
+					class="fill {r.short ? 'bad' : meterTone(r.value) === 'accent' ? '' : meterTone(r.value)}"
+					style:width={percent(Math.min(r.value, 1))}
 				></span>
-				{#if level.measured && u.requested !== null}
-					<span
-						class="request"
-						class:over={u.requested > u.capacity}
-						style:left={percent(Math.min(u.requested / u.capacity, 1))}
-						title={t('Requested')}
-					></span>
+				{#if r.reserved !== null && r.used !== null}
+					<span class="request" style:left={percent(Math.min(r.used / r.capacity, 1))} title={t('In use')}></span>
 				{/if}
 			</span>
 		{:else}
@@ -687,13 +732,15 @@
 		font-weight: 400;
 		color: var(--text-muted);
 	}
-	.kpi-note.requested strong {
-		color: var(--text);
-		font-weight: 600;
-	}
-	.kpi-note.requested.over,
-	.kpi-note.requested.over strong {
+	.kpi-note.short {
+		display: flex;
+		gap: 5px;
+		align-items: flex-start;
 		color: var(--bad);
+	}
+	.kpi-note.short :global(svg) {
+		flex: none;
+		margin-top: 1px;
 	}
 	.health {
 		display: inline-flex;
@@ -739,9 +786,6 @@
 		width: 2px;
 		margin-left: -1px;
 		background: var(--text);
-	}
-	.request.over {
-		background: var(--bad);
 	}
 	.columns {
 		display: grid;
@@ -896,17 +940,22 @@
 			animation: none;
 		}
 	}
-	.reasons {
-		margin-right: 4px;
-		font-family: var(--mono);
-		font-size: 11.5px;
-	}
 	.where {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 4px 12px;
 		font-size: 11.5px;
 		color: var(--text-muted);
+	}
+	.last-log {
+		font-size: 12px;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.last-log code {
+		font-family: var(--mono);
+		font-size: 11.5px;
+		color: var(--text);
 	}
 	.where code {
 		font-family: var(--mono);

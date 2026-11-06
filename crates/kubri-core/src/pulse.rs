@@ -33,7 +33,23 @@ pub struct Pulse {
     pub memory: Utilization,
     /// cert-manager Certificates that expire soon or are not ready, soonest first.
     pub certificates: Vec<CertificateAlert>,
+    /// Pods no node has taken yet, the ones asking for the most CPU first.
+    pub waiting: Vec<WaitingPod>,
 }
+
+/// A pod that waits for a node, and what it asks for.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WaitingPod {
+    pub object: ObjectRef,
+    /// In millicores.
+    pub cpu: f64,
+    /// In bytes.
+    pub memory: f64,
+}
+
+/// Waiting pods the overview names, at most.
+const WAITING_PODS: usize = 100;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,6 +96,17 @@ pub struct RecentEvent {
     /// The object the event is about, such as `Pod`.
     pub object_kind: String,
     pub object: ObjectRef,
+    /// The workload a pod or ReplicaSet belongs to, such as its Deployment.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workload: Option<Workload>,
+}
+
+/// The Deployment, StatefulSet, DaemonSet, Job or CronJob at the top of an object's owners.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Workload {
+    pub kind: String,
+    pub object: ObjectRef,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -89,6 +116,8 @@ pub struct Utilization {
     pub used: Option<f64>,
     /// Requested by the pods that are not finished.
     pub requested: Option<f64>,
+    /// The part of `requested` that pods no node has taken yet ask for.
+    pub waiting: Option<f64>,
     /// Allocatable on all nodes.
     pub capacity: Option<f64>,
 }
@@ -136,19 +165,31 @@ pub(crate) async fn gather(
         ("Job", uids(&jobs)),
     ]);
 
+    let mut owners = Owners::default();
+    owners.add("Pod", &pods);
+    owners.add("ReplicaSet", &replica_sets);
+    owners.add("Deployment", &deployments);
+    owners.add("StatefulSet", &stateful_sets);
+    owners.add("DaemonSet", &daemon_sets);
+    owners.add("Job", &jobs);
+    owners.add("CronJob", &cron_jobs);
+
     let usage = usage.ok();
     let used = |pick: fn(&Usage) -> f64| usage.as_ref().map(|u| u.iter().map(pick).sum());
     let cpu = Utilization {
         used: used(|u| u.cpu),
         requested: pods.as_ref().ok().map(|p| requested(p, "cpu") * 1000.0),
+        waiting: pods.as_ref().ok().map(|p| requested(unplaced(p), "cpu") * 1000.0),
         capacity: nodes.as_ref().ok().map(|n| allocatable(n, "cpu") * 1000.0),
     };
     let memory = Utilization {
         used: used(|u| u.memory),
         requested: pods.as_ref().ok().map(|p| requested(p, "memory")),
+        waiting: pods.as_ref().ok().map(|p| requested(unplaced(p), "memory")),
         capacity: nodes.as_ref().ok().map(|n| allocatable(n, "memory")),
     };
 
+    let waiting = pods.as_deref().map(waiting_pods).unwrap_or_default();
     Pulse {
         kinds: vec![
             summarize(nodes, health::node),
@@ -167,7 +208,7 @@ pub(crate) async fn gather(
         .chain(certificate_pulse)
         .collect(),
         events: match events {
-            Ok(events) => tally_events(events, now, &resolve, &live),
+            Ok(events) => tally_events(events, now, &resolve, &live, &owners),
             Err(error) => EventPulse {
                 error: Some(error),
                 ..Default::default()
@@ -176,6 +217,7 @@ pub(crate) async fn gather(
         cpu,
         memory,
         certificates,
+        waiting,
     }
 }
 
@@ -279,7 +321,20 @@ pub(crate) fn summarize<K: kube::Resource<DynamicType = ()>>(
 
 /// What the scheduler reserves for pods that still run: the larger of the sum of the
 /// containers and the largest init container, as `kubectl describe node` counts it.
-pub(crate) fn requested(pods: &[Pod], resource: &str) -> f64 {
+pub(crate) fn requested<'a>(pods: impl IntoIterator<Item = &'a Pod>, resource: &str) -> f64 {
+    pods.into_iter()
+        .filter(|p| !finished(p))
+        .map(|p| pod_request(p, resource))
+        .sum()
+}
+
+fn finished(pod: &Pod) -> bool {
+    let phase = pod.status.as_ref().and_then(|s| s.phase.as_deref());
+    matches!(phase, Some("Succeeded" | "Failed"))
+}
+
+/// One pod's request, in cores or bytes.
+fn pod_request(pod: &Pod, resource: &str) -> f64 {
     let request = |c: &k8s_openapi::api::core::v1::Container| {
         c.resources
             .as_ref()
@@ -288,23 +343,45 @@ pub(crate) fn requested(pods: &[Pod], resource: &str) -> f64 {
             .and_then(|q| parse_quantity(&q.0))
             .unwrap_or(0.0)
     };
-    pods.iter()
-        .filter(|p| {
-            let phase = p.status.as_ref().and_then(|s| s.phase.as_deref());
-            !matches!(phase, Some("Succeeded" | "Failed"))
+    let Some(spec) = pod.spec.as_ref() else { return 0.0 };
+    let containers: f64 = spec.containers.iter().map(request).sum();
+    let init = spec
+        .init_containers
+        .iter()
+        .flatten()
+        .map(request)
+        .fold(0.0, f64::max);
+    containers.max(init)
+}
+
+/// Pods that still run but no node has taken: they wait for room.
+fn unplaced(pods: &[Pod]) -> impl Iterator<Item = &Pod> {
+    pods.iter().filter(|p| {
+        let placed = p
+            .spec
+            .as_ref()
+            .and_then(|s| s.node_name.as_deref())
+            .is_some_and(|n| !n.is_empty());
+        !placed && !finished(p) && p.metadata.deletion_timestamp.is_none()
+    })
+}
+
+fn waiting_pods(pods: &[Pod]) -> Vec<WaitingPod> {
+    let mut waiting: Vec<WaitingPod> = unplaced(pods)
+        .map(|p| WaitingPod {
+            object: ObjectRef {
+                context: None,
+                resource: resource_ref::<Pod>(),
+                namespace: p.metadata.namespace.clone(),
+                name: p.metadata.name.clone().unwrap_or_default(),
+            },
+            cpu: pod_request(p, "cpu") * 1000.0,
+            memory: pod_request(p, "memory"),
         })
-        .filter_map(|p| p.spec.as_ref())
-        .map(|spec| {
-            let containers: f64 = spec.containers.iter().map(request).sum();
-            let init = spec
-                .init_containers
-                .iter()
-                .flatten()
-                .map(request)
-                .fold(0.0, f64::max);
-            containers.max(init)
-        })
-        .sum()
+        .collect();
+    waiting.sort_by(|a, b| b.cpu.total_cmp(&a.cpu).then(b.memory.total_cmp(&a.memory)));
+    waiting.truncate(WAITING_PODS);
+    waiting
 }
 
 pub(crate) fn allocatable(nodes: &[Node], resource: &str) -> f64 {
@@ -358,6 +435,75 @@ fn uids<K: kube::Resource>(listed: &Result<Vec<K>, String>) -> Option<HashSet<St
         .map(|items| items.iter().filter_map(|i| i.meta().uid.clone()).collect())
 }
 
+/// Objects by UID with their controller, to find the workload a pod belongs to.
+#[derive(Default)]
+struct Owners(HashMap<String, Owned>);
+
+struct Owned {
+    kind: &'static str,
+    resource: ResourceRef,
+    namespace: Option<String>,
+    name: String,
+    controller: Option<String>,
+}
+
+impl Owners {
+    fn add<K: kube::Resource<DynamicType = ()>>(
+        &mut self,
+        kind: &'static str,
+        listed: &Result<Vec<K>, String>,
+    ) {
+        for item in listed.iter().flatten() {
+            let meta = item.meta();
+            let Some(uid) = meta.uid.clone() else { continue };
+            let controller = meta
+                .owner_references
+                .iter()
+                .flatten()
+                .find(|o| o.controller == Some(true))
+                .map(|o| o.uid.clone());
+            self.0.insert(
+                uid,
+                Owned {
+                    kind,
+                    resource: resource_ref::<K>(),
+                    namespace: meta.namespace.clone(),
+                    name: meta.name.clone().unwrap_or_default(),
+                    controller,
+                },
+            );
+        }
+    }
+
+    /// The topmost known owner of `uid` that is a workload, if the object has an owner.
+    fn workload(&self, uid: &str, kind: &str) -> Option<Workload> {
+        if !matches!(kind, "Pod" | "ReplicaSet" | "Job") {
+            return None;
+        }
+        let mut found = None;
+        let mut next = self.0.get(uid)?.controller.as_deref();
+        // A pod's chain is at most ReplicaSet, Deployment or Job, CronJob; the cap guards loops.
+        for _ in 0..4 {
+            let Some(owner) = next.and_then(|uid| self.0.get(uid)) else {
+                break;
+            };
+            if owner.kind != "ReplicaSet" {
+                found = Some(owner);
+            }
+            next = owner.controller.as_deref();
+        }
+        found.map(|o| Workload {
+            kind: o.kind.to_string(),
+            object: ObjectRef {
+                context: None,
+                resource: o.resource.clone(),
+                namespace: o.namespace.clone(),
+                name: o.name.clone(),
+            },
+        })
+    }
+}
+
 /// Counts the events of the last hour and keeps the newest warnings. `resolve` finds the
 /// resource type of an `apiVersion` and kind, so a warning can link to its object. Warnings
 /// about objects that no longer exist are counted but not kept.
@@ -366,6 +512,7 @@ fn tally_events(
     now: Timestamp,
     resolve: &impl Fn(&str, &str) -> Option<ResourceRef>,
     live: &Live,
+    owners: &Owners,
 ) -> EventPulse {
     let since = now - RECENT;
     let mut pulse = EventPulse::default();
@@ -391,7 +538,12 @@ fn tally_events(
                 return None;
             }
             let resource = resolve(involved.api_version.as_deref().unwrap_or("v1"), &kind)?;
+            let workload = involved
+                .uid
+                .as_deref()
+                .and_then(|uid| owners.workload(uid, &kind));
             Some(RecentEvent {
+                workload,
                 object_kind: kind,
                 object: ObjectRef {
                     context: None,
@@ -453,6 +605,69 @@ mod tests {
     }
 
     #[test]
+    fn names_pods_that_wait_for_a_node() {
+        let pod = |name: &str, node: Option<&str>, phase: &str, cpu: &str| -> Pod {
+            from(
+                json!({ "metadata": { "name": name, "namespace": "shop" }, "spec": {
+                "nodeName": node,
+                "containers": [{ "name": "a", "resources": { "requests": { "cpu": cpu, "memory": "1Gi" } } }]
+            }, "status": { "phase": phase } }),
+            )
+        };
+        let pods = [
+            pod("placed", Some("n1"), "Running", "1"),
+            pod("small", None, "Pending", "100m"),
+            pod("big", None, "Pending", "64"),
+            pod("done", None, "Failed", "8"),
+        ];
+        assert!((requested(unplaced(&pods), "cpu") - 64.1).abs() < 1e-9);
+        assert_eq!(
+            requested(unplaced(&pods), "memory"),
+            2.0 * 1024.0 * 1024.0 * 1024.0
+        );
+        let waiting = waiting_pods(&pods);
+        let names: Vec<_> = waiting.iter().map(|w| w.object.name.as_str()).collect();
+        assert_eq!(names, ["big", "small"]);
+        assert_eq!(waiting[0].cpu, 64_000.0);
+        assert_eq!(waiting[0].object.namespace.as_deref(), Some("shop"));
+    }
+
+    #[test]
+    fn finds_the_workload_a_pod_belongs_to() {
+        let meta = |kind: &str, uid: &str, owner: Option<(&str, &str)>| {
+            json!({ "metadata": { "name": format!("{kind}-{uid}"), "namespace": "shop", "uid": uid,
+                "ownerReferences": owner.map(|(k, u)| vec![json!({ "apiVersion": "v1", "kind": k, "name": "x", "uid": u, "controller": true })]).unwrap_or_default() } })
+        };
+        let mut owners = Owners::default();
+        owners.add::<Pod>(
+            "Pod",
+            &Ok(vec![
+                from(meta("Pod", "p1", Some(("ReplicaSet", "rs1")))),
+                from(meta("Pod", "p2", Some(("Job", "j1")))),
+                from(meta("Pod", "p3", None)),
+            ]),
+        );
+        owners.add::<ReplicaSet>(
+            "ReplicaSet",
+            &Ok(vec![from(meta("ReplicaSet", "rs1", Some(("Deployment", "d1"))))]),
+        );
+        owners.add::<Deployment>("Deployment", &Ok(vec![from(meta("Deployment", "d1", None))]));
+        owners.add::<Job>("Job", &Ok(vec![from(meta("Job", "j1", Some(("CronJob", "c1"))))]));
+        owners.add::<CronJob>("CronJob", &Ok(vec![from(meta("CronJob", "c1", None))]));
+
+        let deployment = owners.workload("p1", "Pod").unwrap();
+        assert_eq!(
+            (deployment.kind.as_str(), deployment.object.name.as_str()),
+            ("Deployment", "Deployment-d1")
+        );
+        assert_eq!(deployment.object.resource.plural, "deployments");
+        assert_eq!(owners.workload("rs1", "ReplicaSet").unwrap().kind, "Deployment");
+        assert_eq!(owners.workload("p2", "Pod").unwrap().kind, "CronJob");
+        assert!(owners.workload("p3", "Pod").is_none());
+        assert!(owners.workload("d1", "Deployment").is_none());
+    }
+
+    #[test]
     fn sums_node_allocatable() {
         let node = |cpu: &str| -> Node {
             from(
@@ -484,7 +699,7 @@ mod tests {
                 plural: "things".into(),
             })
         };
-        let pulse = tally_events(events, now, &resolve, &Live::default());
+        let pulse = tally_events(events, now, &resolve, &Live::default(), &Owners::default());
         assert_eq!(pulse.warning, 20);
         assert_eq!(pulse.recent.len(), RECENT_WARNINGS);
         assert_eq!(pulse.recent[0].object.name, "o14");
@@ -513,7 +728,7 @@ mod tests {
                 plural: "pods".into(),
             })
         };
-        let pulse = tally_events(events, now, &resolve, &Live::default());
+        let pulse = tally_events(events, now, &resolve, &Live::default(), &Owners::default());
         assert_eq!((pulse.normal, pulse.warning), (1, 2));
         let names: Vec<&str> = pulse.recent.iter().map(|e| e.object.name.as_str()).collect();
         assert_eq!(names, ["b", "a"]);
@@ -540,12 +755,17 @@ mod tests {
             })
         };
         let live = Live::of(&[("Pod", Some(["u2".to_string()].into()))]);
-        let pulse = tally_events(events.clone(), now, &resolve, &live);
+        let pulse = tally_events(events.clone(), now, &resolve, &live, &Owners::default());
         assert_eq!(pulse.warning, 2);
         let names: Vec<&str> = pulse.recent.iter().map(|e| e.object.name.as_str()).collect();
         assert_eq!(names, ["new"]);
         // A kind that could not be listed keeps its warnings.
         let unknown = Live::of(&[("Pod", None)]);
-        assert_eq!(tally_events(events, now, &resolve, &unknown).recent.len(), 2);
+        assert_eq!(
+            tally_events(events, now, &resolve, &unknown, &Owners::default())
+                .recent
+                .len(),
+            2
+        );
     }
 }

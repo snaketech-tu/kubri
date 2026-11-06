@@ -114,7 +114,9 @@ pub use plugin::{Cell, PluginRun, Release};
 pub use portforward::{FavoriteStart, PortForwardInfo, PortForwardRequest};
 pub use preview::{Change, Preview};
 pub use prometheus::{Chart, ChartLevel, Charts, Marker, Range, Series};
-pub use pulse::{CertificateAlert, EventPulse, KindPulse, Pulse, RecentEvent, Utilization};
+pub use pulse::{
+    CertificateAlert, EventPulse, KindPulse, Pulse, RecentEvent, Utilization, WaitingPod, Workload,
+};
 pub use rbac::{Grant, Permissions, Rbac, RoleState, Rule, SubjectInfo};
 pub use references::Reference;
 pub use resource::{ResourceInfo, ResourceRef};
