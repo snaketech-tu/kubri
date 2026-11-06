@@ -12,7 +12,8 @@
 	import { age, errorMessage, memory, relative } from '../format';
 	import { fleetState, serverHost, workloads } from '../fleet';
 	import { attentionTitle } from '../causes';
-	import { attentionItems, fill, kindLabel, meterTone, record, shortMessage, splitKinds } from '../pulse';
+	import { attentionItems, fill, kindLabel, meterTone, record, restartingContainer, shortMessage, splitKinds, type AttentionItem } from '../pulse';
+	import { lastLogLine } from '../lastlog';
 	import { app, findResource } from '../state.svelte';
 	import { plural, t } from '../i18n';
 	import HealthIcon from './HealthIcon.svelte';
@@ -121,6 +122,7 @@
 
 	const kindGroups = $derived(splitKinds(pulse?.kinds ?? []));
 	let showHealthy = $state(false);
+	let showRecent = $state(false);
 	const shownKinds = $derived(showHealthy ? [...kindGroups.problems, ...kindGroups.healthy] : kindGroups.problems);
 
 	/** What arrow keys move between and Enter opens: the cards on top, then the kinds. */
@@ -135,6 +137,23 @@
 	const KIND_TILES = 5;
 
 	const attention = $derived(attentionItems(pulse?.events.recent ?? []));
+
+	/** The last words of containers that keep restarting, by pod and container. */
+	let lastLines = $state<Record<string, string | null>>({});
+	const asked = new Set<string>();
+	const logKey = (item: AttentionItem) =>
+		`${app.cluster?.context}/${item.event.object.namespace}/${item.event.object.name}/${restartingContainer(item.event.message)}`;
+	$effect(() => {
+		for (const item of attention) {
+			const container = restartingContainer(item.event.message);
+			const key = logKey(item);
+			if (!container || item.event.objectKind !== 'Pod' || asked.has(key)) continue;
+			asked.add(key);
+			lastLogLine({ ...item.event.object, context: app.cluster?.context }, container).then((line) => {
+				if (line) lastLines[key] = line;
+			});
+		}
+	});
 	const scopeText = $derived(namespace ? t('Namespace {name}', { name: namespace }) : t('All namespaces'));
 	const clusterText = $derived(
 		app.cluster ? [serverHost(app.cluster.server), app.cluster.version].filter(Boolean).join(' · ') : ''
@@ -275,7 +294,7 @@
 						<div class="card-head">
 							<div>
 								<h2 id="attention-title">{t('Needs attention')} <span class="n">{attention.length}</span></h2>
-								<p>{t('Warnings of the last hour, one entry per object.')}</p>
+								<p>{t('Warnings of the last hour, one entry per workload.')}</p>
 							</div>
 							<button class="link" onclick={() => openList({ group: '', version: 'v1', plural: 'events' })}>
 								{t('All events')} <Icon name="arrow" size={15} />
@@ -286,28 +305,38 @@
 						{:else if attention.length === 0}
 							<p class="empty"><Icon name="ok" size={16} /> {namespace ? t('Nothing needs a look in namespace {name}.', { name: namespace }) : t('Nothing needs a look in all namespaces.')}</p>
 						{:else}
-							{#each attention as item (`${item.event.object.namespace}/${item.event.object.name}/${item.event.objectKind}`)}
+							{#each attention as item (`${item.kind}/${item.namespace}/${item.name}`)}
+								{@const when = age(item.event.lastSeen, app.snapshot?.taken ?? now)}
+								{@const line = lastLines[logKey(item)]}
 								<button class="signal" onclick={() => openEvent(item.event)}>
 									<span class="mark {item.severity}"
 										><Icon name={item.severity === 'critical' ? 'critical' : 'warning'} /></span
 									>
 									<span class="copy">
 										<span class="headline">
-											<strong>{attentionTitle(item.event.object.name, item.reasons, item.event.message)}</strong>
+											<strong>{attentionTitle(item.name, item.reasons, item.event.message)}</strong>
 											<span class="tag {item.severity === 'critical' ? 'bad' : 'warn'}">
 												{item.severity === 'critical' ? t('Critical') : t('Warning')}
 											</span>
 										</span>
-										<span class="message" title={item.event.message}
-											><code class="reasons">{item.reasons.join(', ')}</code> {shortMessage(item.event.reason, item.event.message)}</span
+										<span class="message" title="{item.reasons.join(', ')}: {item.event.message}"
+											>{shortMessage(item.event.reason, item.event.message)}</span
 										>
-										<span class="where">
-											<code
-												>{item.event.objectKind}
-												{item.event.object.namespace ? `${item.event.object.namespace} / ` : ''}{item.event.object
-													.name}</code
+										{#if line}
+											<span class="last-log" title={t('From the log of the run that ended')}
+												>{t('Last log line:')} <code>{line}</code></span
 											>
-											<span>{item.count}× · {age(item.event.lastSeen, app.snapshot?.taken ?? now) ? t('{age} ago', { age: age(item.event.lastSeen, app.snapshot?.taken ?? now) }) : t('just now')}</span>
+										{/if}
+										<span class="where">
+											<span><code>{item.kind}</code>{item.namespace ? ` · ${item.namespace}` : ''}</span>
+											{#if item.objects.length > 1 || item.objects[0].name !== item.name}
+												<span title={item.objects.map((o) => o.name).join('\n')}
+													>{plural(item.objects.length, '{n} pod affected', '{n} pods affected')}</span
+												>
+											{/if}
+											<span title={t('{n} warnings since they began', { n: item.count })}
+												>{when ? t('{age} ago', { age: when }) : t('just now')}</span
+											>
 										</span>
 									</span>
 									<span class="go">{t('Investigate')} <Icon name="arrow" size={15} /></span>
@@ -318,10 +347,20 @@
 
 					<section class="card" aria-labelledby="events-title">
 						<div class="card-head">
-							<h2 id="events-title">{t('Recent warnings')}</h2>
-							<span class="muted">{t('{warnings} warnings · {normal} normal, last hour', { warnings: pulse.events.warning, normal: pulse.events.normal })}</span>
+							<div>
+								<h2 id="events-title">{t('Recent warnings')}</h2>
+								<p>{t('{warnings} warnings · {normal} normal, last hour', { warnings: pulse.events.warning, normal: pulse.events.normal })}</p>
+							</div>
+							{#if pulse.events.recent.length}
+								<!-- The same warnings as above, as Kubernetes words them: folded, for those who want them. -->
+								<button class="link" aria-expanded={showRecent} onclick={() => (showRecent = !showRecent)}>
+									{showRecent ? t('Hide') : t('Show')}
+								</button>
+							{/if}
 						</div>
-						{#if pulse.events.recent.length}
+						{#if pulse.events.recent.length && !showRecent}
+							<!-- Folded. -->
+						{:else if pulse.events.recent.length}
 							<ul class="events">
 								{#each pulse.events.recent.slice(0, RECENT) as event, i (i)}
 									<li>
@@ -898,17 +937,22 @@
 			animation: none;
 		}
 	}
-	.reasons {
-		margin-right: 4px;
-		font-family: var(--mono);
-		font-size: 11.5px;
-	}
 	.where {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 4px 12px;
 		font-size: 11.5px;
 		color: var(--text-muted);
+	}
+	.last-log {
+		font-size: 12px;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.last-log code {
+		font-family: var(--mono);
+		font-size: 11.5px;
+		color: var(--text);
 	}
 	.where code {
 		font-family: var(--mono);

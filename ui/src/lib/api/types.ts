@@ -1078,6 +1078,8 @@ export interface FleetCluster {
 export interface RecentEvent extends EventInfo {
 	objectKind: string;
 	object: ObjectRef;
+	/** The workload a pod or ReplicaSet belongs to, such as its Deployment. */
+	workload?: { kind: string; object: ObjectRef };
 }
 
 export interface Utilization {
