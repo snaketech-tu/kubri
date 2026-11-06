@@ -151,7 +151,8 @@ export function isFaulty(columns: Column[], row: Row): boolean {
 	const done = cells.some(
 		(c) => /^(status|phase)$/i.test(c.name) && /^(Completed|Complete|Succeeded)$/.test(String(c.value))
 	);
-	return cells.some((c) => c.tone === 'bad' || (c.tone === 'warn' && !done));
+	// A finished pod is not ready, and that is fine.
+	return cells.some((c) => (c.tone === 'bad' && !(done && /^ready$/i.test(c.name))) || (c.tone === 'warn' && !done));
 }
 
 /** Whether rows of the kind can need attention: it has a state, readiness or health, or is Events. */

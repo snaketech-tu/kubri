@@ -63,6 +63,8 @@ Kubri starts in the context you used last, unless the kubeconfig's current conte
 
 The desktop app zooms with <kbd>Ctrl +</kbd>, <kbd>Ctrl −</kbd> and <kbd>Ctrl 0</kbd> (<kbd>Cmd</kbd> on macOS), or with the zoom buttons there, from 67% to 200%, and opens at the same level next time. In the browser, its own zoom does the same. Kubri is laid out to work up to 200%: in a narrow window the resource list folds behind a button at the top, and in a short one the page scrolls so lists keep room for their rows.
 
+**CPU and memory** there picks how amounts read: in cores and MiB or GiB (`0.25`, `512 MiB`), the default, or like kubectl (`250m`, `512Mi`). It applies to the lists, the overview and the Clusters page, and is kept in the app (or in the browser, for the web server). The CSV export and k9s plugins always get kubectl's units, and the fields where you type requests and limits take them too.
+
 ## Updates
 
 When it starts, Kubri asks GitHub for its latest release (`api.github.com/repos/snaketech-tu/kubri/releases/latest`), at most every six hours, and shows **Kubri 1.0.1 is out** at the bottom when that release is newer than the one running. The notice opens the release page with its notes and downloads; **×** hides it until the next release. Nothing about you or your clusters is sent, only the request itself. **Tell me when a new release is out** under **Updates** in Settings (`:updates`) turns the check off; this choice is kept in the app (or in the browser, for the web server).
