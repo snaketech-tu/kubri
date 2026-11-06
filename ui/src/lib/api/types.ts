@@ -1085,6 +1085,8 @@ export interface Utilization {
 	used: number | null;
 	/** Requested by the pods that are not finished. */
 	requested: number | null;
+	/** The part of `requested` that pods no node has taken yet ask for. Missing from old recordings. */
+	waiting?: number | null;
 	/** Allocatable on all nodes. */
 	capacity: number | null;
 }
@@ -1099,6 +1101,17 @@ export interface Pulse {
 	memory: Utilization;
 	/** cert-manager Certificates that expire soon or are not ready, soonest first. */
 	certificates: CertificateAlert[];
+	/** Pods no node has taken yet, the ones asking for the most CPU first. Missing from old recordings. */
+	waiting?: WaitingPod[];
+}
+
+/** A pod that waits for a node, and what it asks for. */
+export interface WaitingPod {
+	object: ObjectRef;
+	/** In millicores. */
+	cpu: number;
+	/** In bytes. */
+	memory: number;
 }
 
 export type SizeReason = 'nearLimit' | 'underRequested' | 'overRequested' | 'noRequest';
