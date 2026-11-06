@@ -1,8 +1,8 @@
 ## What's new
 
-- **Port-forwards work on the first try:** a port check no longer leaves an error behind, and `localhost` listens on both 127.0.0.1 and ::1.
-- **Nodes list:** CPU and Mem show the node's use next to what it can give to pods, with a bar that turns red at 90 %.
-- **Wider inspector** with readable container images.
+- **Resizable sidebar:** drag its edge to make it wider; Kubri remembers the width, and a double-click goes back to the default.
+- **Steady lists:** the action bar stays on one line and keeps its place, so clicking a row no longer pushes the list down. Columns no longer jump when a list opens or its metrics arrive.
+- **Clearer checkboxes:** bigger, with a clear edge in light and dark, and always visible in lists.
 
 ## Install
 

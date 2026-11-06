@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.2 — 2026-11-06
+
+- **Resizable sidebar.** Drag the sidebar's edge to make it wider, or focus it and use the arrow keys. Kubri remembers the width; a double-click or <kbd>Home</kbd> goes back to the default, which is also the smallest width.
+- **No more jumping layout.** The action bar above a list keeps to one line, with the buttons that do not fit under **More**, and always keeps its place, so clicking a row, loading a list or filtering it empty no longer moves the rows. Columns are drawn once when a list opens, not again when its metrics come. The inspector, What changed and Helm no longer jump while they load.
+- **Clearer checkboxes.** Checkboxes are bigger, with a clear edge in light and dark. The marks in lists stay in sight.
+- **Port-forwards:** a client leaving at the moment the pod resets its connection no longer shows up as a failed forward.
+
 ## 1.9.1 — 2026-11-06
 
 - **Port-forwards work on the first try.** A client that only checks whether the port is open no longer keeps the pod's connection, so databases such as MariaDB no longer reset it and show an error. With the address `localhost`, a forward listens on both 127.0.0.1 and ::1, like kubectl, so clients reach it whichever one they try.
