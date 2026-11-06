@@ -85,6 +85,19 @@
 	$effect(() => {
 		if (metricsKind) return metrics.start(metricsKind, ns);
 	});
+	/**
+	 * The rows wait a moment for the first metrics, so their columns are drawn once, not again
+	 * when the numbers come. A slow metrics-server does not hold the list for longer than that.
+	 */
+	let patience = $state(false);
+	$effect(() => {
+		void metricsKind;
+		void ns;
+		patience = false;
+		const timer = setTimeout(() => (patience = true), 1000);
+		return () => clearTimeout(timer);
+	});
+	const holding = $derived(!!metricsKind && !metrics.answered && !patience);
 	$effect(() => {
 		const timer = setInterval(() => (now = Date.now()), 1000);
 		return () => clearInterval(timer);
@@ -272,7 +285,7 @@
 	const last = $derived(
 		windowed ? Math.min(rows.length, Math.ceil((scrollTop + viewHeight) / rowHeight) + OVERSCAN) : rows.length
 	);
-	const shown = $derived(windowed ? rows.slice(first, last) : rows);
+	const shown = $derived(holding ? [] : windowed ? rows.slice(first, last) : rows);
 
 	// Rows are as high as the zoom and font make them.
 	$effect(() => {
@@ -297,6 +310,7 @@
 	// Rows arriving from the cluster do not count: they must not pull the list away from where the user scrolled.
 	$effect(() => {
 		void cursorKey;
+		void holding;
 		void filter;
 		void sort.column;
 		void sort.descending;
@@ -805,6 +819,11 @@
 		app.dialog = { kind: 'delete', resource, targets: chosen.map(target) };
 	}
 
+	/**
+	 * The width of the mark column. Before the list has columns it stretches over the whole table:
+	 * its width then says nothing, and would hide columns and push the names aside.
+	 */
+	const markWidth = $derived(checkWidth && checkWidth < 80 ? checkWidth : 34);
 	const hiddenColumns = $derived(table.columns.filter((c) => c.priority > 0).length);
 
 	const shownLabel = (c: DisplayColumn) => c.label.replace(/^Memory/, 'Mem');
@@ -816,7 +835,7 @@
 	const fitted = $derived.by(() => {
 		if (wide || !room) return { drawn: columns, left: [] as string[], nameMax: null };
 		// The mark and menu columns at both ends.
-		const space = room - (checkWidth || 34) - 42;
+		const space = room - markWidth - 42;
 		// A long name is cut short before other columns go; its whole name is in the tooltip.
 		const nameMax = Math.max(200, Math.round(space * 0.4));
 		const sample = rows.slice(0, 200);
@@ -989,7 +1008,7 @@
 			bind:clientWidth={room}
 			onscroll={() => (scrollTop = scroller?.scrollTop ?? 0)}
 		>
-			<table class:stale={table.stale} aria-rowcount={windowed ? rows.length + 1 : undefined} style:--check-width="{checkWidth}px">
+			<table class:stale={table.stale} aria-rowcount={windowed ? rows.length + 1 : undefined} style:--check-width="{markWidth}px">
 				<thead>
 					<tr>
 						<th class="check" bind:offsetWidth={checkWidth}></th>
@@ -1125,7 +1144,7 @@
 					{/if}
 				</tbody>
 			</table>
-			{#if table.loading}
+			{#if table.loading || (holding && rows.length)}
 				<p class="empty">{t('Loading…')}</p>
 			{:else if rows.length === 0 && !problem}
 				<p class="empty">

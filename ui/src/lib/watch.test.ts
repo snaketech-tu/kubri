@@ -91,4 +91,18 @@ describe('live resource state', () => {
 		expect(metrics.get('shop', 'pod')).toBeUndefined();
 		stop();
 	});
+
+	it('says when metrics-server answered first, also with an error', async () => {
+		vi.useFakeTimers();
+		let fail!: (err: Error) => void;
+		mock.metrics.mockReturnValueOnce(new Promise((_, reject) => (fail = reject)));
+		const metrics = new LiveMetrics();
+		const stop = metrics.start('pods', 'shop');
+		await vi.advanceTimersByTimeAsync(1);
+		expect(metrics.answered).toBe(false);
+		fail(new Error('Unavailable'));
+		await vi.advanceTimersByTimeAsync(1);
+		expect(metrics.answered).toBe(true);
+		stop();
+	});
 });

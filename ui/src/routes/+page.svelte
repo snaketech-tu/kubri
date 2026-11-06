@@ -752,7 +752,7 @@
 								</div>
 							{/if}
 						</section>
-					{:else}
+					{:else if app.loaded}
 						<section class="connect">
 							<img src={logo} alt="" width="56" height="56" />
 							<h1>{t('Connect to a cluster.')}</h1>

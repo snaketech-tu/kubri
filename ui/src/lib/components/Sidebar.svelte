@@ -329,7 +329,8 @@
 		z-index: 2;
 		top: 0;
 		bottom: 0;
-		right: -4px;
+		/* Mostly outside the sidebar, so it stays clear of the list's scrollbar. */
+		right: -6px;
 		width: 8px;
 		cursor: col-resize;
 		touch-action: none;
@@ -337,7 +338,7 @@
 	.resize:hover,
 	.resize:focus-visible {
 		outline: none;
-		background: linear-gradient(to right, transparent 3px, var(--accent) 3px, var(--accent) 5px, transparent 5px);
+		background: linear-gradient(to right, transparent 1px, var(--accent) 1px, var(--accent) 3px, transparent 3px);
 	}
 	/* Narrower windows keep the sidebar at its fixed size or fold it into icons. */
 	@media (min-width: 1101px) {
