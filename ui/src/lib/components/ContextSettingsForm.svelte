@@ -138,12 +138,12 @@
 		<input type="checkbox" checked={current.production} onchange={(e) => setProduction(e.currentTarget.checked)} />
 		<span>
 			<strong>{t('Production')}</strong>
-			<small>{t('A banner shows it, and deleting asks you to type the name.')}</small>
+			<small>{t('A red stripe and a badge show it, and deleting asks you to type the name.')}</small>
 		</span>
 	</label>
 	{#if !current.production}
 		<ProductionNamespaces {context} {namespaces} />
-		<p class="note">{t('Like a production context, only there: a banner, typed names before deleting, and no changes by AI agents.')}</p>
+		<p class="note">{t('Like a production context, only there: a red marker, typed names before deleting, and no changes by AI agents.')}</p>
 	{/if}
 	<label class="check">
 		<input type="checkbox" checked={current.locked} onchange={(e) => save({ locked: e.currentTarget.checked })} />

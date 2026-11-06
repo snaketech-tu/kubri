@@ -21,10 +21,10 @@ pub struct ContextSettings {
     pub label: String,
     /// The accent color, as `#rrggbb`; empty for none.
     pub color: String,
-    /// Destructive actions ask to type the object's name, and a banner says where you are.
+    /// Destructive actions ask to type the object's name, and a red stripe and a badge say where you are.
     pub production: bool,
     /// Namespaces treated like a production context, in a context that is not one: typed names
-    /// before destructive actions, a banner, and no changes by AI agents. Each is a name or a
+    /// before destructive actions, a red marker, and no changes by AI agents. Each is a name or a
     /// pattern where `*` stands for any text, like `*-prod`.
     pub production_namespaces: Vec<String>,
     /// Namespaces treated the same by their labels: each entry a selector such as

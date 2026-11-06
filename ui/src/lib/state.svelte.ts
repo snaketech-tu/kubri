@@ -525,7 +525,7 @@ class AppState {
 	contextSettings = $derived(this.contextSettingsOf(this.cluster?.context));
 	/** A label such as "Production" for this context, set by the user; Kubri never guesses it from names. */
 	environment = $derived(this.contextSettings.label);
-	/** Marked as production by the user: a banner, and typed names before destructive actions. */
+	/** Marked as production by the user: a red stripe and badge, and typed names before destructive actions. */
 	production = $derived(this.contextSettings.production);
 	/** The labels of the namespaces of the connected context, where Kubri may list them. */
 	namespaceLabels = $state<Record<string, Record<string, string>>>({});
@@ -553,10 +553,12 @@ class AppState {
 		if (await this.setContextSettings(context, { ...settings, productionNamespaces: withMarked(settings, names, production) })) {
 			const name = names.join(', ');
 			const n = names.length;
-			if (n > 1) {
+			// Unmarked by name, but a pattern or label rule still marks it.
+			const still = production ? null : names.map((n) => this.productionRuleOf(n)).find(Boolean);
+			if (still) this.toast(t('Production by the rule {rule}. Change it in the context settings.', { rule: still.rule }));
+			else if (n > 1) {
 				this.toast(production ? plural(n, '{n} namespace is now production', '{n} namespaces are now production') : plural(n, '{n} namespace is no longer production', '{n} namespaces are no longer production'));
-			}
-			else this.toast(production ? t('{name} is now a production namespace', { name }) : t('{name} is no longer a production namespace', { name }));
+			} else this.toast(production ? t('{name} is now a production namespace', { name }) : t('{name} is no longer a production namespace', { name }));
 		}
 	}
 	/** k9s `readOnly`, read-only or locked in Kubri: nothing that changes the cluster is offered. */

@@ -1470,7 +1470,7 @@ impl Kubri {
     /// Replaces an object, as `kubectl edit` does. Fails with a conflict if it changed since
     /// `object` was read.
     pub async fn replace(&self, obj: &ObjectRef, object: Value) -> Result<Value> {
-        self.ensure_writable_in(obj.namespace.as_deref()).await?;
+        self.ensure_writable_in(obj.scope()).await?;
         let session = self.object_session(obj).await?;
         session.ensure_may("update", obj, "").await?;
         let api = session.api(&obj.resource, obj.namespace.as_deref())?;
@@ -1557,7 +1557,7 @@ impl Kubri {
 
     /// Applies a JSON merge patch, for example to change labels or annotations.
     pub async fn patch(&self, obj: &ObjectRef, patch: Value) -> Result<Value> {
-        self.ensure_writable_in(obj.namespace.as_deref()).await?;
+        self.ensure_writable_in(obj.scope()).await?;
         let session = self.object_session(obj).await?;
         session.ensure_may("patch", obj, "").await?;
         let api = session.api(&obj.resource, obj.namespace.as_deref())?;
@@ -1568,7 +1568,7 @@ impl Kubri {
     }
 
     pub async fn delete(&self, obj: &ObjectRef, options: &DeleteOptions) -> Result<()> {
-        self.ensure_writable_in(obj.namespace.as_deref()).await?;
+        self.ensure_writable_in(obj.scope()).await?;
         let session = self.object_session(obj).await?;
         session.ensure_may("delete", obj, "").await?;
         let api = session.api(&obj.resource, obj.namespace.as_deref())?;
@@ -1578,7 +1578,7 @@ impl Kubri {
 
     /// Sets the replica count through the `scale` subresource, so CRDs that support it work too.
     pub async fn scale(&self, obj: &ObjectRef, replicas: u32) -> Result<()> {
-        self.ensure_writable_in(obj.namespace.as_deref()).await?;
+        self.ensure_writable_in(obj.scope()).await?;
         let session = self.object_session(obj).await?;
         let info = session.info_for(&obj.resource)?;
         if !info.subresources.iter().any(|s| s == "scale") {
@@ -1595,7 +1595,7 @@ impl Kubri {
     /// Restarts the pods of a Deployment, StatefulSet or DaemonSet, like
     /// `kubectl rollout restart`.
     pub async fn restart(&self, obj: &ObjectRef) -> Result<()> {
-        self.ensure_writable_in(obj.namespace.as_deref()).await?;
+        self.ensure_writable_in(obj.scope()).await?;
         let session = self.object_session(obj).await?;
         let info = session.info_for(&obj.resource)?;
         if !matches!(info.kind.as_str(), "Deployment" | "StatefulSet" | "DaemonSet") {
@@ -1645,7 +1645,7 @@ impl Kubri {
     /// Runs a CronJob now: creates a Job from its template, like `kubectl create job
     /// --from=cronjob/…`. Returns the Job's name.
     pub async fn trigger_cronjob(&self, target: &ObjectRef) -> Result<String> {
-        self.ensure_writable_in(target.namespace.as_deref()).await?;
+        self.ensure_writable_in(target.scope()).await?;
         let session = self.object_session(target).await?;
         if session.info_for(&target.resource)?.kind != "CronJob" {
             return Err(Error::Unsupported("only CronJobs can be triggered".into()));
@@ -1674,7 +1674,7 @@ impl Kubri {
 
     /// Suspends a CronJob, so it starts no more Jobs, or resumes it.
     pub async fn suspend_cronjob(&self, target: &ObjectRef, suspend: bool) -> Result<()> {
-        self.ensure_writable_in(target.namespace.as_deref()).await?;
+        self.ensure_writable_in(target.scope()).await?;
         let session = self.object_session(target).await?;
         if session.info_for(&target.resource)?.kind != "CronJob" {
             return Err(Error::Unsupported("only CronJobs can be suspended".into()));
@@ -1731,7 +1731,7 @@ impl Kubri {
     /// Sets container images of a pod, Deployment, StatefulSet or DaemonSet, like
     /// `kubectl set image`.
     pub async fn set_images(&self, target: &ObjectRef, images: &[ContainerImage]) -> Result<()> {
-        self.ensure_writable_in(target.namespace.as_deref()).await?;
+        self.ensure_writable_in(target.scope()).await?;
         let session = self.object_session(target).await?;
         let info = session.info_for(&target.resource)?;
         if !workload::has_images(info) {
@@ -1751,7 +1751,7 @@ impl Kubri {
     /// `kubectl rollout undo --to-revision`. Returns the kind and name of what was rolled back,
     /// like `Deployment web`.
     pub async fn rollback(&self, target: &ObjectRef) -> Result<String> {
-        self.ensure_writable_in(target.namespace.as_deref()).await?;
+        self.ensure_writable_in(target.scope()).await?;
         let session = self.object_session(target).await?;
         let info = session.info_for(&target.resource)?;
         match (info.reference.group.as_str(), info.kind.as_str()) {
@@ -2221,7 +2221,7 @@ impl Kubri {
     /// Opens a shell in a pod's container, or attaches to its main process.
     pub async fn open_terminal(&self, target: &ObjectRef, options: TerminalOptions) -> Result<Terminal> {
         // A shell can change anything the container can.
-        self.ensure_writable_in(target.namespace.as_deref()).await?;
+        self.ensure_writable_in(target.scope()).await?;
         let session = self.object_session(target).await?;
         if !session.is_core(&target.resource, "Pod")? {
             return Err(Error::Unsupported("terminals open in pods".into()));
@@ -2789,7 +2789,10 @@ mod tests {
             snapshot: None,
             resumed: false,
         };
-        let resources = vec![resource("", "v1", "configmaps", "ConfigMap", true)];
+        let resources = vec![
+            resource("", "v1", "configmaps", "ConfigMap", true),
+            resource("", "v1", "namespaces", "Namespace", false),
+        ];
         *kubri.session.write().await = Some(Arc::new(Session::new(info, client, resources)));
         kubri
             .set_context_settings(
@@ -2823,6 +2826,22 @@ mod tests {
                 .to_string();
             assert!(err.contains("production namespace"), "{refused}: {err}");
         }
+        // Nor the Namespace object itself.
+        let namespace = ObjectRef {
+            resource: ResourceRef {
+                group: String::new(),
+                version: "v1".into(),
+                plural: "namespaces".into(),
+            },
+            namespace: None,
+            name: "checkout-prod".into(),
+            context: None,
+        };
+        let err = kubri
+            .delete(&namespace, &DeleteOptions::default())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("production namespace"), "{err}");
         kubri.patch(&config("web"), patch).await.unwrap();
         let sent = requests.lock().unwrap();
         let patched: Vec<_> = sent

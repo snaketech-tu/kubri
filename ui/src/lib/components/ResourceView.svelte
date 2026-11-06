@@ -1168,7 +1168,7 @@
 											title={byRule
 												? t('Production by the rule {rule}. Change it in the context settings.', { rule: rule!.rule })
 												: rule
-													? t('Production: a banner, typed names before deleting, and no changes by AI agents. Click to unmark.')
+													? t('Production: a red marker, typed names before deleting, and no changes by AI agents. Click to unmark.')
 													: t('Mark {name} as production', { name: row.name })}
 											onclick={(e) => {
 												e.stopPropagation();
