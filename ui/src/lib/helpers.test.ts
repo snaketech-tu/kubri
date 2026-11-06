@@ -391,5 +391,6 @@ describe('readable amounts', () => {
 		expect([cpuText(250), memoryText(512 * 1024 ** 2)]).toEqual(['250m', '512Mi']);
 		setKubectlUnits(false);
 		expect([cpuText(250), memoryText(512 * 1024 ** 2)]).toEqual(['0.25', '512 MiB']);
+		expect([cpuText(1000, true), cpuText(1030, true), cpuText(1500, true)]).toEqual(['1 core', '1 core', '1.5 cores']);
 	});
 });

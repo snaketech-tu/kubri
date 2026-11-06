@@ -71,7 +71,8 @@ export function bytes(amount: number): string {
 export function cpuText(millicores: number, unit = false): string {
 	if (units.kubectl) return cpu(millicores);
 	if (!unit) return cores(millicores);
-	return millicores === 1000 ? t('1 core') : t('{n} cores', { n: cores(millicores) });
+	const n = cores(millicores);
+	return n === '1' ? t('1 core') : t('{n} cores', { n });
 }
 
 /** Memory as the person chose to read it: 512 MiB, or like kubectl, 512Mi. */
