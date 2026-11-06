@@ -526,7 +526,8 @@
 		white-space: normal;
 		overflow-wrap: break-word;
 	}
-	td.state {
+	td.state,
+	tr.main td:first-child {
 		white-space: normal;
 	}
 	/* A narrow inspector shows the image on a line of its own, with the whole width to break into. */
@@ -536,13 +537,17 @@
 	tr.below {
 		display: none;
 	}
-	@container (max-width: 560px) {
+	@container (max-width: 640px) {
 		.image {
 			display: none;
 		}
 		tr.main td {
 			border-bottom: 0;
 			padding-bottom: 2px;
+		}
+		/* A long container name breaks anywhere, so the Logs and Shell buttons stay in view. */
+		tr.main td:first-child {
+			overflow-wrap: anywhere;
 		}
 		tr.below {
 			display: table-row;
