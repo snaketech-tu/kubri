@@ -1698,6 +1698,8 @@ const de: Record<string, string> = {
 	"The kubeconfig's current context": 'Dem aktuellen Kontext der kubeconfig',
 	'Context on start': 'Kontext beim Start',
 	nothing: 'nichts',
+	'The node uses {used} of the {allocatable} it can give to pods; its pods request {request}':
+		'Der Node nutzt {used} von {allocatable}, die er Pods geben kann; seine Pods fordern {request} an',
 	'Uses {used}, requests {request}, may use at most {limit}': 'Nutzt {used}, fordert {request} an, darf höchstens {limit} nutzen',
 	'Uses {used}, requests {request}. Not every container has a limit, so there is no maximum.':
 		'Nutzt {used}, fordert {request} an. Nicht jeder Container hat ein Limit, darum gibt es keine Obergrenze.',

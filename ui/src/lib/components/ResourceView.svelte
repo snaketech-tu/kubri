@@ -400,9 +400,9 @@
 		return value === null || value === undefined ? null : String(value);
 	}
 
-	/** CPU or memory, for the pod list's columns of what pods use, which also show their limit. */
+	/** CPU or memory, for the columns of what pods and nodes use, which also show their limit or allocatable. */
 	function usageColumn(column: DisplayColumn): Measure | null {
-		if (column.kind !== 'metric' || !isPods(resource)) return null;
+		if (column.kind !== 'metric' || !metricsKind) return null;
 		return column.label === 'CPU' ? 'cpu' : column.label === 'Mem' ? 'memory' : null;
 	}
 
