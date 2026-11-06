@@ -486,7 +486,7 @@ impl Kubri {
 
     /// Sets one container's memory limit in a workload's pod template.
     pub async fn set_memory_limit(&self, target: &ObjectRef, container: &str, memory: &str) -> Result<()> {
-        self.ensure_writable_in(target.namespace.as_deref()).await?;
+        self.ensure_writable_in(target.scope()).await?;
         let session = self.object_session(target).await?;
         session.ensure_may("patch", target, "").await?;
         let patch = memory_patch(container, memory)?;

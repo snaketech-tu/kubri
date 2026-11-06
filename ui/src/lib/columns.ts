@@ -85,9 +85,10 @@ export interface FitColumn {
  * How much a column matters when the list is narrow: the name and the state always stay, then
  * readiness, the namespace and what the pods use; ages, restarts and the rest go first.
  */
-export function columnRank(label: string, kind: 'namespace' | 'cell' | 'metric', isName = false): number {
+export function columnRank(label: string, kind: 'namespace' | 'cell' | 'metric' | 'production', isName = false): number {
 	if (isName) return Infinity;
 	if (kind === 'namespace') return 85;
+	if (kind === 'production') return 65;
 	const name = label.toLowerCase();
 	if (/^(status|phase|state|health)$/.test(name)) return Infinity;
 	if (kind === 'metric') return name === 'cpu' || name === 'mem' ? 70 : 40;

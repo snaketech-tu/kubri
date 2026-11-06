@@ -4,6 +4,16 @@ export interface SelectOption<T> {
 	label: string;
 	disabled?: boolean;
 	group?: string;
+	/** A switch at the end of the option that does something else than picking it; Shift+Enter too. */
+	toggle?: OptionToggle;
+}
+
+export interface OptionToggle {
+	/** What the switch turns on or off, for its tooltip and screen readers. */
+	label: string;
+	/** Shown also while the option is not pointed at, in the warning color. */
+	on: boolean;
+	run: () => void;
 }
 
 /** Turns plain values into options that show themselves. */

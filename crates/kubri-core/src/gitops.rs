@@ -249,7 +249,7 @@ pub(crate) fn behavior(tool: Tool, kind: &str, manager: &Value) -> (bool, bool) 
 impl Kubri {
     /// Runs a Flux or Argo CD action on the object `target`, the way their CLIs do.
     pub async fn gitops(&self, target: &ObjectRef, action: GitOpsAction) -> Result<()> {
-        self.ensure_writable_in(target.namespace.as_deref()).await?;
+        self.ensure_writable_in(target.scope()).await?;
         let session = self.object_session(target).await?;
         session.ensure_may("patch", target, "").await?;
         let kind = session.info_for(&target.resource)?.kind.clone();

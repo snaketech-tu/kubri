@@ -5,6 +5,7 @@
 	import { isTauri } from '@tauri-apps/api/core';
 	import { backend, type KindView } from '../api';
 	import { ZOOMS, skinWarning, stepZoom } from '../appearance';
+	import { setKubectlUnits, units } from '../units.svelte';
 	import { kubriUses, parseShortcut, shortcutLabel, skinTheme, type SkinTheme } from '../k9s';
 	import { forControl } from '../keys';
 	import { resolveColor, type Scheme } from '../skin';
@@ -441,6 +442,20 @@
 					compact
 				/>
 				<span class="muted small">{t('Kubri starts again in the language you pick.')}</span>
+			</div>
+			<div class="zoom">
+				<span>{t('CPU and memory')}</span>
+				<Select
+					value={units.kubectl ? 'kubectl' : 'plain'}
+					options={[
+						{ value: 'plain', label: t('In cores and MiB (0.25, 512 MiB)') },
+						{ value: 'kubectl', label: t('Like kubectl (250m, 512Mi)') }
+					]}
+					onchange={(value) => setKubectlUnits(value === 'kubectl')}
+					aria-label={t('CPU and memory')}
+					compact
+				/>
+				<span class="muted small">{t('How lists and the overview show amounts. The CSV export and k9s plugins always get them like kubectl.')}</span>
 			</div>
 		</div>
 

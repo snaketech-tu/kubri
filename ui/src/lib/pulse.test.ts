@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { KindPulse, RecentEvent } from './api';
-import { attentionItems, pushTrail, shortMessage, splitKinds, TRAIL_LENGTH } from './pulse';
+import { attentionItems, pushTrail, room, shortMessage, splitKinds, TRAIL_LENGTH } from './pulse';
 
 const pods = { group: '', version: 'v1', plural: 'pods' };
 
@@ -38,6 +38,20 @@ describe('attention items', () => {
 			['emails', 'critical'],
 			['inventory', 'warning']
 		]);
+	});
+
+	it('groups the pods of one workload and names the workload', () => {
+		const deployment = { kind: 'Deployment', object: { resource: { group: 'apps', version: 'v1', plural: 'deployments' }, namespace: 'payments', name: 'checkout' } };
+		const items = attentionItems([
+			{ ...event('checkout-1', 'BackOff', 1, 5), workload: deployment },
+			{ ...event('checkout-2', 'BackOff', 2, 4), workload: deployment },
+			{ ...event('checkout-2', 'Unhealthy', 3), workload: deployment },
+			event('ledger', 'FailedScheduling', 4)
+		]);
+		expect(items).toHaveLength(2);
+		expect(items[0]).toMatchObject({ kind: 'Deployment', name: 'checkout', namespace: 'payments', count: 10, reasons: ['BackOff', 'Unhealthy'] });
+		expect(items[0].objects.map((o) => o.name)).toEqual(['checkout-1', 'checkout-2']);
+		expect(items[1]).toMatchObject({ kind: 'Pod', name: 'ledger', objects: [{ name: 'ledger' }] });
 	});
 
 	it('keeps objects of the same name in different namespaces apart', () => {
@@ -84,6 +98,10 @@ describe('splitKinds', () => {
 		expect(problems.map((k) => k.kind)).toEqual(['B', 'D']);
 		expect(healthy.map((k) => k.kind)).toEqual(['A', 'C']);
 	});
+	it('leaves out what the cards above already count', () => {
+		const { problems } = splitKinds([kind('Pod', 1, 0, 2), kind('ReplicaSet', 0, 0, 1), kind('Node', 0, 1), kind('Deployment', 0, 0, 1)]);
+		expect(problems.map((k) => k.kind)).toEqual(['Deployment']);
+	});
 });
 
 describe('pushTrail', () => {
@@ -92,5 +110,24 @@ describe('pushTrail', () => {
 		for (let i = 0; i < 30; i++) trail = pushTrail(trail, i);
 		expect(trail).toHaveLength(TRAIL_LENGTH);
 		expect(trail?.[trail.length - 1]).toBe(29);
+	});
+});
+
+describe('room', () => {
+	it('counts only placed pods as reserved and flags pods that cannot fit', () => {
+		const r = room({ used: 300, requested: 65_010, waiting: 64_000, capacity: 4000 })!;
+		expect(r.reserved).toBe(1010);
+		expect(r.value).toBeCloseTo(0.2525);
+		expect(r.short).toBe(true);
+	});
+
+	it('does not flag waiting pods that fit into what is left', () => {
+		expect(room({ used: null, requested: 1100, waiting: 100, capacity: 4000 })!.short).toBe(false);
+	});
+
+	it('falls back to use without requests, and to nothing without capacity', () => {
+		expect(room({ used: 2000, requested: null, capacity: 4000 })).toMatchObject({ reserved: null, value: 0.5 });
+		expect(room({ used: 2000, requested: 1000, capacity: null })).toBeNull();
+		expect(room({ used: null, requested: null, capacity: 4000 })).toBeNull();
 	});
 });

@@ -1,10 +1,10 @@
 import type { Usage } from './api';
-import { cpu, memory } from './format';
+import { cpuText, memoryText } from './format';
 import { t } from './i18n';
 
 export type Measure = 'cpu' | 'memory';
 
-const show = (what: Measure, value: number) => (what === 'cpu' ? cpu(value) : memory(value));
+const show = (what: Measure, value: number, unit = false) => (what === 'cpu' ? cpuText(value, unit) : memoryText(value));
 
 /** The most a pod may use (its limit), or what a node can give to pods (its allocatable). */
 function ceiling(usage: Usage | undefined, what: Measure): number | undefined {
@@ -29,17 +29,17 @@ export function limitsHint(usage: Usage | undefined, what: Measure): string | nu
 	if (!usage) return null;
 	const request = usage.requests?.[what];
 	const limit = usage.limits?.[what];
-	const used = show(what, usage[what]);
-	const requested = request ? show(what, request) : t('nothing');
+	const used = show(what, usage[what], true);
+	const requested = request ? show(what, request, true) : t('nothing');
 	const allocatable = usage.allocatable?.[what];
 	if (allocatable) {
 		return t('The node uses {used} of the {allocatable} it can give to pods; its pods request {request}', {
 			used,
-			allocatable: show(what, allocatable),
+			allocatable: show(what, allocatable, true),
 			request: requested
 		});
 	}
-	if (limit) return t('Uses {used}, requests {request}, may use at most {limit}', { used, request: requested, limit: show(what, limit) });
+	if (limit) return t('Uses {used}, requests {request}, may use at most {limit}', { used, request: requested, limit: show(what, limit, true) });
 	return t('Uses {used}, requests {request}. Not every container has a limit, so there is no maximum.', { used, request: requested });
 }
 
@@ -61,9 +61,9 @@ export function reading(usage: Usage, what: Measure): Reading {
 	const limit = usage.limits?.[what];
 	const of = limit ?? request;
 	return {
-		used: show(what, usage[what]),
-		request: request ? show(what, request) : null,
-		limit: limit ? show(what, limit) : null,
+		used: show(what, usage[what], true),
+		request: request ? show(what, request, true) : null,
+		limit: limit ? show(what, limit, true) : null,
 		share: of ? Math.min(1, usage[what] / of) : null,
 		against: limit ? 'limit' : request ? 'request' : null,
 		strained: !!limit && usage[what] >= limit * 0.9

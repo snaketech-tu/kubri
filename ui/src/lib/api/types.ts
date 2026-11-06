@@ -78,10 +78,15 @@ export interface ContextSettings {
 	label: string;
 	/** `#rrggbb`, or empty. */
 	color: string;
-	/** Destructive actions ask to type the name; a banner says where you are. */
+	/** Destructive actions ask to type the name; a red stripe and a badge say where you are. */
 	production: boolean;
-	/** Namespaces treated like a production context: typed names, a banner, no AI agent changes. */
+	/**
+	 * Namespaces treated like a production context: typed names, a red marker, no AI agent changes.
+	 * Names, or patterns where `*` stands for any text, like `*-prod`.
+	 */
 	productionNamespaces: string[];
+	/** Namespaces treated the same by their labels, each a rule like `env=production`. */
+	productionLabels: string[];
 	readOnly: boolean;
 	/** Starts read-only; unlocking lasts 15 minutes. */
 	locked: boolean;
@@ -1080,6 +1085,8 @@ export interface FleetCluster {
 export interface RecentEvent extends EventInfo {
 	objectKind: string;
 	object: ObjectRef;
+	/** The workload a pod or ReplicaSet belongs to, such as its Deployment. */
+	workload?: { kind: string; object: ObjectRef };
 }
 
 export interface Utilization {
@@ -1087,6 +1094,8 @@ export interface Utilization {
 	used: number | null;
 	/** Requested by the pods that are not finished. */
 	requested: number | null;
+	/** The part of `requested` that pods no node has taken yet ask for. Missing from old recordings. */
+	waiting?: number | null;
 	/** Allocatable on all nodes. */
 	capacity: number | null;
 }
@@ -1101,6 +1110,17 @@ export interface Pulse {
 	memory: Utilization;
 	/** cert-manager Certificates that expire soon or are not ready, soonest first. */
 	certificates: CertificateAlert[];
+	/** Pods no node has taken yet, the ones asking for the most CPU first. Missing from old recordings. */
+	waiting?: WaitingPod[];
+}
+
+/** A pod that waits for a node, and what it asks for. */
+export interface WaitingPod {
+	object: ObjectRef;
+	/** In millicores. */
+	cpu: number;
+	/** In bytes. */
+	memory: number;
 }
 
 export type SizeReason = 'nearLimit' | 'underRequested' | 'overRequested' | 'noRequest';

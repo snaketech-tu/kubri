@@ -6,11 +6,14 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { canDelete, canRestart, canScale, copyLines, saveFile } from '../actions';
 	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
-	import { age, cpu, memory, relative } from '../format';
+	import { age, cpu, cpuText, memory, memoryText, relative } from '../format';
+	import { units } from '../units.svelte';
 	import { limitShare, limitSuffix, limitsHint, type Measure } from '../limits';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, refusedAction, type ActionOptions, type Subject } from '../objects';
 	import { isNamespaces, isNodes, isPods, isServices } from '../pods';
+	import { suggestions } from '../production';
+	import ProductionSuggestions from './ProductionSuggestions.svelte';
 	import { ALL_NAMESPACES, app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
 	import { filterRows, hasHealth, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
@@ -127,9 +130,9 @@
 	const POD_METRICS: MetricColumn[] = [
 		CPU,
 		MEM,
-		{ label: 'CPU / request', index: -4, wide: false, value: (u) => percent(u.cpu, u.requests?.cpu), format: 'percent', threshold: 'cpu' },
+		{ label: 'CPU / request', index: -4, wide: true, value: (u) => percent(u.cpu, u.requests?.cpu), format: 'percent', threshold: 'cpu' },
 		{ label: 'CPU / limit', index: -5, wide: true, value: (u) => percent(u.cpu, u.limits?.cpu), format: 'percent', threshold: 'cpu' },
-		{ label: 'Memory / request', index: -6, wide: false, value: (u) => percent(u.memory, u.requests?.memory), format: 'percent', threshold: 'memory' },
+		{ label: 'Memory / request', index: -6, wide: true, value: (u) => percent(u.memory, u.requests?.memory), format: 'percent', threshold: 'memory' },
 		{ label: 'Memory / limit', index: -7, wide: true, value: (u) => percent(u.memory, u.limits?.memory), format: 'percent', threshold: 'memory' },
 		// What the pod spec sets, summed over the containers; a limit only when every container has one.
 		{ label: 'CPU request', index: -10, wide: true, value: (u) => u.requests?.cpu, format: 'cpu' },
@@ -139,12 +142,13 @@
 	];
 	const NODE_METRICS: MetricColumn[] = [
 		CPU,
-		{ label: '%CPU', index: -8, wide: false, value: (u) => percent(u.cpu, u.allocatable?.cpu), format: 'percent', threshold: 'cpu' },
+		{ label: '%CPU', index: -8, wide: true, value: (u) => percent(u.cpu, u.allocatable?.cpu), format: 'percent', threshold: 'cpu' },
 		MEM,
-		{ label: '%Mem', index: -9, wide: false, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' },
-		// The room left for new pods: what the node gives to pods minus what its pods request.
-		{ label: 'CPU free', index: -14, wide: false, value: (u) => free(u.allocatable?.cpu, u.requests?.cpu), format: 'cpu' },
-		{ label: 'Mem free', index: -15, wide: false, value: (u) => free(u.allocatable?.memory, u.requests?.memory), format: 'memory' }
+		{ label: '%Mem', index: -9, wide: true, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' },
+		// The room left for new pods: what the node gives to pods minus what its pods request. Not
+		// "free": that would read as not used, and these count requests, used or not.
+		{ label: 'CPU left', index: -14, wide: false, value: (u) => free(u.allocatable?.cpu, u.requests?.cpu), format: 'cpu' },
+		{ label: 'Mem left', index: -15, wide: false, value: (u) => free(u.allocatable?.memory, u.requests?.memory), format: 'memory' }
 	];
 
 	// What the pods of a namespace use and request, and how many of them are healthy.
@@ -165,7 +169,37 @@
 		| { kind: 'namespace'; label: string; index: -1 }
 		| { kind: 'cell'; label: string; index: number; age: boolean; name: boolean; custom: boolean }
 		| ({ kind: 'metric' } & MetricColumn)
+		| { kind: 'production'; label: string; index: typeof PRODUCTION }
 	) & { wideOnly: boolean };
+
+	/** The index the Production column of namespaces sorts by. */
+	const PRODUCTION = -20;
+	/** Namespaces show which ones get production's care, in a context that is not production as a whole. */
+	const marksProduction = $derived(isNamespaces(resource) && !!app.cluster && !app.cluster.snapshot && !app.production);
+
+	function readLocal(key: string): string | null {
+		try {
+			return localStorage.getItem(key);
+		} catch {
+			return null;
+		}
+	}
+	function writeLocal(key: string, value: string) {
+		try {
+			localStorage.setItem(key, value);
+		} catch {
+			// Asks again after a reload.
+		}
+	}
+
+	/** Namespaces that look like production and are not marked, until the user says not to ask again. */
+	let hintDismissed = $state(false);
+	$effect(() => {
+		hintDismissed = !!app.cluster && readLocal(`kubri.productionHint.${app.cluster.context}`) === 'off';
+	});
+	const productionHints = $derived(
+		marksProduction && !hintDismissed ? suggestions(app.contextSettings, table.rows.map((r) => ({ name: r.name, labels: r.labels }))) : []
+	);
 
 	/** Every column the list can show, in their own order, before the settings and the wide view. */
 	const allColumns = $derived.by(() => {
@@ -179,6 +213,7 @@
 			}
 			// A custom column comes back named by its path.
 			const custom = c.format === 'jsonpath' ? columnSettings.custom.find((x) => x.path === c.name) : undefined;
+			if (isAge && marksProduction) out.push({ kind: 'production', label: 'Production', index: PRODUCTION, wideOnly: false });
 			out.push({
 				kind: 'cell',
 				label: isAge ? 'Age' : (custom?.name ?? c.name),
@@ -203,7 +238,8 @@
 	const isRunning = (r: Row) => statusIndex !== -1 && r.cells[statusIndex] === 'Running';
 	/** A namespace with failing pods needs a look, though it is Active. */
 	const troubled = (r: Row) => isNamespaces(resource) && !!metrics.get(r.namespace, r.name)?.pods?.failed;
-	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r) || troubled(r)));
+	// Pods at their CPU or memory limit need a look too, though they run.
+	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r) || strains(r).length > 0 || troubled(r)));
 	/** Kinds with a state, readiness or health; Secrets or Ingresses have nothing to need attention. */
 	const healthy = $derived(hasHealth(table.columns, resource.plural));
 	const running = $derived(isPods(resource) ? owned.filter(isRunning) : []);
@@ -258,6 +294,11 @@
 
 	const rows = $derived.by(() => {
 		const filtered = filterRows(scoped, filter);
+		if (sort.column === PRODUCTION && marksProduction) {
+			const marked = (r: Row) => (app.productionRuleOf(r.name, r.labels) ? 0 : 1);
+			const sorted = [...filtered].sort((a, b) => marked(a) - marked(b) || a.name.localeCompare(b.name));
+			return sort.descending ? sorted.reverse() : sorted;
+		}
 		const metric = columns.find((c) => c.kind === 'metric' && c.index === sort.column);
 		if (metric?.kind === 'metric') {
 			const value = (r: Row) => {
@@ -338,7 +379,7 @@
 			resource: refOf(resource),
 			target: current ? target(current) : null,
 			release: null,
-			columns: current ? columns.map((c) => ({ name: c.label, value: cellText(current, c) })) : [],
+			columns: current ? columns.map((c) => ({ name: c.label, value: cellText(current, c, true) })) : [],
 			filter
 		});
 		app.focus = focus;
@@ -415,8 +456,10 @@
 
 	/** Sorts by a metrics-server column, such as `CPU` or `%Mem/R`, when the list shows it. */
 	function sortByMetric(label: string) {
-		const column = columns.find((c) => c.kind === 'metric' && c.label === label);
+		const column = allColumns.find((c) => c.kind === 'metric' && c.label === label);
 		if (!column) return false;
+		// A column only the wide view shows, like the share of a request.
+		if (column.wideOnly && !columns.includes(column)) wide = true;
 		sortBy(column.index, true);
 		return true;
 	}
@@ -446,24 +489,30 @@
 		return u ? column.value(u) : null;
 	}
 
-	function cellText(row: Row, column: DisplayColumn): string {
+	/** A cell as the list shows it; `raw` keeps amounts as kubectl writes them, for the CSV. */
+	function cellText(row: Row, column: DisplayColumn, raw = false): string {
 		switch (column.kind) {
 			case 'namespace':
 				return row.namespace ?? '';
+			case 'production': {
+				const rule = app.productionRuleOf(row.name, row.labels);
+				return !rule ? '' : rule.by === 'name' ? t('Yes') : rule.rule;
+			}
 			case 'metric': {
 				if (column.format === 'pods') return podsText(row);
 				const value = metricValue(row, column);
 				if (value === null || value === undefined) return '—';
-				return column.format === 'cpu' ? cpu(value) : column.format === 'memory' ? memory(value) : `${value}%`;
+				if (column.format === 'cpu') return raw ? cpu(value) : cpuText(value);
+				return column.format === 'memory' ? (raw ? memory(value) : memoryText(value)) : `${value}%`;
 			}
 			case 'cell': {
 				if (column.age) return age(row.created, app.snapshot?.taken ?? now);
 				const value = row.cells[column.index];
 				if (value === null || value === undefined) return '';
 				if (column.label === 'Cluster-IP' && value === 'None') return 'Headless';
-				if (column.label === 'Restarts' && typeof value === 'string') return restarts(value);
+				if (column.label === 'Restarts' && typeof value === 'string' && !raw) return restarts(value);
 				// A finished pod is not "0 of 1 ready": readiness no longer applies to it.
-				if (/^ready$/i.test(column.label) && isPods(resource) && /^(Completed|Succeeded)$/.test(cell(row, 'Status') ?? '')) return '—';
+				if (!raw && /^ready$/i.test(column.label) && isPods(resource) && /^(Completed|Succeeded)$/.test(cell(row, 'Status') ?? '')) return '—';
 				if (column.label === 'Schedule' && resource.kind === 'CronJob') return describeCron(String(value));
 				// Yes and No read better than True and False for switches such as Suspend. Condition
 				// columns (Ready True) keep the word Kubernetes uses, and their color.
@@ -505,11 +554,41 @@
 		return null;
 	}
 
+	/**
+	 * What a pod's status leaves out: that it runs at its CPU limit and is throttled, or close to
+	 * its memory limit and may be stopped. Shown as a word after the status.
+	 */
+	function strains(row: Row): { label: string; hint: string }[] {
+		if (!isPods(resource)) return [];
+		const out: { label: string; hint: string }[] = [];
+		const cpuStrain = pressure(row, 'cpu');
+		if (cpuStrain?.tone === 'bad') out.push({ label: t('throttled'), hint: cpuStrain.hint });
+		const memoryStrain = pressure(row, 'memory');
+		if (memoryStrain?.tone === 'bad') out.push({ label: t('near memory limit'), hint: memoryStrain.hint });
+		return out;
+	}
+
+	/** What a column's title means, where its name alone does not say. */
+	function headerHint(column: DisplayColumn): string | undefined {
+		if (column.kind !== 'metric') return undefined;
+		if (column.label === 'CPU left' || column.label === 'Mem left') {
+			return t('What the node can still give to new pods: what it has for pods, minus what its pods request, used or not');
+		}
+		if (column.format === 'cpu' && !units.kubectl) return t('In cores');
+		return undefined;
+	}
+
 	/** Colors status cells, and percentages by the k9s thresholds. */
 	function tone(row: Row, column: DisplayColumn, text: string): Tone {
 		// A pod that finished is not "0 of 1 ready"; that is how it ends.
 		if (column.kind === 'cell' && /^ready$/i.test(column.label) && /^(Completed|Succeeded)$/.test(cell(row, 'Status') ?? '')) {
 			return '';
+		}
+		// A pod's readiness takes the color of its status, so a crashing pod is red in both.
+		if (column.kind === 'cell' && /^ready$/i.test(column.label) && isPods(resource)) {
+			const ready = cellTone(column.label, text);
+			if (ready === 'ok' || ready === '') return ready;
+			return cellTone('Status', cell(row, 'Status') ?? '') === 'bad' ? 'bad' : 'warn';
 		}
 		if (column.kind === 'cell') return cellTone(column.label, text);
 		if (column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')) {
@@ -569,7 +648,7 @@
 
 	function exportCsv() {
 		const header = columns.map((c) => c.label);
-		const lines = rows.map((r) => columns.map((c) => cellText(r, c)));
+		const lines = rows.map((r) => columns.map((c) => cellText(r, c, true)));
 		const stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15);
 		saveFile(`${resource.plural}${ns ? `-${ns}` : ''}-${stamp}.csv`, toCsv(header, lines));
 	}
@@ -630,6 +709,18 @@
 			{ group: 'Marked', label: t('Mark all'), keys: ['ctrl+a'], primary: 0, run: () => rows.forEach((r) => selection.add(r.key)) },
 			{ group: 'Marked', label: t('Unmark all'), keys: ['ctrl+\\'], primary: 0, run: () => selection.clear() }
 		);
+		if (marksProduction) {
+			// A setting in Kubri, so also when changes are off. Names a rule marks stay as they are.
+			const rules = chosen.map((r) => app.productionRuleOf(r.name, r.labels));
+			const unmarked = chosen.filter((_, i) => !rules[i]).map((r) => r.name);
+			const named = chosen.filter((_, i) => rules[i]?.by === 'name').map((r) => r.name);
+			if (unmarked.length) {
+				out.push({ group: 'Change', label: t('Mark {n} as production', { n: unmarked.length }), keys: [], primary: 0, run: () => void app.setProductionNamespace(unmarked, true) });
+			}
+			if (named.length) {
+				out.push({ group: 'Change', label: t('Unmark {n} as production', { n: named.length }), keys: [], primary: 0, run: () => void app.setProductionNamespace(named, false) });
+			}
+		}
 		if (writable && canScale(resource) && !isPods(resource)) {
 			out.push({
 				group: 'Change',
@@ -983,6 +1074,18 @@
 		</div>
 	{/if}
 
+	{#if productionHints.length && app.cluster}
+		{@const context = app.cluster.context}
+		<ProductionSuggestions
+			{context}
+			suggestions={productionHints}
+			ondismiss={() => {
+				hintDismissed = true;
+				writeLocal(`kubri.productionHint.${context}`, 'off');
+			}}
+		/>
+	{/if}
+
 	<div class="card">
 		<div class="toolbar">
 			<label class="search">
@@ -1048,7 +1151,7 @@
 								class:sorted={sort.column === column.index}
 								aria-sort={sort.column === column.index ? (sort.descending ? 'descending' : 'ascending') : 'none'}
 							>
-								<button class="sort" onclick={() => sortBy(column.index)}>
+								<button class="sort" onclick={() => sortBy(column.index)} title={headerHint(column)}>
 									{shownLabel(column)}
 									<span class="arrow" aria-hidden="true">
 										{sort.column === column.index ? (sort.descending ? '↓' : '↑') : '↕'}
@@ -1120,7 +1223,34 @@
 									class:numeric={column.kind === 'metric'}
 									class:limited={measure && limitSuffix(usage, measure)}
 								>
-									{#if column.kind === 'cell' && column.name}
+									{#if column.kind === 'production'}
+										{@const rule = app.productionRuleOf(row.name, row.labels)}
+										{@const byRule = !!rule && rule.by !== 'name'}
+										<button
+											class="production"
+											class:on={!!rule}
+											class:ruled={byRule}
+											aria-pressed={!!rule}
+											title={byRule
+												? t('Production by the rule {rule}. Change it in the context settings.', { rule: rule!.rule })
+												: rule
+													? t('Production: a red marker, typed names before deleting, and no changes by AI agents. Click to unmark.')
+													: t('Mark {name} as production', { name: row.name })}
+											onclick={(e) => {
+												e.stopPropagation();
+												if (byRule) {
+													app.toast(t('Production by the rule {rule}. Change it in the context settings.', { rule: rule!.rule }));
+													return;
+												}
+												const names = selection.has(row.key) && selection.size > 1 ? chosenRows().map((r) => r.name) : [row.name];
+												void app.setProductionNamespace(names, !rule);
+											}}
+											ondblclick={(e) => e.stopPropagation()}
+										>
+											<Icon name="shield" size={13} />
+											{#if rule}<span>{rule.by === 'name' ? t('Production') : rule.rule}</span>{:else}<span class="mark">{t('Mark')}</span>{/if}
+										</button>
+									{:else if column.kind === 'cell' && column.name}
 										<button
 											class="open"
 											title={t('Describe {name}', { name: row.name })}
@@ -1130,7 +1260,11 @@
 											}}>{text}</button
 										>
 									{:else if icon}
-										<span class="status"><Icon name={icon} size={15} />{text}</span>
+										<span class="status"
+											><Icon name={icon} size={15} />{text}{#each strains(row) as strain (strain.label)}<span class="strain" title={strain.hint}
+													>{strain.label}</span
+												>{/each}</span
+										>
 									{:else if column.kind === 'cell' && column.label === 'Message'}
 										<span class="clamp" title={text}>{text}</span>
 									{:else if column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')}
@@ -1213,6 +1347,48 @@
 </section>
 
 <style>
+	button.production {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		max-width: 100%;
+		padding: 2px 9px 2px 7px;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		background: none;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 500;
+		white-space: nowrap;
+	}
+	button.production span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	/* Unmarked rows show only the shield until the row is pointed at, so the column stays calm. */
+	button.production .mark {
+		opacity: 0;
+	}
+	tr:hover button.production .mark,
+	tr.cursor button.production .mark,
+	button.production:focus-visible .mark {
+		opacity: 1;
+	}
+	button.production:not(.on):hover {
+		border-color: var(--border);
+		color: var(--text);
+	}
+	button.production.on {
+		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
+		color: var(--bad);
+	}
+	button.production.ruled {
+		background: none;
+		border-color: color-mix(in srgb, var(--bad) 30%, var(--border));
+	}
+	button.production.on:not(.ruled):hover {
+		border-color: color-mix(in srgb, var(--bad) 40%, transparent);
+	}
 	.choose {
 		font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 		font-size: 13px;
@@ -1680,6 +1856,15 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
+	}
+	.strain {
+		padding: 0 6px;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--bad) 14%, transparent);
+		color: var(--bad);
+		font-size: 11.5px;
+		font-weight: 600;
+		white-space: nowrap;
 	}
 	.muted {
 		color: var(--text-muted);

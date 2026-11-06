@@ -2,6 +2,7 @@
 	import { app } from '../state.svelte';
 	import { t } from '../i18n';
 	import Icon from './Icon.svelte';
+	import ProductionBadge from './ProductionBadge.svelte';
 	import { relative } from '../format';
 	import { switcherOrder } from '../places';
 	import { CHECK_AT_MOST, reach, STALE_MS } from '../reach.svelte';
@@ -78,6 +79,7 @@
 				{app.connecting ? app.contextName(app.connecting) : app.cluster ? app.contextName(app.cluster.context) : t('No context')}
 			</span>
 		</span>
+		{#if app.cluster && app.production && !app.connecting}<ProductionBadge what="context" />{/if}
 		<span class="chevron"><Icon name="chevron" size={16} /></span>
 	</button>
 

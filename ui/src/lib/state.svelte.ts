@@ -57,6 +57,7 @@ import { skinTheme, type Focus, type PluginView } from './k9s';
 import type { Menu, MenuAction } from './menu';
 import { applyScheme, applyTheme, resolveColor, storeSkin, storedScheme, storedSkin, type Scheme } from './skin';
 import { xrayResources } from './xray';
+import { productionRule, withMarked, type ProductionRule } from './production';
 import type { ToolId } from './nav';
 
 export const ALL_NAMESPACES = '';
@@ -131,6 +132,7 @@ export const NO_CONTEXT_SETTINGS: ContextSettings = {
 	color: '',
 	production: false,
 	productionNamespaces: [],
+	productionLabels: [],
 	readOnly: false,
 	locked: false,
 	namespace: '',
@@ -523,27 +525,40 @@ class AppState {
 	contextSettings = $derived(this.contextSettingsOf(this.cluster?.context));
 	/** A label such as "Production" for this context, set by the user; Kubri never guesses it from names. */
 	environment = $derived(this.contextSettings.label);
-	/** Marked as production by the user: a banner, and typed names before destructive actions. */
+	/** Marked as production by the user: a red stripe and badge, and typed names before destructive actions. */
 	production = $derived(this.contextSettings.production);
+	/** The labels of the namespaces of the connected context, where Kubri may list them. */
+	namespaceLabels = $state<Record<string, Record<string, string>>>({});
 	/** The namespace picked is marked as production, in a context that is not. */
-	productionNamespace = $derived(
-		!this.contextSettings.production && !!this.namespace && (this.contextSettings.productionNamespaces ?? []).includes(this.namespace)
-	);
+	productionNamespace = $derived(!this.contextSettings.production && !!this.namespace && !!this.productionRuleOf(this.namespace));
+
+	/** What marks `namespace` of the connected context as production, in a context that is not; null if nothing does. */
+	productionRuleOf(namespace: string | null | undefined, labels?: Record<string, string>): ProductionRule | null {
+		if (!namespace || this.contextSettings.production) return null;
+		return productionRule(this.contextSettings, namespace, labels ?? this.namespaceLabels[namespace]);
+	}
 
 	/** Whether changes in `namespace` get production's care: the context, or the namespace, is marked. */
 	productionIn(namespace: string | null | undefined): boolean {
-		return this.production || (!!namespace && (this.contextSettings.productionNamespaces ?? []).includes(namespace));
+		return this.production || !!this.productionRuleOf(namespace);
 	}
 
-	/** Marks a namespace of the connected context as production, or not. */
-	async setProductionNamespace(namespace: string, production: boolean) {
+	/** Marks namespaces of the connected context as production one by one, or no longer. */
+	async setProductionNamespace(namespaces: string | string[], production: boolean) {
 		const context = this.cluster?.context;
-		if (!context) return;
+		// A name a pattern or label rule already marks needs no entry of its own.
+		const names = (typeof namespaces === 'string' ? [namespaces] : namespaces).filter((n) => !production || !this.productionRuleOf(n));
+		if (!context || !names.length) return;
 		const settings = this.contextSettingsOf(context);
-		const list = (settings.productionNamespaces ?? []).filter((n) => n !== namespace);
-		if (production) list.push(namespace);
-		if (await this.setContextSettings(context, { ...settings, productionNamespaces: list.sort() })) {
-			this.toast(production ? t('{name} is now a production namespace', { name: namespace }) : t('{name} is no longer a production namespace', { name: namespace }));
+		if (await this.setContextSettings(context, { ...settings, productionNamespaces: withMarked(settings, names, production) })) {
+			const name = names.join(', ');
+			const n = names.length;
+			// Unmarked by name, but a pattern or label rule still marks it.
+			const still = production ? null : names.map((n) => this.productionRuleOf(n)).find(Boolean);
+			if (still) this.toast(t('Production by the rule {rule}. Change it in the context settings.', { rule: still.rule }));
+			else if (n > 1) {
+				this.toast(production ? plural(n, '{n} namespace is now production', '{n} namespaces are now production') : plural(n, '{n} namespace is no longer production', '{n} namespaces are no longer production'));
+			} else this.toast(production ? t('{name} is now a production namespace', { name }) : t('{name} is no longer a production namespace', { name }));
 		}
 	}
 	/** k9s `readOnly`, read-only or locked in Kubri: nothing that changes the cluster is offered. */
