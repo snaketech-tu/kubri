@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ContextInfo, ResourceInfo, Row } from './api';
 import { matchResources, namesAction, suggest } from './commands';
-import { age, cpu, isNotFound, memory, workloadPrefix } from './format';
+import { age, cpu, imageParts, isNotFound, memory, workloadPrefix } from './format';
 import { cellTone } from './status';
 import { filterRows, hasHealth, isFaulty, sortRows, toCsv } from './table';
 
@@ -360,5 +360,17 @@ describe('hasHealth', () => {
 	it('is false for kinds with nothing to go wrong in their rows', () => {
 		expect(hasHealth(columns('Name', 'Type', 'Data', 'Age'), 'secrets')).toBe(false);
 		expect(hasHealth(columns('Name', 'Class', 'Hosts', 'Address', 'Ports', 'Age'), 'ingresses')).toBe(false);
+	});
+});
+
+describe('imageParts', () => {
+	it('breaks an image after its separators', () => {
+		expect(imageParts('ghcr.io/org/api:v2.1')).toEqual(['ghcr.io/', 'org/', 'api:', 'v2.1']);
+		expect(imageParts('busybox')).toEqual(['busybox']);
+	});
+
+	it('cuts a digest short', () => {
+		const digest = '4f2a9c1be07d5e8a3c6b1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c';
+		expect(imageParts(`nginx:1.27@sha256:${digest}`).join('')).toBe('nginx:1.27@sha256:4f2a9c1be07d…');
 	});
 });

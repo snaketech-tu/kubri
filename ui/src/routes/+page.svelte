@@ -1172,7 +1172,7 @@
 	}
 	/* A dragged width never leaves the list less than 320px. */
 	main.with-details {
-		grid-template-columns: minmax(0, 1fr) min(var(--panel-width, clamp(360px, 34vw, 540px)), calc(100% - 320px));
+		grid-template-columns: minmax(0, 1fr) min(var(--panel-width, clamp(420px, 42vw, 760px)), calc(100% - 320px));
 	}
 	/* The list stays mounted so its shortcuts keep working. */
 	main.wide {

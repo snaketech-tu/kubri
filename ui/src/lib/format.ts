@@ -59,3 +59,12 @@ export function workloadPrefix(podName: string): string | null {
 export function isNotFound(message: string): boolean {
 	return /"[^"]*" not found/i.test(message);
 }
+
+/**
+ * A container image in pieces that may break onto the next line after each `/`, `:` or `@`, with
+ * a digest cut to its first 12 characters. The full image belongs in a tooltip.
+ */
+export function imageParts(image: string): string[] {
+	const short = image.replace(/(@sha256:[0-9a-f]{12})[0-9a-f]{20,}$/, '$1…');
+	return short.split(/(?<=[/:@])/);
+}
