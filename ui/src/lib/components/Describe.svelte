@@ -2,7 +2,7 @@
 	import { plural, t } from '../i18n';
 	import { copyLines } from '../actions';
 	import type { EventInfo, KubeObject, Reference } from '../api';
-	import { age } from '../format';
+	import { age, imageParts } from '../format';
 	import { secretValue } from '../pods';
 	import { relatedOf } from '../references';
 	import { rulesOf } from '../rbac';
@@ -264,28 +264,34 @@
 
 	{#if containers.length}
 		<h3>{t('Containers')}</h3>
-		<table>
-			<thead><tr><th>{t('Name')}</th><th>{t('Image')}</th><th>{t('Ready')}</th><th>{t('Restarts')}</th><th>{t('State')}</th><th></th></tr></thead>
-			<tbody>
-				{#each containers as c (c.name)}
-					<tr>
-						<td class="mono">{c.name}{#if c.init}<span class="tag">{t('init')}</span>{/if}</td>
-						<td class="mono wrap">{c.image}</td>
-						<td class={c.ready ? 'ok' : 'warn'}>{c.ready ? t('yes') : t('no')}</td>
-						<td class={c.restarts > 0 ? 'warn' : ''}>{c.restarts}</td>
-						<td>{c.state}</td>
-						<td class="actions">
-							{#if oncontainer}
-								<button onclick={() => oncontainer(c.name, 'logs')} title={t('Logs of {name}', { name: c.name })}>{t('Logs')}</button>
-								{#if shell && !c.init}
-									<button onclick={() => oncontainer(c.name, 'shell')} title={t('Shell in {name}', { name: c.name })}>{t('Shell')}</button>
+		{#snippet image(name: string)}{#each imageParts(name) as part, i (i)}{part}<wbr />{/each}{/snippet}
+		<div class="containers">
+			<table>
+				<thead><tr><th>{t('Name')}</th><th class="image">{t('Image')}</th><th>{t('Ready')}</th><th>{t('Restarts')}</th><th>{t('State')}</th><th></th></tr></thead>
+				<tbody>
+					{#each containers as c (c.name)}
+						<tr class="main">
+							<td class="mono">{c.name}{#if c.init}<span class="tag">{t('init')}</span>{/if}</td>
+							<td class="mono image" title={c.image}>{@render image(c.image)}</td>
+							<td class={c.ready ? 'ok' : 'warn'}>{c.ready ? t('yes') : t('no')}</td>
+							<td class={c.restarts > 0 ? 'warn' : ''}>{c.restarts}</td>
+							<td class="state">{c.state}</td>
+							<td class="actions">
+								{#if oncontainer}
+									<button onclick={() => oncontainer(c.name, 'logs')} title={t('Logs of {name}', { name: c.name })}>{t('Logs')}</button>
+									{#if shell && !c.init}
+										<button onclick={() => oncontainer(c.name, 'shell')} title={t('Shell in {name}', { name: c.name })}>{t('Shell')}</button>
+									{/if}
 								{/if}
-							{/if}
-						</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
+							</td>
+						</tr>
+						<tr class="below">
+							<td class="mono" colspan="6" title={c.image}>{@render image(c.image)}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
 	{/if}
 
 	{#if object.kind === 'Secret'}
@@ -512,6 +518,46 @@
 	td.wrap {
 		white-space: normal;
 		word-break: break-word;
+	}
+	/* The image takes the room the other columns leave, and breaks after / : and @. */
+	td.image {
+		width: 100%;
+		min-width: 14ch;
+		white-space: normal;
+		overflow-wrap: break-word;
+	}
+	td.state,
+	tr.main td:first-child {
+		white-space: normal;
+	}
+	/* A narrow inspector shows the image on a line of its own, with the whole width to break into. */
+	.containers {
+		container-type: inline-size;
+	}
+	tr.below {
+		display: none;
+	}
+	@container (max-width: 640px) {
+		.image {
+			display: none;
+		}
+		tr.main td {
+			border-bottom: 0;
+			padding-bottom: 2px;
+		}
+		/* A long container name breaks anywhere, so the Logs and Shell buttons stay in view. */
+		tr.main td:first-child {
+			overflow-wrap: anywhere;
+		}
+		tr.below {
+			display: table-row;
+		}
+		tr.below td {
+			padding-top: 0;
+			white-space: normal;
+			overflow-wrap: anywhere;
+			color: var(--text-muted);
+		}
 	}
 	.mono {
 		font-family: var(--mono);
