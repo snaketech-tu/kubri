@@ -33,7 +33,7 @@ export function limitsHint(usage: Usage | undefined, what: Measure): string | nu
 	const requested = request ? show(what, request) : t('nothing');
 	const allocatable = usage.allocatable?.[what];
 	if (allocatable) {
-		return t('Uses {used} of the {allocatable} it can give to pods; its pods request {request}', {
+		return t('The node uses {used} of the {allocatable} it can give to pods; its pods request {request}', {
 			used,
 			allocatable: show(what, allocatable),
 			request: requested

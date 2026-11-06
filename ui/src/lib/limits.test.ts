@@ -35,7 +35,7 @@ describe('room on a node in the node list', () => {
 		expect(limitSuffix(usage, 'cpu')).toBe('/ 4000m');
 		expect(limitSuffix(usage, 'memory')).toBe('/ 16Gi');
 		expect(limitShare(usage, 'cpu')).toBeCloseTo(0.073);
-		expect(limitsHint(usage, 'cpu')).toBe('Uses 292m of the 4000m it can give to pods; its pods request 400m');
+		expect(limitsHint(usage, 'cpu')).toBe('The node uses 292m of the 4000m it can give to pods; its pods request 400m');
 	});
 
 	it('shows nothing when the node does not say what it can give', () => {
