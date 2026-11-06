@@ -56,12 +56,17 @@
 
 	/** The workload above a pod's ReplicaSet, such as its Deployment, which is what people think of. */
 	let workload = $state<{ kind: string; name: string; apiVersion?: string; via: string } | null>(null);
-	$effect(() => {
+	/** The ReplicaSet a pod belongs to; a string, so updates to the pod do not look it up again. */
+	const replicaSet = $derived.by(() => {
 		const owners = meta.ownerReferences ?? [];
-		const namespace = meta.namespace ?? null;
+		return object.kind === 'Pod' && owners.length === 1 && owners[0].kind === 'ReplicaSet' ? owners[0].name : null;
+	});
+	const podNamespace = $derived<string | null>(meta.namespace ?? null);
+	$effect(() => {
+		const via = replicaSet;
+		const namespace = podNamespace;
 		workload = null;
-		if (object.kind !== 'Pod' || owners.length !== 1 || owners[0].kind !== 'ReplicaSet') return;
-		const via = owners[0].name;
+		if (!via) return;
 		let stale = false;
 		backend
 			.getObject({ context: app.cluster?.context, resource: { group: 'apps', version: 'v1', plural: 'replicasets' }, namespace, name: via })

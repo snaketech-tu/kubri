@@ -1162,7 +1162,6 @@ const de: Record<string, string> = {
 	'{label} of its request': '{label} gemessen am Request',
 	'Against the limit': 'Gemessen am Limit',
 	'Against the request: no limit is set': 'Gemessen am Request: kein Limit gesetzt',
-	'Use is not measured: metrics-server does not report this pod.': 'Die Nutzung wird nicht gemessen: metrics-server meldet diesen Pod nicht.',
 	'Node': 'Node',
 	'Pod IP': 'Pod-IP',
 	'Phase': 'Phase',

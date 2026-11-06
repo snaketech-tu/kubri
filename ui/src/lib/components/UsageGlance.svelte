@@ -8,21 +8,18 @@
 
 	const REFRESH_MS = 15_000;
 	let usage = $state<Usage | null>(null);
-	let missing = $state(false);
 
 	$effect(() => {
 		const { namespace, name } = target;
 		let stopped = false;
 		usage = null;
-		missing = false;
 		const load = async () => {
 			try {
 				const list = await backend.metrics('pods', namespace ?? null);
 				if (stopped) return;
 				usage = list.find((u) => u.name === name) ?? null;
-				missing = !usage;
 			} catch {
-				if (!stopped) missing = true;
+				// Without metrics-server there is nothing to show.
 			}
 		};
 		load();
@@ -74,8 +71,6 @@
 			</div>
 		{/each}
 	</section>
-{:else if missing}
-	<p class="muted none">{t('Use is not measured: metrics-server does not report this pod.')}</p>
 {/if}
 
 <style>
@@ -112,10 +107,6 @@
 	}
 	.muted {
 		color: var(--text-muted);
-	}
-	.none {
-		margin: 12px 20px 0;
-		font-size: 12px;
 	}
 	.strain {
 		padding: 0 6px;
