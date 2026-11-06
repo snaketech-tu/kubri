@@ -724,6 +724,10 @@
 			{/snippet}
 		</PageHeader>
 
+		{#if helm === undefined}
+			<!-- The note about a missing helm and the list come together, so the list does not move. -->
+			<p class="muted pad">{t('Loading…')}</p>
+		{:else}
 		{#if error}
 			<div class="notice" role="alert">{error}</div>
 		{/if}
@@ -789,6 +793,7 @@
 				{/if}
 			</div>
 		</div>
+		{/if}
 	{/if}
 </section>
 

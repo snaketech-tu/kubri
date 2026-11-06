@@ -4,6 +4,7 @@
 	import { version } from '../../../package.json';
 	import { NAV_SECTIONS, SIDEBAR_TOOLS, TOOLS, pluralKind, toolOf } from '../nav';
 	import { samePin } from '../pins';
+	import { clampWidth, followDrag } from '../resize';
 	import { t } from '../i18n';
 	import { app, favoriteLabel, sameResource } from '../state.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
@@ -59,9 +60,36 @@
 		observer.observe(items);
 		return () => observer.disconnect();
 	});
+
+	/** The sidebar is at least as wide as by default, and leaves the page most of the window. */
+	const MIN_WIDTH = 220;
+	const MAX_WIDTH = 480;
+	let nav = $state<HTMLElement>();
+	let width = $state(0);
+
+	function resize(width: number) {
+		app.sidebarWidth = clampWidth(width, MIN_WIDTH, MAX_WIDTH);
+	}
+
+	/** Drags the right edge of the sidebar. */
+	function onpointerdown(e: PointerEvent) {
+		if (!nav) return;
+		const left = nav.getBoundingClientRect().left;
+		followDrag(e, (x) => resize(x - left));
+	}
+
+	function onresizekey(e: KeyboardEvent) {
+		const step = e.shiftKey ? 80 : 20;
+		if (e.key === 'ArrowRight') resize(width + step);
+		else if (e.key === 'ArrowLeft') resize(width - step);
+		else if (e.key === 'Home') app.sidebarWidth = null;
+		else return;
+		e.preventDefault();
+		e.stopPropagation();
+	}
 </script>
 
-<nav aria-label={t('Cluster navigation')}>
+<nav aria-label={t('Cluster navigation')} bind:this={nav} bind:offsetWidth={width}>
 	<div class="brand">
 		<img src={logo} alt="" width="28" height="28" />
 		<span>kubri</span>
@@ -210,6 +238,22 @@
 			<span class="label">{t('Shortcuts & help')}</span>
 		</button>
 	</div>
+	<!-- A focusable separator is a widget: it takes the arrow keys. -->
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+	<div
+		class="resize"
+		role="separator"
+		aria-orientation="vertical"
+		aria-label={t('Resize the sidebar')}
+		aria-valuenow={width}
+		aria-valuemin={MIN_WIDTH}
+		aria-valuemax={MAX_WIDTH}
+		tabindex="0"
+		title={t('Drag to resize, double-click for the default width')}
+		{onpointerdown}
+		ondblclick={() => (app.sidebarWidth = null)}
+		onkeydown={onresizekey}
+	></div>
 </nav>
 
 {#snippet item(r: ResourceInfo, label: string, icon: IconName)}
@@ -272,11 +316,34 @@
 		color: var(--text);
 	}
 	nav {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
 		border-right: 1px solid var(--border);
 		background: var(--surface-1);
+	}
+	.resize {
+		display: none;
+		position: absolute;
+		z-index: 2;
+		top: 0;
+		bottom: 0;
+		right: -4px;
+		width: 8px;
+		cursor: col-resize;
+		touch-action: none;
+	}
+	.resize:hover,
+	.resize:focus-visible {
+		outline: none;
+		background: linear-gradient(to right, transparent 3px, var(--accent) 3px, var(--accent) 5px, transparent 5px);
+	}
+	/* Narrower windows keep the sidebar at its fixed size or fold it into icons. */
+	@media (min-width: 1101px) {
+		.resize {
+			display: block;
+		}
 	}
 	.brand {
 		display: flex;

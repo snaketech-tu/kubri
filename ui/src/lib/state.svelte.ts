@@ -105,6 +105,7 @@ const READ_ONLY_KEY = 'kubri.readonly.';
 const ENVIRONMENT_KEY = 'kubri.environment.';
 const TOOLS_BESIDE_KEY = 'kubri.toolsBeside';
 const PANEL_WIDTH_KEY = 'kubri.panelWidth';
+const SIDEBAR_WIDTH_KEY = 'kubri.sidebarWidth';
 
 function stored(key: string): string | null {
 	try {
@@ -349,6 +350,15 @@ class AppState {
 	set panelWidth(value: number | null) {
 		this.#panelWidth = value;
 		store(PANEL_WIDTH_KEY, value ? String(Math.round(value)) : null);
+	}
+	/** The width the sidebar was dragged to, or null for the default. */
+	#sidebarWidth = $state(Number(stored(SIDEBAR_WIDTH_KEY)) || null);
+	get sidebarWidth() {
+		return this.#sidebarWidth;
+	}
+	set sidebarWidth(value: number | null) {
+		this.#sidebarWidth = value;
+		store(SIDEBAR_WIDTH_KEY, value ? String(Math.round(value)) : null);
 	}
 	/** The details panel takes the place of the list: maximized, or showing logs or a shell. */
 	get panelWide(): boolean {

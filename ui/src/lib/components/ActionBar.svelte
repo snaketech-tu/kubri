@@ -25,18 +25,46 @@
 		max?: number;
 	} = $props();
 
-	// A narrow bar keeps to one or two lines: fewer buttons, the rest under More.
-	let width = $state(Infinity);
-	const room = $derived(width < 480 ? Math.min(max, 2) : width < 720 ? Math.min(max, 4) : max);
+	// The bar keeps to one line, so the list below it never moves: the buttons that do not fit
+	// go under More. Hidden copies of every button tell how wide each one is.
+	const GAP = 6;
+	let bar = $state<HTMLDivElement>();
+	let measure = $state<HTMLDivElement>();
+	let width = $state(0);
+	let fit = $state(Infinity);
 
-	const buttons = $derived(
-		actions
-			.filter((a) => a.primary !== undefined && !a.danger)
-			.sort((a, b) => a.primary! - b.primary!)
-			.slice(0, room)
+	const primary = $derived(
+		actions.filter((a) => a.primary !== undefined && !a.danger).sort((a, b) => a.primary! - b.primary!)
 	);
+	const buttons = $derived(primary.slice(0, Math.min(max, fit)));
 	const dangerous = $derived(actions.filter((a) => a.primary !== undefined && a.danger));
 	const more = $derived(actions.filter((a) => !buttons.includes(a) && !dangerous.includes(a)));
+
+	$effect(() => {
+		void primary;
+		void dangerous;
+		if (!bar || !measure || !width) return;
+		const widths = [...measure.children].map((c) => (c as HTMLElement).offsetWidth);
+		fit = fitting(widths, primary.length, dangerous.length, actions.length > primary.length + dangerous.length);
+	});
+
+	/** How many of the first buttons fit beside the subject, More and the dangerous ones. */
+	function fitting(widths: number[], count: number, danger: number, extra: boolean): number {
+		const style = getComputedStyle(bar!);
+		const room = bar!.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+		// The subject gives way to the buttons down to a short name.
+		const subject = bar!.querySelector<HTMLElement>('.subject');
+		const named = subject ? Math.min(subject.scrollWidth, 140) + GAP : 0;
+		const sum = (from: number, to: number) => widths.slice(from, to).reduce((a, w) => a + w + GAP, 0);
+		// The spacer before the dangerous buttons takes a gap of its own; widths are rounded.
+		const fixed = named + GAP + sum(count, count + danger) + 2;
+		const moreWidth = widths[count + danger] + GAP;
+		for (let n = Math.min(count, max); n > 0; n--) {
+			const needsMore = extra || n < count;
+			if (fixed + sum(0, n) + (needsMore ? moreWidth : 0) <= room + GAP) return n;
+		}
+		return 0;
+	}
 
 	/** A click leaves the focus where it was, so the keys keep working on the list. */
 	const keepFocus = (e: MouseEvent) => e.preventDefault();
@@ -47,7 +75,7 @@
 	}
 </script>
 
-<div class="bar" class:marked class:compact role="toolbar" aria-label={t('Actions')} bind:clientWidth={width}>
+<div class="bar" class:marked class:compact role="toolbar" aria-label={t('Actions')} bind:this={bar} bind:clientWidth={width}>
 	{#if children}<span class="subject">{@render children()}</span>{/if}
 	{#each buttons as action, i (i)}
 		{@render button(action)}
@@ -59,6 +87,12 @@
 	{#each dangerous as action, i (i)}
 		{@render button(action)}
 	{/each}
+	<div class="measure" bind:this={measure} aria-hidden="true" inert>
+		{#each [...primary, ...dangerous] as action, i (i)}
+			{@render button(action)}
+		{/each}
+		<button>{t('More')} <span class="chevron">▾</span></button>
+	</div>
 </div>
 
 {#snippet button(action: MenuAction)}
@@ -78,10 +112,11 @@
 
 <style>
 	.bar {
+		position: relative;
 		display: flex;
-		flex-wrap: wrap;
 		align-items: center;
 		gap: 6px;
+		min-height: 42px;
 		margin: 0 20px 8px;
 		padding: 6px;
 		border: 1px solid var(--border);
@@ -90,6 +125,7 @@
 		container-type: inline-size;
 	}
 	.bar.compact {
+		min-height: 38px;
 		margin: 0;
 		padding: 0 16px 10px 20px;
 		border: none;
@@ -100,6 +136,9 @@
 		background: color-mix(in srgb, var(--accent) 8%, var(--surface-1));
 	}
 	.subject {
+		flex: 0 1 auto;
+		min-width: 0;
+		height: 28px;
 		max-width: 320px;
 		line-height: 28px;
 		padding: 0 8px 0 4px;
@@ -116,10 +155,27 @@
 		font-size: 13px;
 		font-weight: 600;
 	}
+	/* Out of sight and out of the way, at the width each button would have. */
+	.measure {
+		position: absolute;
+		top: 0;
+		left: 0;
+		display: flex;
+		gap: 6px;
+		width: 0;
+		height: 0;
+		overflow: hidden;
+		visibility: hidden;
+		pointer-events: none;
+	}
+	.measure button {
+		flex: none;
+	}
 	.spacer {
 		flex: 1;
 	}
 	button {
+		flex: none;
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;

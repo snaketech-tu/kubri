@@ -25,6 +25,7 @@
 	import { drafts } from '../navigation.svelte';
 	import { focusForKeys } from '../keys';
 	import { containerNames, hasLogs, hasUsers, isPods, isServices } from '../pods';
+	import { clampWidth, followDrag } from '../resize';
 	import { app, type Details, type DetailsTab } from '../state.svelte';
 	import { cellTone } from '../status';
 	import { drill, drillLabel, objectActions, subjectOf } from '../objects';
@@ -178,25 +179,14 @@
 	/** Sets the width beside the list, keeping 320px for each side. */
 	function resize(width: number) {
 		const room = aside?.parentElement?.clientWidth ?? window.innerWidth;
-		app.panelWidth = Math.max(MIN_WIDTH, Math.min(room - MIN_WIDTH, width));
+		app.panelWidth = clampWidth(width, MIN_WIDTH, room - MIN_WIDTH);
 	}
 
 	/** Drags the left edge of the panel. */
 	function onpointerdown(e: PointerEvent) {
-		if (e.button !== 0 || !aside) return;
-		e.preventDefault();
-		const handle = e.currentTarget as HTMLElement;
-		handle.setPointerCapture(e.pointerId);
+		if (!aside) return;
 		const right = aside.getBoundingClientRect().right;
-		const move = (ev: PointerEvent) => resize(right - ev.clientX);
-		const up = () => {
-			handle.removeEventListener('pointermove', move);
-			handle.removeEventListener('pointerup', up);
-			handle.removeEventListener('pointercancel', up);
-		};
-		handle.addEventListener('pointermove', move);
-		handle.addEventListener('pointerup', up);
-		handle.addEventListener('pointercancel', up);
+		followDrag(e, (x) => resize(right - x));
 	}
 
 	function onresizekey(e: KeyboardEvent) {
@@ -473,6 +463,9 @@
 					<Icon name={status.tone === 'ok' ? 'ok' : status.tone === 'bad' ? 'critical' : 'pending'} size={15} />
 					{status.text}
 				</p>
+			{:else if !object && isPods(details.resource)}
+				<!-- Keeps the line of the status while the pod loads, so the tabs do not move. -->
+				<p class="status" aria-hidden="true">&nbsp;</p>
 			{/if}
 		</div>
 		<div class="window">
