@@ -358,15 +358,6 @@ impl Kubri {
                 };
             }
             item.namespace = namespace.clone();
-            if !request.dry_run
-                && elsewhere.is_none()
-                && self.agent.load(std::sync::atomic::Ordering::Relaxed)
-                && self.production_namespace(namespace.as_deref()).await
-            {
-                item.message = Some(crate::PRODUCTION_NAMESPACE.into());
-                items.push(item);
-                continue;
-            }
             let target = ObjectRef {
                 context: Some(session.info.context.clone()),
                 resource: ResourceRef {
@@ -377,6 +368,15 @@ impl Kubri {
                 namespace: namespace.clone(),
                 name: head.name.clone(),
             };
+            if !request.dry_run
+                && elsewhere.is_none()
+                && self.agent.load(std::sync::atomic::Ordering::Relaxed)
+                && self.production_namespace(target.scope()).await
+            {
+                item.message = Some(crate::PRODUCTION_NAMESPACE.into());
+                items.push(item);
+                continue;
+            }
             if request.dry_run
                 && let Some(ns) = &namespace
                 && pretended.contains(ns)

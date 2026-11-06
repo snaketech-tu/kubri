@@ -7,6 +7,7 @@
 	import { creating } from '../create.svelte';
 	import { errorMessage } from '../format';
 	import { app, findResource } from '../state.svelte';
+	import { productionRule } from '../production';
 	import DiffView from './DiffView.svelte';
 	import FormPanel from './FormPanel.svelte';
 	import Icon from './Icon.svelte';
@@ -28,7 +29,7 @@
 	const production = $derived(into ? app.contextSettingsOf(into).production : app.production);
 	/** The namespace to apply in is marked as production, in a context that is not. */
 	const productionNamespace = $derived(
-		!production && (app.contextSettingsOf(into || app.cluster?.context).productionNamespaces ?? []).includes(namespace)
+		!production && !!productionRule(app.contextSettingsOf(into || app.cluster?.context), namespace, into ? undefined : app.namespaceLabels[namespace])
 	);
 	let busy = $state(false);
 	let error = $state<string | null>(null);

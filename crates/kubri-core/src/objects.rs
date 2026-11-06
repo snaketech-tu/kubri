@@ -16,6 +16,20 @@ pub struct ObjectRef {
     pub name: String,
 }
 
+impl ObjectRef {
+    /// The namespace a change to this object happens in: its own, or for a Namespace the one it
+    /// is, so guard rails for a namespace also keep it from being changed or deleted.
+    pub fn scope(&self) -> Option<&str> {
+        match &self.namespace {
+            Some(ns) => Some(ns),
+            None if self.resource.group.is_empty() && self.resource.plural == "namespaces" => {
+                Some(&self.name)
+            }
+            None => None,
+        }
+    }
+}
+
 impl std::fmt::Display for ObjectRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.namespace {

@@ -151,7 +151,7 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
     <td valign="top">
       <b>🛡️ Work safely</b>
       <ul>
-        <li>A name and color per context, and a banner on production</li>
+        <li>A name and color per context, and a clear marker on production</li>
         <li>Read-only and locked contexts</li>
         <li>Missing permissions explained, with a Role to ask for</li>
         <li>What breaks before you delete something still in use</li>

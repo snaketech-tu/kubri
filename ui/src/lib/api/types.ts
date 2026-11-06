@@ -78,10 +78,15 @@ export interface ContextSettings {
 	label: string;
 	/** `#rrggbb`, or empty. */
 	color: string;
-	/** Destructive actions ask to type the name; a banner says where you are. */
+	/** Destructive actions ask to type the name; a red stripe and a badge say where you are. */
 	production: boolean;
-	/** Namespaces treated like a production context: typed names, a banner, no AI agent changes. */
+	/**
+	 * Namespaces treated like a production context: typed names, a red marker, no AI agent changes.
+	 * Names, or patterns where `*` stands for any text, like `*-prod`.
+	 */
 	productionNamespaces: string[];
+	/** Namespaces treated the same by their labels, each a rule like `env=production`. */
+	productionLabels: string[];
 	readOnly: boolean;
 	/** Starts read-only; unlocking lasts 15 minutes. */
 	locked: boolean;

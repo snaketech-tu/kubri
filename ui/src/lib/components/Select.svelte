@@ -2,7 +2,7 @@
 	import { t } from '../i18n';
 	import { tick } from 'svelte';
 	import type { HTMLButtonAttributes } from 'svelte/elements';
-	import Icon from './Icon.svelte';
+	import Icon, { type IconName } from './Icon.svelte';
 	import { centeredScroll, edge, filterOptions, step, typeahead, type SelectOption } from '../select';
 
 	/*
@@ -20,6 +20,7 @@
 		quiet = false,
 		mono = false,
 		searchable,
+		toggleIcon = 'shield',
 		...rest
 	}: {
 		value?: T;
@@ -37,6 +38,8 @@
 		mono?: boolean;
 		/** Puts a filter field above the list; on by default for long lists. */
 		searchable?: boolean;
+		/** The icon of the options' switches. */
+		toggleIcon?: IconName;
 	} & Omit<HTMLButtonAttributes, 'value' | 'onchange' | 'disabled'> = $props();
 
 	const id = $props.id();
@@ -161,7 +164,8 @@
 				move(step(options, shown, active, -page));
 				return true;
 			case 'Enter':
-				choose(active);
+				if (e.shiftKey) options[active]?.toggle?.run();
+				else choose(active);
 				return true;
 			case 'Escape':
 				swallowCancel = true;
@@ -325,6 +329,25 @@
 				>
 					<span class="label" class:mono>{option.label}</span>
 					{#if i === selected}<span class="tick"><Icon name="check" size={14} /></span>{/if}
+					{#if option.toggle}
+						{@const toggle = option.toggle}
+						<!-- Shift+Enter does the same from the keyboard; the button itself takes no focus, as options do not. -->
+						<button
+							type="button"
+							class="toggle"
+							class:on={toggle.on}
+							tabindex="-1"
+							aria-pressed={toggle.on}
+							aria-label={toggle.label}
+							title="{toggle.label} (Shift+Enter)"
+							onclick={(e) => {
+								e.stopPropagation();
+								toggle.run();
+							}}
+						>
+							<Icon name={toggleIcon} size={14} />
+						</button>
+					{/if}
 				</li>
 			{:else}
 				<li class="empty" role="presentation">{query ? t('Nothing matches') : t('Nothing to choose')}</li>
@@ -491,6 +514,28 @@
 	.tick {
 		display: flex;
 		flex: none;
+	}
+	.toggle {
+		display: flex;
+		flex: none;
+		margin: -3px -4px -3px 0;
+		padding: 3px;
+		border: none;
+		border-radius: 5px;
+		background: none;
+		color: var(--text-muted);
+		opacity: 0;
+	}
+	li.active .toggle,
+	.toggle.on {
+		opacity: 1;
+	}
+	.toggle:hover {
+		background: color-mix(in srgb, var(--text) 10%, transparent);
+		color: var(--text);
+	}
+	.toggle.on {
+		color: var(--bad);
 	}
 	.group {
 		position: sticky;
