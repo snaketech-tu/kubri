@@ -4,6 +4,7 @@
 	import { backend, type RightSizing, type SizeAdvice } from '../api';
 	import { cpu, errorMessage, memory } from '../format';
 	import { app, findResource } from '../state.svelte';
+	import { byContainer } from '../advice';
 	import Icon from './Icon.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import Phrase from './Phrase.svelte';
@@ -30,6 +31,8 @@
 
 	const amount = (a: SizeAdvice, value: number) =>
 		a.resource === 'cpu' ? (value > 0 && value < 0.0005 ? '<1m' : cpu(value * 1000)) : memory(value);
+	/** A container's CPU and memory side by side. */
+	const rows = $derived(found ? byContainer(found.advice) : []);
 	/** What the requests free once lowered, per resource. */
 	const freed = $derived.by(() => {
 		const sum = (resource: string) =>
@@ -94,7 +97,7 @@
 	<PageHeader
 		crumbs={[t('Right-sizing')]}
 		title={t('Right-sizing')}
-		count={found?.advice.length}
+		count={found ? rows.filter((x) => x.first).length : undefined}
 		subtitle={namespace
 			? t('Containers that request much more or less than they use, or run close to their limit, in {namespace}', { namespace })
 			: t('Containers that request much more or less than they use, or run close to their limit')}
@@ -137,14 +140,17 @@
 							</tr>
 						</thead>
 						<tbody>
-							{#each found.advice as a (`${a.workload.namespace}/${a.workload.name}/${a.container}/${a.resource}`)}
+							{#each rows as { advice: a, first } (`${a.workload.namespace}/${a.workload.name}/${a.container}/${a.resource}`)}
 								{@const reason = why(a)}
-								<tr>
+								<!-- A container's CPU and memory read as one block, named once. -->
+								<tr class:more={!first}>
 									<td>
-										<button class="name" onclick={() => open(a)} title={t('Show its metrics')}>{a.workload.name}</button>
-										<div class="muted small">{a.kind}{namespace ? '' : ` · ${a.workload.namespace}`}</div>
+										{#if first}
+											<button class="name" onclick={() => open(a)} title={t('Show its metrics')}>{a.workload.name}</button>
+											<div class="muted small">{a.kind}{namespace ? '' : ` · ${a.workload.namespace}`}</div>
+										{/if}
 									</td>
-									<td class="mono">{a.container}</td>
+									<td class="mono">{first ? a.container : ''}</td>
 									<td>
 										<div class="why {reason.tone}">
 											{#if reason.tone}<Icon name={reason.tone === 'bad' ? 'critical' : 'warning'} size={14} />{/if}
@@ -159,7 +165,7 @@
 										{#if a.suggestedLimit}<span title={t('Limit')}>{t('limit {suggestedLimit}', { suggestedLimit: a.suggestedLimit })}</span>{/if}
 									</td>
 									<td class="action">
-										{#if !app.readOnly}<button class="btn" onclick={() => review(a)}>{t('Review…')}</button>{/if}
+										{#if !app.readOnly && first}<button class="btn" onclick={() => review(a)}>{t('Review…')}</button>{/if}
 									</td>
 								</tr>
 							{/each}
@@ -231,6 +237,12 @@
 		padding: 9px 10px;
 		border-bottom: 1px solid var(--border-subtle);
 		vertical-align: top;
+	}
+	tr:has(+ tr.more) td {
+		border-bottom-color: transparent;
+	}
+	tr.more td {
+		padding-top: 0;
 	}
 	.numeric {
 		text-align: right;

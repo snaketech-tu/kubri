@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ContextInfo, ResourceInfo, Row } from './api';
 import { matchResources, namesAction, suggest } from './commands';
-import { age, cpu, imageParts, isNotFound, memory, workloadPrefix } from './format';
+import { age, cpu, imageParts, isNotFound, memory, restarts, workloadPrefix } from './format';
 import { cellTone } from './status';
 import { filterRows, hasHealth, isFaulty, sortRows, toCsv } from './table';
 
@@ -372,5 +372,14 @@ describe('imageParts', () => {
 	it('cuts a digest short', () => {
 		const digest = '4f2a9c1be07d5e8a3c6b1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c';
 		expect(imageParts(`nginx:1.27@sha256:${digest}`).join('')).toBe('nginx:1.27@sha256:4f2a9c1be07d…');
+	});
+});
+
+describe('restarts', () => {
+	it('reads the time of the last restart as an age', () => {
+		expect(restarts('5 (119s ago)')).toBe('5 · 1m ago');
+		expect(restarts('36 (2m1s ago)')).toBe('36 · 2m ago');
+		expect(restarts('2 (3d4h ago)')).toBe('2 · 3d ago');
+		expect(restarts('0')).toBe('0');
 	});
 });

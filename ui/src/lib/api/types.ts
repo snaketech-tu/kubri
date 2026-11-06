@@ -863,7 +863,7 @@ export interface EventInfo {
 	lastSeen: string | null;
 }
 
-export type MetricsKind = 'pods' | 'nodes';
+export type MetricsKind = 'pods' | 'nodes' | 'namespaces';
 
 export interface Usage {
 	namespace: string | null;
@@ -877,6 +877,8 @@ export interface Usage {
 	limits?: Limits;
 	/** What a node can give to pods. */
 	allocatable?: Limits;
+	/** For a namespace: how healthy its pods are. */
+	pods?: { total: number; ok: number; warning: number; failed: number };
 }
 
 /** Millicores and bytes, where set. */

@@ -10,7 +10,7 @@
 	import { limitShare, limitSuffix, limitsHint, type Measure } from '../limits';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, refusedAction, type ActionOptions, type Subject } from '../objects';
-	import { isNodes, isPods, isServices } from '../pods';
+	import { isNamespaces, isNodes, isPods, isServices } from '../pods';
 	import { ALL_NAMESPACES, app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { cellTone, type Tone } from '../status';
 	import { filterRows, hasHealth, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
@@ -21,6 +21,7 @@
 	import ColumnChooser from './ColumnChooser.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 	import { describeCron } from '../cron';
+	import { restarts } from '../format';
 	import { midSentence, t } from '../i18n';
 	import { coreText } from '../i18n/errors';
 
@@ -64,7 +65,9 @@
 	let scroller = $state<HTMLDivElement>();
 
 	const ns = $derived(resource.namespaced && namespace ? namespace : null);
-	const metricsKind = $derived<MetricsKind | null>(isPods(resource) ? 'pods' : isNodes(resource) ? 'nodes' : null);
+	const metricsKind = $derived<MetricsKind | null>(
+		isPods(resource) ? 'pods' : isNodes(resource) ? 'nodes' : isNamespaces(resource) ? 'namespaces' : null
+	);
 	const writable = $derived(!app.readOnly);
 
 	/** How this kind's list shows its columns, from the settings. */
@@ -109,7 +112,7 @@
 		index: number;
 		wide: boolean;
 		value: (u: Usage) => number | null | undefined;
-		format: 'cpu' | 'memory' | 'percent';
+		format: 'cpu' | 'memory' | 'percent' | 'pods';
 		/** Which k9s threshold colors a percentage. */
 		threshold?: 'cpu' | 'memory';
 	}
@@ -144,6 +147,15 @@
 		{ label: 'Mem free', index: -15, wide: false, value: (u) => free(u.allocatable?.memory, u.requests?.memory), format: 'memory' }
 	];
 
+	// What the pods of a namespace use and request, and how many of them are healthy.
+	const NAMESPACE_METRICS: MetricColumn[] = [
+		{ label: 'Pods', index: -16, wide: false, value: (u) => u.pods?.total, format: 'pods' },
+		CPU,
+		MEM,
+		{ label: 'CPU request', index: -10, wide: false, value: (u) => u.requests?.cpu, format: 'cpu' },
+		{ label: 'Memory request', index: -12, wide: false, value: (u) => u.requests?.memory, format: 'memory' }
+	];
+
 	/** Empty cells, `<none>` and `None` all read as a dash. */
 	const NOTHING = /^(|<none>|None)$/;
 
@@ -162,7 +174,7 @@
 		for (const [index, c] of table.columns.entries()) {
 			const isAge = isAgeColumn(c);
 			if (isAge && metricsKind) {
-				const metricColumns = metricsKind === 'nodes' ? NODE_METRICS : POD_METRICS;
+				const metricColumns = metricsKind === 'nodes' ? NODE_METRICS : metricsKind === 'namespaces' ? NAMESPACE_METRICS : POD_METRICS;
 				out.push(...metricColumns.map((m) => ({ kind: 'metric' as const, ...m, wideOnly: m.wide })));
 			}
 			// A custom column comes back named by its path.
@@ -174,7 +186,8 @@
 				age: isAge,
 				name: c.format === 'name',
 				custom: c.format === 'jsonpath',
-				wideOnly: c.priority > 0
+				// Ready says what Up-to-date and Available add for most; All columns has them.
+				wideOnly: c.priority > 0 || (resource.kind === 'Deployment' && /^(Up-to-date|Available)$/.test(c.name))
 			});
 		}
 		return ordered(out, columnSettings);
@@ -188,7 +201,9 @@
 	});
 	const statusIndex = $derived(table.columns.findIndex((c) => /^(status|phase)$/i.test(c.name)));
 	const isRunning = (r: Row) => statusIndex !== -1 && r.cells[statusIndex] === 'Running';
-	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r)));
+	/** A namespace with failing pods needs a look, though it is Active. */
+	const troubled = (r: Row) => isNamespaces(resource) && !!metrics.get(r.namespace, r.name)?.pods?.failed;
+	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r) || troubled(r)));
 	/** Kinds with a state, readiness or health; Secrets or Ingresses have nothing to need attention. */
 	const healthy = $derived(hasHealth(table.columns, resource.plural));
 	const running = $derived(isPods(resource) ? owned.filter(isRunning) : []);
@@ -416,8 +431,14 @@
 
 	/** CPU or memory, for the columns of what pods and nodes use, which also show their limit or allocatable. */
 	function usageColumn(column: DisplayColumn): Measure | null {
-		if (column.kind !== 'metric' || !metricsKind) return null;
+		if (column.kind !== 'metric' || (metricsKind !== 'pods' && metricsKind !== 'nodes')) return null;
 		return column.label === 'CPU' ? 'cpu' : column.label === 'Mem' ? 'memory' : null;
+	}
+
+	/** A namespace's pods: how many are healthy of all, as the overview counts them. */
+	function podsText(row: Row): string {
+		const pods = metrics.get(row.namespace, row.name)?.pods;
+		return pods ? `${pods.ok}/${pods.total}` : '—';
 	}
 
 	function metricValue(row: Row, column: MetricColumn) {
@@ -430,6 +451,7 @@
 			case 'namespace':
 				return row.namespace ?? '';
 			case 'metric': {
+				if (column.format === 'pods') return podsText(row);
 				const value = metricValue(row, column);
 				if (value === null || value === undefined) return '—';
 				return column.format === 'cpu' ? cpu(value) : column.format === 'memory' ? memory(value) : `${value}%`;
@@ -439,6 +461,9 @@
 				const value = row.cells[column.index];
 				if (value === null || value === undefined) return '';
 				if (column.label === 'Cluster-IP' && value === 'None') return 'Headless';
+				if (column.label === 'Restarts' && typeof value === 'string') return restarts(value);
+				// A finished pod is not "0 of 1 ready": readiness no longer applies to it.
+				if (/^ready$/i.test(column.label) && isPods(resource) && /^(Completed|Succeeded)$/.test(cell(row, 'Status') ?? '')) return '—';
 				if (column.label === 'Schedule' && resource.kind === 'CronJob') return describeCron(String(value));
 				// Yes and No read better than True and False for switches such as Suspend. Condition
 				// columns (Ready True) keep the word Kubernetes uses, and their color.
@@ -489,6 +514,10 @@
 		if (column.kind === 'cell') return cellTone(column.label, text);
 		if (column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')) {
 			return pressure(row, column.label === 'CPU' ? 'cpu' : 'memory')?.tone ?? '';
+		}
+		if (column.kind === 'metric' && column.format === 'pods') {
+			const pods = metrics.get(row.namespace, row.name)?.pods;
+			return !pods || !pods.total ? '' : pods.failed ? 'bad' : pods.warning ? 'warn' : 'ok';
 		}
 		if (column.kind !== 'metric' || !column.threshold) return '';
 		if (column.label.endsWith('/ request')) {

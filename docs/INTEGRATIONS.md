@@ -24,6 +24,14 @@ Kubri reaches Prometheus, Grafana and Loki through the API server's service prox
 
 The settings live in Kubri's [settings file](SETTINGS.md), per context.
 
+## Use right now
+
+Without Prometheus, the metrics server still shows what things use now:
+
+- The inspector of a pod starts with **Use right now**: CPU and memory against the limit, or the request when there is none, and whether the pod is throttled or close to its memory limit.
+- The **Namespaces** list shows per namespace how many pods are healthy (`7/9`), what they use and what they request.
+- Restarts read with how long ago the last one was, like `5 · 1m ago`.
+
 ## Metrics
 
 **Metrics** (<kbd>m</kbd>) in the inspector of a pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, CronJob, node or namespace shows, over the last hour, 6 hours, 24 hours or 7 days:
@@ -58,7 +66,7 @@ Suggestions come with a reason, the most urgent first:
 - **No request**: the container has none, so the scheduler counts it as free.
 - **Over-requested**: the request is at least twice the suggestion, and by at least 50m CPU or 64Mi memory.
 
-The suggested request is use with 20% headroom, the suggested limit use with 50%, rounded up to 5m or 16Mi. The page sums what lowering the over-requested ones would free. **Review…** opens [Requests & limits](CREATE.md#requests-and-limits) with the suggestions for all containers of the workload filled in, so one rollout covers them, the room on the nodes, the dry-run diff of the workload's template, the matching `kubectl set resources` command and, when Flux or Argo CD manage the workload, what they will do with it. Setting the values restarts the workload's pods, as any template change does.
+A container's CPU and memory read as one block with one **Review…**. The suggested request is use with 20% headroom, the suggested limit use with 50%, rounded up to 5m or 16Mi. The page sums what lowering the over-requested ones would free. **Review…** opens [Requests & limits](CREATE.md#requests-and-limits) with the suggestions for all containers of the workload filled in, so one rollout covers them, the room on the nodes, the dry-run diff of the workload's template, the matching `kubectl set resources` command and, when Flux or Argo CD manage the workload, what they will do with it. Setting the values restarts the workload's pods, as any template change does.
 
 ## Grafana
 
