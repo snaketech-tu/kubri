@@ -8,11 +8,11 @@
 <script lang="ts">
 	import { forControl } from '../keys';
 	import { tick } from 'svelte';
-	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization } from '../api';
+	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization, type WaitingPod } from '../api';
 	import { age, errorMessage, memory, relative } from '../format';
 	import { fleetState, serverHost, workloads } from '../fleet';
 	import { attentionTitle } from '../causes';
-	import { attentionItems, fill, kindLabel, meterTone, record, restartingContainer, shortMessage, splitKinds, type AttentionItem } from '../pulse';
+	import { attentionItems, fill, kindLabel, meterTone, record, restartingContainer, room, shortMessage, splitKinds, type AttentionItem } from '../pulse';
 	import { lastLogLine } from '../lastlog';
 	import { app, findResource } from '../state.svelte';
 	import { plural, t } from '../i18n';
@@ -179,6 +179,12 @@
 
 	const percent = (value: number) => `${Math.round(value * 100)}%`;
 
+	/** The waiting pods, one per line, for the tooltip. */
+	function waitingTitle(waiting: WaitingPod[], resource: 'cpu' | 'memory', format: (v: number) => string) {
+		const lines = waiting.map((w) => `${w.object.namespace ? `${w.object.namespace}/` : ''}${w.object.name}: ${format(w[resource])}`);
+		return [t('Waiting for a node:'), ...lines].join('\n');
+	}
+
 	const KIND_ICONS: Record<string, IconName> = {
 		Pod: 'pod',
 		Deployment: 'deployment',
@@ -257,11 +263,11 @@
 				</p>
 			</div>
 			<div class="state">
-				{#if health?.health}
-					<span class="health" role="status"><HealthIcon health={health.health} size={11} />{health.summary}</span>
-				{/if}
+				<!-- One line: the cards below count pods and workloads, so it says what needs a look. -->
 				{#if attention.length}
-					<span class="tag warn"><Icon name="warning" size={14} />{plural(attention.length, '{n} needs attention', '{n} need attention')}</span>
+					<span class="tag warn" role="status"><Icon name="warning" size={14} />{plural(attention.length, '{n} needs attention', '{n} need attention')}</span>
+				{:else if health?.health}
+					<span class="health" role="status"><HealthIcon health={health.health} size={11} />{health.summary}</span>
 				{/if}
 				{#if updated}
 					<span class="live" title={t('Refreshes every {seconds} seconds', { seconds: REFRESH_MS / 1000 })}>
@@ -284,8 +290,8 @@
 				{@render countCard(0, t('Healthy pods'), 'pod', pods, namespace ? t('In {namespace}', { namespace }) : t('All namespaces'))}
 				{@render countCard(1, t('Ready nodes'), 'node', nodes, t('Cluster-wide'))}
 				{@render countCard(2, t('Ready workloads'), 'deployment', work ?? undefined, namespace ? t('In {namespace}', { namespace }) : t('All namespaces'))}
-				{@render usageCard(3, t('CPU utilization'), 'benchmark', pulse.cpu, cores)}
-				{@render usageCard(4, t('Memory utilization'), 'volume', pulse.memory, memory)}
+				{@render usageCard(3, t('CPU'), 'benchmark', pulse.cpu, cores, 'cpu')}
+				{@render usageCard(4, t('Memory'), 'volume', pulse.memory, memory, 'memory')}
 			</div>
 
 			<div class="columns">
@@ -488,37 +494,41 @@
 	</button>
 {/snippet}
 
-{#snippet usageCard(index: number, label: string, icon: IconName, u: Utilization, format: (v: number) => string)}
-	{@const level = fill(u)}
+{#snippet usageCard(index: number, label: string, icon: IconName, u: Utilization, format: (v: number) => string, resource: 'cpu' | 'memory')}
+	{@const r = room(u)}
+	{@const waiting = (pulse?.waiting ?? []).filter((w) => w[resource] > 0)}
 	<button
 		class="kpi"
 		class:cursor={keyboard && cursor === index}
 		data-tile={index}
 		onclick={() => activate(index)}
-		title={namespace ? t('Open pods') : t('Open nodes')}
+		title={r?.reserved != null
+			? t('Reserved is what running pods ask for: the scheduler sets it aside, used or not. A new pod starts only where enough is left.')
+			: namespace
+				? t('Open pods')
+				: t('Open nodes')}
 	>
 		<span class="kpi-label">{label}<Icon name={icon} /></span>
-		{#if level && u.capacity}
-			<span class="kpi-value">{Math.round(level.value * 100)}<small>%{level.measured ? '' : ` ${t('requested')}`}</small></span>
+		{#if r}
+			<span class="kpi-value">{Math.round(r.value * 100)}<small>% {r.reserved !== null ? t('reserved') : t('used')}</small></span>
 			<span class="kpi-note">
-				{#if level.measured && u.used !== null}
-					{t('{used} used of {capacity}', { used: format(u.used), capacity: format(u.capacity) })}
+				{#if r.reserved !== null}
+					{t('{reserved} of {capacity} reserved', { reserved: format(r.reserved), capacity: format(r.capacity) })}
 				{:else}
-					{t('{requested} of {capacity}', { requested: format(u.requested ?? 0), capacity: format(u.capacity) })} · {t('no metrics-server')}
+					{t('{used} used of {capacity}', { used: format(r.used ?? 0), capacity: format(r.capacity) })}
 				{/if}
 			</span>
-			{#if level.measured && u.requested !== null}
-				{@const over = u.requested > u.capacity}
-				<span
-					class="kpi-note requested"
-					class:over
-					title={over
-						? t('Pods request {requested} of {capacity}: those that do not fit wait as Pending', { requested: format(u.requested), capacity: format(u.capacity) })
-						: undefined}
-				>
-					<strong>{percent(u.requested / u.capacity)}</strong> {t('requested')} · {over
-						? t('more than the nodes hold')
-						: format(u.requested)}
+			{#if r.reserved !== null}
+				<span class="kpi-note">
+					{r.used !== null ? t('{used} in use right now', { used: format(r.used) }) : t('Use not measured: no metrics-server')}
+				</span>
+			{/if}
+			{#if r.short && waiting.length}
+				<span class="kpi-note short" title={waitingTitle(waiting, resource, format)}>
+					<Icon name="warning" size={13} />
+					{waiting.length === 1
+						? t('{name} cannot start: it asks for {amount}', { name: waiting[0].object.name, amount: format(waiting[0][resource]) })
+						: t('{n} pods cannot start: they ask for {amount}', { n: waiting.length, amount: format(r.waiting) })}
 				</span>
 			{/if}
 			<span
@@ -526,20 +536,15 @@
 				role="meter"
 				aria-valuemin="0"
 				aria-valuemax="100"
-				aria-valuenow={Math.round(level.value * 100)}
-				aria-label="{label} {level.measured ? t('used') : t('requested')}"
+				aria-valuenow={Math.round(r.value * 100)}
+				aria-label="{label} {r.reserved !== null ? t('reserved') : t('used')}"
 			>
 				<span
-					class="fill {meterTone(level.value) === 'accent' ? '' : meterTone(level.value)}"
-					style:width={percent(Math.min(level.value, 1))}
+					class="fill {r.short ? 'bad' : meterTone(r.value) === 'accent' ? '' : meterTone(r.value)}"
+					style:width={percent(Math.min(r.value, 1))}
 				></span>
-				{#if level.measured && u.requested !== null}
-					<span
-						class="request"
-						class:over={u.requested > u.capacity}
-						style:left={percent(Math.min(u.requested / u.capacity, 1))}
-						title={t('Requested')}
-					></span>
+				{#if r.reserved !== null && r.used !== null}
+					<span class="request" style:left={percent(Math.min(r.used / r.capacity, 1))} title={t('In use')}></span>
 				{/if}
 			</span>
 		{:else}
@@ -729,13 +734,15 @@
 		font-weight: 400;
 		color: var(--text-muted);
 	}
-	.kpi-note.requested strong {
-		color: var(--text);
-		font-weight: 600;
-	}
-	.kpi-note.requested.over,
-	.kpi-note.requested.over strong {
+	.kpi-note.short {
+		display: flex;
+		gap: 5px;
+		align-items: flex-start;
 		color: var(--bad);
+	}
+	.kpi-note.short :global(svg) {
+		flex: none;
+		margin-top: 1px;
 	}
 	.health {
 		display: inline-flex;
@@ -781,9 +788,6 @@
 		width: 2px;
 		margin-left: -1px;
 		background: var(--text);
-	}
-	.request.over {
-		background: var(--bad);
 	}
 	.columns {
 		display: grid;

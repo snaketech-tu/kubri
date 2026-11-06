@@ -20,6 +20,31 @@ export function fill(u: Utilization): { value: number; measured: boolean } | nul
 	return null;
 }
 
+/** How much room is left: what running pods reserve, what they use, and what waits for a node. */
+export interface Room {
+	capacity: number;
+	/** Requested by pods a node has taken; null without access to pods. */
+	reserved: number | null;
+	used: number | null;
+	/** Requested by pods no node has taken yet. */
+	waiting: number;
+	/** The waiting pods ask for more than is left: they cannot start until room is made. */
+	short: boolean;
+	/** The main number, from 0: reserved, or used when requests are not known. */
+	value: number;
+}
+
+/** The answer to "is there room for more pods?" for one resource. */
+export function room(u: Utilization): Room | null {
+	if (!u.capacity) return null;
+	const waiting = u.waiting ?? 0;
+	const reserved = u.requested === null ? null : Math.max(0, u.requested - waiting);
+	const main = reserved ?? u.used;
+	if (main === null) return null;
+	const short = reserved !== null && waiting > 0 && waiting > u.capacity - reserved;
+	return { capacity: u.capacity, reserved, used: u.used, waiting, short, value: main / u.capacity };
+}
+
 /** Meter severity: the fill turns amber, then red, as the cluster fills up. */
 export function meterTone(value: number): 'accent' | 'warn' | 'bad' {
 	return value >= 0.9 ? 'bad' : value >= 0.75 ? 'warn' : 'accent';
@@ -124,8 +149,15 @@ export function shortMessage(reason: string, message: string): string {
 	return first.length > 140 ? `${first.slice(0, 137)}…` : first;
 }
 
+/**
+ * Kinds the cards above Resource health already count (pods, nodes), and ReplicaSets, which only
+ * repeat their Deployments: listing them again would count one problem twice.
+ */
+const COUNTED_ABOVE = ['Pod', 'Node', 'ReplicaSet'];
+
 /** Kinds with problems first (keeping their order), then the healthy ones. */
-export function splitKinds(kinds: KindPulse[]): { problems: KindPulse[]; healthy: KindPulse[] } {
+export function splitKinds(all: KindPulse[]): { problems: KindPulse[]; healthy: KindPulse[] } {
+	const kinds = all.filter((k) => !COUNTED_ABOVE.includes(k.kind));
 	const sick = (k: KindPulse) => Boolean(k.error) || k.failed > 0 || k.warning > 0;
 	return { problems: kinds.filter(sick), healthy: kinds.filter((k) => !sick(k)) };
 }
