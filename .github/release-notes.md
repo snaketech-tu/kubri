@@ -1,12 +1,8 @@
 ## What's new
 
-- **Requests and limits in one dialog:** <kbd>Shift</kbd>+<kbd>Q</kbd> sets CPU and memory for all containers of a workload, with the room left on the nodes and in quotas.
-- **Limits in the pod list:** CPU and Mem show the limit next to the use, and the Nodes list shows the room left on each node.
-- **Start where you left off:** Kubri opens the context and view you used last.
-- **Port-forwards stay open**, and favorites start or stop with one click from the sidebar.
-- **Production namespaces:** mark single namespaces as production for the same care as a production context.
-- **Other label names for logs**, such as `exported_namespace`, saved as templates for every context.
-- Pinned places come first in the sidebar, the Port-forwards page has bigger entries, and the Integrations page has a clearer layout.
+- **Port-forwards work on the first try:** a port check no longer leaves an error behind, and `localhost` listens on both 127.0.0.1 and ::1.
+- **Nodes list:** CPU and Mem show the node's use next to what it can give to pods, with a bar that turns red at 90 %.
+- **Wider inspector** with readable container images.
 
 ## Install
 
