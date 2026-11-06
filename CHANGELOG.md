@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.1 — 2026-11-06
+
+- **Port-forwards work on the first try.** A client that only checks whether the port is open no longer keeps the pod's connection, so databases such as MariaDB no longer reset it and show an error. With the address `localhost`, a forward listens on both 127.0.0.1 and ::1, like kubectl, so clients reach it whichever one they try.
+- **Node use against what a node can give.** CPU and Mem in the Nodes list show what the node uses next to what it can give to pods, such as `292m / 4000m`, with a bar that turns red at 90 %.
+- **Wider inspector.** The details panel opens wider, and container images stay readable: long images break at `/`, `:` and `@`, and digests are shortened, with the full image in the tooltip.
+
 ## 1.9.0 — 2026-11-05
 
 - **Requests and limits in one dialog.** **Requests & limits…** (<kbd>Shift</kbd>+<kbd>Q</kbd>) on a workload, or on a pod for the workload that owns it, sets CPU and memory requests and limits for all its containers at once. It shows what the pods use and the room still free on the nodes and in the namespace's quotas, warns before a pod would no longer fit, and offers common values and steps with <kbd>↑</kbd> and <kbd>↓</kbd>. **Review…** in Right-sizing fills in all suggestions of a workload. See [Requests and limits](docs/CREATE.md#requests-and-limits).
