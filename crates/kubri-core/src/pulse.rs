@@ -33,7 +33,23 @@ pub struct Pulse {
     pub memory: Utilization,
     /// cert-manager Certificates that expire soon or are not ready, soonest first.
     pub certificates: Vec<CertificateAlert>,
+    /// Pods no node has taken yet, the ones asking for the most CPU first.
+    pub waiting: Vec<WaitingPod>,
 }
+
+/// A pod that waits for a node, and what it asks for.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WaitingPod {
+    pub object: ObjectRef,
+    /// In millicores.
+    pub cpu: f64,
+    /// In bytes.
+    pub memory: f64,
+}
+
+/// Waiting pods the overview names, at most.
+const WAITING_PODS: usize = 100;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,6 +105,8 @@ pub struct Utilization {
     pub used: Option<f64>,
     /// Requested by the pods that are not finished.
     pub requested: Option<f64>,
+    /// The part of `requested` that pods no node has taken yet ask for.
+    pub waiting: Option<f64>,
     /// Allocatable on all nodes.
     pub capacity: Option<f64>,
 }
@@ -141,14 +159,17 @@ pub(crate) async fn gather(
     let cpu = Utilization {
         used: used(|u| u.cpu),
         requested: pods.as_ref().ok().map(|p| requested(p, "cpu") * 1000.0),
+        waiting: pods.as_ref().ok().map(|p| requested(unplaced(p), "cpu") * 1000.0),
         capacity: nodes.as_ref().ok().map(|n| allocatable(n, "cpu") * 1000.0),
     };
     let memory = Utilization {
         used: used(|u| u.memory),
         requested: pods.as_ref().ok().map(|p| requested(p, "memory")),
+        waiting: pods.as_ref().ok().map(|p| requested(unplaced(p), "memory")),
         capacity: nodes.as_ref().ok().map(|n| allocatable(n, "memory")),
     };
 
+    let waiting = pods.as_deref().map(waiting_pods).unwrap_or_default();
     Pulse {
         kinds: vec![
             summarize(nodes, health::node),
@@ -176,6 +197,7 @@ pub(crate) async fn gather(
         cpu,
         memory,
         certificates,
+        waiting,
     }
 }
 
@@ -279,7 +301,20 @@ pub(crate) fn summarize<K: kube::Resource<DynamicType = ()>>(
 
 /// What the scheduler reserves for pods that still run: the larger of the sum of the
 /// containers and the largest init container, as `kubectl describe node` counts it.
-pub(crate) fn requested(pods: &[Pod], resource: &str) -> f64 {
+pub(crate) fn requested<'a>(pods: impl IntoIterator<Item = &'a Pod>, resource: &str) -> f64 {
+    pods.into_iter()
+        .filter(|p| !finished(p))
+        .map(|p| pod_request(p, resource))
+        .sum()
+}
+
+fn finished(pod: &Pod) -> bool {
+    let phase = pod.status.as_ref().and_then(|s| s.phase.as_deref());
+    matches!(phase, Some("Succeeded" | "Failed"))
+}
+
+/// One pod's request, in cores or bytes.
+fn pod_request(pod: &Pod, resource: &str) -> f64 {
     let request = |c: &k8s_openapi::api::core::v1::Container| {
         c.resources
             .as_ref()
@@ -288,23 +323,45 @@ pub(crate) fn requested(pods: &[Pod], resource: &str) -> f64 {
             .and_then(|q| parse_quantity(&q.0))
             .unwrap_or(0.0)
     };
-    pods.iter()
-        .filter(|p| {
-            let phase = p.status.as_ref().and_then(|s| s.phase.as_deref());
-            !matches!(phase, Some("Succeeded" | "Failed"))
+    let Some(spec) = pod.spec.as_ref() else { return 0.0 };
+    let containers: f64 = spec.containers.iter().map(request).sum();
+    let init = spec
+        .init_containers
+        .iter()
+        .flatten()
+        .map(request)
+        .fold(0.0, f64::max);
+    containers.max(init)
+}
+
+/// Pods that still run but no node has taken: they wait for room.
+fn unplaced(pods: &[Pod]) -> impl Iterator<Item = &Pod> {
+    pods.iter().filter(|p| {
+        let placed = p
+            .spec
+            .as_ref()
+            .and_then(|s| s.node_name.as_deref())
+            .is_some_and(|n| !n.is_empty());
+        !placed && !finished(p) && p.metadata.deletion_timestamp.is_none()
+    })
+}
+
+fn waiting_pods(pods: &[Pod]) -> Vec<WaitingPod> {
+    let mut waiting: Vec<WaitingPod> = unplaced(pods)
+        .map(|p| WaitingPod {
+            object: ObjectRef {
+                context: None,
+                resource: resource_ref::<Pod>(),
+                namespace: p.metadata.namespace.clone(),
+                name: p.metadata.name.clone().unwrap_or_default(),
+            },
+            cpu: pod_request(p, "cpu") * 1000.0,
+            memory: pod_request(p, "memory"),
         })
-        .filter_map(|p| p.spec.as_ref())
-        .map(|spec| {
-            let containers: f64 = spec.containers.iter().map(request).sum();
-            let init = spec
-                .init_containers
-                .iter()
-                .flatten()
-                .map(request)
-                .fold(0.0, f64::max);
-            containers.max(init)
-        })
-        .sum()
+        .collect();
+    waiting.sort_by(|a, b| b.cpu.total_cmp(&a.cpu).then(b.memory.total_cmp(&a.memory)));
+    waiting.truncate(WAITING_PODS);
+    waiting
 }
 
 pub(crate) fn allocatable(nodes: &[Node], resource: &str) -> f64 {
@@ -450,6 +507,34 @@ mod tests {
         let pods = [pod("Running"), pod("Succeeded"), pod("Pending")];
         assert!((requested(&pods, "cpu") - 1.0).abs() < 1e-9);
         assert_eq!(requested(&pods, "memory"), 2.0 * 64.0 * 1024.0 * 1024.0);
+    }
+
+    #[test]
+    fn names_pods_that_wait_for_a_node() {
+        let pod = |name: &str, node: Option<&str>, phase: &str, cpu: &str| -> Pod {
+            from(
+                json!({ "metadata": { "name": name, "namespace": "shop" }, "spec": {
+                "nodeName": node,
+                "containers": [{ "name": "a", "resources": { "requests": { "cpu": cpu, "memory": "1Gi" } } }]
+            }, "status": { "phase": phase } }),
+            )
+        };
+        let pods = [
+            pod("placed", Some("n1"), "Running", "1"),
+            pod("small", None, "Pending", "100m"),
+            pod("big", None, "Pending", "64"),
+            pod("done", None, "Failed", "8"),
+        ];
+        assert!((requested(unplaced(&pods), "cpu") - 64.1).abs() < 1e-9);
+        assert_eq!(
+            requested(unplaced(&pods), "memory"),
+            2.0 * 1024.0 * 1024.0 * 1024.0
+        );
+        let waiting = waiting_pods(&pods);
+        let names: Vec<_> = waiting.iter().map(|w| w.object.name.as_str()).collect();
+        assert_eq!(names, ["big", "small"]);
+        assert_eq!(waiting[0].cpu, 64_000.0);
+        assert_eq!(waiting[0].object.namespace.as_deref(), Some("shop"));
     }
 
     #[test]
