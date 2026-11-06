@@ -85,4 +85,6 @@ An empty list of a kind you may create offers **Create** right there, and an emp
 - <kbd>o</kbd> opens a forward in the browser, and <kbd>c</kbd> copies its URL.
 - Quiet connections stay open: Kubri pings the cluster every 20 seconds, so load balancers and proxies in front of the API server do not drop them as idle.
 - A client that stops sending after its request, as some HTTP and database clients do, still gets the whole answer. The cluster's port-forward cannot tell the pod that the client is done, so Kubri keeps the connection until the pod closes it, or until the pod has sent nothing for 15 seconds.
+- A client that connects and leaves without sending anything, such as a check whether the port is open, frees the pod's connection after a second. When the pod resets a connection whose client has already left, as MariaDB does with one that never signed in, that is not shown as an error.
+- With the address `localhost`, a forward listens on both 127.0.0.1 and ::1, like kubectl, so clients reach it whichever one they try.
 - Each row says how its last connection ended: closed by the pod, closed by the client, or the error, in red.
