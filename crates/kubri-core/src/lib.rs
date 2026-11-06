@@ -913,18 +913,28 @@ impl Kubri {
         Ok(())
     }
 
-    /// Whether `namespace` of the connected context is marked as production.
+    /// Whether `namespace` of the connected context is marked as production, by its name or a
+    /// pattern, or by its labels. Labels are read only where a rule needs them; a namespace
+    /// whose labels cannot be read counts as production then.
     pub(crate) async fn production_namespace(&self, namespace: Option<&str>) -> bool {
         let Some(namespace) = namespace else { return false };
-        match self.cluster().await {
-            Some(cluster) => self
-                .settings()
-                .context(&cluster.context)
-                .production_namespaces
-                .iter()
-                .any(|p| p == namespace),
-            None => false,
+        let Ok(session) = self.session().await else {
+            return false;
+        };
+        let settings = self.settings().context(&session.info.context);
+        if settings.production_by_name(namespace).is_some() {
+            return true;
         }
+        if settings.production_labels.is_empty() {
+            return false;
+        }
+        let api: Api<k8s_openapi::api::core::v1::Namespace> = Api::all(session.client.clone());
+        let labels = api
+            .get(namespace)
+            .await
+            .ok()
+            .map(|ns| ns.metadata.labels.unwrap_or_default());
+        settings.production_by_labels(labels.as_ref()).is_some()
     }
 
     /// Re-reads the kubeconfig from disk, keeping the current connection.
@@ -2757,6 +2767,79 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn agents_leave_namespaces_alone_by_their_labels() {
+        let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
+        let (client, requests) = testing::client(|req| {
+            let labels = match req.uri.rsplit('/').next().unwrap_or_default() {
+                "shop" => r#"{"env":"production"}"#,
+                "web" => r#"{"env":"dev"}"#,
+                "hidden" => return (403, r#"{"kind":"Status","status":"Failure","code":403}"#.into()),
+                _ => return (200, r#"{"kind":"Status","status":"Success"}"#.into()),
+            };
+            let body = format!(
+                r#"{{"kind":"Namespace","apiVersion":"v1","metadata":{{"name":"x","labels":{labels}}}}}"#
+            );
+            (200, body)
+        });
+        let info = ClusterInfo {
+            context: "dev".into(),
+            server: "https://dev".into(),
+            version: "v1.36.0".into(),
+            default_namespace: "default".into(),
+            snapshot: None,
+            resumed: false,
+        };
+        let resources = vec![resource("", "v1", "configmaps", "ConfigMap", true)];
+        *kubri.session.write().await = Some(Arc::new(Session::new(info, client, resources)));
+        kubri
+            .set_context_settings(
+                "dev",
+                ContextSettings {
+                    agent_writes: true,
+                    production_namespaces: vec!["*-prod".into()],
+                    production_labels: vec!["env=production".into()],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let config = |namespace: &str| ObjectRef {
+            resource: ResourceRef {
+                group: String::new(),
+                version: "v1".into(),
+                plural: "configmaps".into(),
+            },
+            namespace: Some(namespace.into()),
+            name: "settings".into(),
+            context: None,
+        };
+        let patch = serde_json::json!({ "data": { "a": "b" } });
+        kubri.set_agent();
+        // By label, by a name pattern, and where the labels cannot be read.
+        for refused in ["shop", "checkout-prod", "hidden"] {
+            let err = kubri
+                .patch(&config(refused), patch.clone())
+                .await
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("production namespace"), "{refused}: {err}");
+        }
+        kubri.patch(&config("web"), patch).await.unwrap();
+        let sent = requests.lock().unwrap();
+        let patched: Vec<_> = sent
+            .iter()
+            .filter(|r| r.method == "PATCH")
+            .map(|r| r.uri.clone())
+            .collect();
+        assert_eq!(patched.len(), 1, "{patched:?}");
+        assert!(patched[0].contains("/namespaces/web/"), "{patched:?}");
+        // A name pattern needs no labels.
+        assert!(
+            !sent.iter().any(|r| r.uri.ends_with("/namespaces/checkout-prod")),
+            "{sent:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn agents_leave_production_namespaces_alone() {
         let kubri = Kubri::from_kubeconfig(Kubeconfig::default());
         let (client, requests) = testing::client(|_| (200, r#"{"kind":"Status","status":"Success"}"#.into()));
@@ -2782,7 +2865,9 @@ mod tests {
             .unwrap();
         let settings = kubri.settings().context("dev");
         assert_eq!(settings.production_namespaces, ["shop"]);
-        assert!(settings.production_in(Some("shop")) && !settings.production_in(Some("web")));
+        assert!(
+            settings.production_by_name("shop").is_some() && settings.production_by_name("web").is_none()
+        );
         let config = |namespace: &str| ObjectRef {
             resource: ResourceRef {
                 group: String::new(),

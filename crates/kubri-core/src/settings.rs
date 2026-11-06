@@ -24,8 +24,12 @@ pub struct ContextSettings {
     /// Destructive actions ask to type the object's name, and a banner says where you are.
     pub production: bool,
     /// Namespaces treated like a production context, in a context that is not one: typed names
-    /// before destructive actions, a banner, and no changes by AI agents.
+    /// before destructive actions, a banner, and no changes by AI agents. Each is a name or a
+    /// pattern where `*` stands for any text, like `*-prod`.
     pub production_namespaces: Vec<String>,
+    /// Namespaces treated the same by their labels: each entry a selector such as
+    /// `env=production` (`key=value`, `key!=value`, `key` or `!key`, joined by commas to need all).
+    pub production_labels: Vec<String>,
     /// Kubri never changes this cluster until this is turned off again.
     pub read_only: bool,
     /// Starts read-only; unlocking lasts 15 minutes at a time.
@@ -80,10 +84,29 @@ impl FavoriteForward {
 }
 
 impl ContextSettings {
-    /// Whether changes in `namespace` get production's care: the whole context is production,
-    /// or the namespace is marked as such.
-    pub fn production_in(&self, namespace: Option<&str>) -> bool {
-        self.production || namespace.is_some_and(|ns| self.production_namespaces.iter().any(|p| p == ns))
+    /// The name or pattern in [`Self::production_namespaces`] that marks `namespace`, its own
+    /// name first.
+    pub fn production_by_name(&self, namespace: &str) -> Option<&str> {
+        let names = &self.production_namespaces;
+        names
+            .iter()
+            .find(|p| *p == namespace)
+            .or_else(|| {
+                names
+                    .iter()
+                    .find(|p| p.contains('*') && name_matches(p, namespace))
+            })
+            .map(String::as_str)
+    }
+
+    /// The selector in [`Self::production_labels`] that a namespace with `labels` matches. Labels
+    /// that could not be read match the first one: better a namespace too careful than one
+    /// that lets an agent change production.
+    pub fn production_by_labels(&self, labels: Option<&BTreeMap<String, String>>) -> Option<&str> {
+        self.production_labels
+            .iter()
+            .find(|selector| labels.is_none_or(|labels| labels_match(selector, labels)))
+            .map(String::as_str)
     }
 
     fn is_default(&self) -> bool {
@@ -104,6 +127,24 @@ impl ContextSettings {
         }
         production.sort();
         self.production_namespaces = production;
+        let mut labels = Vec::new();
+        for selector in std::mem::take(&mut self.production_labels) {
+            let Some(requirements) = parse_selector(&selector) else {
+                return Err(Error::Unsupported(format!(
+                    "the label rule `{}` is not of the form key=value, key!=value, key or !key",
+                    selector.trim()
+                )));
+            };
+            let selector = requirements
+                .iter()
+                .map(Requirement::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            if !requirements.is_empty() && !labels.contains(&selector) {
+                labels.push(selector);
+            }
+        }
+        self.production_labels = labels;
         self.color = self.color.trim().to_ascii_lowercase();
         self.integrations = self.integrations.normalized()?;
         let hex = self.color.strip_prefix('#').unwrap_or("");
@@ -114,6 +155,94 @@ impl ContextSettings {
             )));
         }
         Ok(self)
+    }
+}
+
+/// Whether `name` matches `pattern`, where `*` stands for any text, also none.
+pub fn name_matches(pattern: &str, name: &str) -> bool {
+    let mut parts = pattern.split('*');
+    let first = parts.next().unwrap_or_default();
+    let Some(mut rest) = name.strip_prefix(first) else {
+        return false;
+    };
+    let mut parts: Vec<&str> = parts.collect();
+    let Some(last) = parts.pop() else {
+        return rest.is_empty();
+    };
+    for part in parts {
+        match rest.find(part) {
+            Some(at) => rest = &rest[at + part.len()..],
+            None => return false,
+        }
+    }
+    rest.len() >= last.len() && rest.ends_with(last)
+}
+
+/// One part of a label selector.
+#[derive(Debug, PartialEq, Eq)]
+enum Requirement<'a> {
+    Equals(&'a str, &'a str),
+    Differs(&'a str, &'a str),
+    Exists(&'a str),
+    Missing(&'a str),
+}
+
+impl std::fmt::Display for Requirement<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Equals(key, value) => write!(f, "{key}={value}"),
+            Self::Differs(key, value) => write!(f, "{key}!={value}"),
+            Self::Exists(key) => write!(f, "{key}"),
+            Self::Missing(key) => write!(f, "!{key}"),
+        }
+    }
+}
+
+/// The parts of a selector such as `env=production,!canary`; None when one is not of a form
+/// Kubri matches.
+fn parse_selector(selector: &str) -> Option<Vec<Requirement<'_>>> {
+    let mut out = Vec::new();
+    for part in selector.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        out.push(if let Some((k, v)) = part.split_once("!=") {
+            Requirement::Differs(label_key(k)?, label_value(v)?)
+        } else if let Some((k, v)) = part.split_once("==").or_else(|| part.split_once('=')) {
+            Requirement::Equals(label_key(k)?, label_value(v)?)
+        } else if let Some(k) = part.strip_prefix('!') {
+            Requirement::Missing(label_key(k)?)
+        } else {
+            Requirement::Exists(label_key(part)?)
+        });
+    }
+    Some(out)
+}
+
+fn label_key(key: &str) -> Option<&str> {
+    let key = key.trim();
+    let ok = !key.is_empty()
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./".contains(c));
+    ok.then_some(key)
+}
+
+fn label_value(value: &str) -> Option<&str> {
+    let value = value.trim();
+    value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+        .then_some(value)
+}
+
+/// Whether `labels` meet every part of `selector`; never for a selector Kubri cannot read.
+pub fn labels_match(selector: &str, labels: &BTreeMap<String, String>) -> bool {
+    match parse_selector(selector) {
+        Some(requirements) if !requirements.is_empty() => requirements.iter().all(|r| match r {
+            Requirement::Equals(k, v) => labels.get(*k).is_some_and(|l| l == v),
+            Requirement::Differs(k, v) => labels.get(*k).is_none_or(|l| l != v),
+            Requirement::Exists(k) => labels.contains_key(*k),
+            Requirement::Missing(k) => !labels.contains_key(*k),
+        }),
+        _ => false,
     }
 }
 
@@ -376,6 +505,76 @@ mod tests {
         assert_eq!(settings.context("prod").color, "#d64545");
         settings.set_context("prod", ContextSettings::default()).unwrap();
         assert!(settings.contexts.is_empty());
+    }
+
+    #[test]
+    fn patterns_match_names() {
+        for (pattern, name, yes) in [
+            ("*-prod", "shop-prod", true),
+            ("*-prod", "shop-prod-2", false),
+            ("prod-*", "prod-eu", true),
+            ("prod-*", "prod-", true),
+            ("*prod*", "payments-production", true),
+            ("a*b*c", "abc", true),
+            ("a*b*c", "acb", false),
+            ("ab*ba", "aba", false),
+            ("shop", "shop", true),
+            ("shop", "shops", false),
+            ("*", "anything", true),
+        ] {
+            assert_eq!(name_matches(pattern, name), yes, "{pattern} {name}");
+        }
+    }
+
+    #[test]
+    fn selectors_match_labels() {
+        let labels: BTreeMap<String, String> = [
+            ("env".into(), "production".into()),
+            ("team".into(), "shop".into()),
+        ]
+        .into();
+        for (selector, yes) in [
+            ("env=production", true),
+            ("env == production", true),
+            ("env=staging", false),
+            ("env!=staging", true),
+            ("tier!=web", true),
+            ("team", true),
+            ("!team", false),
+            ("!canary", true),
+            ("env=production,team=web", false),
+            ("env=production, team", true),
+            ("env in (production)", false),
+            ("", false),
+        ] {
+            assert_eq!(labels_match(selector, &labels), yes, "{selector}");
+        }
+    }
+
+    #[test]
+    fn production_rules_are_kept_tidy() {
+        let mut settings = Settings::default();
+        let rules = ContextSettings {
+            production_namespaces: vec!["shop".into(), "*-prod".into()],
+            production_labels: vec![" env = production ".into(), "env=production".into(), " ".into()],
+            ..Default::default()
+        };
+        settings.set_context("dev", rules).unwrap();
+        let dev = settings.context("dev");
+        assert_eq!(dev.production_labels, ["env=production"]);
+        assert_eq!(dev.production_by_name("shop"), Some("shop"));
+        assert_eq!(dev.production_by_name("shop-prod"), Some("*-prod"));
+        assert_eq!(dev.production_by_name("web"), None);
+        let prod: BTreeMap<String, String> = [("env".into(), "production".into())].into();
+        assert_eq!(dev.production_by_labels(Some(&prod)), Some("env=production"));
+        assert_eq!(dev.production_by_labels(Some(&BTreeMap::new())), None);
+        assert_eq!(dev.production_by_labels(None), Some("env=production"));
+        let bad = ContextSettings {
+            production_labels: vec!["env in (prod)".into()],
+            ..Default::default()
+        };
+        let err = settings.set_context("dev", bad).unwrap_err().to_string();
+        assert!(err.contains("env in (prod)"), "{err}");
     }
 
     #[test]

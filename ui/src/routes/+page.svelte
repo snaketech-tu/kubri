@@ -170,6 +170,10 @@
 	$effect(() => {
 		if (!limited) app.namespaces = namespaces.rows.map((r) => r.name).sort();
 	});
+	// Their labels, for production namespaces marked by a label rule.
+	$effect(() => {
+		app.namespaceLabels = Object.fromEntries(namespaces.rows.map((r) => [r.name, r.labels]));
+	});
 
 	// Someone who may not list namespaces still gets the ones the kubeconfig and settings name.
 	$effect(() => {

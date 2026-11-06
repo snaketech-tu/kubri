@@ -4,6 +4,7 @@
 	import { app } from '../state.svelte';
 	import { plainOptions } from '../select';
 	import Select from './Select.svelte';
+	import ProductionNamespaces from './ProductionNamespaces.svelte';
 
 	let { context, namespaces = [] }: { context: string; namespaces?: string[] } = $props();
 
@@ -141,18 +142,7 @@
 		</span>
 	</label>
 	{#if !current.production}
-		<label class="field">
-			<span>{t('Production namespaces')}</span>
-			<input
-				value={(current.productionNamespaces ?? []).join(', ')}
-				placeholder={t('None, e.g. payments, checkout')}
-				onchange={(e) => {
-					const list = [...new Set(e.currentTarget.value.split(/[\s,]+/).filter(Boolean))].sort();
-					if (list.join() !== (current.productionNamespaces ?? []).join()) save({ productionNamespaces: list });
-				}}
-				spellcheck="false"
-			/>
-		</label>
+		<ProductionNamespaces {context} {namespaces} />
 		<p class="note">{t('Like a production context, only there: a banner, typed names before deleting, and no changes by AI agents.')}</p>
 	{/if}
 	<label class="check">
@@ -183,7 +173,7 @@
 					{t('Never on a production context: agents only read here.')}
 				{:else}
 					{t('Agents connected over MCP may scale, restart, set images and delete here. You allow each change in Kubri.')}
-					{#if current.productionNamespaces?.length}{t('Never in its production namespaces.')}{/if}
+					{#if current.productionNamespaces?.length || current.productionLabels?.length}{t('Never in its production namespaces.')}{/if}
 				{/if}
 			</small>
 		</span>
