@@ -46,7 +46,7 @@ The views keep their k9s commands, though some have a name of their own in Kubri
 - **Create** from templates, forms, files or the clipboard, and Helm installs and upgrades with a diff ([Creating and changing](CREATE.md)).
 - **Clusters**: all your contexts on one page, search across them, and contexts that stay connected so switching back is quick ([Several clusters](CLUSTERS.md)).
 - Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager, found without setup ([Integrations](INTEGRATIONS.md)).
-- A name, color and production banner per context, and read-only or locked contexts ([Settings and guard rails](SETTINGS.md)).
+- A name, color and production marker per context, and read-only or locked contexts ([Settings and guard rails](SETTINGS.md)).
 - Snapshots to look at a cluster offline, and `kubri lint` for CI ([Snapshots](SNAPSHOTS.md), [Command line](CLI.md)).
 - The same app in the browser, also for a whole team with each person's own permissions ([In the browser](WEB.md)).
 

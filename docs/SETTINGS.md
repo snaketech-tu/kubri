@@ -19,8 +19,8 @@ Kubri keeps its own settings in one file. The kubeconfig and the k9s configurati
 | Display name | Shown instead of the context's name in the switcher, the header and the status bar. |
 | Label | A word such as `Staging` beside the name. Kubri never guesses it from the name. |
 | Color | Tints the header and marks the context in the switcher. |
-| Production | Shows a banner, and dangerous actions, such as deleting, draining or uninstalling a Helm release, ask you to type the object's name (or the context's, for bulk actions) first. |
-| Production namespaces | For a context that is not production as a whole: these namespaces get the same care. A banner shows while one is picked, dangerous actions on objects in them ask you to type the name, Helm and Create say so, and AI agents never change anything there. See [Production namespaces](#production-namespaces). |
+| Production | Shows a red stripe over the header and a Production badge beside the context name, and dangerous actions, such as deleting, draining or uninstalling a Helm release, ask you to type the object's name (or the context's, for bulk actions) first. |
+| Production namespaces | For a context that is not production as a whole: these namespaces get the same care. While one is picked, a red stripe and a Production badge beside the namespace show it, dangerous actions on objects in them ask you to type the name, Helm and Create say so, and AI agents never change anything there. See [Production namespaces](#production-namespaces). |
 | Read-only | Kubri never changes this cluster until you turn it off. |
 | Locked | Starts read-only. **Unlock** in the header allows changes for 15 minutes, then the context locks again. |
 | Namespace | The namespace shown after connecting, instead of all namespaces. |

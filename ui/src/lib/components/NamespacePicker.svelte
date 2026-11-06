@@ -2,6 +2,7 @@
 	import { ALL_NAMESPACES, app } from '../state.svelte';
 	import { t } from '../i18n';
 	import Select from './Select.svelte';
+	import ProductionBadge from './ProductionBadge.svelte';
 	import type { OptionToggle } from '../select';
 
 	// Keep the current and default namespace selectable even if listing namespaces is forbidden.
@@ -40,6 +41,7 @@
 		quiet
 	/>
 </label>
+{#if app.cluster && app.productionNamespace}<ProductionBadge what="namespace" />{/if}
 
 <style>
 	.picker {
