@@ -1095,6 +1095,7 @@ const de: Record<string, string> = {
 	// Details: inspector
 	'{kind} inspector': 'Inspektor für {kind}',
 	'Resize the inspector': 'Breite des Inspektors ändern',
+	'Resize the sidebar': 'Breite der Seitenleiste ändern',
 	'Drag to resize, double-click for the default width': 'Ziehen ändert die Breite, Doppelklick stellt die Standardbreite her',
 	'Move to the workspace, where the shell keeps running while you browse': 'In den Arbeitsbereich verschieben, wo die Shell weiterläuft, während du dich umsiehst',
 	'Move to the workspace, where the logs keep running while you browse': 'In den Arbeitsbereich verschieben, wo die Logs weiterlaufen, während du dich umsiehst',

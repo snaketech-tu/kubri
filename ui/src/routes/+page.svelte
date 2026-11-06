@@ -469,6 +469,7 @@
 	class:tinted={accent}
 	class:nav-open={navOpen}
 	style:--context-color={accent}
+	style:--sidebar-width={app.sidebarWidth ? `${app.sidebarWidth}px` : null}
 >
 	<Sidebar />
 	<div class="workspace">
@@ -859,7 +860,8 @@
 <style>
 	.shell {
 		display: grid;
-		grid-template-columns: 220px minmax(0, 1fr);
+		/* The sidebar can be dragged wider, yet never takes more than a third of the window. */
+		grid-template-columns: max(220px, min(var(--sidebar-width, 220px), 33vw)) minmax(0, 1fr);
 		height: 100dvh;
 	}
 	/* Logs and shells can take the whole window. */

@@ -976,6 +976,9 @@
 			{:else if current}
 				{@const [before, after] = t('Click a row or press {key} to act on it').split('{key}')}
 				<ActionBar actions={[]}><span class="choose">{before}<kbd>↓</kbd>{after}</span></ActionBar>
+			{:else}
+				<!-- An empty bar keeps its line, so the list does not move once rows come or go. -->
+				<ActionBar actions={[]} />
 			{/if}
 		</div>
 
@@ -1508,8 +1511,9 @@
 		width: 34px;
 		padding: 0 0 0 14px;
 	}
+	/* The marks stay in sight, quieter until the row is pointed at, chosen or marked. */
 	.check input {
-		opacity: 0;
+		opacity: 0.45;
 		margin: 0;
 	}
 	.check input:focus-visible {

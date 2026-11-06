@@ -20,6 +20,12 @@
 	let older = $state.raw<HistoryEntry[]>([]);
 	let more = $state(false);
 	let error = $state<string | null>(null);
+	/**
+	 * What the recorder said last, kept while another range loads, so its notes do not come
+	 * and go above the list.
+	 */
+	let recorder = $state.raw<HistoryPage['recorder'] | null>(null);
+	let recorderContext: string | undefined;
 	let text = $state('');
 	let typed = $state('');
 	let now = $state(Date.now());
@@ -53,8 +59,10 @@
 
 	$effect(() => {
 		const asked = { ...query };
-		void app.cluster?.context;
+		const context = app.cluster?.context;
 		void hours;
+		if (context !== recorderContext) recorder = null;
+		recorderContext = context;
 		let cancelled = false;
 		let loading = false;
 		page = null;
@@ -69,6 +77,7 @@
 				const next = await backend.history({ ...asked, since: since() });
 				if (!cancelled) {
 					page = next;
+					recorder = next.recorder;
 					more = next.more;
 					error = null;
 				}
@@ -149,20 +158,24 @@
 		{/snippet}
 	</PageHeader>
 
-	{#if page && !page.recorder.recording}
+	{#if !recorder && !error}
+		<!-- The notes and the list come together, so the list does not move down under them. -->
+		<p class="muted reading">{t('Reading the changes…')}</p>
+	{:else}
+	{#if recorder && !recorder.recording}
 		<div class="banner" role="status">
 			<Icon name="pending" size={14} />
-			<span>{t('Not recording now: {reason}.', { reason: page.recorder.reason ? coreText(page.recorder.reason) : t('unknown reason') })}</span>
-			{#if page.recorder.reason === 'Recording is turned off in the settings'}
+			<span>{t('Not recording now: {reason}.', { reason: recorder.reason ? coreText(recorder.reason) : t('unknown reason') })}</span>
+			{#if recorder.reason === 'Recording is turned off in the settings'}
 				<button class="link" onclick={() => app.showConfig('changes')}>{t('Settings')}</button>
 			{/if}
 		</div>
 	{/if}
-	{#if page?.recorder.skipped.length}
+	{#if recorder?.skipped.length}
 		<details class="skipped">
-			<summary><Icon name="warning" size={14} /> {plural(page.recorder.skipped.length, '{n} kind is not recorded', '{n} kinds are not recorded')}</summary>
+			<summary><Icon name="warning" size={14} /> {plural(recorder.skipped.length, '{n} kind is not recorded', '{n} kinds are not recorded')}</summary>
 			<ul>
-				{#each page.recorder.skipped as s (s)}<li>{s}</li>{/each}
+				{#each recorder.skipped as s (s)}<li>{s}</li>{/each}
 			</ul>
 		</details>
 	{/if}
@@ -268,6 +281,7 @@
 			{/if}
 		</div>
 	</div>
+	{/if}
 </section>
 
 <style>
@@ -492,6 +506,10 @@
 	.pad {
 		margin: 0;
 		padding: 18px;
+	}
+	.reading {
+		margin: 0;
+		padding: 0 4px;
 	}
 	@media (max-width: 900px) {
 		.row {
