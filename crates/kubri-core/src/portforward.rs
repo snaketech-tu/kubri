@@ -373,7 +373,10 @@ where
             },
             message = from_pod.next() => match message {
                 None | Some(Ok(Message::Close(_))) => break Ok(EndedBy::Pod),
-                Some(Err(e)) => break failed(e.to_string(), client_done, &mut writer),
+                Some(Err(e)) => {
+                    let done = client_done || closed(&mut reader, &mut buffer);
+                    break failed(e.to_string(), done, &mut writer);
+                }
                 Some(Ok(Message::Binary(frame))) => {
                     let Some((&channel, mut data)) = frame.split_first() else { continue };
                     let channel = usize::from(channel);
@@ -389,7 +392,8 @@ where
                     }
                     if channel == 1 {
                         let message = String::from_utf8_lossy(data).trim().to_owned();
-                        break failed(message, client_done, &mut writer);
+                        let done = client_done || closed(&mut reader, &mut buffer);
+                        break failed(message, done, &mut writer);
                     }
                     if writer.write_all(data).await.is_err() {
                         // The client is gone for good.
@@ -413,6 +417,14 @@ where
     let _ = writer.shutdown().await;
     let _ = to_pod.close().await;
     result
+}
+
+/// Whether the client has closed its side already, as far as can be told without waiting. The
+/// pod's error can come in before the end of the client's stream was read, when both arrive at
+/// once.
+fn closed<R: AsyncRead + Unpin>(reader: &mut R, buffer: &mut [u8]) -> bool {
+    use futures::FutureExt;
+    matches!(reader.read(buffer).now_or_never(), Some(Ok(0)))
 }
 
 /// How a connection ends on an error from the pod's side. Once the local client has stopped
