@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ContextInfo, ResourceInfo, Row } from './api';
 import { matchResources, namesAction, suggest } from './commands';
-import { age, bytes, cores, cpu, cpuText, imageParts, isNotFound, memory, memoryText, workloadPrefix } from './format';
+import { age, bytes, cores, cpu, cpuText, imageParts, isNotFound, memory, memoryText, restarts, workloadPrefix } from './format';
 import { setKubectlUnits } from './units.svelte';
 import { cellTone } from './status';
 import { filterRows, hasHealth, isFaulty, sortRows, toCsv } from './table';
@@ -392,5 +392,14 @@ describe('readable amounts', () => {
 		setKubectlUnits(false);
 		expect([cpuText(250), memoryText(512 * 1024 ** 2)]).toEqual(['0.25', '512 MiB']);
 		expect([cpuText(1000, true), cpuText(1030, true), cpuText(1500, true)]).toEqual(['1 core', '1 core', '1.5 cores']);
+	});
+});
+
+describe('restarts', () => {
+	it('reads the time of the last restart as an age', () => {
+		expect(restarts('5 (119s ago)')).toBe('5 · 1m ago');
+		expect(restarts('36 (2m1s ago)')).toBe('36 · 2m ago');
+		expect(restarts('2 (3d4h ago)')).toBe('2 · 3d ago');
+		expect(restarts('0')).toBe('0');
 	});
 });

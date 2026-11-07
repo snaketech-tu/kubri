@@ -1843,6 +1843,11 @@ impl Kubri {
     pub async fn metrics(&self, kind: MetricsKind, namespace: Option<&str>) -> Result<Vec<Usage>> {
         let session = self.session().await?;
         let client = session.client.clone();
+        if kind == MetricsKind::Namespaces {
+            let usage = session.metrics(MetricsKind::Pods, None).await?;
+            let pods = typed::list(Api::<Pod>::all(client)).await.unwrap_or_default();
+            return Ok(metrics::by_namespace(&usage, &pods));
+        }
         let mut usage = session.metrics(kind, namespace).await?;
         // Without them the percentages stay empty; the usage itself is still worth showing.
         match kind {
@@ -1855,6 +1860,7 @@ impl Kubri {
                     metrics::add_pod_limits(&mut usage, &pods);
                 }
             }
+            MetricsKind::Namespaces => {}
             MetricsKind::Nodes => {
                 if let Ok(nodes) = typed::list(Api::<Node>::all(client.clone())).await {
                     metrics::add_node_allocatable(&mut usage, &nodes);
@@ -2551,7 +2557,7 @@ impl Session {
 
     async fn metrics(&self, kind: MetricsKind, namespace: Option<&str>) -> Result<Vec<Usage>> {
         let plural = match kind {
-            MetricsKind::Pods => "pods",
+            MetricsKind::Pods | MetricsKind::Namespaces => "pods",
             MetricsKind::Nodes => "nodes",
         };
         let resource = self

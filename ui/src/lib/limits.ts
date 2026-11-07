@@ -42,3 +42,30 @@ export function limitsHint(usage: Usage | undefined, what: Measure): string | nu
 	if (limit) return t('Uses {used}, requests {request}, may use at most {limit}', { used, request: requested, limit: show(what, limit, true) });
 	return t('Uses {used}, requests {request}. Not every container has a limit, so there is no maximum.', { used, request: requested });
 }
+
+/** One reading of a pod's CPU or memory against its request and limit, for the inspector. */
+export interface Reading {
+	used: string;
+	request: string | null;
+	limit: string | null;
+	/** How full up to the limit, or up to the request without one, from 0 to 1; null without either. */
+	share: number | null;
+	/** What the share is measured against. */
+	against: 'limit' | 'request' | null;
+	/** At the CPU limit (throttled) or close to the memory limit (may be stopped). */
+	strained: boolean;
+}
+
+export function reading(usage: Usage, what: Measure): Reading {
+	const request = usage.requests?.[what];
+	const limit = usage.limits?.[what];
+	const of = limit ?? request;
+	return {
+		used: show(what, usage[what], true),
+		request: request ? show(what, request, true) : null,
+		limit: limit ? show(what, limit, true) : null,
+		share: of ? Math.min(1, usage[what] / of) : null,
+		against: limit ? 'limit' : request ? 'request' : null,
+		strained: !!limit && usage[what] >= limit * 0.9
+	};
+}

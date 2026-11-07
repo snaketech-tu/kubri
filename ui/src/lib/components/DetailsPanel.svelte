@@ -43,6 +43,7 @@
 	import ManagedNote from './ManagedNote.svelte';
 	import MetricsPanel from './MetricsPanel.svelte';
 	import PodSummary from './PodSummary.svelte';
+	import UsageGlance from './UsageGlance.svelte';
 	import ServiceSummary from './ServiceSummary.svelte';
 	import RolloutHistory from './RolloutHistory.svelte';
 	import ViewSummary from './ViewSummary.svelte';
@@ -622,6 +623,7 @@
 		{:else if details.tab === 'describe'}
 			<div class="scroll">
 				<ManagedNote target={details.target} />
+				{#if isPods(details.resource)}<UsageGlance target={details.target} />{/if}
 				<StatusSummary {object} target={details.target} {now} />
 				<ViewSummary {object} resource={details.resource} {now} />
 				<PodSummary {object} target={details.target} onlogs={logs ? openLogs : undefined} />

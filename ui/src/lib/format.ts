@@ -16,6 +16,25 @@ export function age(timestamp: string | null | undefined, now: number): string {
 	return days < 730 ? `${days}d` : `${Math.floor(days / 365)}y`;
 }
 
+/** Seconds as an age reads: 42s, 5m, 3h, 12d. */
+function span(seconds: number): string {
+	return age(new Date(0).toISOString(), seconds * 1000);
+}
+
+/**
+ * kubectl's restarts, `5 (119s ago)`, with the time as ages read elsewhere in Kubri:
+ * `5 · 1m ago`. Other text is left as it is.
+ */
+export function restarts(value: string): string {
+	const m = /^(\d+) \(((?:\d+[dhms])+) ago\)$/.exec(value.trim());
+	if (!m) return value;
+	const seconds = [...m[2].matchAll(/(\d+)([dhms])/g)].reduce(
+		(n, [, amount, unit]) => n + Number(amount) * { d: 86_400, h: 3600, m: 60, s: 1 }[unit as 'd' | 'h' | 'm' | 's'],
+		0
+	);
+	return `${m[1]} · ${t('{age} ago', { age: span(seconds) })}`;
+}
+
 /** A time before or after `now`: `3d ago`, `in 60d`. */
 export function relative(timestamp: string | null | undefined, now: number): string {
 	if (!timestamp || Number.isNaN(Date.parse(timestamp))) return '';

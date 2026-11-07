@@ -25,6 +25,19 @@ pub struct Usage {
     /// What a node can give to pods, for its %CPU and %MEM.
     #[serde(skip_serializing_if = "Limits::is_empty")]
     pub allocatable: Limits,
+    /// For a namespace: how healthy its pods are.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pods: Option<PodCounts>,
+}
+
+/// How many pods are healthy, as the overview counts them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodCounts {
+    pub total: usize,
+    pub ok: usize,
+    pub warning: usize,
+    pub failed: usize,
 }
 
 /// CPU in millicores and memory in bytes, where they are set.
@@ -49,6 +62,49 @@ impl Limits {
 pub enum MetricsKind {
     Pods,
     Nodes,
+    /// What the pods of each namespace use and request, and how healthy they are.
+    Namespaces,
+}
+
+/// One usage per namespace: what its pods use (from `usage`, per pod) and request, and how
+/// healthy they are. Namespaces without pods are left out; finished pods count as healthy
+/// but request nothing.
+pub(crate) fn by_namespace(usage: &[Usage], pods: &[Pod]) -> Vec<Usage> {
+    use std::collections::BTreeMap;
+    fn entry<'a>(out: &'a mut BTreeMap<String, Usage>, ns: &str) -> &'a mut Usage {
+        out.entry(ns.to_string()).or_insert_with(|| Usage {
+            name: ns.to_string(),
+            pods: Some(PodCounts::default()),
+            ..Usage::default()
+        })
+    }
+    let mut out = BTreeMap::new();
+    for u in usage {
+        let Some(ns) = u.namespace.as_deref() else {
+            continue;
+        };
+        let e = entry(&mut out, ns);
+        e.cpu += u.cpu;
+        e.memory += u.memory;
+    }
+    for pod in pods {
+        let Some(ns) = pod.metadata.namespace.as_deref() else {
+            continue;
+        };
+        let e = entry(&mut out, ns);
+        let counts = e.pods.get_or_insert_with(PodCounts::default);
+        counts.total += 1;
+        match crate::health::pod(pod).health {
+            crate::health::Health::Ok => counts.ok += 1,
+            crate::health::Health::Warning => counts.warning += 1,
+            crate::health::Health::Failed => counts.failed += 1,
+        }
+        let cpu = crate::pulse::requested(std::slice::from_ref(pod), "cpu") * 1000.0;
+        let memory = crate::pulse::requested(std::slice::from_ref(pod), "memory");
+        e.requests.cpu = Some(e.requests.cpu.unwrap_or(0.0) + cpu);
+        e.requests.memory = Some(e.requests.memory.unwrap_or(0.0) + memory);
+    }
+    out.into_values().collect()
 }
 
 /// Turns a `PodMetricsList` or `NodeMetricsList` into one usage per pod or node.
@@ -236,6 +292,51 @@ pub fn parse_quantity(text: &str) -> Option<f64> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn sums_use_requests_and_health_per_namespace() {
+        let pod = |ns: &str, name: &str, phase: &str, cpu: &str| -> Pod {
+            serde_json::from_value(json!({
+                "metadata": { "name": name, "namespace": ns },
+                "spec": { "containers": [{ "name": "c", "resources": { "requests": { "cpu": cpu, "memory": "64Mi" } } }] },
+                "status": { "phase": phase, "containerStatuses": [{ "name": "c", "ready": phase == "Running", "restartCount": 0, "image": "i", "imageID": "",
+                    "state": if phase == "Running" { json!({ "running": {} }) } else { json!({ "waiting": { "reason": "CrashLoopBackOff" } }) } }] }
+            }))
+            .unwrap()
+        };
+        let pods = [
+            pod("shop", "web", "Running", "100m"),
+            pod("shop", "cache", "Pending", "50m"),
+            pod("payments", "api", "Running", "1"),
+        ];
+        let usage = [
+            Usage {
+                namespace: Some("shop".into()),
+                name: "web".into(),
+                cpu: 20.0,
+                memory: 1000.0,
+                ..Usage::default()
+            },
+            Usage {
+                namespace: Some("shop".into()),
+                name: "cache".into(),
+                cpu: 5.0,
+                memory: 500.0,
+                ..Usage::default()
+            },
+        ];
+        let out = by_namespace(&usage, &pods);
+        let names: Vec<_> = out.iter().map(|u| u.name.as_str()).collect();
+        assert_eq!(names, ["payments", "shop"]);
+        let shop = &out[1];
+        assert_eq!((shop.cpu, shop.memory), (25.0, 1500.0));
+        assert_eq!(shop.requests.cpu, Some(150.0));
+        let counts = shop.pods.unwrap();
+        assert_eq!((counts.total, counts.ok), (2, 1));
+        assert_eq!(counts.warning + counts.failed, 1);
+        assert_eq!(out[0].requests.cpu, Some(1000.0));
+        assert!(shop.namespace.is_none());
+    }
 
     #[test]
     fn parses_quantities() {

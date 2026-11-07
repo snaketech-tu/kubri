@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { plural, t } from '../i18n';
 	import { copyLines } from '../actions';
-	import type { EventInfo, KubeObject, Reference } from '../api';
+	import { backend, type EventInfo, type KubeObject, type Reference } from '../api';
 	import { age, imageParts } from '../format';
 	import { secretValue } from '../pods';
 	import { relatedOf } from '../references';
@@ -51,6 +51,36 @@
 	const spec = $derived(object.spec ?? {});
 	const status = $derived(object.status ?? {});
 	const conditions = $derived<any[]>(Array.isArray(status.conditions) ? status.conditions : []);
+	/** Conditions that are all True say nothing new; they fold. */
+	const allTrue = $derived(conditions.length > 0 && conditions.every((c) => c.status === 'True'));
+
+	/** The workload above a pod's ReplicaSet, such as its Deployment, which is what people think of. */
+	let workload = $state<{ kind: string; name: string; apiVersion?: string; via: string } | null>(null);
+	/** The ReplicaSet a pod belongs to; a string, so updates to the pod do not look it up again. */
+	const replicaSet = $derived.by(() => {
+		const owners = meta.ownerReferences ?? [];
+		return object.kind === 'Pod' && owners.length === 1 && owners[0].kind === 'ReplicaSet' ? owners[0].name : null;
+	});
+	const podNamespace = $derived<string | null>(meta.namespace ?? null);
+	$effect(() => {
+		const via = replicaSet;
+		const namespace = podNamespace;
+		workload = null;
+		if (!via) return;
+		let stale = false;
+		backend
+			.getObject({ context: app.cluster?.context, resource: { group: 'apps', version: 'v1', plural: 'replicasets' }, namespace, name: via })
+			.then((rs) => {
+				const top = (rs.metadata.ownerReferences ?? []).find((o: any) => o.controller);
+				if (!stale && top) workload = { kind: top.kind, name: top.name, apiVersion: top.apiVersion, via };
+			})
+			.catch(() => {
+				// The ReplicaSet stays the answer.
+			});
+		return () => {
+			stale = true;
+		};
+	});
 
 	interface ContainerRow {
 		name: string;
@@ -119,7 +149,15 @@
 		f.push([t('Created'), `${t('{age} ago', { age: age(meta.creationTimestamp, now) })} · ${meta.creationTimestamp ?? ''}`]);
 		if (meta.deletionTimestamp) f.push([t('Deleting since'), meta.deletionTimestamp]);
 		const owners = meta.ownerReferences ?? [];
-		if (owners.length === 1) {
+		if (owners.length === 1 && workload) {
+			const w = workload;
+			f.push([
+				t('Controlled by'),
+				`${w.kind}/${w.name}`,
+				() => showObject(w.kind, w.apiVersion, ns, w.name),
+				t('Through ReplicaSet {name}', { name: w.via })
+			]);
+		} else if (owners.length === 1) {
 			const [o] = owners;
 			f.push([t('Controlled by'), `${o.kind}/${o.name}`, () => showObject(o.kind, o.apiVersion, ns, o.name)]);
 		} else if (owners.length) {
@@ -368,24 +406,35 @@
 	{/if}
 
 	{#if conditions.length}
-		<h3>{t('Conditions')}</h3>
-		<table>
-			<thead><tr><th>{t('Type')}</th><th>{t('Status')}</th><th>{t('Reason')}</th><th>{t('Age')}</th><th>{t('Message')}</th></tr></thead>
-			<tbody>
-				{#each conditions as c (c.type)}
-					<tr>
-						<td>{c.type}</td>
-						<td class={cellTone('Status', c.status)}>{c.status}</td>
-						<td>{c.reason ?? ''}</td>
-						<td class="muted">{age(c.lastTransitionTime, now)}</td>
-						<td class="wrap">{c.message ?? ''}</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
+		{#if allTrue}
+			<details class="conditions">
+				<summary><h3>{t('Conditions')}</h3><span class="muted">{plural(conditions.length, 'The {n} condition is true', 'All {n} conditions are true')}</span></summary>
+				{@render conditionTable()}
+			</details>
+		{:else}
+			<h3>{t('Conditions')}</h3>
+			{@render conditionTable()}
+		{/if}
 	{/if}
 
 </div>
+
+{#snippet conditionTable()}
+	<table>
+		<thead><tr><th>{t('Type')}</th><th>{t('Status')}</th><th>{t('Reason')}</th><th>{t('Age')}</th><th>{t('Message')}</th></tr></thead>
+		<tbody>
+			{#each conditions as c (c.type)}
+				<tr>
+					<td>{c.type}</td>
+					<td class={cellTone('Status', c.status)}>{c.status}</td>
+					<td>{c.reason ?? ''}</td>
+					<td class="muted">{age(c.lastTransitionTime, now)}</td>
+					<td class="wrap">{c.message ?? ''}</td>
+				</tr>
+			{/each}
+		</tbody>
+	</table>
+{/snippet}
 
 <style>
 	.describe {
@@ -397,6 +446,18 @@
 		margin: 22px 0 10px;
 		font-size: 14px;
 		font-weight: 650;
+	}
+	.conditions summary {
+		display: flex;
+		align-items: baseline;
+		gap: 10px;
+		cursor: pointer;
+	}
+	.conditions summary h3 {
+		margin-bottom: 0;
+	}
+	.conditions[open] summary {
+		margin-bottom: 10px;
 	}
 	h3.first {
 		margin-top: 0;
