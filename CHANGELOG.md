@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.0 — 2026-11-07
+
+- **An overview that answers "is there room?"** The CPU and memory cards show how much of the cluster running pods reserve with their requests, which decides whether a new pod fits, and below it what is in use right now. A pod that cannot start names itself in one sentence, such as "ledger cannot start: it asks for 64 cores", instead of pushing the card past 100 %. Each problem is counted once: Resource health no longer repeats pods, nodes and ReplicaSets. See [Clusters](docs/CLUSTERS.md).
+- **Warnings by workload.** **Needs attention** shows one entry per Deployment, StatefulSet, DaemonSet or CronJob, with how many pods are affected, in plain words, and for a container that keeps restarting, the last line it logged before it stopped. The raw warnings fold away under **Recent warnings**. See [Debugging](docs/DEBUGGING.md).
+- **Amounts you can read.** CPU reads in cores (0.25, 1.5 cores) and memory in MiB and GiB. **Settings → Appearance → CPU and memory** switches back to kubectl's units (250m, 512Mi); the CSV export and k9s plugins always get those. See [Settings](docs/SETTINGS.md#appearance).
+- **Throttled pods stand out.** A pod at its CPU limit says **throttled**, one close to its memory limit **near memory limit**, and both count under Needs attention. The inspector of a pod starts with **Use right now**: CPU and memory against the limit, without Prometheus. The Nodes list calls the room for new pods **CPU left** and **Mem left**.
+- **Namespaces at a glance.** The Namespaces list shows how many pods are healthy, and what they use and request. A namespace with failing pods needs attention.
+- **Production namespaces where you see them.** A shield in the Namespaces list and in the namespace picker marks a namespace as production with one click, and rules in the context settings mark them by name (`*-prod`) or label (`env=production`). Kubri suggests namespaces that look like production. Production shows as a red stripe and a **Production** badge, and AI agents can change nothing in it, the namespace itself included. See [Settings](docs/SETTINGS.md#production-namespaces).
+- One health color everywhere: a Deployment with no pod ready is red, a pod's Ready takes the color of its status, and a finished pod no longer counts as not ready. "Controlled by" names a pod's Deployment, conditions fold when all are true, restarts read as `5 · 1m ago`, and Right-sizing shows a container's CPU and memory as one block.
+
 ## 1.9.2 — 2026-11-06
 
 - **Resizable sidebar.** Drag the sidebar's edge to make it wider, or focus it and use the arrow keys. Kubri remembers the width; a double-click or <kbd>Home</kbd> goes back to the default, which is also the smallest width.
