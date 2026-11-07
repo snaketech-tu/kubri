@@ -40,7 +40,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Look up GitHub Pages
         id: pages
         run: |
@@ -53,10 +53,10 @@ jobs:
             echo "publish=false" >> "$GITHUB_OUTPUT"
           fi
           echo "base=$base" >> "$GITHUB_OUTPUT"
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: ui/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -87,7 +87,7 @@ jobs:
           cp docs/assets/screenshots/{overview,logs,xray,palette}.png _site/assets/
           cp docs/assets/kubri-tour-light.gif docs/assets/kubri-tour-dark.gif _site/assets/
           du -sh _site
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -104,4 +104,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
