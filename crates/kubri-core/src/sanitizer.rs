@@ -348,18 +348,13 @@ impl Uses {
             .deployments
             .iter()
             .flatten()
-            .map(|d| (d.namespace(), d.spec.as_ref().map(|s| &s.template)))
+            .map(|d| (d.namespace(), Some(&d.spec.template)))
             .chain(
-                (inventory.stateful_sets.iter().flatten())
-                    .map(|s| (s.namespace(), s.spec.as_ref().map(|s| &s.template))),
+                (inventory.stateful_sets.iter().flatten()).map(|s| (s.namespace(), Some(&s.spec.template))),
             )
+            .chain((inventory.daemon_sets.iter().flatten()).map(|d| (d.namespace(), Some(&d.spec.template))))
             .chain(
-                (inventory.daemon_sets.iter().flatten())
-                    .map(|d| (d.namespace(), d.spec.as_ref().map(|s| &s.template))),
-            )
-            .chain(
-                (inventory.replica_sets.iter().flatten())
-                    .map(|r| (r.namespace(), r.spec.as_ref().and_then(|s| s.template.as_ref()))),
+                (inventory.replica_sets.iter().flatten()).map(|r| (r.namespace(), r.spec.template.as_ref())),
             )
             .chain(
                 (inventory.jobs.iter().flatten())
@@ -441,10 +436,10 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
             let mut issues: Vec<Issue> = Issue::of_health("replicas", health::deployment(d))
                 .into_iter()
                 .collect();
-            if d.spec.as_ref().and_then(|s| s.replicas) == Some(0) {
+            if d.spec.replicas == Some(0) {
                 issues.push(Issue::info("scaled-down", "Scaled to 0"));
             }
-            issues.extend(template(d.spec.as_ref().map(|s| &s.template), false));
+            issues.extend(template(Some(&d.spec.template), false));
             issues
         },
     ));
@@ -455,10 +450,10 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
             let mut issues: Vec<Issue> = Issue::of_health("replicas", health::stateful_set(s))
                 .into_iter()
                 .collect();
-            if s.spec.as_ref().and_then(|s| s.replicas) == Some(0) {
+            if s.spec.replicas == Some(0) {
                 issues.push(Issue::info("scaled-down", "Scaled to 0"));
             }
-            issues.extend(template(s.spec.as_ref().map(|s| &s.template), false));
+            issues.extend(template(Some(&s.spec.template), false));
             issues
         },
     ));
@@ -469,7 +464,7 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
             let mut issues: Vec<Issue> = Issue::of_health("replicas", health::daemon_set(d))
                 .into_iter()
                 .collect();
-            issues.extend(template(d.spec.as_ref().map(|s| &s.template), false));
+            issues.extend(template(Some(&d.spec.template), false));
             issues
         },
     ));
@@ -481,7 +476,7 @@ pub(crate) fn report(inventory: &Inventory) -> SanitizerReport {
             let mut issues: Vec<Issue> = Issue::of_health("replicas", health::replica_set(r))
                 .into_iter()
                 .collect();
-            issues.extend(template(r.spec.as_ref().and_then(|s| s.template.as_ref()), false));
+            issues.extend(template(r.spec.template.as_ref(), false));
             issues
         },
     ));

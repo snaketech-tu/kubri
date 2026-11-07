@@ -388,9 +388,9 @@ pub(crate) fn build(inv: &Inventory) -> Graph {
             }
         };
     }
-    workloads!(inv.deployments, Deployment, health::deployment, w => w.spec.as_ref().and_then(|s| s.template.spec.as_ref()));
-    workloads!(inv.stateful_sets, StatefulSet, health::stateful_set, w => w.spec.as_ref().and_then(|s| s.template.spec.as_ref()));
-    workloads!(inv.daemon_sets, DaemonSet, health::daemon_set, w => w.spec.as_ref().and_then(|s| s.template.spec.as_ref()));
+    workloads!(inv.deployments, Deployment, health::deployment, w => w.spec.template.spec.as_ref());
+    workloads!(inv.stateful_sets, StatefulSet, health::stateful_set, w => w.spec.template.spec.as_ref());
+    workloads!(inv.daemon_sets, DaemonSet, health::daemon_set, w => w.spec.template.spec.as_ref());
     workloads!(inv.cron_jobs, CronJob, health::cron_job, w => w.spec.job_template.spec.as_ref().and_then(|s| s.template.spec.as_ref()));
     // Jobs of a CronJob stand for it; others are workloads of their own.
     let cron_uids: HashMap<&str, String> = by_uid.clone();
@@ -422,16 +422,11 @@ pub(crate) fn build(inv: &Inventory) -> Graph {
             Some(owner) => {
                 by_uid.insert(own, owner);
             }
-            None if rs.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0) > 0 => {
+            None if rs.spec.replicas.unwrap_or(0) > 0 => {
                 let app = app_of(rs.metadata.labels.as_ref());
                 let id = b.node::<ReplicaSet>(&rs.metadata, health::replica_set(rs), app);
                 by_uid.insert(own, id.clone());
-                if let Some(spec) = rs
-                    .spec
-                    .as_ref()
-                    .and_then(|s| s.template.as_ref())
-                    .and_then(|t| t.spec.as_ref())
-                {
+                if let Some(spec) = rs.spec.template.as_ref().and_then(|t| t.spec.as_ref()) {
                     templates.push((id, rs.metadata.namespace.clone(), spec));
                 }
             }
