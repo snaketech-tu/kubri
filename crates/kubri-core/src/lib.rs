@@ -291,7 +291,10 @@ pub(crate) async fn client_config(
     config
         .headers
         .extend(kubeconfig::impersonation_headers(&config.auth_info)?);
-    proxy::skip_proxy_like_kubectl(&mut config, &kubeconfig, context);
+    // The headers above carry these two as kubectl sends them; kube-rs would send them again.
+    config.auth_info.impersonate_uid = None;
+    config.auth_info.impersonate_user_extra = None;
+    proxy::proxy_like_kubectl(&mut config, &kubeconfig, context);
     Ok(config)
 }
 
@@ -2684,6 +2687,32 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn client_config_impersonates_and_proxies_like_kubectl() {
+        let kubeconfig = Kubeconfig::from_yaml(
+            "clusters:
+- {name: c, cluster: {server: 'https://127.0.0.1:6443', proxy-url: 'http://proxy.example:3128'}}
+users:
+- {name: u, user: {token: t, as: jane, as-uid: '42', as-user-extra: {scopes: [a]}}}
+contexts:
+- {name: x, context: {cluster: c, user: u}}",
+        )
+        .unwrap();
+        let config = client_config(&kubeconfig, "x", None).await.unwrap();
+        // Kubri sends these headers itself, so kube-rs must not send them a second time.
+        let count = |name: &str| config.headers.iter().filter(|(k, _)| k == name).count();
+        assert_eq!(count("impersonate-uid"), 1);
+        assert_eq!(count("impersonate-extra-scopes"), 1);
+        assert!(config.auth_info.impersonate_uid.is_none());
+        assert!(config.auth_info.impersonate_user_extra.is_none());
+        assert_eq!(config.auth_info.impersonate.as_deref(), Some("jane"));
+        // A proxy-url in the kubeconfig counts even for localhost.
+        assert_eq!(
+            config.proxy_url.map(|u| u.to_string()).as_deref(),
+            Some("http://proxy.example:3128/")
+        );
+    }
 
     #[tokio::test]
     async fn missing_kubeconfig_is_reported_not_fatal() {

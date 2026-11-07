@@ -774,7 +774,8 @@ mod tests {
         assert_ne!(info.local_port, 0);
         assert_eq!(forwards.lock().unwrap().list(), std::slice::from_ref(&info));
 
-        // A connection reaches the forward; the fake cluster refuses the stream.
+        // A connection reaches the forward; the fake cluster refuses the stream, and its reason
+        // is what the forward shows.
         let _socket = TcpStream::connect(("127.0.0.1", info.local_port)).await.unwrap();
         for _ in 0..100 {
             if forwards.lock().unwrap().list()[0].error.is_some() {
@@ -783,7 +784,7 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         let failed = forwards.lock().unwrap().list().remove(0);
-        assert!(failed.error.unwrap().contains("400 Bad Request"));
+        assert_eq!(failed.error.as_deref(), Some("no upgrade"));
         assert_eq!(failed.connections, 0);
 
         forwards.lock().unwrap().stop(info.id).unwrap();

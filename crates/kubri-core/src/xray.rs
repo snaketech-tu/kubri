@@ -278,7 +278,7 @@ impl<'a> Tree<'a> {
                 })
                 // Old revisions are kept scaled to 0; only the ones with pods matter.
                 .filter(|set| {
-                    set.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1) > 0
+                    set.spec.replicas.unwrap_or(1) > 0
                         || self
                             .owned_by(&set.metadata)
                             .iter()

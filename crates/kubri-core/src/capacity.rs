@@ -199,7 +199,7 @@ impl Kubri {
                     let d = Api::<Deployment>::namespaced(client.clone(), &namespace)
                         .get(&target.name)
                         .await?;
-                    let spec = d.spec.unwrap_or_default();
+                    let spec = d.spec;
                     (
                         spec.template,
                         spec.selector.match_labels.unwrap_or_default(),
@@ -210,7 +210,7 @@ impl Kubri {
                     let s = Api::<StatefulSet>::namespaced(client.clone(), &namespace)
                         .get(&target.name)
                         .await?;
-                    let spec = s.spec.unwrap_or_default();
+                    let spec = s.spec;
                     (
                         spec.template,
                         spec.selector.match_labels.unwrap_or_default(),
@@ -222,7 +222,7 @@ impl Kubri {
                         .get(&target.name)
                         .await?;
                     let wanted = d.status.as_ref().map_or(0, |s| s.desired_number_scheduled);
-                    let spec = d.spec.unwrap_or_default();
+                    let spec = d.spec;
                     (
                         spec.template,
                         spec.selector.match_labels.unwrap_or_default(),

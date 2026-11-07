@@ -152,13 +152,16 @@ fn replicas(ready: i32, desired: i32) -> Status {
 }
 
 pub(crate) fn deployment(deployment: &Deployment) -> Status {
-    let desired = deployment.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1);
+    let desired = deployment.spec.replicas.unwrap_or(1);
     let status = deployment.status.as_ref();
     let stuck = status
         .and_then(|s| s.conditions.as_ref())
         .into_iter()
         .flatten()
-        .any(|c| c.type_ == "Progressing" && c.reason.as_deref() == Some("ProgressDeadlineExceeded"));
+        .any(|c| {
+            c.type_.as_deref() == Some("Progressing")
+                && c.reason.as_deref() == Some("ProgressDeadlineExceeded")
+        });
     let mut verdict = replicas(status.and_then(|s| s.ready_replicas).unwrap_or(0), desired);
     if stuck {
         verdict.health = Health::Failed;
@@ -168,7 +171,7 @@ pub(crate) fn deployment(deployment: &Deployment) -> Status {
 }
 
 pub(crate) fn stateful_set(set: &StatefulSet) -> Status {
-    let desired = set.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1);
+    let desired = set.spec.replicas.unwrap_or(1);
     replicas(
         set.status.as_ref().and_then(|s| s.ready_replicas).unwrap_or(0),
         desired,
@@ -186,7 +189,7 @@ pub(crate) fn daemon_set(set: &DaemonSet) -> Status {
 }
 
 pub(crate) fn replica_set(set: &ReplicaSet) -> Status {
-    let desired = set.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1);
+    let desired = set.spec.replicas.unwrap_or(1);
     replicas(
         set.status.as_ref().and_then(|s| s.ready_replicas).unwrap_or(0),
         desired,
