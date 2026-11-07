@@ -319,7 +319,7 @@ async fn workloads(client: &Client, namespace: Option<&str>, context: &str) -> R
             "Deployment",
             resource_ref::<Deployment>(),
             meta,
-            d.spec.map(|s| s.template),
+            Some(d.spec.template),
         );
     }
     for s in stateful_sets? {
@@ -328,7 +328,7 @@ async fn workloads(client: &Client, namespace: Option<&str>, context: &str) -> R
             "StatefulSet",
             resource_ref::<StatefulSet>(),
             meta,
-            s.spec.map(|s| s.template),
+            Some(s.spec.template),
         );
     }
     for d in daemon_sets? {
@@ -337,7 +337,7 @@ async fn workloads(client: &Client, namespace: Option<&str>, context: &str) -> R
             "DaemonSet",
             resource_ref::<DaemonSet>(),
             meta,
-            d.spec.map(|s| s.template),
+            Some(d.spec.template),
         );
     }
     Ok(out)

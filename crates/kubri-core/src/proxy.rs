@@ -1,28 +1,33 @@
-//! Which cluster connections skip the proxy. kube-rs takes the proxy from `HTTPS_PROXY` but
-//! ignores `NO_PROXY`, so a cluster on localhost or the company network would be reached
-//! through a proxy that kubectl leaves out. This follows kubectl (Go's `httpproxy`).
+//! Which proxy the cluster connection uses. This follows kubectl (Go's `httpproxy`): the
+//! kubeconfig's `proxy-url`, else `HTTPS_PROXY`, except for localhost, loopback addresses and
+//! hosts in `NO_PROXY`. kube-rs makes this choice too, but differently: it checks `NO_PROXY`
+//! against the proxy instead of the cluster and lets it drop a `proxy-url`. So its choice is
+//! replaced by this one.
 
 use std::net::IpAddr;
 
 use kube::Config;
 use kube::config::Kubeconfig;
 
-/// Drops the proxy kube-rs took from `HTTPS_PROXY` when kubectl would not use it for this
-/// cluster: localhost, loopback addresses and hosts in `NO_PROXY`. A `proxy-url` in the
-/// kubeconfig always counts, as in kubectl.
-pub(crate) fn skip_proxy_like_kubectl(config: &mut Config, kubeconfig: &Kubeconfig, context: &str) {
-    if config.proxy_url.is_none() || has_proxy_url(kubeconfig, context) {
+/// Sets the proxy kubectl would use for this context's cluster.
+pub(crate) fn proxy_like_kubectl(config: &mut Config, kubeconfig: &Kubeconfig, context: &str) {
+    if let Some(url) = proxy_url(kubeconfig, context) {
+        config.proxy_url = url.parse().ok();
         return;
     }
-    let no_proxy = ["NO_PROXY", "no_proxy"]
-        .iter()
-        .find_map(|name| std::env::var(name).ok().filter(|v| !v.is_empty()));
-    if bypasses_proxy(&config.cluster_url, no_proxy.as_deref()) {
-        config.proxy_url = None;
-    }
+    let env = |names: &[&str]| {
+        names
+            .iter()
+            .find_map(|name| std::env::var(name).ok().filter(|v| !v.is_empty()))
+    };
+    let no_proxy = env(&["NO_PROXY", "no_proxy"]);
+    config.proxy_url = env(&["HTTPS_PROXY", "https_proxy"])
+        .filter(|_| !bypasses_proxy(&config.cluster_url, no_proxy.as_deref()))
+        .and_then(|url| url.parse().ok());
 }
 
-fn has_proxy_url(kubeconfig: &Kubeconfig, context: &str) -> bool {
+/// The `proxy-url` of the context's cluster, which always counts, as in kubectl.
+fn proxy_url<'a>(kubeconfig: &'a Kubeconfig, context: &str) -> Option<&'a str> {
     let cluster = kubeconfig
         .contexts
         .iter()
@@ -35,7 +40,7 @@ fn has_proxy_url(kubeconfig: &Kubeconfig, context: &str) -> bool {
         .find(|c| Some(c.name.as_str()) == cluster)
         .and_then(|c| c.cluster.as_ref())
         .and_then(|c| c.proxy_url.as_deref())
-        .is_some_and(|url| !url.is_empty())
+        .filter(|url| !url.is_empty())
 }
 
 fn bypasses_proxy(uri: &http::Uri, no_proxy: Option<&str>) -> bool {
@@ -193,8 +198,8 @@ contexts:
 - {name: b, context: {cluster: b, user: u}}",
         )
         .unwrap();
-        assert!(has_proxy_url(&kubeconfig, "a"));
-        assert!(!has_proxy_url(&kubeconfig, "b"));
-        assert!(!has_proxy_url(&kubeconfig, "missing"));
+        assert_eq!(proxy_url(&kubeconfig, "a"), Some("http://proxy:3128"));
+        assert_eq!(proxy_url(&kubeconfig, "b"), None);
+        assert_eq!(proxy_url(&kubeconfig, "missing"), None);
     }
 }
