@@ -56,13 +56,13 @@ jobs:
     permissions:
       security-events: write   # for the SARIF upload
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # … start a cluster or write a kubeconfig to ~/.kube/config, deploy your manifests …
       - uses: snaketech-tu/kubri/actions/lint@main
         with:
           namespace: shop
           fail-on: error
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: kubri.sarif
