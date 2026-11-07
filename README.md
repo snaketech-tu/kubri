@@ -70,6 +70,18 @@ Download Kubri from the [latest release](https://github.com/snaketech-tu/kubri/r
 
 Kubri uses the kubeconfig on your computer, just like kubectl. It updates itself when a new version is out.
 
+### On Ubuntu, Debian, Pop!_OS and Linux Mint
+
+Add Kubri's apt repository, and apt and your software center keep Kubri up to date, like every other app:
+
+```sh
+curl -fsSL https://snaketech-tu.github.io/kubri/apt/kubri.gpg | sudo tee /usr/share/keyrings/kubri.gpg > /dev/null
+curl -fsSL https://snaketech-tu.github.io/kubri/apt/kubri.sources | sudo tee /etc/apt/sources.list.d/kubri.sources > /dev/null
+sudo apt update && sudo apt install kubri
+```
+
+Once the repository is added, Kubri also shows up in the COSMIC Store, GNOME Software and KDE Discover.
+
 ### In the browser, with Docker
 
 ```sh

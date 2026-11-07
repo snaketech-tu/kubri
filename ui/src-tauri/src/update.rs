@@ -83,8 +83,12 @@ fn linux_package_manager() -> Option<String> {
     }
     match bundle_type() {
         Some(BundleType::AppImage) => None,
-        // The updater installs the new package with dpkg or rpm, which must own this one.
+        // The updater installs the new package with dpkg or rpm, which must own this one. With
+        // Kubri's apt repository set up, apt and the software center update it instead.
         Some(BundleType::Deb) => {
+            if std::path::Path::new("/etc/apt/sources.list.d/kubri.sources").exists() {
+                return Some("Kubri gets its updates from its apt repository.".into());
+            }
             (!std::path::Path::new("/var/lib/dpkg/info/kubri.list").exists()).then(|| ELSEWHERE.into())
         }
         Some(BundleType::Rpm) => {

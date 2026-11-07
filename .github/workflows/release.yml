@@ -251,6 +251,7 @@ jobs:
       pages: write
       id-token: write
     uses: ./.github/workflows/pages.yml
+    secrets: inherit
 
   # Fills the Homebrew cask, winget manifests, AUR package and Flatpak manifest with the
   # release's checksums and publishes each where its secret is set; see docs/RELEASING.md.
