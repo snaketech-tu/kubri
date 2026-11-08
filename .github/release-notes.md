@@ -1,9 +1,10 @@
 ## What's new
 
-- **An overview that answers "is there room?":** CPU and memory show what running pods reserve, which decides whether a new pod fits, and name a pod that cannot start.
-- **Warnings by workload:** Needs attention has one entry per Deployment or CronJob, in plain words, with the last line a crashing container logged.
-- **Amounts you can read:** CPU in cores and memory in MiB, with kubectl's units as a setting. Throttled pods say so, and a pod's inspector shows its use right now.
-- **Namespaces at a glance:** healthy pods, use and requests per namespace, and production namespaces marked with one click or by rules.
+A small release with fixes and updates:
+
+- **Shells close cleanly:** input typed after a shell ended goes nowhere, and its end shows once.
+- **AI agent requests that were given up go away** from the approval window and can no longer be allowed.
+- **Newer libraries:** kube 5 and the Kubernetes 1.37 types, and every other library up to date.
 
 ## Install
 

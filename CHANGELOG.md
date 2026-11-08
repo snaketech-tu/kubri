@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.1 — 2026-11-08
+
+- **Shells and terminals close cleanly.** Typing into a shell that has just ended or been closed no longer sends the input anywhere, and a shell that ends shows its message once, in the desktop app and in the browser.
+- **AI agent requests that were given up go away.** When an AI agent stops waiting for your approval, its request leaves the approval window and can no longer be allowed by mistake.
+- **Newer libraries.** Kubri now talks to clusters with kube 5 and the Kubernetes 1.37 types, and all its libraries are up to date. A proxy set in the kubeconfig (`proxy-url`) and `NO_PROXY` keep working as before.
+
 ## 1.10.0 — 2026-11-07
 
 - **An overview that answers "is there room?"** The CPU and memory cards show how much of the cluster running pods reserve with their requests, which decides whether a new pod fits, and below it what is in use right now. A pod that cannot start names itself in one sentence, such as "ledger cannot start: it asks for 64 cores", instead of pushing the card past 100 %. Each problem is counted once: Resource health no longer repeats pods, nodes and ReplicaSets. See [Clusters](docs/CLUSTERS.md).
