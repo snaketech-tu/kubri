@@ -31,6 +31,21 @@ Each needs a one-time setup first:
 - **Flathub**: submit the app once by hand, as [Flathub's guide](https://docs.flathub.org/docs/for-app-authors/submission) describes, with the manifest and metainfo from the `packages` artifact. Once it is accepted, Flathub creates the repository and the job keeps it up to date. The Flatpak cannot run commands installed on the computer, so kubeconfigs that sign in through one, k9s plugins and Helm changes do not work in it; its description says so.
 - **winget**: submit the first version by hand, with `wingetcreate submit` and the manifests from the `packages` artifact, or as a pull request to `microsoft/winget-pkgs`. Later versions go through the job.
 
+## The apt repository
+
+The website also carries an apt repository for Ubuntu, Debian, Pop!_OS and Linux Mint at `https://snaketech-tu.github.io/kubri/apt` (install steps in the [README](../README.md#on-ubuntu-debian-pop_os-and-linux-mint)). Each time the **Website** workflow runs, which the Release workflow does after publishing, [`packaging/apt/build.sh`](../packaging/apt/build.sh) builds it again from the `.deb` files of the three latest releases. It also adds the app-store data (AppStream) made from the metainfo in the packages ([`ui/src-tauri/linux/`](../ui/src-tauri/linux)), with the icons and screenshots, so the COSMIC Store, GNOME Software and KDE Discover list Kubri once the repository is added.
+
+The repository is signed with a key of its own. Make it once, on a computer with `gpg`, and keep a copy of it somewhere safe: people who added the repository trust exactly this key, so a new one means they all have to add it again.
+
+```sh
+export GNUPGHOME=$(mktemp -d)
+gpg --batch --passphrase '' --quick-gen-key 'Kubri apt repository' ed25519 sign never
+gpg --armor --export-secret-keys > kubri-apt.key
+gh secret set APT_SIGNING_KEY -R snaketech-tu/kubri < kubri-apt.key
+```
+
+Without the secret, the website is published without the repository.
+
 ## Updates in the app
 
 The desktop app updates itself from the latest release ([SETTINGS.md](SETTINGS.md#updates)). It only installs packages signed with the updater key, whose public half is built into the app. Set the key up once:

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The app's entry in Linux app stores, installed by the .deb and .rpm packages. -->
+<component type="desktop-application">
+  <id>io.github.snaketech_tu.kubri</id>
+  <name>Kubri</name>
+  <summary>A fast, simple Kubernetes GUI</summary>
+  <developer id="io.github.snaketech_tu">
+    <name>SnakeTech</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <url type="homepage">https://snaketech-tu.github.io/kubri/</url>
+  <url type="bugtracker">https://github.com/snaketech-tu/kubri/issues</url>
+  <url type="vcs-browser">https://github.com/snaketech-tu/kubri</url>
+  <launchable type="desktop-id">Kubri.desktop</launchable>
+  <provides>
+    <binary>kubri</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <branding>
+    <color type="primary" scheme_preference="light">#c9d4ff</color>
+    <color type="primary" scheme_preference="dark">#1e2a5a</color>
+  </branding>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <keywords>
+    <keyword>kubernetes</keyword>
+    <keyword>k8s</keyword>
+    <keyword>k9s</keyword>
+    <keyword>kubectl</keyword>
+    <keyword>cluster</keyword>
+    <keyword>helm</keyword>
+  </keywords>
+  <description>
+    <p>
+      Kubri shows every resource of your Kubernetes clusters live, with the columns of kubectl get, and covers what
+      k9s can do: logs, shells, port-forwards, Helm, RBAC and the k9s keys, plugins and skins. Use it by keyboard
+      or by mouse.
+    </p>
+    <ul>
+      <li>An overview of every cluster in your kubeconfig, and a topology graph of how objects connect</li>
+      <li>A log workspace with tabs, structured logs and debug containers</li>
+      <li>Safe changes: context colors, read-only production contexts and a diff before every change</li>
+      <li>What changed in a cluster, and snapshots to look at later</li>
+    </ul>
+    <p>
+      Kubri uses the kubeconfig on your computer, just like kubectl.
+    </p>
+  </description>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Pods, live</caption>
+      <image>https://raw.githubusercontent.com/snaketech-tu/kubri/main/docs/assets/screenshots/pods-light.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Cluster overview</caption>
+      <image>https://raw.githubusercontent.com/snaketech-tu/kubri/main/docs/assets/screenshots/overview.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Logs</caption>
+      <image>https://raw.githubusercontent.com/snaketech-tu/kubri/main/docs/assets/screenshots/logs.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Topology</caption>
+      <image>https://raw.githubusercontent.com/snaketech-tu/kubri/main/docs/assets/screenshots/graph.png</image>
+    </screenshot>
+  </screenshots>
+</component>

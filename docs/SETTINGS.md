@@ -98,6 +98,7 @@ The desktop app can also update itself. When the new release is newer, it asks r
 | `.deb`, `.rpm` | Kubri, which installs the new package with `dpkg` or `rpm`; your system asks for your password (pkexec) |
 | `-setup.exe`, `.msi` | Kubri, which runs the new installer; it closes Kubri and opens the new version |
 | `.dmg`, Homebrew | Kubri, which replaces `Kubri.app`; macOS asks for your password when the app's folder needs it |
+| Kubri's apt repository | apt or your software center, like every other package; Kubri only shows the notice |
 | Flatpak, the AUR | Flatpak or your AUR helper; Kubri only shows the notice |
 
 Releases from before the updater (1.0 and older) only show the notice: install the next release by hand once, and it updates itself from then on. If an update fails, the dialog says why and links the download page.
