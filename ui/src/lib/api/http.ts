@@ -34,43 +34,56 @@ function socketUrl(path: string) {
 function requestSocket(path: string, request: unknown) {
 	const socket = new WebSocket(socketUrl(path));
 	socket.binaryType = 'arraybuffer';
-	socket.onopen = () => socket.send(JSON.stringify(request));
+	socket.onopen = () => {
+		// A queued open event may arrive after its owner has closed the socket.
+		if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(request));
+	};
 	return socket;
 }
 
 /** A terminal over a socket: raw bytes both ways, control messages as JSON. */
 function terminalSocket(path: string, request: unknown, onEvent: (event: TerminalEvent) => void): TerminalSession {
 	const encoder = new TextEncoder();
-	let exited = false;
-	let closed = false;
+	let state: 'connecting' | 'ready' | 'exited' | 'closed' = 'connecting';
 	const pending: string[] = [];
 	const socket = requestSocket(path, request);
 	socket.onmessage = (msg) => {
+		if (state === 'closed' || state === 'exited') return;
 		if (msg.data instanceof ArrayBuffer) {
 			onEvent({ type: 'data', data: new Uint8Array(msg.data) });
 			return;
 		}
 		const event = JSON.parse(msg.data) as TerminalEvent;
 		if (event.type === 'ready') {
+			state = 'ready';
 			for (const data of pending.splice(0)) socket.send(encoder.encode(data));
 		}
-		if (event.type === 'exit') exited = true;
+		if (event.type === 'exit') {
+			state = 'exited';
+			pending.length = 0;
+		}
 		onEvent(event);
 	};
 	socket.onclose = () => {
-		if (!exited && !closed) onEvent({ type: 'exit', message: 'Lost connection to kubri-server' });
+		if (state === 'exited' || state === 'closed') return;
+		state = 'exited';
+		pending.length = 0;
+		onEvent({ type: 'exit', message: 'Lost connection to kubri-server' });
 	};
 	const open = () => socket.readyState === WebSocket.OPEN;
 	return {
 		write(data) {
-			if (open() && pending.length === 0) socket.send(encoder.encode(data));
+			if (state === 'closed' || state === 'exited') return;
+			if (state === 'ready' && open()) socket.send(encoder.encode(data));
 			else pending.push(data);
 		},
 		resize(cols, rows) {
-			if (open()) socket.send(JSON.stringify({ type: 'resize', cols, rows }));
+			if (state !== 'closed' && state !== 'exited' && open()) socket.send(JSON.stringify({ type: 'resize', cols, rows }));
 		},
 		close() {
-			closed = true;
+			if (state === 'closed') return;
+			state = 'closed';
+			pending.length = 0;
 			socket.close();
 		}
 	};

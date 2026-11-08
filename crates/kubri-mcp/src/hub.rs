@@ -118,7 +118,11 @@ impl Hub {
     }
 
     fn pending_list(&self) -> std::sync::MutexGuard<'_, Vec<Pending>> {
-        self.pending.lock().unwrap_or_else(|e| e.into_inner())
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        // Dropping a caller cancels its confirmation future. Such requests must no
+        // longer appear in the window or accept an answer.
+        pending.retain(|p| !p.reply.is_closed());
+        pending
     }
 
     fn window_open(&self) -> bool {
@@ -250,5 +254,46 @@ mod tests {
         let calls: Vec<_> = hub.calls().into_iter().map(|c| c.tool).collect();
         assert_eq!(calls, ["b", "a"]);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn cancelled_calls_leave_no_confirmation_to_answer() {
+        // Test both entry points independently: listing must not be required
+        // before a canceled request is rejected by answer().
+        for list_first in [true, false] {
+            let hub = Hub::new(None);
+            hub.pending();
+            let mut waiting = Box::pin(hub.confirm("scale", None, "Scale web".into(), "kubectl".into()));
+            assert!(futures::poll!(waiting.as_mut()).is_pending());
+            let id = hub.pending()[0].id;
+            drop(waiting);
+            if list_first {
+                assert!(hub.pending().is_empty());
+            }
+            assert!(!hub.answer(id, true));
+            assert!(hub.pending().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn pruning_cancelled_calls_preserves_live_approvals_and_refusals() {
+        let hub = Hub::new(None);
+        hub.pending();
+        let mut cancelled = Box::pin(hub.confirm("scale", None, "Scale".into(), "kubectl".into()));
+        let mut allowed = Box::pin(hub.confirm("restart", None, "Restart".into(), "kubectl".into()));
+        let mut refused = Box::pin(hub.confirm("delete_object", None, "Delete".into(), "kubectl".into()));
+        assert!(futures::poll!(cancelled.as_mut()).is_pending());
+        assert!(futures::poll!(allowed.as_mut()).is_pending());
+        assert!(futures::poll!(refused.as_mut()).is_pending());
+        let requests = hub.pending();
+        drop(cancelled);
+        assert_eq!(hub.pending().len(), 2);
+        assert!(!hub.answer(requests[0].id, true));
+        assert!(hub.answer(requests[1].id, true));
+        assert!(hub.answer(requests[2].id, false));
+        assert!(allowed.await.is_ok());
+        assert!(refused.await.unwrap_err().contains("did not allow"));
+        assert!(!hub.answer(requests[1].id, true));
+        assert!(hub.pending().is_empty());
     }
 }

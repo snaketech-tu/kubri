@@ -8,33 +8,50 @@ function terminalChannel(
 	args: Record<string, unknown>,
 	onEvent: (event: TerminalEvent) => void
 ): TerminalSession {
-	// Output arrives as raw bytes, control messages as JSON.
-	const channel = new Channel<ArrayBuffer | Exclude<TerminalEvent, { type: 'data' }>>();
-	channel.onmessage = (msg) => {
-		onEvent(msg instanceof ArrayBuffer ? { type: 'data', data: new Uint8Array(msg) } : msg);
-	};
 	let id: number | null = null;
-	let closed = false;
+	let state: 'opening' | 'open' | 'exited' | 'closed' = 'opening';
 	const input = writeQueue(
 		(data) => invoke('terminal_write', { id, data }),
 		() => {}
 	);
+	// Teardown is best-effort: the process or transport may have already gone.
+	const closeNative = () => invoke('terminal_close', { id }).catch(() => {});
+	// Output arrives as raw bytes, control messages as JSON.
+	const channel = new Channel<ArrayBuffer | Exclude<TerminalEvent, { type: 'data' }>>();
+	channel.onmessage = (msg) => {
+		if (state === 'closed' || state === 'exited') return;
+		if (!(msg instanceof ArrayBuffer) && msg.type === 'exit') {
+			state = 'exited';
+			input.close();
+		}
+		onEvent(msg instanceof ArrayBuffer ? { type: 'data', data: new Uint8Array(msg) } : msg);
+	};
 	invoke<number>(command, { ...args, onEvent: channel }).then(
 		(opened) => {
 			id = opened;
-			if (closed) invoke('terminal_close', { id });
-			else input.start();
+			if (state === 'closed') void closeNative();
+			else if (state === 'opening') {
+				state = 'open';
+				input.start();
+			}
 		},
-		(err) => onEvent({ type: 'exit', message: String(err) })
+		(err) => {
+			input.close();
+			if (state === 'closed' || state === 'exited') return;
+			state = 'exited';
+			onEvent({ type: 'exit', message: String(err) });
+		}
 	);
 	return {
 		write: (data) => input.write(data),
 		resize(cols, rows) {
-			if (id !== null && !closed) invoke('terminal_resize', { id, cols, rows }).catch(() => {});
+			if (state === 'open') invoke('terminal_resize', { id, cols, rows }).catch(() => {});
 		},
 		close() {
-			closed = true;
-			if (id !== null) invoke('terminal_close', { id });
+			if (state === 'closed') return;
+			state = 'closed';
+			input.close();
+			if (id !== null) void closeNative();
 		}
 	};
 }

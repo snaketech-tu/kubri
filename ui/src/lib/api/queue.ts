@@ -5,15 +5,17 @@
 export function writeQueue(send: (data: string) => Promise<unknown>, onError: (err: unknown) => void) {
 	let pending = '';
 	let busy = false;
-	let ready = false;
+	let state: 'waiting' | 'ready' | 'closed' = 'waiting';
 
 	function flush() {
-		if (busy || !ready || !pending) return;
+		if (busy || state !== 'ready' || !pending) return;
 		const data = pending;
 		pending = '';
 		busy = true;
 		send(data)
-			.catch(onError)
+			.catch((err) => {
+				if (state !== 'closed') onError(err);
+			})
 			.finally(() => {
 				busy = false;
 				flush();
@@ -22,13 +24,20 @@ export function writeQueue(send: (data: string) => Promise<unknown>, onError: (e
 
 	return {
 		write(data: string) {
+			if (state === 'closed') return;
 			pending += data;
 			flush();
 		},
 		/** Starts sending; input written before is kept until then. */
 		start() {
-			ready = true;
+			if (state === 'closed') return;
+			state = 'ready';
 			flush();
+		},
+		/** Closing is final; an in-flight write may finish but queued input is discarded. */
+		close() {
+			state = 'closed';
+			pending = '';
 		}
 	};
 }
