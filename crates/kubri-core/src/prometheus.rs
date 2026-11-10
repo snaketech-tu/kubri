@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::integrations::Endpoint;
+use crate::percent::encode;
 use crate::{Error, Result};
 
 /// At most this many lines per chart; the rest are added up as "Other".
@@ -460,17 +461,6 @@ pub(crate) async fn query_range(
     );
     let answer = endpoint.get_json(client, &path, None).await?;
     parse_matrix(&answer)
-}
-
-pub(crate) fn encode(text: &str) -> String {
-    let mut out = String::new();
-    for byte in text.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
-            _ => out.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    out
 }
 
 pub(crate) fn check(answer: &Value) -> Result<()> {

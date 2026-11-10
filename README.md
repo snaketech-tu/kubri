@@ -35,7 +35,7 @@
   <img src="docs/assets/kubri-tour-light.gif" alt="A short tour of Kubri: the cluster overview, the command palette going to the Deployments of a namespace, a Deployment's pods, their JSON logs as a table of fields, a shell in a pod, and switching to another context">
 </picture>
 
-## ✨ Why Kubri
+## Why Kubri
 
 <table>
   <tr>
@@ -56,7 +56,7 @@
 
 <a id="install"></a>
 
-## 🚀 Install
+## Install
 
 ### Desktop app
 
@@ -99,12 +99,12 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
 
 <a id="features"></a>
 
-## 🧰 Features
+## Features
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <b>🔎 Browse</b>
+      <b>Browse</b>
       <ul>
         <li>Every resource type and CRD, live, with the columns of <code>kubectl get</code></li>
         <li>k9s filters: regular expressions, <code>!</code> to invert, <code>-f</code> fuzzy, <code>-l app=web</code></li>
@@ -114,7 +114,7 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
       </ul>
     </td>
     <td width="50%" valign="top">
-      <b>✏️ Change</b>
+      <b>Change</b>
       <ul>
         <li>Create from templates, forms, files or the clipboard (<kbd>:new</kbd>)</li>
         <li>Delete, scale, restart, set images and roll back, one object or many</li>
@@ -126,7 +126,7 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
   </tr>
   <tr>
     <td valign="top">
-      <b>🐞 Debug</b>
+      <b>Debug</b>
       <ul>
         <li>Live logs of a pod or a whole workload, with JSON fields as columns and filters like <code>status>=500</code></li>
         <li>Shells, debug containers and node shells in a real terminal</li>
@@ -136,7 +136,7 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
       </ul>
     </td>
     <td valign="top">
-      <b>🧭 Understand the cluster</b>
+      <b>Understand the cluster</b>
       <ul>
         <li>An overview of what needs attention, the topology as trees or a graph, and who may do what</li>
         <li>Helm: install, upgrade with a diff, compare revisions, roll back</li>
@@ -149,7 +149,7 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
   </tr>
   <tr>
     <td valign="top">
-      <b>🛡️ Work safely</b>
+      <b>Work safely</b>
       <ul>
         <li>A name and color per context, and a clear marker on production</li>
         <li>Read-only and locked contexts</li>
@@ -159,7 +159,7 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
       </ul>
     </td>
     <td valign="top">
-      <b>🧩 Fits your setup</b>
+      <b>Fits your setup</b>
       <ul>
         <li>Your k9s configuration, per context</li>
         <li>Views in YAML that give your CRDs columns, health and actions</li>
@@ -174,7 +174,7 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
 
 <a id="screenshots"></a>
 
-## 📸 Screenshots
+## Screenshots
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/screenshots/pods-dark.png">
@@ -242,7 +242,7 @@ For a team, install the Helm chart with OpenID Connect: everyone signs in with t
 
 <a id="coming-from-k9s"></a>
 
-## ⌨️ Coming from k9s
+## Coming from k9s
 
 Kubri reads your k9s configuration and uses the same keys, so you can start right away. The ones you will use most:
 
@@ -260,7 +260,7 @@ Kubri reads your k9s configuration and uses the same keys, so you can start righ
 
 [Coming from k9s](docs/FROM-K9S.md) covers the first few minutes: what carries over, what works a little differently, and what there is besides. [Using your k9s configuration](docs/K9S.md) lists what Kubri covers and what it does not.
 
-## 🔑 Your kubeconfig
+## Your kubeconfig
 
 Kubri reads your kubeconfig the way kubectl does: a context that works with kubectl works in Kubri, and one that fails shows kubectl's error.
 
@@ -271,7 +271,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
 
 <a id="documentation"></a>
 
-## 📚 Documentation
+## Documentation
 
 <table>
   <tr>
@@ -303,7 +303,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
   </tr>
 </table>
 
-## 🛠️ Development
+## Development
 
 <details>
 <summary>Build, run and test Kubri from source</summary>
@@ -343,10 +343,10 @@ cd ui && pnpm check && pnpm test
 
 Want to help? [Contributing](CONTRIBUTING.md) explains how.
 
-## 💬 Feedback
+## Feedback
 
 Something wrong or missing? [Report a problem](https://github.com/snaketech-tu/kubri/issues/new?template=bug.yml) or [suggest an idea](https://github.com/snaketech-tu/kubri/issues/new?template=idea.yml). From inside Kubri, the links at the bottom of the help (<kbd>?</kbd>) or `:feedback` open the same forms with your version and system filled in. Found a security problem? Please report it privately, as [SECURITY.md](SECURITY.md) describes.
 
-## 📄 License
+## License
 
 Kubri is licensed under the [Apache License 2.0](LICENSE).

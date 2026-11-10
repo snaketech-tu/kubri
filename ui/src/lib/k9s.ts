@@ -197,7 +197,7 @@ function lookup(skin: unknown, path: string[]): unknown {
 }
 
 /** `#rrggbb` for hex colors; the browser resolves names like `dodgerblue`. */
-export function hexColor(color: string): string | null {
+function hexColor(color: string): string | null {
 	const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(color);
 	if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toLowerCase();
 	return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : null;

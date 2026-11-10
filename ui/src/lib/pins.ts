@@ -1,4 +1,5 @@
 import type { RecentObject } from './search';
+import { store, storedList } from './storage';
 
 const KEY = 'kubri.pins';
 const MAX = 30;
@@ -10,12 +11,7 @@ const MAX = 30;
 export type Pin = RecentObject;
 
 export function loadPins(): Pin[] {
-	try {
-		const parsed = JSON.parse(localStorage.getItem(KEY) ?? '[]');
-		return Array.isArray(parsed) ? parsed : [];
-	} catch {
-		return [];
-	}
+	return storedList<Pin>(KEY);
 }
 
 export function samePin(a: Pin, b: Pin): boolean {
@@ -34,9 +30,5 @@ export function toggled(pins: Pin[], pin: Pin): Pin[] {
 }
 
 export function savePins(pins: Pin[]) {
-	try {
-		localStorage.setItem(KEY, JSON.stringify(pins));
-	} catch {
-		// Private windows may refuse; the pins then last until Kubri closes.
-	}
+	store(KEY, JSON.stringify(pins));
 }

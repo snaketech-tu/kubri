@@ -176,12 +176,7 @@ pub(crate) fn describe(own: &[PathBuf], chosen: &[PathBuf]) -> Vec<KubeconfigFil
 mod tests {
     use super::*;
 
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("kubri-chosen-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
+    use crate::k9s::tests::scratch;
 
     fn kubeconfig(dir: &Path, name: &str, contexts: &[&str]) -> PathBuf {
         let path = dir.join(name);

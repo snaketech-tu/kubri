@@ -1,4 +1,5 @@
 import type { SkinTheme } from './k9s';
+import { store, stored } from './storage';
 
 let canvas: CanvasRenderingContext2D | null | undefined;
 
@@ -20,23 +21,14 @@ const SCHEME_KEY = 'kubri.scheme';
 let scheme: Scheme = null;
 
 export function storedScheme(): Scheme {
-	try {
-		const value = localStorage.getItem(SCHEME_KEY);
-		return value === 'light' || value === 'dark' ? value : null;
-	} catch {
-		return null;
-	}
+	const value = stored(SCHEME_KEY);
+	return value === 'light' || value === 'dark' ? value : null;
 }
 
 /** Puts Kubri's own colors in light or dark; a skin on screen keeps its scheme until it is taken off. */
 export function applyScheme(next: Scheme) {
 	scheme = next;
-	try {
-		if (next) localStorage.setItem(SCHEME_KEY, next);
-		else localStorage.removeItem(SCHEME_KEY);
-	} catch {
-		// Lasts until the page is reloaded.
-	}
+	store(SCHEME_KEY, next);
 	const root = document.documentElement;
 	if (root.classList.contains('skinned')) return;
 	root.classList.remove('light', 'dark');
@@ -62,19 +54,10 @@ const KEY = 'kubri.skin.';
 
 /** The skin picked for a context: undefined follows k9s, null is Kubri's own colors. */
 export function storedSkin(context: string): string | null | undefined {
-	try {
-		const value = localStorage.getItem(KEY + context);
-		return value === null ? undefined : value === '' ? null : value;
-	} catch {
-		return undefined;
-	}
+	const value = stored(KEY + context);
+	return value === null ? undefined : value === '' ? null : value;
 }
 
 export function storeSkin(context: string, skin: string | null | undefined) {
-	try {
-		if (skin === undefined) localStorage.removeItem(KEY + context);
-		else localStorage.setItem(KEY + context, skin ?? '');
-	} catch {
-		// Without storage the choice lasts until the page is reloaded.
-	}
+	store(KEY + context, skin === undefined ? null : (skin ?? ''));
 }

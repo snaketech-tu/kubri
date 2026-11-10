@@ -21,6 +21,7 @@ use kube::client::Body;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::percent::encode;
 use crate::session::Session;
 use crate::{ClusterInfo, Error, Kubri, ResourceInfo, ResourceRef, Result};
 
@@ -1034,15 +1035,6 @@ fn decode(text: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
-}
-
-fn encode(text: &str) -> String {
-    text.bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
-            b => format!("%{b:02X}"),
-        })
-        .collect()
 }
 
 fn reply(code: StatusCode, content_type: &'static str, body: BoxBody<Bytes, Infallible>) -> Reply {

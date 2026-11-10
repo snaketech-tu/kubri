@@ -1,4 +1,4 @@
-import { store, stored } from './model';
+import { store, stored } from '../storage';
 
 const TOOLS_BESIDE_KEY = 'kubri.toolsBeside';
 const PANEL_WIDTH_KEY = 'kubri.panelWidth';

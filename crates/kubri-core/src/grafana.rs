@@ -15,6 +15,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::integrations::Endpoint;
+use crate::percent::encode;
 
 /// Dashboards whose variables are fetched one by one from the API, at most.
 const MAX_FETCHED: usize = 150;
@@ -282,17 +283,6 @@ pub(crate) fn loki_source(settings: &Value) -> Option<String> {
     });
     let (_, source) = lokis.first()?;
     source.get("uid").and_then(Value::as_str).map(str::to_owned)
-}
-
-fn encode(text: &str) -> String {
-    let mut out = String::new();
-    for byte in text.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
-            _ => out.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    out
 }
 
 #[cfg(test)]

@@ -24,6 +24,7 @@
 	import ListNotices from './ListNotices.svelte';
 	import ResourceTable from './ResourceTable.svelte';
 	import { midSentence, t } from '../i18n';
+	import { store, stored } from '../storage';
 
 	let {
 		resource,
@@ -134,25 +135,10 @@
 	/** Namespaces show which ones get production's care, in a context that is not production as a whole. */
 	const marksProduction = $derived(isNamespaces(resource) && !!app.cluster && !app.cluster.snapshot && !app.production);
 
-	function readLocal(key: string): string | null {
-		try {
-			return localStorage.getItem(key);
-		} catch {
-			return null;
-		}
-	}
-	function writeLocal(key: string, value: string) {
-		try {
-			localStorage.setItem(key, value);
-		} catch {
-			// Asks again after a reload.
-		}
-	}
-
 	/** Namespaces that look like production and are not marked, until the user says not to ask again. */
 	let hintDismissed = $state(false);
 	$effect(() => {
-		hintDismissed = !!app.cluster && readLocal(`kubri.productionHint.${app.cluster.context}`) === 'off';
+		hintDismissed = !!app.cluster && stored(`kubri.productionHint.${app.cluster.context}`) === 'off';
 	});
 	const productionHints = $derived(
 		marksProduction && !hintDismissed ? suggestions(app.contextSettings, table.rows.map((r) => ({ name: r.name, labels: r.labels }))) : []
@@ -692,7 +678,7 @@
 			suggestions={productionHints}
 			ondismiss={() => {
 				hintDismissed = true;
-				writeLocal(`kubri.productionHint.${context}`, 'off');
+				store(`kubri.productionHint.${context}`, 'off');
 			}}
 		/>
 	{/if}

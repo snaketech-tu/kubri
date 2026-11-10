@@ -1,6 +1,7 @@
 import type { ContextInfo, FieldTest, ResourceInfo, SearchRequest } from './api';
 import { matchResources } from './commands';
 import { t } from './i18n';
+import { store, storedList } from './storage';
 
 /** A query as typed, as the core takes it, and what in it was not understood. */
 export interface ParsedSearch {
@@ -131,12 +132,7 @@ export interface RecentObject {
 
 /** Objects opened lately, newest first, kept in the browser. */
 export function recentObjects(): RecentObject[] {
-	try {
-		const parsed = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
-		return Array.isArray(parsed) ? parsed : [];
-	} catch {
-		return [];
-	}
+	return storedList<RecentObject>(RECENT_KEY);
 }
 
 /** Puts `object` first among the recent ones. */
@@ -144,10 +140,6 @@ export function remember(object: RecentObject, list = recentObjects()): RecentOb
 	const same = (o: RecentObject) =>
 		o.context === object.context && o.group === object.group && o.plural === object.plural && o.namespace === object.namespace && o.name === object.name;
 	const next = [object, ...list.filter((o) => !same(o))].slice(0, RECENT_MAX);
-	try {
-		localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-	} catch {
-		// Private windows may refuse; the list then lasts until Kubri closes.
-	}
+	store(RECENT_KEY, JSON.stringify(next));
 	return next;
 }

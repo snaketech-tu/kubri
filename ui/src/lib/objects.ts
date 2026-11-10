@@ -110,7 +110,7 @@ export function ownerOf(subject: Subject) {
 }
 
 /** Shows the controller of an object, like k9s Shift+J. */
-export function jumpToOwner(subject: Subject) {
+function jumpToOwner(subject: Subject) {
 	const owner = ownerOf(subject);
 	if (!owner) {
 		app.toast(t('{name} has no owner', { name: subject.target.name }), 'bad');
@@ -128,7 +128,7 @@ export function jumpToOwner(subject: Subject) {
 }
 
 /** The ReplicaSets of a Deployment, like k9s `z`. */
-export async function showReplicaSets(target: ObjectRef) {
+async function showReplicaSets(target: ObjectRef) {
 	const replicasets = findResource(app.resources, { group: 'apps', version: 'v1', plural: 'replicasets' });
 	if (!replicasets) return;
 	try {

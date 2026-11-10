@@ -103,7 +103,7 @@ export function filterSubjects(subjects: SubjectInfo[], text: string) {
 }
 
 /** Whether a rule allows `verb` on a resource; a null group matches any group. */
-export function ruleAllows(rule: Rule, verb: string, group: string | null, resource: string, subresource = ''): boolean {
+function ruleAllows(rule: Rule, verb: string, group: string | null, resource: string, subresource = ''): boolean {
 	const name = subresource ? `${resource}/${subresource}` : resource;
 	const verbs = rule.verbs.includes('*') || rule.verbs.includes(verb);
 	const groups = group === null || rule.apiGroups.includes('*') || rule.apiGroups.includes(group);

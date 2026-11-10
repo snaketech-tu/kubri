@@ -2,18 +2,11 @@
 	/** Schemas by context and resource: a kind's schema does not change while connected. */
 	const schemas = new Map<string, Promise<KindSchema | null>>();
 	const FIELD_HELP_KEY = 'kubri.fieldHelp';
-
-	function storedFieldHelp() {
-		try {
-			return localStorage.getItem(FIELD_HELP_KEY) !== 'off';
-		} catch {
-			return true;
-		}
-	}
 </script>
 
 <script lang="ts">
 	import { midSentence, t } from '../i18n';
+	import { store, stored } from '../storage';
 	import { tick, untrack } from 'svelte';
 	import { parse, stringify } from 'yaml';
 	import { canEdit, save } from '../actions';
@@ -210,7 +203,7 @@
 	/** The kind's schema, for completion, validation and the field help. */
 	let schema = $state<KindSchema | null>(null);
 	let cursor = $state<FieldPath>([]);
-	let fieldHelp = $state(storedFieldHelp());
+	let fieldHelp = $state(stored(FIELD_HELP_KEY) !== 'off');
 
 	$effect(() => {
 		if (details.tab !== 'yaml') return;
@@ -227,11 +220,7 @@
 
 	function toggleFieldHelp() {
 		fieldHelp = !fieldHelp;
-		try {
-			localStorage.setItem(FIELD_HELP_KEY, fieldHelp ? 'on' : 'off');
-		} catch {
-			// Remembered until the page reloads.
-		}
+		store(FIELD_HELP_KEY, fieldHelp ? 'on' : 'off');
 	}
 
 	/** The object as it is on the server now, fetched while editing to notice changes made meanwhile. */

@@ -6,6 +6,7 @@
  * reloads the UI, so texts made when a module loads follow too.
  */
 import de from './de';
+import { store, stored } from '../storage';
 
 export type Language = 'en' | 'de';
 export type LanguageSetting = Language | 'system';
@@ -30,24 +31,13 @@ export function systemLanguage(preferred: readonly string[]): Language {
 
 /** The language picked in the settings, or `system`. */
 export function languageSetting(): LanguageSetting {
-	try {
-		const stored = localStorage.getItem(KEY);
-		if (stored === 'en' || stored === 'de') return stored;
-	} catch {
-		// No storage: follow the system.
-	}
-	return 'system';
+	const value = stored(KEY);
+	return value === 'en' || value === 'de' ? value : 'system';
 }
 
 /** Keeps `setting` and starts the UI again in that language. */
 export function setLanguage(setting: LanguageSetting) {
-	try {
-		if (setting === 'system') localStorage.removeItem(KEY);
-		else localStorage.setItem(KEY, setting);
-	} catch {
-		return;
-	}
-	location.reload();
+	if (store(KEY, setting === 'system' ? null : setting)) location.reload();
 }
 
 function startLanguage(): Language {

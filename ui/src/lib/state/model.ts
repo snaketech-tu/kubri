@@ -145,24 +145,6 @@ export interface Toast {
 	text: string;
 }
 
-/** Reads a choice kept in the browser; null without storage. */
-export function stored(key: string): string | null {
-	try {
-		return localStorage.getItem(key);
-	} catch {
-		return null;
-	}
-}
-
-/** Keeps a choice in the browser; null forgets it. Without storage it lasts until the page reloads. */
-export function store(key: string, value: string | null) {
-	try {
-		if (value === null) localStorage.removeItem(key);
-		else localStorage.setItem(key, value);
-	} catch {
-		// Kept in memory only.
-	}
-}
 
 export function sameResource(a: ResourceRef, b: ResourceRef) {
 	return a.group === b.group && a.version === b.version && a.plural === b.plural;
