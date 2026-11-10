@@ -191,10 +191,10 @@ export function objectActions(subject: Subject, options: ActionOptions, writable
 	add('View', t('Describe'), ['d'], show('describe'), { primary: 5, id: 'describe', needs: on('get'), kubectl: k({ op: 'describe' }) });
 	add('View', t('YAML'), ['y'], show('yaml'), { primary: 6, id: 'yaml', needs: on('get'), kubectl: k({ op: 'yaml' }) });
 	const logs = isPods(resource) ? on('get', 'log') : need('get', pods, ns, { subresource: 'log' });
-	if (hasCharts(resource) && (app.has('prometheus') || app.has('grafana'))) add('View', t('Metrics'), ['m'], show('metrics'), { primary: 9, id: 'metrics' });
+	if (hasCharts(resource) && (app.integrations.has('prometheus') || app.integrations.has('grafana'))) add('View', t('Metrics'), ['m'], show('metrics'), { primary: 9, id: 'metrics' });
 	// Any object: its logs in Explore, the dashboards that fit it, and Grafana's search by name.
 	const grafana = app.contextSettings.integrations?.grafana;
-	if ((grafana && grafana !== 'off') || app.has('grafana')) {
+	if ((grafana && grafana !== 'off') || app.integrations.has('grafana')) {
 		const here = { ...target, context: app.cluster?.context };
 		if (ns || (!resource.group && resource.plural === 'namespaces')) add('View', t('Logs in Grafana'), [], () => openGrafanaLogs(here), { id: 'grafana-logs' });
 		add('View', t('Grafana…'), [], dialog(() => ({ kind: 'grafana', target: here })), { id: 'grafana' });
@@ -208,12 +208,12 @@ export function objectActions(subject: Subject, options: ActionOptions, writable
 	if (hasUsers(resource)) add('View', t('Used by'), ['u'], show('describe'), { id: 'usedBy' });
 	add('View', t('What changed'), [], () => app.showChanges({ namespace: target.namespace ?? undefined, kind: resource.kind, name: target.name }), { id: 'changes' });
 	{
-		const pin = app.pinFor(resource, target);
-		add('View', app.isPinned(pin) ? t('Unpin from sidebar') : t('Pin to sidebar'), [], () => app.togglePin(pin), { id: 'pin' });
+		const pin = app.pins.of(resource, target);
+		add('View', app.pins.has(pin) ? t('Unpin from sidebar') : t('Pin to sidebar'), [], () => app.pins.toggle(pin), { id: 'pin' });
 	}
 	add('View', t('Compare…'), [], dialog(() => ({ kind: 'compare', resource, target })), { id: 'compare', needs: on('get') });
 	// In the action bar once a model is set up; until then the menus lead to the settings.
-	const explaining = app.settings.explain.provider !== 'none' ? { primary: isPods(resource) ? 4 : 9 } : {};
+	const explaining = app.prefs.settings.explain.provider !== 'none' ? { primary: isPods(resource) ? 4 : 9 } : {};
 	add('View', t('Explain…'), ['E'], () => (app.explaining = { kind: 'object', target }), { id: 'explain', needs: on('get'), ...explaining });
 
 	if (isPods(resource) && writable) {

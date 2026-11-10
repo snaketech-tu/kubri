@@ -461,7 +461,7 @@
 		resourceProblems: sizeProblems.length > 0
 	});
 	/** The change to dry-run before this action runs, when the settings ask for a diff. */
-	const change = $derived(previewChange(dialog, app.settings.diff, fields));
+	const change = $derived(previewChange(dialog, app.prefs.settings.diff, fields));
 	/** The dry run on screen is for the change as it is now typed. */
 	const reviewing = $derived(!!preview && !!change && JSON.stringify(change) === previewed);
 	/** A dry run is due before the button runs the action. */
@@ -534,7 +534,7 @@
 >
 	<h2>{title}</h2>
 	<p class="action-context">
-		<strong>{context ? app.contextName(context) : ''}</strong>{app.environment ? ` · ${app.environment}` : ''} ·
+		<strong>{context ? app.prefs.contextName(context) : ''}</strong>{app.environment ? ` · ${app.environment}` : ''} ·
 		{dialog.kind === 'delete' || dialog.kind === 'scaleMany' || dialog.kind === 'restartMany'
 			? t('{n} selected', { n: dialog.targets.length })
 			: t('Review the target before you continue')}

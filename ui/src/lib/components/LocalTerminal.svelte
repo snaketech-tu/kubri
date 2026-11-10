@@ -20,8 +20,8 @@
 
 	/** The core opens terminals for the connected context only. */
 	const here = $derived(app.cluster?.context === s.context && !app.snapshot);
-	const where = $derived(s.namespace ? `${app.contextName(s.context)}/${s.namespace}` : app.contextName(s.context));
-	const production = $derived(app.contextSettingsOf(s.context).production);
+	const where = $derived(s.namespace ? `${app.prefs.contextName(s.context)}/${s.namespace}` : app.prefs.contextName(s.context));
+	const production = $derived(app.prefs.contextSettingsOf(s.context).production);
 
 	$effect(() => {
 		void restarts;
@@ -38,7 +38,7 @@
 					status = 'refused';
 					return;
 				}
-				const { fontSize, fontFamily } = untrack(() => app.settings.terminal ?? { fontSize: 13, fontFamily: '' });
+				const { fontSize, fontFamily } = untrack(() => app.prefs.settings.terminal ?? { fontSize: 13, fontFamily: '' });
 				unmount = mountTerminal(
 					host,
 					(term) => {
@@ -76,13 +76,13 @@
 	});
 
 	async function unlock() {
-		await app.unlock();
-		if (!app.guard.readOnly) restarts++;
+		await app.rails.unlock();
+		if (!app.rails.guard.readOnly) restarts++;
 	}
 
 	const refusal = $derived.by(() => {
 		if (status !== 'refused') return null;
-		if (!here) return t('This terminal belongs to {context}. Switch to it to open the terminal again.', { context: app.contextName(s.context) });
+		if (!here) return t('This terminal belongs to {context}. Switch to it to open the terminal again.', { context: app.prefs.contextName(s.context) });
 		return info?.reason ? coreText(info.reason) : t('Kubri could not tell whether a terminal may be opened here.');
 	});
 </script>
@@ -113,17 +113,17 @@
 						: t('Starting…')}
 		</span>
 		<span class="spacer"></span>
-		<button onclick={() => restarts++} disabled={!here} title={here ? '' : t('Switch to {context} to open it again', { context: app.contextName(s.context) })}>
+		<button onclick={() => restarts++} disabled={!here} title={here ? '' : t('Switch to {context} to open it again', { context: app.prefs.contextName(s.context) })}>
 			{status === 'open' || status === 'starting' ? t('Restart') : t('Open again')}
 		</button>
 	</div>
-	{#if status === 'open' && here && app.guard.readOnly}
+	{#if status === 'open' && here && app.rails.guard.readOnly}
 		<p class="note" role="status">{t('Changes are off for this context again. This shell keeps running, without Kubri\'s checks.')}</p>
 	{/if}
 	{#if refusal}
 		<div class="refused" role="status">
 			<p>{refusal}</p>
-			{#if here && app.guard.readOnly && app.guard.canUnlock}
+			{#if here && app.rails.guard.readOnly && app.rails.guard.canUnlock}
 				<button onclick={unlock}>{t('Unlock for 15 minutes')}</button>
 			{/if}
 		</div>

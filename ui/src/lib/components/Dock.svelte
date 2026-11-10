@@ -18,7 +18,7 @@
 
 	function title(s: DockSession, other: string | null) {
 		if (s.kind === 'local') {
-			const context = app.contextName(s.context);
+			const context = app.prefs.contextName(s.context);
 			return s.namespace
 				? t('Terminal on this computer: kubectl and helm use {context}, namespace {namespace}', { context, namespace: s.namespace })
 				: t("Terminal on this computer: kubectl and helm use {context}, in the context's own namespace", { context });
@@ -26,7 +26,7 @@
 		const values = { kind: s.resource.kind, name: `${s.target.namespace ? `${s.target.namespace}/` : ''}${label(s)}` };
 		const what = s.kind === 'logs' ? t('Logs of {kind} {name}', values) : t('Shell in {kind} {name}', values);
 		const previous = s.previous ? ` (${t('previous instance')})` : '';
-		return other ? t('{what} in {context}', { what: what + previous, context: app.contextName(other) }) : what + previous;
+		return other ? t('{what} in {context}', { what: what + previous, context: app.prefs.contextName(other) }) : what + previous;
 	}
 
 	/**
@@ -125,7 +125,7 @@
 			{#each dock.sessions as s (s.id)}
 				{@const on = shown(s.id)}
 				{@const other = chipContext(s)}
-				{@const settings = other ? app.contextSettingsOf(other) : null}
+				{@const settings = other ? app.prefs.contextSettingsOf(other) : null}
 				<div class="tab" class:on class:focused={on && dock.beside !== null && dock.last === s.id}>
 					<button
 						role="tab"
@@ -137,7 +137,7 @@
 						<Icon name={s.kind === 'logs' ? 'logs' : 'terminal'} size={14} />
 						{#if other}
 							<span class="context" class:production={settings?.production} style:--context={settings?.color || null}
-								>{app.contextName(other)}</span
+								>{app.prefs.contextName(other)}</span
 							>
 						{/if}
 						<span>{label(s)}</span>

@@ -14,7 +14,7 @@
 	let { context, namespaces = [] }: { context: string; namespaces?: string[] } = $props();
 
 	const id = $props.id();
-	const current = $derived(app.contextSettingsOf(context));
+	const current = $derived(app.prefs.contextSettingsOf(context));
 	/** Labels are known for the connected context only. */
 	const labels = $derived(context === app.cluster?.context ? app.namespaceLabels : {});
 	const names = $derived(markedNames(current));
@@ -31,7 +31,7 @@
 	const listed = $derived(filter ? namespaces.filter((n) => n.includes(filter.trim())) : namespaces);
 
 	function save(change: Partial<ContextSettings>) {
-		return app.setContextSettings(context, { ...current, ...change });
+		return app.prefs.setContextSettings(context, { ...current, ...change });
 	}
 
 	function mark(name: string, on: boolean) {

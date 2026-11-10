@@ -59,15 +59,15 @@
 	/** The usual label names, then the templates; one the settings name that is gone stays listed. */
 	const labelOptions = $derived([
 		{ value: '', label: t('Usual: namespace, pod, container') },
-		...app.settings.labelTemplates.map((x) => ({ value: x.name, label: x.name })),
-		...(draft.labels && !app.settings.labelTemplates.some((x) => x.name === draft.labels)
+		...app.prefs.settings.labelTemplates.map((x) => ({ value: x.name, label: x.name })),
+		...(draft.labels && !app.prefs.settings.labelTemplates.some((x) => x.name === draft.labels)
 			? [{ value: draft.labels, label: t('{name} (removed)', { name: draft.labels }) }]
 			: [])
 	]);
 
 	async function check() {
 		checking = true;
-		await app.loadIntegrations(true);
+		await app.integrations.load(true);
 		checking = false;
 	}
 	$effect(() => {
@@ -78,7 +78,7 @@
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
 		saving = true;
-		const ok = await app.setContextSettings(context, { ...app.contextSettings, integrations: { ...draft } });
+		const ok = await app.prefs.setContextSettings(context, { ...app.contextSettings, integrations: { ...draft } });
 		saving = false;
 		if (ok) {
 			app.toast(t('Saved; looking again'));
@@ -95,8 +95,8 @@
 	}
 
 	/** Tools the cluster runs, or that the settings point to, as cards; the rest as a short list below. */
-	const present = $derived(app.integrations?.items.filter((i) => i.source !== 'missing' && i.source !== 'off') ?? []);
-	const absent = $derived(app.integrations?.items.filter((i) => i.source === 'missing' || i.source === 'off') ?? []);
+	const present = $derived(app.integrations.found?.items.filter((i) => i.source !== 'missing' && i.source !== 'off') ?? []);
+	const absent = $derived(app.integrations.found?.items.filter((i) => i.source === 'missing' || i.source === 'off') ?? []);
 
 	function where(item: Integration): string | null {
 		const e = item.endpoint;
@@ -124,7 +124,7 @@
 
 	<div class="body">
 		<div class="main">
-			{#if !app.integrations}
+			{#if !app.integrations.found}
 				<p class="muted">{checking ? t('Looking for Prometheus, Grafana, Loki, Flux, Argo CD and cert-manager…') : t('Kubri could not look for integrations.')}</p>
 			{:else}
 				{#if present.length}
@@ -187,7 +187,7 @@
 		<div class="side">
 			<h2 class="section" id="point-elsewhere">{t('Point elsewhere')}</h2>
 			<form class="settings" onsubmit={save} aria-labelledby="point-elsewhere">
-				<p class="muted">{t('For {context} only. Leave a field empty and Kubri finds the tool in the cluster.', { context: app.contextName(context) })}</p>
+				<p class="muted">{t('For {context} only. Leave a field empty and Kubri finds the tool in the cluster.', { context: app.prefs.contextName(context) })}</p>
 				<details class="help">
 					<summary>{t('How to fill these in')}</summary>
 					<p>

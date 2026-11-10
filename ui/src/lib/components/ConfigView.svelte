@@ -86,7 +86,7 @@
 		reloading = true;
 		requested.clear();
 		previews = {};
-		await Promise.all([app.loadK9s(), app.loadViews()]);
+		await Promise.all([app.loadK9s(), app.views.load()]);
 		reloading = false;
 	}
 
@@ -124,7 +124,7 @@
 		vars: { '--bg': '#101522', '--text': '#e5eaf5', '--accent': '#a6b3ff', '--ok': '#3ccf7e', '--warn': '#e5a73b', '--bad': '#f06b6b' },
 		scheme: 'dark'
 	};
-	const kubriTheme = $derived(app.systemDark ? darkTheme : lightTheme);
+	const kubriTheme = $derived(app.appearance.systemDark ? darkTheme : lightTheme);
 	const desktop = isTauri();
 	const schemes: { value: Scheme; label: string; theme: SkinTheme }[] = $derived([
 		{ value: null, label: t('As the system'), theme: kubriTheme },
@@ -167,13 +167,13 @@
 			</p>
 			<div class="contexts">
 				{#each app.contexts as ctx (ctx.name)}
-					{@const settings = app.contextSettingsOf(ctx.name)}
+					{@const settings = app.prefs.contextSettingsOf(ctx.name)}
 					<details class="context" open={ctx.name === app.cluster?.context && app.configSection === 'contexts'}>
 						<summary>
 							{#if settings.color}
 								<span class="swatch" style:background={settings.color} title={t('Color {color}', { color: settings.color })} aria-hidden="true"></span>
 							{/if}
-							<strong>{app.contextName(ctx.name)}</strong>
+							<strong>{app.prefs.contextName(ctx.name)}</strong>
 							{#if settings.displayName}<span class="muted small">{ctx.name}</span>{/if}
 							{#if settings.production}<span class="tag bad">{t('production')}</span>
 							{:else if settings.label}<span class="tag">{settings.label}</span>{/if}
@@ -202,8 +202,8 @@
 					<label>
 						<input
 							type="checkbox"
-							checked={app.settings.diff[key]}
-							onchange={(e) => app.setDiffSettings({ ...app.settings.diff, [key]: e.currentTarget.checked })}
+							checked={app.prefs.settings.diff[key]}
+							onchange={(e) => app.prefs.setDiffSettings({ ...app.prefs.settings.diff, [key]: e.currentTarget.checked })}
 						/>
 						{label}
 					</label>
@@ -223,8 +223,8 @@
 				<label>
 					<input
 						type="checkbox"
-						checked={app.settings.history.record}
-						onchange={(e) => app.setHistorySettings({ ...app.settings.history, record: e.currentTarget.checked })}
+						checked={app.prefs.settings.history.record}
+						onchange={(e) => app.prefs.setHistorySettings({ ...app.prefs.settings.history, record: e.currentTarget.checked })}
 					/>
 					{t('Record changes')}
 				</label>
@@ -235,10 +235,10 @@
 						type="number"
 						min="1"
 						max="365"
-						value={app.settings.history.keepDays}
+						value={app.prefs.settings.history.keepDays}
 						onchange={(e) => {
 							const days = Math.round(Number(e.currentTarget.value));
-							if (days >= 1) app.setHistorySettings({ ...app.settings.history, keepDays: Math.min(days, 365) });
+							if (days >= 1) app.prefs.setHistorySettings({ ...app.prefs.settings.history, keepDays: Math.min(days, 365) });
 						}}
 					/>
 					{t('days')}
@@ -251,10 +251,10 @@
 						min="10"
 						max="10000"
 						step="10"
-						value={app.settings.history.maxMb}
+						value={app.prefs.settings.history.maxMb}
 						onchange={(e) => {
 							const mb = Math.round(Number(e.currentTarget.value));
-							if (mb >= 10) app.setHistorySettings({ ...app.settings.history, maxMb: Math.min(mb, 10000) });
+							if (mb >= 10) app.prefs.setHistorySettings({ ...app.prefs.settings.history, maxMb: Math.min(mb, 10000) });
 						}}
 					/>
 					MB
@@ -300,10 +300,10 @@
 						type="number"
 						min="0"
 						max="5"
-						value={app.settings.connections?.keepRecent ?? 3}
+						value={app.prefs.settings.connections?.keepRecent ?? 3}
 						onchange={(e) => {
 							const count = Math.round(Number(e.currentTarget.value));
-							if (count >= 0) app.setConnectionSettings({ keepRecent: Math.min(count, 5) });
+							if (count >= 0) app.prefs.setConnectionSettings({ keepRecent: Math.min(count, 5) });
 						}}
 					/>
 					{t('contexts connected (0 turns it off)')}
@@ -312,7 +312,7 @@
 		</div>
 
 		{#if app.localTerminal}
-			{@const terminal = app.settings.terminal ?? { shell: '', args: [], startDir: '', fontSize: 13, fontFamily: '' }}
+			{@const terminal = app.prefs.settings.terminal ?? { shell: '', args: [], startDir: '', fontSize: 13, fontFamily: '' }}
 			<div class="block">
 				<h2 id="config-terminal">{t('Terminal')}</h2>
 				<p class="muted">
@@ -333,7 +333,7 @@
 							placeholder={t('Login shell')}
 							spellcheck="false"
 							value={terminal.shell}
-							onchange={(e) => app.setTerminalSettings({ ...terminal, shell: e.currentTarget.value.trim() })}
+							onchange={(e) => app.prefs.setTerminalSettings({ ...terminal, shell: e.currentTarget.value.trim() })}
 						/>
 					</label>
 					<label>
@@ -345,7 +345,7 @@
 							spellcheck="false"
 							title={t('Separated by spaces')}
 							value={terminal.args.join(' ')}
-							onchange={(e) => app.setTerminalSettings({ ...terminal, args: e.currentTarget.value.split(/\s+/).filter(Boolean) })}
+							onchange={(e) => app.prefs.setTerminalSettings({ ...terminal, args: e.currentTarget.value.split(/\s+/).filter(Boolean) })}
 						/>
 					</label>
 					<label>
@@ -356,7 +356,7 @@
 							placeholder={t('Home folder')}
 							spellcheck="false"
 							value={terminal.startDir}
-							onchange={(e) => app.setTerminalSettings({ ...terminal, startDir: e.currentTarget.value.trim() })}
+							onchange={(e) => app.prefs.setTerminalSettings({ ...terminal, startDir: e.currentTarget.value.trim() })}
 						/>
 					</label>
 					<label>
@@ -369,7 +369,7 @@
 							value={terminal.fontSize}
 							onchange={(e) => {
 								const size = Math.round(Number(e.currentTarget.value));
-								if (size >= 8 && size <= 32) app.setTerminalSettings({ ...terminal, fontSize: size });
+								if (size >= 8 && size <= 32) app.prefs.setTerminalSettings({ ...terminal, fontSize: size });
 							}}
 						/>
 						{t('px, for terminals opened next')}
@@ -383,7 +383,7 @@
 							spellcheck="false"
 							title={t('Installed fonts to use first, separated by commas, like MesloLGS NF. Kubri\'s own font and its icons for prompts like powerlevel10k fill in the rest.')}
 							value={terminal.fontFamily}
-							onchange={(e) => app.setTerminalSettings({ ...terminal, fontFamily: e.currentTarget.value.trim() })}
+							onchange={(e) => app.prefs.setTerminalSettings({ ...terminal, fontFamily: e.currentTarget.value.trim() })}
 						/>
 					</label>
 				</div>
@@ -397,12 +397,12 @@
 				{#each schemes as option (option.label)}
 					<button
 						class="skin"
-						class:active={app.scheme === option.value}
+						class:active={app.appearance.scheme === option.value}
 						role="radio"
-						aria-checked={app.scheme === option.value}
+						aria-checked={app.appearance.scheme === option.value}
 						onclick={() => {
-							app.setScheme(option.value);
-							if (app.skin) app.setSkin(null);
+							app.appearance.setScheme(option.value);
+							if (app.appearance.skin) app.appearance.setSkin(null);
 						}}
 					>
 						{@render swatch(option.theme)}
@@ -410,19 +410,19 @@
 					</button>
 				{/each}
 			</div>
-			{#if app.skin}<p class="muted small">{t('The skin {skin} is on screen. Picking one of these takes it off for this context.', { skin: app.skin })}</p>{/if}
+			{#if app.appearance.skin}<p class="muted small">{t('The skin {skin} is on screen. Picking one of these takes it off for this context.', { skin: app.appearance.skin })}</p>{/if}
 			<div class="zoom">
 				<span>{t('Zoom')}</span>
 				{#if desktop}
-					<button onclick={() => app.setZoom(stepZoom(app.zoom, -1))} disabled={app.zoom <= ZOOMS[0]} aria-label={t('Zoom out')}>−</button>
+					<button onclick={() => app.appearance.setZoom(stepZoom(app.appearance.zoom, -1))} disabled={app.appearance.zoom <= ZOOMS[0]} aria-label={t('Zoom out')}>−</button>
 					<Select
-						value={app.zoom}
+						value={app.appearance.zoom}
 						options={ZOOMS.map((z) => ({ value: z, label: `${Math.round(z * 100)}%` }))}
-						onchange={(z) => app.setZoom(z)}
+						onchange={(z) => app.appearance.setZoom(z)}
 						aria-label={t('Zoom level')}
 						compact
 					/>
-					<button onclick={() => app.setZoom(stepZoom(app.zoom, 1))} disabled={app.zoom >= ZOOMS[ZOOMS.length - 1]} aria-label={t('Zoom in')}>+</button>
+					<button onclick={() => app.appearance.setZoom(stepZoom(app.appearance.zoom, 1))} disabled={app.appearance.zoom >= ZOOMS[ZOOMS.length - 1]} aria-label={t('Zoom in')}>+</button>
 					<span class="muted small"
 						><Phrase text={t('{bigger} {smaller} and {reset} too; kept for the next start')} kbd={{ bigger: 'Ctrl +', smaller: 'Ctrl −', reset: 'Ctrl 0' }} /></span
 					>
@@ -463,7 +463,7 @@
 			<h2 id="config-updates">{t('Updates')}</h2>
 			<div class="diff-settings">
 				<label>
-					<input type="checkbox" checked={app.releaseChecks} onchange={(e) => app.setReleaseChecks(e.currentTarget.checked)} />
+					<input type="checkbox" checked={app.releases.checks} onchange={(e) => app.releases.setChecks(e.currentTarget.checked)} />
 					{t('Tell me when a new release is out')}
 				</label>
 			</div>
@@ -480,28 +480,28 @@
 		<ExplainSettings />
 
 		<div class="block files">
-			<h2 id="config-views">{t('Views')} <span class="count">{app.views?.views.length ?? 0}</span></h2>
+			<h2 id="config-views">{t('Views')} <span class="count">{app.views.loaded?.views.length ?? 0}</span></h2>
 			<p class="muted">
-				{#each parts(t('How custom resources show: extra columns, a Health column, sections in the overview, actions and edges in the graph, each from a YAML file. Kubri brings views for Flux, Argo CD and cert-manager; yours go in {folder} and replace a built-in one of the same kind. {link}.')) as part, i (i)}{#if 'text' in part}{part.text}{:else if part.name === 'folder'}{#if app.views?.dir}<code
-								>{app.views.dir}</code
+				{#each parts(t('How custom resources show: extra columns, a Health column, sections in the overview, actions and edges in the graph, each from a YAML file. Kubri brings views for Flux, Argo CD and cert-manager; yours go in {folder} and replace a built-in one of the same kind. {link}.')) as part, i (i)}{#if 'text' in part}{part.text}{:else if part.name === 'folder'}{#if app.views.loaded?.dir}<code
+								>{app.views.loaded.dir}</code
 							>{:else}<Phrase text={t('the {views} folder next to the settings file')} code={{ views: 'views' }} />{/if}{:else}<a
 							href="https://github.com/snaketech-tu/kubri/blob/main/docs/VIEWS.md"
 							target="_blank"
 							rel="noreferrer">{t('How to write one')}</a
 						>{/if}{/each}
 			</p>
-			{#if app.views?.errors.length}
+			{#if app.views.loaded?.errors.length}
 				<ul>
-					{#each app.views.errors as error (error)}
+					{#each app.views.loaded.errors as error (error)}
 						<li class="bad"><span class="mark" aria-hidden="true">✕</span><span class="error">{error}</span></li>
 					{/each}
 				</ul>
 			{/if}
-			{#if app.views?.views.length}
+			{#if app.views.loaded?.views.length}
 				<table>
 					<thead><tr><th>{t('Kind')}</th><th>{t('Shows')}</th><th>{t('File')}</th></tr></thead>
 					<tbody>
-						{#each app.views.views as view (`${view.group}/${view.kind}`)}
+						{#each app.views.loaded.views as view (`${view.group}/${view.kind}`)}
 							{@const served = app.resources.some((r) => r.group === view.group && r.kind === view.kind)}
 							<tr>
 								<td>
@@ -555,29 +555,29 @@
 				<p class="muted">
 					<Phrase text={t('Picked per context, like in k9s. {command} switches from the command line.')} code={{ command: ':skin name' }} />
 				</p>
-				{#if app.skinError}<p class="error">{app.skinError}</p>{/if}
-				{#if app.skin && skinWarning(previews[app.skin])}
+				{#if app.appearance.skinError}<p class="error">{app.appearance.skinError}</p>{/if}
+				{#if app.appearance.skin && skinWarning(previews[app.appearance.skin])}
 					<p class="warning">
-						{t("{skin}: {warning}. Kubri shows it as it is; another skin or Kubri's colors read better.", { skin: app.skin, warning: skinWarning(previews[app.skin]) ?? '' })}
+						{t("{skin}: {warning}. Kubri shows it as it is; another skin or Kubri's colors read better.", { skin: app.appearance.skin, warning: skinWarning(previews[app.appearance.skin]) ?? '' })}
 					</p>
 				{/if}
 				<div class="skins">
-					<button class="skin" class:active={app.skinChoice === undefined} onclick={() => app.setSkin(undefined)}>
+					<button class="skin" class:active={app.appearance.skinChoice === undefined} onclick={() => app.appearance.setSkin(undefined)}>
 						{@render swatch(config.skin ? previews[config.skin] : kubriTheme)}
 						<span class="name">{t('As in k9s')}</span>
 						<span class="muted small">{config.skin ?? t('no skin set')}</span>
 					</button>
-					<button class="skin" class:active={app.skinChoice === null} onclick={() => app.setSkin(null)}>
+					<button class="skin" class:active={app.appearance.skinChoice === null} onclick={() => app.appearance.setSkin(null)}>
 						{@render swatch(kubriTheme)}
 						<span class="name">{t('Kubri')}</span>
 						<span class="muted small">{t('light or dark, as the system')}</span>
 					</button>
 					{#each config.skins as name (name)}
 						{@const warning = skinWarning(previews[name])}
-						<button class="skin" class:active={app.skinChoice === name} onclick={() => app.setSkin(name)}>
+						<button class="skin" class:active={app.appearance.skinChoice === name} onclick={() => app.appearance.setSkin(name)}>
 							{@render swatch(previews[name])}
 							<span class="name">{name}</span>
-							{#if app.skin === name}<span class="muted small">{t('on screen')}</span>{/if}
+							{#if app.appearance.skin === name}<span class="muted small">{t('on screen')}</span>{/if}
 							{#if warning}<span class="warning small" title={warning}>{t('Hard to read')}</span>{/if}
 						</button>
 					{/each}

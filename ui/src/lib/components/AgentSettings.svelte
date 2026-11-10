@@ -12,10 +12,10 @@
 	let way = $state<'http' | 'stdio'>('http');
 	const desktop = isTauri();
 
-	const agents = $derived(app.settings.agents);
+	const agents = $derived(app.prefs.settings.agents);
 	const writable = $derived(
 		app.contexts.filter((c) => {
-			const s = app.contextSettingsOf(c.name);
+			const s = app.prefs.contextSettingsOf(c.name);
 			return s.agentWrites && !s.production && !s.readOnly;
 		})
 	);
@@ -39,7 +39,7 @@
 	});
 
 	async function update(change: Partial<typeof agents>) {
-		await app.setAgentSettings({ ...agents, ...change });
+		await app.prefs.setAgentSettings({ ...agents, ...change });
 		await refresh();
 	}
 
@@ -127,7 +127,7 @@
 			</div>
 			<p class="muted small">
 				{#if writable.length}
-					{t('Agents may change {contexts}, after you allow it.', { contexts: writable.map((c) => app.contextName(c.name)).join(', ') })}
+					{t('Agents may change {contexts}, after you allow it.', { contexts: writable.map((c) => app.prefs.contextName(c.name)).join(', ') })}
 				{:else}
 					{t('Agents only read: no context allows changes. Turn on “AI agents may change it” for a context above to allow them.')}
 				{/if}
@@ -174,7 +174,7 @@
 							<td class="nowrap">{time(call.time)}</td>
 							<td><code>{call.tool}</code> <span class="muted small">{call.transport}</span></td>
 							<td class="args"><code>{callArguments(call.arguments)}</code></td>
-							<td>{call.context ? app.contextName(call.context) : '–'}</td>
+							<td>{call.context ? app.prefs.contextName(call.context) : '–'}</td>
 							<td class:bad={call.error}>{call.error ?? t('ok, {ms} ms', { ms: call.millis })}</td>
 						</tr>
 					{/each}
