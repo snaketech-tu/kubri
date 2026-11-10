@@ -2,6 +2,27 @@
 
 A release is built and published in one run of the **Release** workflow.
 
+## When to release
+
+- **A minor release every two to four weeks** (2.1, 2.2, …), with what is ready on `main`. Not one release per pull request.
+- **A patch release only for a bug** in the latest release that people would notice: a crash, a wrong result, a broken install or update, or a security fix. New features wait for the next minor release.
+- **A major release** only when something people rely on changes in a way that breaks it, such as the web API or a setting. The release notes then say what changes and what to do.
+
+### Before each minor release
+
+Merge only fixes to `main` for the last week, and work through this list:
+
+- [ ] Use the release candidate every day for a week, on real clusters, in the desktop app and in the browser.
+- [ ] CI is green on the commit to release, including the end-to-end tests against k3s.
+- [ ] Install the candidate once on each system (macOS, Windows and Linux), from the installers of a Release run without **publish**.
+- [ ] Update from the previous release once in the desktop app, and once with `helm upgrade` for kubri-server.
+- [ ] The release notes say what changed in plain words, and anything people must do.
+- [ ] [`ROADMAP.md`](ROADMAP.md) moves what shipped out of "Now".
+
+A patch release skips the week of daily use, but not the CI and the release notes.
+
+## How to release
+
 1. Set the new version in [`Cargo.toml`](../Cargo.toml) (`[workspace.package]`), [`ui/package.json`](../ui/package.json), [`ui/src-tauri/tauri.conf.json`](../ui/src-tauri/tauri.conf.json) and [`deploy/helm/kubri/Chart.yaml`](../deploy/helm/kubri/Chart.yaml) (`version` and `appVersion`, so the chart installs the image of the same release), run `cargo check` so `Cargo.lock` follows, write what changed under "What's new" in [`.github/release-notes.md`](../.github/release-notes.md), and merge that to `main`.
 2. Open **Actions → Release → Run workflow**, keep `main`, tick **publish** and choose **Run workflow**. From a terminal: `gh workflow run release.yml --ref main -f publish=true`.
 3. The run checks that the version is not released yet and creates a draft release with the text from `.github/release-notes.md`. It attaches the desktop builds to it: `.dmg` for macOS on Apple silicon and Intel, `.deb`, `.rpm` and `.AppImage` for Linux on x64 and Arm, and `.msi` and `-setup.exe` for Windows on x64, and `-setup.exe` for Windows on Arm. With the updater key set up, it also attaches their signatures and `latest.json` (see [Updates in the app](#updates-in-the-app)). It publishes `ghcr.io/snaketech-tu/kubri` for amd64 and arm64 as `X.Y.Z`, `X.Y` and `latest`; every push to `main` also publishes `edge`.
