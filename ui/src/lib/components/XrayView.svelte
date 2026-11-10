@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { plural, t } from '../i18n';
 	import { roving } from '../roving';
+	import { every } from '../poll';
 	import { forControl } from '../keys';
 	import { tick, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -18,7 +19,7 @@
 
 	let { resource }: { resource: ResourceInfo } = $props();
 
-	const REFRESH_MS = 15_000;
+	const REFRESH_MS = 30_000;
 
 	let roots = $state.raw<XrayNode[]>([]);
 	let loaded = $state(false);
@@ -62,10 +63,10 @@
 			}
 		};
 		load();
-		const timer = setInterval(() => document.hidden || load(), REFRESH_MS);
+		const stop = every(REFRESH_MS, load);
 		return () => {
 			cancelled = true;
-			clearInterval(timer);
+			stop();
 		};
 	});
 

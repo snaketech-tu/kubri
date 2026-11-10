@@ -3,6 +3,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { errorMessage } from './format';
 import { pushTrail } from './pulse';
 import { backend, type Column, type MetricsKind, type ResourceRef, type Row, type TableScope, type Usage } from './api';
+import { every } from './poll';
 
 /** The last rows of lists left, by context and list, to show at once when coming back. */
 const lastRows = new Map<string, { rows: Row[]; columns: Column[] }>();
@@ -102,7 +103,7 @@ export class LiveTable {
 	}
 }
 
-const METRICS_INTERVAL = 15_000;
+const METRICS_INTERVAL = 30_000;
 
 /** Polls metrics-server. `available` stays false when it is not installed. */
 export class LiveMetrics {
@@ -152,10 +153,10 @@ export class LiveMetrics {
 			}
 		};
 		poll();
-		const timer = setInterval(poll, METRICS_INTERVAL);
+		const stop = every(METRICS_INTERVAL, poll);
 		return () => {
 			stopped = true;
-			clearInterval(timer);
+			stop();
 		};
 	}
 

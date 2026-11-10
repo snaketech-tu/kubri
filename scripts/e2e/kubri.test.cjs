@@ -44,6 +44,30 @@ after(async () => {
 	await server?.stop();
 });
 
+describe('inspector', () => {
+	check('Tab goes into the inspector, arrows change its tabs, Esc goes back', async () => {
+		// A ConfigMap: what the inspector shows joins the recent objects, which the pod tests do not expect.
+		await h.openList(page, server.url, { resource: 'configmaps.v1', heading: 'ConfigMaps', filter: 'settings' });
+		await page.keyboard.press('d');
+		const inspector = page.getByRole('complementary', { name: 'ConfigMap inspector' });
+		await inspector.waitFor();
+		await page.keyboard.press('Tab');
+		await h.until(() => inspector.getByRole('tab', { name: /Overview/, selected: true }).evaluate((el) => el === document.activeElement));
+		await page.keyboard.press('ArrowRight');
+		await inspector.getByRole('tab', { name: /Events/, selected: true }).waitFor();
+		await page.keyboard.press('ArrowRight');
+		await inspector.getByRole('tab', { name: /YAML/, selected: true }).waitFor();
+		await page.keyboard.press('ArrowLeft');
+		await page.keyboard.press('ArrowLeft');
+		await inspector.getByRole('tab', { name: /Overview/, selected: true }).waitFor();
+		// Esc leaves the inspector open and gives the keys back to the list; Esc again closes it.
+		await page.keyboard.press('Escape');
+		assert.equal(await inspector.count(), 1);
+		await page.keyboard.press('Escape');
+		await inspector.waitFor({ state: 'detached' });
+	});
+});
+
 describe('lists', () => {
 	check('lists the pods of a namespace', async () => {
 		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods' });
@@ -70,6 +94,32 @@ describe('lists', () => {
 			h.kubectl('delete', 'configmap', 'arrives-live', '-n', 'e2e', '--ignore-not-found');
 		}
 		await page.getByRole('button', { name: 'arrives-live', exact: true }).waitFor({ state: 'detached' });
+	});
+});
+
+describe('keyboard', () => {
+	check('a list opens with its first row chosen, and Enter opens that row', async () => {
+		await h.openList(page, server.url, { resource: 'deployments.v1.apps', heading: 'Deployments' });
+		// The action bar offers what to do with the first row before any key is pressed.
+		await page.getByRole('toolbar').getByRole('button', { name: /^Scale/ }).waitFor();
+		// Reach Pods in the sidebar with Tab and open it with Enter, as a keyboard user does.
+		await page.evaluate(() => document.activeElement?.blur());
+		const onPods = () => page.evaluate(() => document.activeElement?.textContent?.trim() === 'Pods');
+		for (let i = 0; i < 60; i++) {
+			await page.keyboard.press('Tab');
+			// The sidebar may be one Tab stop, at the current page.
+			const inSidebar = () => !!document.activeElement?.closest('nav .items') && !!document.querySelector('nav .items [tabindex="-1"]');
+			if ((await onPods()) || (await page.evaluate(inSidebar))) break;
+		}
+		// There the arrow keys move on to Pods.
+		for (let i = 0; i < 10 && !(await onPods()); i++) await page.keyboard.press('ArrowUp');
+		assert.ok(await onPods(), 'the focus on Pods in the sidebar');
+		await page.keyboard.press('Enter');
+		await page.getByRole('heading', { name: 'Pods', level: 1, exact: true }).waitFor();
+		// The list has the keys now: once its first row is there, Enter opens the pod, not the Pods list again.
+		await page.locator('tr.cursor').waitFor();
+		await page.keyboard.press('Enter');
+		await page.getByRole('complementary', { name: 'Pod inspector' }).waitFor();
 	});
 });
 
@@ -482,5 +532,28 @@ describe('MCP', () => {
 		} finally {
 			child.kill('SIGTERM');
 		}
+	});
+});
+
+describe('gentle on the cluster', () => {
+	check('the Clusters page checks each context once, not again and again', async () => {
+		const asked = new Map();
+		const seen = (request) => {
+			if (request.method() !== 'POST' || !request.url().endsWith('/api/call')) return;
+			const body = request.postDataJSON();
+			if (body?.call === 'fleetCluster') asked.set(body.context, (asked.get(body.context) ?? 0) + 1);
+		};
+		page.on('request', seen);
+		try {
+			await page.goto('about:blank');
+			await page.goto(`${server.url}/#/e2e-one/fleet`);
+			await page.getByRole('heading', { name: 'Clusters', level: 1, exact: true }).waitFor();
+			await new Promise((resolve) => setTimeout(resolve, 8000));
+		} finally {
+			page.off('request', seen);
+		}
+		// One round; the next is due in minutes.
+		assert.ok(asked.get('e2e-one') >= 1, 'checks e2e-one');
+		for (const [context, times] of asked) assert.equal(times, 1, `checked ${context} ${times} times in 8 seconds`);
 	});
 });

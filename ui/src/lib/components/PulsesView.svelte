@@ -17,12 +17,13 @@
 	import { app, findResource } from '../state.svelte';
 	import { plural, t } from '../i18n';
 	import { nearestVertically } from '../roving';
+	import { every } from '../poll';
 	import HealthIcon from './HealthIcon.svelte';
 	import OtherContexts from './OtherContexts.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 	import Sparkline from './Sparkline.svelte';
 
-	const REFRESH_MS = 10_000;
+	const REFRESH_MS = 30_000;
 	/** Recent warnings the overview lists; the events list has them all. */
 	const RECENT = 6;
 
@@ -93,13 +94,13 @@
 		stored = null;
 		load();
 		loadHistory();
-		const refresh = setInterval(() => document.hidden || load(), REFRESH_MS);
-		const refreshHistory = setInterval(() => document.hidden || loadHistory(), 60_000);
+		const stopRefresh = every(REFRESH_MS, load);
+		const stopHistory = every(60_000, loadHistory);
 		const clock = setInterval(() => (now = Date.now()), 1000);
 		return () => {
 			cancelled = true;
-			clearInterval(refresh);
-			clearInterval(refreshHistory);
+			stopRefresh();
+			stopHistory();
 			clearInterval(clock);
 		};
 	});

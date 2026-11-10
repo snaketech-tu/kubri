@@ -92,6 +92,14 @@ export function annotatedForwards(object: KubeObject | null | undefined, key: st
 	});
 }
 
+/** The port a forward dialog starts with: the one the annotation names, as in k9s, else the first declared. */
+export function startingPort(object: KubeObject | null | undefined): { remote: number; local: number | null } | null {
+	const [wanted] = annotatedForwards(object, PORT_FORWARDS_KEY);
+	if (wanted) return { remote: wanted.remote, local: wanted.local ?? suggestedLocalPort(wanted.remote) };
+	const [first] = forwardablePorts(object);
+	return first ? { remote: first.port, local: suggestedLocalPort(first.port) } : null;
+}
+
 /** A value of a Secret's data: its size, and its text when it is UTF-8. */
 export function secretValue(base64: string): { bytes: number; text: string | null } {
 	let raw: string;

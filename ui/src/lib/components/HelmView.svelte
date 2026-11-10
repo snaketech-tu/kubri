@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { parts, plural, t } from '../i18n';
 	import { roving } from '../roving';
+	import { every } from '../poll';
 	import { tick } from 'svelte';
 	import { stringify } from 'yaml';
 	import { backend, type ApplyItem, type HelmRelease, type HelmReleaseDetails } from '../api';
@@ -94,10 +95,10 @@
 				(err) => !cancelled && (error = errorMessage(err))
 			);
 		load();
-		const timer = setInterval(load, REFRESH_MS);
+		const stop = every(REFRESH_MS, load);
 		return () => {
 			cancelled = true;
-			clearInterval(timer);
+			stop();
 		};
 	});
 

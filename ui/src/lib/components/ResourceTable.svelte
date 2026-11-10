@@ -101,6 +101,11 @@
 		}
 		return tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
 	}
+
+	/** Gives the list the keys, without scrolling. */
+	export function focus() {
+		scroller?.focus({ preventScroll: true });
+	}
 </script>
 
 <!-- One stop for Tab: the arrow keys move in the list, Space marks, Shift+F10 opens the row's menu. -->
@@ -365,6 +370,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow: auto;
+		outline: none;
 	}
 	.table-wrap:focus {
 		outline: none;
