@@ -92,7 +92,8 @@ describe('keyboard', () => {
 		assert.ok(await onPods(), 'the focus on Pods in the sidebar');
 		await page.keyboard.press('Enter');
 		await page.getByRole('heading', { name: 'Pods', level: 1, exact: true }).waitFor();
-		// The list has the keys now: Enter opens the pod, not the Pods list again.
+		// The list has the keys now: once its first row is there, Enter opens the pod, not the Pods list again.
+		await page.locator('tr.cursor').waitFor();
 		await page.keyboard.press('Enter');
 		await page.getByRole('complementary', { name: 'Pod inspector' }).waitFor();
 	});
