@@ -36,9 +36,11 @@ The views keep their k9s commands, though some have a name of their own in Kubri
 - The command palette completes what you type: `:po sh` opens the pods of `shop`, and `:po kube` those of `kube-system`. Enter runs the first suggestion, shown in grey after what you typed; <kbd>→</kbd> or <kbd>Tab</kbd> takes it into the line. A namespace that does not exist is named in red instead of opening an empty list. The same goes for the namespace of `:helm`, `:overview`, `:checks`, `:changes` and the others, and for `@context`.
 - There is nothing to quit: close the window. `:q` opens ResourceQuotas.
 - Logs and shells open in the inspector beside the list, so the list stays in view. **Move to the workspace** keeps them running below while you browse elsewhere ([the workspace](DEBUGGING.md#the-workspace)).
+- The keys stay with the list while the inspector is open, so <kbd>↑</kbd> <kbd>↓</kbd> show the next object. <kbd>Tab</kbd> goes into the inspector: <kbd>←</kbd> <kbd>→</kbd> change its tab, <kbd>↑</kbd> <kbd>↓</kbd> and the page keys scroll, <kbd>Tab</kbd> walks its links and buttons, and <kbd>Esc</kbd> goes back to the list.
 - In a shell, <kbd>Esc</kbd> goes to the program in it. Press <kbd>Esc</kbd> twice quickly to give the keys back to Kubri.
 - Changes such as edits, scaling and Helm upgrades show a server-side dry run with the diff first, and each shows the `kubectl` command that does the same.
 - Everything also works with the mouse: a click selects a row, a double click opens it, a right click shows everything there is to do with it, and the key hints at the bottom can be clicked.
+- <kbd>Tab</kbd> moves between the parts of the window: the sidebar, a row of tabs, a toolbar and the list are one stop each. Inside, the arrow keys move, as in tabs, and <kbd>Home</kbd> and <kbd>End</kbd> go to the first and last. On the Overview the arrow keys move between the tiles. <kbd>Shift</kbd>+<kbd>F10</kbd> or the menu key opens the menu of the row under the cursor.
 
 ## What there is besides
 

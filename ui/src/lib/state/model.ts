@@ -44,6 +44,8 @@ export interface ListScope {
 	scope: TableScope;
 	/** Keeps only what this UID owns. */
 	ownerUid: string | null;
+	/** The object the list belongs to, and the namespace shown before, for the breadcrumb back to it. */
+	from?: { object: ObjectRef; namespace: string };
 }
 
 /** A place in Kubri, for going back and forth like k9s `[`, `]` and `-`. */
@@ -87,6 +89,8 @@ export type Dialog =
 	| { kind: 'restartMany'; resource: ResourceInfo; targets: ObjectRef[] }
 	| { kind: 'labels'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'portforward'; resource: ResourceInfo; target: ObjectRef }
+	/** A forward to an object chosen in the dialog: namespace, then a workload, service or pod. */
+	| { kind: 'newForward' }
 	| { kind: 'benchmark'; forward: PortForwardInfo; preset?: BenchInfo }
 	| { kind: 'drain'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'helmRollback'; release: HelmRelease; revision: number; done: () => void }

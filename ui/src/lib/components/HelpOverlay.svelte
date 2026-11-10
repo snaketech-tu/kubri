@@ -27,10 +27,13 @@
 				['Ctrl+F / B  or  PgDn / PgUp', t('A page down / up')],
 				['/', t('Filter: regex, !inverse, -f fuzzy, -l app=web')],
 				['[ / ]  or  Alt+← / →', t('Back / forward')],
+				['Backspace', t('Back; first closes the inspector')],
 				['-', t('Last view, and back again')],
 				['Shift+W', t('Warp to the namespace of the row')],
 				['Shift+J', t('Jump to the owner')],
-				['Esc', t('Close, clear selection or filter, go back')]
+				['Esc', t('Close, clear selection or filter, go back')],
+				['Tab', t('To the next area: sidebar, tabs, actions, list')],
+				['← → ↑ ↓', t('Within tabs, actions and the sidebar, once reached with Tab')]
 			]
 		],
 		[
@@ -54,9 +57,20 @@
 			]
 		],
 		[
+			t('Inspector'),
+			[
+				['Tab', t('From the list or the overview into the inspector')],
+				['← / →', t('Overview, Events, YAML, Metrics, Logs, Shell')],
+				['↑ / ↓  or  PgUp / PgDn', t('Scroll; j / k and g / G too')],
+				['Tab / Shift+Tab', t('Links and buttons in the inspector')],
+				['Esc', t('Back to the list; Esc again closes the inspector')]
+			]
+		],
+		[
 			t('Change'),
 			[
 				['Space', t('Mark the row')],
+				['Shift+F10', t("The row's menu, like a right click")],
 				['Ctrl+Space', t('Mark up to here')],
 				['Ctrl+A / Ctrl+\\', t('Mark all / none')],
 				['e', t('Edit YAML (Ctrl+S saves)')],
@@ -129,6 +143,7 @@
 		[
 			t('Port-forwards'),
 			[
+				['Shift+F', t('Start a port-forward')],
 				['b', t('HTTP benchmark')],
 				['o', t('Open in the browser')],
 				['c  or  Enter', t('Copy URL')],

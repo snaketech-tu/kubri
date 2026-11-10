@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { completedPods } from '../cleanup';
 	import { forControl } from '../keys';
-	import { untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { canDelete, saveFile } from '../actions';
 	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row } from '../api';
@@ -24,6 +24,7 @@
 	import ListNotices from './ListNotices.svelte';
 	import ResourceTable from './ResourceTable.svelte';
 	import { midSentence, t } from '../i18n';
+	import { roving } from '../roving';
 	import { store, stored } from '../storage';
 
 	let {
@@ -49,15 +50,10 @@
 	let runningOnly = $state(false);
 	let sort = $state<SortState>({ column: -1, descending: false });
 	let sortedByUser = false;
+	/** The row the keys and the action bar work on; the first one until another is chosen, as in k9s. */
 	let cursorKey = $state<string | null>(null);
-	/**
-	 * Whether the user put the cursor somewhere. Until then the keys still work on the first row,
-	 * as in k9s, but the action bar offers nothing for a row nobody chose.
-	 */
-	let picked = $state(false);
 	function pick(key: string) {
 		cursorKey = key;
-		picked = true;
 	}
 	/** Where Ctrl+Space marks a range from. */
 	let anchorKey = $state<string | null>(null);
@@ -87,6 +83,15 @@
 	);
 	$effect(() => {
 		if (metricsKind) return metrics.start(metricsKind, ns);
+	});
+
+	// A list opened from the sidebar, a tile, the palette or Back takes the keys, so Enter opens
+	// its row and not again what opened the list. The focus stays where someone is typing.
+	onMount(() => {
+		void tick().then(() => {
+			const el = document.activeElement;
+			if (!el || el === document.body || el.closest('nav')) list?.focus();
+		});
 	});
 	/**
 	 * The rows wait a moment for the first metrics, so their columns are drawn once, not again
@@ -489,6 +494,15 @@
 			return;
 		}
 		const ctrl = e.ctrlKey || e.metaKey;
+		// The row's menu, as a right click opens it.
+		if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey && !ctrl)) {
+			const at = list?.cursorMenuPoint();
+			if (current && at) {
+				e.preventDefault();
+				openMenu(current, at.x, at.y, 'right');
+			}
+			return;
+		}
 		const handled = (() => {
 			if (ctrl) {
 				switch (e.key.toLowerCase()) {
@@ -696,7 +710,7 @@
 				<kbd>/</kbd>
 			</label>
 		</div>
-		<div class="tabs" role="tablist" aria-label={t('Show')}>
+		<div class="tabs" role="tablist" aria-label={t('Show')} {@attach roving({ items: '[role="tab"]', orientation: 'horizontal', activate: true })}>
 			<button role="tab" aria-selected={!faults && !runningOnly} onclick={() => showTab('all')}>
 				{t('All')} <span class="n">{counts.all}</span>
 			</button>
@@ -719,11 +733,8 @@
 			{:else if current && app.details}
 				<!-- The inspector holds the actions while it is open: one place, not two. -->
 				<ActionBar actions={[]}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
-			{:else if current && picked}
-				<ActionBar actions={actionsFor(current, [current])}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
 			{:else if current}
-				{@const [before, after] = t('Click a row or press {key} to act on it').split('{key}')}
-				<ActionBar actions={[]}><span class="choose">{before}<kbd>↓</kbd>{after}</span></ActionBar>
+				<ActionBar actions={actionsFor(current, [current])}>{current.namespace ? `${current.namespace}/` : ''}{current.name}</ActionBar>
 			{:else}
 				<!-- An empty bar keeps its line, so the list does not move once rows come or go. -->
 				<ActionBar actions={[]} />
@@ -793,17 +804,6 @@
 </section>
 
 <style>
-	.choose {
-		font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-		font-size: 13px;
-	}
-	.choose kbd {
-		padding: 0 4px;
-		border: 1px solid var(--border);
-		border-radius: 4px;
-		font-family: var(--mono);
-		font-size: 11px;
-	}
 	.updating {
 		color: var(--text-muted);
 	}

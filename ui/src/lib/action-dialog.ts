@@ -7,7 +7,7 @@ import { summarizeUsers } from './references';
 import type { Dialog } from './state.svelte';
 
 /** The dialogs ActionDialog shows: those that review a change and then run it. */
-export type ActionDialogSpec = Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' | 'snapshot' | 'grafana' }>;
+export type ActionDialogSpec = Exclude<Dialog, { kind: 'forbidden' | 'kubectl' | 'debug' | 'compare' | 'snapshot' | 'grafana' | 'newForward' }>;
 
 /** Whether Argo CD's auto-sync is on now, for the action that turns it off or on. */
 export type AutoSync = { on: boolean; options: string[] };

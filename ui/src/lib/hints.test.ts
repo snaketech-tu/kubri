@@ -34,9 +34,22 @@ function state(extra: Partial<HintState> = {}): HintState {
 const keys = (hints: [string, string][]) => hints.map(([key]) => key);
 
 describe('viewHints', () => {
+	it('offers Backspace on pages without list keys once there is somewhere to go back to', () => {
+		expect(keys(viewHints(state({ page: 'integrations' })))).not.toContain('⌫');
+		expect(keys(viewHints(state({ page: 'integrations', canGoBack: true })))).toContain('⌫');
+		expect(keys(viewHints(state({ page: 'pulses', canGoBack: true })))).toContain('⌫');
+	});
+
 	it('offers the change keys only where changes are allowed', () => {
 		expect(keys(viewHints(state()))).toEqual(expect.arrayContaining(['e', '^d', 's', 'r']));
 		expect(keys(viewHints(state({ readOnly: true })))).not.toContain('^d');
+	});
+
+	it('offers a new port-forward where there is a cluster to forward to', () => {
+		const forwards = (cluster: object | null) => keys(viewHints(state({ page: 'portforwards', cluster } as Partial<HintState>)));
+		expect(forwards({ context: 'c', snapshot: null })).toContain('⇧f');
+		expect(forwards({ context: 'c', snapshot: { file: 'x.kubri' } })).not.toContain('⇧f');
+		expect(forwards(null)).not.toContain('⇧f');
 	});
 
 	it('offers no row keys for an empty list', () => {
