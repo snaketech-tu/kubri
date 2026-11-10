@@ -110,4 +110,21 @@ The editor loads the kind's schema from the API server (`/openapi/v3`), so it kn
 - Typing a key offers the fields allowed there, required ones first. <kbd>Ctrl</kbd>+<kbd>Space</kbd> opens the list.
 - Field names the schema does not know are underlined. Free-form parts, such as labels or the open parts of a custom resource, are left alone.
 
+The keys work as in common code editors:
+
+| Key | Does |
+| --- | --- |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Review the change and save |
+| <kbd>Ctrl</kbd>+<kbd>F</kbd>, <kbd>Ctrl</kbd>+<kbd>H</kbd> | Find, replace; <kbd>F3</kbd> and <kbd>Shift</kbd>+<kbd>F3</kbd> go to the next and previous match |
+| <kbd>Ctrl</kbd>+<kbd>G</kbd> | Go to a line |
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> | Delete the line |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> | Duplicate the line; <kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd> move it |
+| <kbd>Ctrl</kbd>+<kbd>/</kbd> | Comment or uncomment the line |
+| <kbd>Alt</kbd>+<kbd>J</kbd> | Also select the next occurrence of the selection, for several cursors |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> | Select every occurrence |
+| <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd>, <kbd>Ctrl</kbd>+click, <kbd>Alt</kbd>+drag | Another cursor above or below, where you click, or a block of them |
+| <kbd>Esc</kbd> | Close the search, keep one cursor, then stop editing |
+
+On macOS, <kbd>Cmd</kbd> takes the place of <kbd>Ctrl</kbd>. Brackets and quotes close as you type them, and the other places of the selected word are marked. In a list, <kbd>Ctrl</kbd>+<kbd>D</kbd> still deletes the object, as in k9s.
+
 While you edit, Kubri checks the object on the server every 5 seconds. When someone else changes it, **Compare** shows their changes and yours. **Apply mine to theirs** then puts your changes on top of the latest version. Where you both changed the same field, yours win and the field is named. Nothing is saved until you review the result and save.
