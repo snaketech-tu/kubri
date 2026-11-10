@@ -90,6 +90,7 @@ cargo run --release -p kubri-server    # root, after `pnpm build`: production UI
 - Branch off `main` and do not stack PRs: PRs are squash-merged and a stacked PR's base does not retarget.
 - Commit and PR titles describe the change in plain words (e.g. "Load kubeconfig files in the app").
 - Leave merging to the maintainer unless asked.
+- Dependabot (`.github/dependabot.yml`) opens grouped dependency updates every Monday. Third-party actions are pinned to a commit with the version in a comment; Dependabot keeps both current.
 - Before reporting work as done, review your own diff (correctness, edge cases, light and dark theme, keyboard flow, tests, docs), fix what you find and rerun the checks.
 
 ## Releases
