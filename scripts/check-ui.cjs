@@ -39,7 +39,7 @@ const k9s={dirs:[],files:[],aliases:[],hotkeys:[],plugins:[],skins:[],skin:null,
   socket.send(JSON.stringify({type:'reset',columns:ns?[columns[0]]:columns,rows:ns?[{...rows[0],name:'shop',cells:['shop']}]:rows}));
  });
  await page.routeWebSocket('**/api/logs',socket=>{socket.onMessage(()=>{socket.send(JSON.stringify({type:'sources',sources:[{pod:'emails',container:'emails'}]}));socket.send(JSON.stringify({type:'lines',lines:[{source:0,text:'ERROR SMTP connection refused'}]}));socket.send(JSON.stringify({type:'end'}));});});
- const out=path.resolve(__dirname,'../docs/design-review/application');fs.mkdirSync(out,{recursive:true});
+ const out=path.resolve(__dirname,'../e2e-artifacts/check-ui');fs.mkdirSync(out,{recursive:true});
  await page.goto(base); await page.getByRole('heading',{name:'Overview',exact:true}).waitFor();
  await page.locator('.signal').first().waitFor();assert.equal(await page.locator('.signal').count(),1);
  await page.screenshot({path:path.join(out,'overview.png')});

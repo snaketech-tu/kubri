@@ -84,7 +84,7 @@ cargo run --release -p kubri-server    # root, after `pnpm build`: production UI
 
 - User-facing text (UI, docs, errors, release notes) is plain, short English sentences, without jargon.
 - Never compare Kubri with other tools or name competitors in the repository, PRs or commit messages. Describing k9s compatibility, as the README does, is fine.
-- Do not link internal implementation plans (`docs/IMPLEMENTATION-PLAN*.md`) from the README.
+- Implementation plans are kept outside the repository. `docs/ROADMAP.md` says in plain words what is coming; update it when a release ships or a plan changes.
 
 ## Git and pull requests
 

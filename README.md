@@ -297,6 +297,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
         <li><a href="docs/WEB.md">In the browser</a>: settings, sign-in, Docker, Kubernetes and reverse proxies</li>
         <li><a href="docs/TEAMS.md">A Kubri for your team</a>: sign-in with OpenID Connect, each person's own permissions, the audit log and the Helm chart</li>
         <li><a href="docs/SPEED.md">Speed</a>: how fast Kubri is with 10,000 pods, and how to measure it yourself</li>
+        <li><a href="docs/ROADMAP.md">Roadmap</a>: what is coming next</li>
       </ul>
     </td>
   </tr>
