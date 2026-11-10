@@ -80,10 +80,16 @@ describe('keyboard', () => {
 		await page.getByRole('toolbar').getByRole('button', { name: /^Scale/ }).waitFor();
 		// Reach Pods in the sidebar with Tab and open it with Enter, as a keyboard user does.
 		await page.evaluate(() => document.activeElement?.blur());
+		const onPods = () => page.evaluate(() => document.activeElement?.textContent?.trim() === 'Pods');
 		for (let i = 0; i < 60; i++) {
 			await page.keyboard.press('Tab');
-			if (await page.evaluate(() => document.activeElement?.textContent?.trim() === 'Pods')) break;
+			// The sidebar may be one Tab stop, at the current page.
+			const inSidebar = () => !!document.activeElement?.closest('nav .items') && !!document.querySelector('nav .items [tabindex="-1"]');
+			if ((await onPods()) || (await page.evaluate(inSidebar))) break;
 		}
+		// There the arrow keys move on to Pods.
+		for (let i = 0; i < 10 && !(await onPods()); i++) await page.keyboard.press('ArrowUp');
+		assert.ok(await onPods(), 'the focus on Pods in the sidebar');
 		await page.keyboard.press('Enter');
 		await page.getByRole('heading', { name: 'Pods', level: 1, exact: true }).waitFor();
 		// The list has the keys now: Enter opens the pod, not the Pods list again.
