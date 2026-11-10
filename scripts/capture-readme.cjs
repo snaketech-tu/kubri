@@ -56,6 +56,9 @@ function object(name) {
 }
 const tree = ['api','emails','frontend','payments','worker'].map((app,i) => ({id:app,kind:'Deployment',name:app,namespace:'shop',resource:ref('deployments','apps'),health:app==='emails'?'failed':'ok',detail:app==='emails'?'0/1 replicas ready':'2/2 replicas ready',children:[{id:`${app}/rs`,kind:'ReplicaSet',name:`${app}-7965c47658`,namespace:'shop',resource:null,health:app==='emails'?'failed':'ok',detail:'revision 12',children:rows.filter(r=>r.labels.app===app).map(r=>({id:r.key,kind:'Pod',name:r.name,namespace:'shop',resource:ref('pods'),health:r.cells[2]==='Running'?'ok':'failed',detail:String(r.cells[2]),children:[{id:`${r.key}/container`,kind:'Container',name:app,namespace:'shop',resource:null,health:r.cells[2]==='Running'?'ok':'failed',detail:`${r.cells[3]} restarts`,children:[]}]}))}]}));
 
+// Calls of the core's call table, as the routes these fixtures answer.
+const CALLS={contexts:'/contexts',reloadContexts:'/contexts/reload',switchContext:'/context'};
+const pathOf=(p,req)=>p==='/call'?(CALLS[req.postDataJSON().call]??`/call/${req.postDataJSON().call}`):p;
 (async () => {
   const browser = await chromium.launch({headless:true,...(process.argv[3]?{executablePath:process.argv[3]}:{})});
   try {
@@ -68,7 +71,7 @@ const tree = ['api','emails','frontend','payments','worker'].map((app,i) => ({id
 
     });
     await page.route('**/api/**',async route => {
-      const request=route.request(),url=new URL(request.url()),p=url.pathname.slice(4);
+      const request=route.request(),url=new URL(request.url()),p=pathOf(url.pathname.slice(4),request);
       let data=[];
       const cluster={context:'demo-eu',server:'https://cluster.example.invalid',version:'v1.36.0',defaultNamespace:'shop'};
       if(p==='/session')data={signedIn:true,required:false};
@@ -91,7 +94,7 @@ const tree = ['api','emails','frontend','payments','worker'].map((app,i) => ({id
         data={certificates:[],cpu:{used:cpu,requested:3200,capacity:8000},memory:{used:Math.round((9.5+Math.min(samples,8)*.05)*1073741824),requested:8*1073741824,capacity:16*1073741824},kinds:pulseKinds,events:{normal:99,warning:13,recent:events,error:null}};
       }
       if(p==='/xray')data=tree;
-      if(!['GET','HEAD'].includes(request.method()) && !['/contexts/reload','/portforwards/favorites','/access','/object/managed-by','/history'].includes(p))throw new Error(`Screenshot attempted a mutation: ${request.method()} ${p}`);
+      if(!['GET','HEAD'].includes(request.method()) && !['/contexts','/contexts/reload','/portforwards/favorites','/access','/object/managed-by','/history'].includes(p))throw new Error(`Screenshot attempted a mutation: ${request.method()} ${p}`);
       await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
     });
     await page.routeWebSocket('**/api/table?**',socket => {

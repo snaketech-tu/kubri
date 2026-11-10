@@ -229,15 +229,24 @@ pub async fn record(State(audit): State<Audit>, mut request: Request, next: Next
             .get::<ConnectInfo<SocketAddr>>()
             .map(|c| c.0.ip().to_string()),
     };
-    let Some(action) = action(request.method(), request.uri().path()) else {
+    // A call names what it does in its body.
+    let is_call = request.method() == Method::POST && request.uri().path() == "/call";
+    let route_action = action(request.method(), request.uri().path());
+    if route_action.is_none() && !is_call {
         request.extensions_mut().insert(recorder);
         return next.run(request).await;
-    };
+    }
     let (parts, body) = request.into_parts();
     let Ok(bytes) = to_bytes(body, MAX_BODY).await else {
         return (StatusCode::PAYLOAD_TOO_LARGE, "the request is too large").into_response();
     };
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    let call = json.get("call").and_then(Value::as_str);
+    let Some(action) = route_action.or_else(|| call.and_then(call_action)) else {
+        let mut request = Request::from_parts(parts, Body::from(bytes));
+        request.extensions_mut().insert(recorder);
+        return next.run(request).await;
+    };
     // A dry run changes nothing.
     if json.get("dryRun") == Some(&Value::Bool(true)) {
         return next.run(Request::from_parts(parts, Body::from(bytes))).await;
@@ -309,6 +318,15 @@ fn action(method: &Method, path: &str) -> Option<&'static str> {
         ("PUT", "/explain/key") => "change settings",
         ("PUT", p) if p.starts_with("/settings/") => "change settings",
         ("POST" | "DELETE", "/contexts/added") => "change contexts",
+        _ => return None,
+    })
+}
+
+/// The changes a call of the core's call table makes, by its name. A call that changes
+/// something must be here, or it does not reach the audit log.
+fn call_action(call: &str) -> Option<&'static str> {
+    Some(match call {
+        "addContexts" | "removeContext" => "change contexts",
         _ => return None,
     })
 }
@@ -435,6 +453,31 @@ mod tests {
             .unwrap();
         request.extensions_mut().insert(who.clone());
         app.clone().oneshot(request).await.unwrap().status()
+    }
+
+    #[tokio::test]
+    async fn calls_are_written_by_their_name() {
+        let log = Arc::new(AuditLog::open(None, vec![]).unwrap());
+        let kubri = Arc::new(Kubri::from_kubeconfig(Default::default()));
+        let app = Router::new().route("/call", post(|| async { Json(()) })).layer(
+            axum::middleware::from_fn_with_state(
+                Audit {
+                    log: log.clone(),
+                    kubri,
+                },
+                record,
+            ),
+        );
+        let alice = caller("alice", &[]);
+        let add = serde_json::json!({ "call": "addContexts", "text": "", "names": ["one"] });
+        assert_eq!(send(&app, "POST", "/call", &alice, add).await, StatusCode::OK);
+        // A call that only reads is not written down.
+        let read = serde_json::json!({ "call": "contexts" });
+        assert_eq!(send(&app, "POST", "/call", &alice, read).await, StatusCode::OK);
+        let written = log.visible_to(&alice);
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].action, "change contexts");
+        assert!(written[0].ok);
     }
 
     #[tokio::test]

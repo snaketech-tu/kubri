@@ -7,6 +7,7 @@ mod access;
 mod added;
 mod apply;
 mod bench;
+mod call;
 mod capacity;
 mod certmanager;
 mod chosen;
@@ -89,6 +90,7 @@ pub use apply::{ApplyItem, ApplyOutcome, ApplyRequest, fetch_manifest};
 pub use bench::{
     BenchInfo, BenchRequest, BenchResults, BenchState, Bucket, ErrorCount, Percentile, StatusCount,
 };
+pub use call::{Request, Responses};
 pub use capacity::{Amounts, Capacity, NodeRoom, QuotaRoom};
 pub use context::{ContextInfo, write_in_cluster_kubeconfig};
 pub use debug::{DebugRequest, DebugSession, DebugSettings};

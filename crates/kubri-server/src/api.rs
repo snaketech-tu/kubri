@@ -32,6 +32,7 @@ use crate::audit::{self, Recorder};
 
 pub fn router(kubri: Arc<Kubri>) -> Router {
     Router::new()
+        .route("/call", post(call))
         .route("/contexts", get(contexts))
         .route("/contexts/reload", post(reload))
         .route("/contexts/inspect", post(inspect_kubeconfig))
@@ -187,6 +188,11 @@ impl IntoResponse for ApiError {
 }
 
 type ApiResult<T> = Result<Json<T>, ApiError>;
+
+/// Every call in the core's call table, named by `call` in the body.
+async fn call(State(kubri): State<Arc<Kubri>>, Json(request): Json<kubri_core::Request>) -> ApiResult<Value> {
+    Ok(Json(kubri.call(request).await?))
+}
 
 async fn contexts(State(kubri): State<Arc<Kubri>>) -> ApiResult<ContextList> {
     Ok(Json(kubri.contexts().await?))
@@ -1458,6 +1464,24 @@ mod tests {
         assert_eq!(body["contexts"][0]["name"], "kind");
         assert_eq!(body["contexts"][0]["isDefault"], true);
         assert!(body["cluster"].is_null());
+    }
+
+    #[tokio::test]
+    async fn answers_calls_of_the_call_table() {
+        let kubeconfig = kube::config::Kubeconfig::from_yaml(
+            "contexts: [{name: kind, context: {cluster: kind, user: kind}}]\ncurrent-context: kind",
+        )
+        .unwrap();
+        let router = router(Arc::new(Kubri::from_kubeconfig(kubeconfig)));
+        let (status, body) = send(router, post_json("/call", r#"{"call":"contexts"}"#)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["contexts"][0]["name"], "kind");
+        // The core's errors keep their status, as on the other routes.
+        let inspect = serde_json::json!({ "call": "inspectKubeconfig", "text": "contexts: [nope" });
+        let (status, body) = send(disconnected(), post_json("/call", &inspect.to_string())).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        let (status, _) = send(disconnected(), post_json("/call", r#"{"call":"nothing"}"#)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
