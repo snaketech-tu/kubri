@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { t } from '../i18n';
+	import { every } from '../poll';
 	import { backend, type FleetCluster, type KindPulse } from '../api';
 	import { connectError, eachLimited, fleetState, serverHost, workloads } from '../fleet';
 	import { cpuText, errorMessage, memoryText, relative } from '../format';
@@ -66,10 +67,10 @@
 		// Untracked: check() reads and sets `checking`, which would start the next round as soon as
 		// one ends, asking every cluster again and again.
 		untrack(check);
-		const timer = setInterval(check, REFRESH_MS);
+		const stop = every(REFRESH_MS, check);
 		const clock = setInterval(() => (now = Date.now()), 10_000);
 		return () => {
-			clearInterval(timer);
+			stop();
 			clearInterval(clock);
 		};
 	});

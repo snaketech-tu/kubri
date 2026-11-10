@@ -39,6 +39,21 @@ Clicking a cluster connects Kubri to it and opens its overview. The overview sta
 
 Below the overview, **Other contexts** shows up to eight of your other contexts with what Kubri last learned about them: healthy or how many pods fail, or that the API server did not answer, and when. A ring instead of a dot means it did not answer. Clicking one switches to it. Contexts not checked in the last five minutes are checked when the overview opens, if you have at most 20.
 
+## How often Kubri asks the cluster
+
+Lists, logs and the change history follow the cluster through watches, so the API server tells Kubri what changed instead of Kubri asking again. Pages that cannot watch ask on a timer:
+
+| Page | How often |
+| --- | --- |
+| Overview | every 30 seconds; the trend from Prometheus every minute |
+| Inspector (Overview, Events, YAML) | every 15 seconds |
+| CPU and memory in lists | every 30 seconds |
+| Topology | every 30 seconds |
+| Helm releases | every 30 seconds |
+| Clusters | every two minutes |
+
+Nothing is asked while the window is minimized or the browser tab is in the background; the page asks once when you come back. After a change made in Kubri, such as scaling or a restart, open pages ask again right away.
+
 ## Adding clusters
 
 **Add clusters…** on the Clusters page takes a kubeconfig dropped on it, chosen as a file or pasted, and lists its contexts. Pick the ones to add:
