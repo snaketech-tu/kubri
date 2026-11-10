@@ -27,7 +27,8 @@ serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
-jsonwebtoken = { version = "9.3", default-features = false }
+# aws-lc for the signatures: the RustCrypto backend pulls in rsa, which has an open advisory.
+jsonwebtoken = { version = "11.1", default-features = false, features = ["aws_lc_rs"] }
 jiff = "0.2"
 tower = { version = "0.5", features = ["util"] }
 tracing.workspace = true
