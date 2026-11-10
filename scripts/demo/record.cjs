@@ -235,7 +235,7 @@ async function main() {
 			}
 			await settle();
 			for (const tab of [/^Events/, /^YAML/, /^Metrics/, /^Logs/, /^Overview/]) {
-				const button = inspector.getByRole('button', { name: tab }).first();
+				const button = inspector.getByRole('tab', { name: tab }).first();
 				if (!(await button.count())) continue;
 				await button.click();
 				await settle(tab.source.includes('Logs') ? 800 : 250);
