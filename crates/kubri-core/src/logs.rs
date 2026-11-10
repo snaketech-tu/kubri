@@ -23,17 +23,21 @@ pub(crate) const MAX_STREAMS: usize = 50;
 /// Lines sent in one event at most, so a burst does not become one huge message.
 const MAX_BATCH: usize = 500;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct LogOptions {
     /// Only this container. `None` streams every container, init containers included.
     pub container: Option<String>,
     /// Keep streaming new lines.
+    #[ts(as = "Option<bool>", optional)]
     pub follow: bool,
     /// Logs of the previous, crashed instance of the container.
+    #[ts(as = "Option<bool>", optional)]
     pub previous: bool,
     /// Prefix the text of every line with the time the kubelet received it. Lines always carry
     /// the time apart, in [`LogLine::time`]; this is for readers of the text alone.
+    #[ts(as = "Option<bool>", optional)]
     pub timestamps: bool,
     /// Start with the last n lines.
     pub tail_lines: Option<i64>,

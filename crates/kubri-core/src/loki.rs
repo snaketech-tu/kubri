@@ -12,8 +12,9 @@ use crate::{Error, LogLine, LogSource, Result};
 /// The most lines one query returns.
 pub const MAX_LINES: u32 = 5000;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct LokiRequest {
     pub target: crate::ObjectRef,
     /// LogQL; the object's own query when left out.

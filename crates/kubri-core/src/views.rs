@@ -26,6 +26,7 @@ const BUILT_IN: [(&str, &str); 3] = [
 /// One kind's view.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[ts(export, rename = "KindView")]
 pub struct View {
     /// The API group; empty for the core group.
     #[serde(default)]

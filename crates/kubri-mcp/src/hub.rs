@@ -20,8 +20,9 @@ const LOG_LIMIT: u64 = 512 * 1024;
 const LOG_SHOWN: usize = 200;
 
 /// A change an agent asked for, waiting for a person in the Kubri window.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename = "AgentRequest")]
 pub struct ConfirmRequest {
     pub id: u64,
     pub tool: String,
@@ -33,14 +34,17 @@ pub struct ConfirmRequest {
 }
 
 /// One tool call, as the log keeps it.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename = "AgentCall")]
 pub struct CallRecord {
     /// Seconds since the Unix epoch.
     pub time: u64,
+    #[ts(type = "'stdio' | 'http'")]
     pub transport: String,
     pub tool: String,
     pub context: Option<String>,
+    #[ts(type = "Record<string, unknown>")]
     pub arguments: Value,
     /// Why the call failed, if it did.
     pub error: Option<String>,

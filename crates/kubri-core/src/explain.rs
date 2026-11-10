@@ -42,6 +42,7 @@ to look at next.";
 /// Where Explain sends its questions.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export, rename = "ExplainProvider")]
 pub enum Provider {
     /// Explain is off: nothing is sent anywhere.
     #[default]

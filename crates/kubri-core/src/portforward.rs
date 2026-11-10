@@ -48,8 +48,9 @@ const AFTER_SILENT_CLIENT: Duration = Duration::from_secs(1);
 
 use crate::{Error, ObjectRef, Result};
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct PortForwardRequest {
     /// A pod, a Service, or a workload whose pods should receive the traffic.
     pub target: ObjectRef,

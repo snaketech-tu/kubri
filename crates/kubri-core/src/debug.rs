@@ -21,8 +21,9 @@ const COPY_OF: &str = "kubri.dev/debug-copy-of";
 /// How long a debug container may take to start, pulling its image included.
 const START_TIMEOUT: Duration = Duration::from_secs(90);
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
 pub enum DebugRequest {
     /// An ephemeral container in the pod that sees the processes of `container`. Works for
     /// images without a shell.

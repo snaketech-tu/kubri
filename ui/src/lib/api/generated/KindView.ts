@@ -8,7 +8,7 @@ import type { ViewField } from "./ViewField";
 /**
  * One kind's view.
  */
-export type View = { 
+export type KindView = { 
 /**
  * The API group; empty for the core group.
  */

@@ -107,8 +107,9 @@ pub(crate) enum Subject {
 }
 
 /// The time range to chart.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename = "ChartRange", optional_fields)]
 pub struct Range {
     /// Seconds back from `end`.
     pub seconds: u64,
