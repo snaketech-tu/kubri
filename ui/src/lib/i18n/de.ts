@@ -1108,6 +1108,7 @@ const de: Record<string, string> = {
 	'A kind, object or action: pods, deploy kube-system, ns default, restart…': 'Ein Typ, Objekt oder eine Aktion: pods, deploy kube-system, ns default, neu…',
 	'Suggestions': 'Vorschläge',
 	'No matching resource or command': 'Kein passender Typ oder Befehl',
+	'No namespace {name}': 'Kein Namespace {name}',
 	'select': 'wählen',
 	'complete': 'ergänzen',
 	'run': 'ausführen',

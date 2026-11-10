@@ -134,6 +134,19 @@
 		active = 0;
 	});
 
+	/**
+	 * What Enter would run, written after what is typed: the rest of it when it goes on from the
+	 * typed text, such as `ds` after `po`, else all of it, such as `pods shop` for `po sh`.
+	 */
+	const ghost = $derived.by((): { rest: string; whole: boolean } | null => {
+		const s = suggestions[active];
+		if (!term || !s || s.refused || input !== input.trimStart()) return null;
+		const typed = input.replace(/^:/, '');
+		if (s.label === typed.trimEnd()) return null;
+		if (s.label.toLowerCase().startsWith(typed.toLowerCase())) return { rest: s.label.slice(typed.length), whole: false };
+		return { rest: s.label, whole: true };
+	});
+
 	$effect(() => {
 		field?.focus();
 	});
@@ -156,7 +169,8 @@
 	}
 
 	function run(s: Suggestion | undefined) {
-		if (!s) return;
+		// Such as a namespace that does not exist: the reason shows beside it.
+		if (!s || s.refused) return;
 		close();
 		app.run(s.action);
 	}
@@ -172,6 +186,13 @@
 			case 'ArrowUp':
 				active = Math.max(0, active - 1);
 				break;
+			case 'ArrowRight': {
+				// At the end of the text, → takes what is written after it.
+				const end = field?.selectionStart === input.length && field?.selectionEnd === input.length;
+				if (!ghost || !end) return;
+				input = (input.startsWith(':') ? ':' : '') + suggestions[active].label;
+				break;
+			}
 			case 'Tab':
 				// Complete the highlighted suggestion, like k9s.
 				if (suggestions[active]) input = suggestions[active].label + ' ';
@@ -190,20 +211,25 @@
 <div class="palette" role="dialog" aria-modal="true" aria-label={t('Command palette')}>
 	<div class="prompt">
 		<span>:</span>
-		<input
-			bind:this={field}
-			bind:value={input}
-			{onkeydown}
-			role="combobox"
-			aria-label={t('Command')}
-			aria-expanded="true"
-			aria-controls="palette-suggestions"
-			aria-autocomplete="list"
-			aria-activedescendant={suggestions.length ? `palette-option-${active}` : undefined}
-			placeholder={t('A kind, object or action: pods, deploy kube-system, ns default, restart…')}
-			spellcheck="false"
-			autocomplete="off"
-		/>
+		<div class="field">
+			{#if ghost}
+				<span class="ghost" aria-hidden="true"><span class="typed">{input}</span>{ghost.whole ? `  → ${ghost.rest}` : ghost.rest}</span>
+			{/if}
+			<input
+				bind:this={field}
+				bind:value={input}
+				{onkeydown}
+				role="combobox"
+				aria-label={t('Command')}
+				aria-expanded="true"
+				aria-controls="palette-suggestions"
+				aria-autocomplete="list"
+				aria-activedescendant={suggestions.length ? `palette-option-${active}` : undefined}
+				placeholder={t('A kind, object or action: pods, deploy kube-system, ns default, restart…')}
+				spellcheck="false"
+				autocomplete="off"
+			/>
+		</div>
 	</div>
 	<ul id="palette-suggestions" role="listbox" aria-label={t('Suggestions')}>
 		{#each suggestions as s, i (s.label + i)}
@@ -219,7 +245,7 @@
 					onclick={() => run(s)}
 				>
 					<span class="label">{s.label}</span>
-					<span class="detail">{s.detail}</span>
+					<span class="detail" class:refused={s.refused}>{s.detail}</span>
 				</button>
 			</li>
 		{:else}
@@ -227,7 +253,7 @@
 		{/each}
 	</ul>
 	<footer>
-		<kbd>↑↓</kbd> {t('select')} <kbd>Tab</kbd> {t('complete')} <kbd>Enter</kbd> {t('run')} <kbd>Esc</kbd> {t('close')}
+		<kbd>↑↓</kbd> {t('select')} <kbd>Tab</kbd> <kbd>→</kbd> {t('complete')} <kbd>Enter</kbd> {t('run')} <kbd>Esc</kbd> {t('close')}
 	</footer>
 </div>
 
@@ -263,11 +289,36 @@
 		font-family: var(--mono);
 		font-size: 16px;
 	}
-	.prompt span {
+	.prompt > span {
 		color: var(--accent-strong);
 		font-weight: 700;
 	}
+	.field {
+		position: relative;
+		flex: 1;
+		min-width: 0;
+		display: flex;
+	}
+	/* Lies under the input, in the same font, so its text starts where the typed text ends. */
+	.ghost {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+		white-space: pre;
+		color: var(--text-muted);
+		opacity: 0.7;
+		pointer-events: none;
+		font-family: var(--mono);
+		font-size: 16px;
+		line-height: normal;
+		display: flex;
+		align-items: center;
+	}
+	.ghost .typed {
+		color: transparent;
+	}
 	.prompt input {
+		position: relative;
 		flex: 1;
 		min-width: 0;
 		text-overflow: ellipsis;
@@ -313,6 +364,9 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	.detail.refused {
+		color: var(--bad);
 	}
 	.empty {
 		padding: 12px;
