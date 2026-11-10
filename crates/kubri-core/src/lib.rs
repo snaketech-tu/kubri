@@ -152,8 +152,9 @@ const WARM_FOR: Duration = Duration::from_secs(30 * 60);
 const WARM_CHECK_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The cluster Kubri is currently connected to.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ClusterInfo {
     pub context: String,
     pub server: String,
@@ -162,16 +163,19 @@ pub struct ClusterInfo {
     pub default_namespace: String,
     /// Set when this is a snapshot opened from a file, not a live cluster.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub snapshot: Option<SnapshotInfo>,
     /// Set when a switch took a connection kept from earlier instead of connecting afresh.
     /// Its resource types may be out of date; [`Kubri::refresh_resources`] checks them.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[ts(as = "Option<bool>", optional)]
     pub resumed: bool,
 }
 
 /// The context switcher's data: every context, and the one Kubri is connected to.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ContextList {
     pub contexts: Vec<ContextInfo>,
     pub cluster: Option<ClusterInfo>,

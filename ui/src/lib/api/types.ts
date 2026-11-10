@@ -1,18 +1,13 @@
-// Mirrors the serialized types of the kubri-core crate.
+// Mirrors the serialized types of the kubri-core crate. Types in ./generated are written from
+// the Rust types by `cargo test` (ts-rs); move a type there instead of copying it here.
 
 import type { KindSchema } from '../schema';
+import type { ClusterInfo } from './generated/ClusterInfo';
+import type { ContextInfo } from './generated/ContextInfo';
+import type { ContextList } from './generated/ContextList';
+import type { SnapshotInfo } from './generated/SnapshotInfo';
 
-export interface ContextInfo {
-	name: string;
-	cluster: string | null;
-	/** The API server's address, as the kubeconfig names it. */
-	server?: string | null;
-	user: string | null;
-	namespace: string | null;
-	isDefault: boolean;
-	/** Added in Kubri rather than in your kubeconfig, so Kubri can remove it. */
-	added: boolean;
-}
+export type { ClusterInfo, ContextInfo, ContextList, SnapshotInfo };
 
 /** One context of a kubeconfig about to be added. */
 export interface NewContext {
@@ -38,36 +33,6 @@ export interface KubeconfigFile {
 	missing: boolean;
 	/** Why Kubri cannot read it. */
 	problem: string | null;
-}
-
-export interface ClusterInfo {
-	context: string;
-	server: string;
-	version: string;
-	defaultNamespace: string;
-	/** Set when this is a snapshot opened from a file, not a live cluster. */
-	snapshot?: SnapshotInfo;
-	/** Set when the switch took a connection kept from earlier; its resource types may be out of date. */
-	resumed?: boolean;
-}
-
-/** What a snapshot file holds. */
-export interface SnapshotInfo {
-	/** The context it was taken from. */
-	context: string;
-	server: string;
-	kubernetes: string;
-	/** The namespace saved; null for the whole cluster. */
-	namespace: string | null;
-	/** When it was taken, in milliseconds. */
-	taken: number;
-	kubri: string;
-	objects: number;
-	/** Containers whose recent log lines it holds. */
-	logs: number;
-	/** What it does not hold and why, like `secrets: forbidden`. */
-	leftOut: string[];
-	file?: string;
 }
 
 /** What Kubri remembers about a context, in its own settings file. */
@@ -730,13 +695,6 @@ export interface Guard {
 	unlockedFor: number | null;
 	/** Read-only for a reason no switch in Kubri lifts: a snapshot, `--read-only`, k9s `readOnly`. */
 	fixed?: boolean;
-}
-
-export interface ContextList {
-	contexts: ContextInfo[];
-	cluster: ClusterInfo | null;
-	/** Contexts kept connected in the background, most recent first. */
-	warm: string[];
 }
 
 export interface ResourceRef {

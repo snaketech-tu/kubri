@@ -30,8 +30,8 @@ const resources = [
 ];
 
 const contexts: ContextInfo[] = [
-	{ name: 'prod', cluster: 'prod', user: null, namespace: 'web', isDefault: true, added: false },
-	{ name: 'staging', cluster: 'stage', user: null, namespace: null, isDefault: false, added: false }
+	{ name: 'prod', cluster: 'prod', server: null, user: null, namespace: 'web', isDefault: true, added: false },
+	{ name: 'staging', cluster: 'stage', server: null, user: null, namespace: null, isDefault: false, added: false }
 ];
 
 describe('command palette', () => {

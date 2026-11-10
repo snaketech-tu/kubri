@@ -7,8 +7,9 @@ use serde::Serialize;
 const SERVICE_ACCOUNT: &str = "/var/run/secrets/kubernetes.io/serviceaccount";
 
 /// A context entry from the merged kubeconfig, as shown in the context switcher.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ContextInfo {
     pub name: String,
     pub cluster: Option<String>,
