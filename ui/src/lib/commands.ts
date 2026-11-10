@@ -53,6 +53,8 @@ export interface Suggestion {
 	label: string;
 	detail: string;
 	action: Action;
+	/** Why it cannot run, such as a namespace that does not exist; the palette stays open. */
+	refused?: boolean;
 }
 
 const feedback: Suggestion[] = [
@@ -112,6 +114,35 @@ export interface PaletteConfig {
 	skins: string[];
 	/** Whether a local terminal can be opened here; the web app needs the server's leave. */
 	terminal?: boolean;
+}
+
+/** Namespaces that win when several start the same way: `kube` is kube-system. */
+const PREFERRED_NAMESPACES = ['default', 'kube-system'];
+
+/**
+ * The names `typed` may stand for, best first: itself, then those it starts, then those it is
+ * part of, ignoring case.
+ */
+export function completions(typed: string, names: string[], preferred: string[] = []): string[] {
+	const lower = typed.toLowerCase();
+	const exact = names.filter((n) => n.toLowerCase() === lower);
+	const rank = (n: string) => {
+		const i = preferred.indexOf(n);
+		return i === -1 ? preferred.length : i;
+	};
+	const order = (a: string, b: string) => rank(a) - rank(b) || a.length - b.length || a.localeCompare(b);
+	const starting = names.filter((n) => n.toLowerCase() !== lower && n.toLowerCase().startsWith(lower)).sort(order);
+	const inside = names.filter((n) => !n.toLowerCase().startsWith(lower) && n.toLowerCase().includes(lower)).sort(order);
+	return [...exact, ...starting, ...inside];
+}
+
+/**
+ * The namespaces a typed namespace argument may stand for, best first. As typed when Kubri
+ * knows no namespaces or for `all`; empty when none fits.
+ */
+export function namespaceCompletions(typed: string, namespaces: string[]): string[] {
+	if (!namespaces.length || typed.toLowerCase() === 'all') return [typed];
+	return completions(typed, namespaces, PREFERRED_NAMESPACES);
 }
 
 /** Groups that win when several resources share a name, e.g. core `events` over events.k8s.io. */
@@ -218,11 +249,18 @@ export function suggest(
 		const target = suggest(expanded, resources, contexts, namespaces, config, depth + 1)[0];
 		if (target) {
 			const label = [command, ...rest].join(' ');
-			const own: Suggestion = { label, detail: t('{command} · alias', { command: alias.command }), action: target.action };
+			const own: Suggestion = target.refused
+				? { ...target, label }
+				: { label, detail: t('{command} · alias', { command: alias.command }), action: target.action };
 			return depth ? [own] : [own, ...builtins(input, resources, contexts, namespaces, config)];
 		}
 	}
 	return builtins(input, resources, contexts, namespaces, config);
+}
+
+/** "No namespace sh", as a suggestion that does not run. */
+function noNamespace(label: string, typed: string, action: Action): Suggestion {
+	return { label, detail: t('No namespace {name}', { name: typed }), action, refused: true };
 }
 
 function builtins(
@@ -235,6 +273,41 @@ function builtins(
 	const [command = '', ...rest] = input.trim().replace(/^:/, '').split(/\s+/);
 	const arg = rest.join(' ').toLowerCase();
 	const cmd = command.toLowerCase();
+	const contextNames = contexts.map((c) => c.name);
+
+	/**
+	 * A command that takes a namespace as its first argument, such as `helm sh`: the namespace
+	 * completed, with the other namespaces it may mean after it.
+	 */
+	const withNamespace = (make: (namespace?: string) => Suggestion, typed: string | undefined, more = 0): Suggestion[] => {
+		if (!typed) return [make()];
+		const found = namespaceCompletions(typed, namespaces);
+		if (!found.length) return [noNamespace(make(typed).label, typed, make(typed).action)];
+		return found.slice(0, 1 + more).map((ns) => make(ns));
+	};
+
+	/**
+	 * What follows a resource name, with its namespace and `@context` completed: one set of
+	 * arguments per namespace it may mean, best first, or null when no namespace fits.
+	 */
+	const completedArgs = (r: ResourceInfo, args: string[], more: number): { args: string[]; action: ResourceArgs }[] | null => {
+		const parsed = resourceArgs(args);
+		let words = args;
+		if (parsed.context !== undefined) {
+			const context = completions(parsed.context, contextNames)[0];
+			if (context && context !== parsed.context) words = words.map((w) => (w === `@${parsed.context}` ? `@${context}` : w));
+		}
+		const typed = r.namespaced ? parsed.namespace : undefined;
+		// Another context's namespaces are not known here.
+		if (typed === undefined || resourceArgs(words).context !== undefined) return [{ args: words, action: resourceArgs(words) }];
+		const found = namespaceCompletions(typed, namespaces);
+		if (!found.length) return null;
+		const at = words.indexOf(typed);
+		return found.slice(0, 1 + more).map((ns) => {
+			const these = words.map((w, i) => (i === at ? ns : w));
+			return { args: these, action: resourceArgs(these) };
+		});
+	};
 
 	// `v1/pods` or `apps/v1/deployments kube-system`.
 	if (cmd.includes('/')) {
@@ -287,28 +360,28 @@ function builtins(
 		detail: t('Overview: health, warnings, CPU and memory · also :pulses'),
 		action: { type: 'pulses', namespace }
 	});
-	if (PULSE_COMMANDS.includes(cmd)) return [pulses(rest[0])];
+	if (PULSE_COMMANDS.includes(cmd)) return withNamespace(pulses, rest[0], 4);
 
 	const rbac = (namespace?: string): Suggestion => ({
 		label: namespace ? `access ${namespace}` : 'access',
 		detail: t('Access: who may do what, and your own rights · also :rbac'),
 		action: { type: 'rbac', namespace }
 	});
-	if (RBAC_COMMANDS.includes(cmd)) return [rbac(rest[0])];
+	if (RBAC_COMMANDS.includes(cmd)) return withNamespace(rbac, rest[0], 4);
 
 	const helm = (namespace?: string): Suggestion => ({
 		label: namespace ? `helm ${namespace}` : 'helm',
 		detail: t('Helm releases: values, manifests, history and rollback'),
 		action: { type: 'helm', namespace }
 	});
-	if (HELM_COMMANDS.includes(cmd)) return [helm(rest[0])];
+	if (HELM_COMMANDS.includes(cmd)) return withNamespace(helm, rest[0], 4);
 
 	const sanitizer = (namespace?: string): Suggestion => ({
 		label: namespace ? `checks ${namespace}` : 'checks',
 		detail: t('Checks: common mistakes and risky settings, scored · also :popeye'),
 		action: { type: 'sanitizer', namespace }
 	});
-	if (SANITIZER_COMMANDS.includes(cmd)) return [sanitizer(rest[0])];
+	if (SANITIZER_COMMANDS.includes(cmd)) return withNamespace(sanitizer, rest[0], 4);
 
 	const benchmarks: Suggestion = {
 		label: 'bench',
@@ -369,7 +442,7 @@ function builtins(
 		detail: t('Topology as one graph: how objects connect, and the request paths of Ingresses'),
 		action: { type: 'graph', namespace }
 	});
-	if (GRAPH_COMMANDS.includes(cmd)) return [graph(rest[0])];
+	if (GRAPH_COMMANDS.includes(cmd)) return withNamespace(graph, rest[0], 4);
 
 	// `changes shop 6h`: a namespace and how far back, both optional.
 	const changes = (filter: ChangesFilter = {}): Suggestion => {
@@ -382,6 +455,12 @@ function builtins(
 	};
 	if (CHANGES_COMMANDS.includes(cmd)) {
 		const filter = parseChangesArgs(rest);
+		if (filter.namespace) {
+			const typed = filter.namespace;
+			const found = withNamespace((namespace) => changes({ ...filter, namespace }), typed);
+			if (found[0].refused) return found;
+			filter.namespace = (found[0].action as { filter: ChangesFilter }).filter.namespace;
+		}
 		return [changes(filter), ...(filter.hours ? [] : [changes({ ...filter, hours: 1 })])];
 	}
 
@@ -396,7 +475,7 @@ function builtins(
 					: t('Save this namespace to a file to open offline, or open one'),
 		action: { type: 'snapshot', namespace: arg === 'all' ? null : arg }
 	});
-	if (SNAPSHOT_COMMANDS.includes(cmd)) return [snapshot(rest[0]), ...(rest[0] ? [] : [snapshot('all')])];
+	if (SNAPSHOT_COMMANDS.includes(cmd)) return rest[0] ? withNamespace(snapshot, rest[0]) : [snapshot(), snapshot('all')];
 	if (KUBECONFIG_COMMANDS.includes(cmd)) {
 		return [{ label: 'kubeconfig', detail: t('The kubeconfig files Kubri reads, and load more'), action: { type: 'kubeconfig' } }];
 	}
@@ -412,7 +491,12 @@ function builtins(
 			})
 		);
 	};
-	if (XRAY_COMMANDS.includes(cmd)) return xray(rest[0] ?? '', rest[1]);
+	if (XRAY_COMMANDS.includes(cmd)) {
+		const typed = rest[1];
+		const found = typed ? namespaceCompletions(typed, namespaces) : [undefined];
+		const shown = xray(rest[0] ?? '', found[0] ?? typed);
+		return typed && !found.length ? shown.slice(0, 1).map((s) => noNamespace(s.label, typed, s.action)) : shown;
+	}
 
 	const blank: Suggestion = {
 		label: 'new',
@@ -442,13 +526,14 @@ function builtins(
 
 	if (CONTEXT_COMMANDS.includes(cmd)) {
 		if (arg === '-') return [{ label: 'ctx -', detail: t('The previous context'), action: { type: 'context', name: '-' } }];
-		const matches = contexts
-			.filter((c) => c.name.toLowerCase().includes(arg))
-			.map((c): Suggestion => ({
+		const order = completions(arg, contextNames);
+		const matches = (arg ? order.map((name) => contexts.find((c) => c.name === name)!) : contexts).map(
+			(c): Suggestion => ({
 				label: `ctx ${c.name}`,
 				detail: [c.cluster, c.namespace && `ns ${c.namespace}`].filter(Boolean).join(' · '),
 				action: { type: 'context', name: c.name }
-			}));
+			})
+		);
 		// Like k9s, a bare `:ctx` lists the contexts rather than switching to the first one.
 		if (!arg && !input.endsWith(' ')) return [{ ...fleet, label: cmd, detail: t('Every context in your kubeconfig, to pick one') }, ...matches];
 		return matches;
@@ -456,23 +541,22 @@ function builtins(
 
 	if (NAMESPACE_COMMANDS.includes(cmd) && (rest.length > 0 || input.endsWith(' '))) {
 		const all: Suggestion = { label: 'ns all', detail: t('All namespaces'), action: { type: 'namespace', name: '' } };
-		const matches = namespaces
-			.filter((n) => n.toLowerCase().includes(arg))
+		const matches = (arg ? completions(arg, namespaces, PREFERRED_NAMESPACES) : namespaces)
 			.map((n) => ({ label: `ns ${n}`, detail: t('Namespace'), action: { type: 'namespace', name: n } }) as Suggestion);
 		return 'all'.startsWith(arg) ? [all, ...matches] : matches;
 	}
 
+	// `po sh` is the pods of shop: the namespace is completed, and the best kind also offers the
+	// other namespaces it may mean.
 	const resourceSuggestions = matchResources(cmd, resources)
 		.slice(0, 30)
-		.map(
-			(r): Suggestion => ({
-				label: rest.length ? `${resourceLabel(r)} ${rest.join(' ')}` : resourceLabel(r),
-				detail: [r.kind, r.shortNames.length ? r.shortNames.join(', ') : '', r.namespaced ? '' : t('cluster-wide')]
-					.filter(Boolean)
-					.join(' · '),
-				action: { type: 'resource', resource: r, ...resourceArgs(rest) }
-			})
-		);
+		.flatMap((r, i): Suggestion[] => {
+			const detail = [r.kind, r.shortNames.length ? r.shortNames.join(', ') : '', r.namespaced ? '' : t('cluster-wide')].filter(Boolean).join(' · ');
+			const label = (args: string[]) => (args.length ? `${resourceLabel(r)} ${args.join(' ')}` : resourceLabel(r));
+			const completed = completedArgs(r, rest, i === 0 ? 4 : 0);
+			if (!completed) return [noNamespace(label(rest), resourceArgs(rest).namespace ?? '', { type: 'resource', resource: r, ...resourceArgs(rest) })];
+			return completed.map(({ args, action }) => ({ label: label(args), detail, action: { type: 'resource', resource: r, ...action } }));
+		});
 
 	// Offer the context and namespace commands while they are being typed.
 	const extra: Suggestion[] = [];

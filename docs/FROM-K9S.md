@@ -33,6 +33,7 @@ The views keep their k9s commands, though some have a name of their own in Kubri
 ## What works a little differently
 
 - <kbd>Ctrl</kbd>+<kbd>K</kbd> opens the command palette, like <kbd>:</kbd>. It does not delete without asking.
+- The command palette completes what you type: `:po sh` opens the pods of `shop`, and `:po kube` those of `kube-system`. Enter runs the first suggestion, shown in grey after what you typed; <kbd>→</kbd> or <kbd>Tab</kbd> takes it into the line. A namespace that does not exist is named in red instead of opening an empty list. The same goes for the namespace of `:helm`, `:overview`, `:checks`, `:changes` and the others, and for `@context`.
 - There is nothing to quit: close the window. `:q` opens ResourceQuotas.
 - Logs and shells open in the inspector beside the list, so the list stays in view. **Move to the workspace** keeps them running below while you browse elsewhere ([the workspace](DEBUGGING.md#the-workspace)).
 - In a shell, <kbd>Esc</kbd> goes to the program in it. Press <kbd>Esc</kbd> twice quickly to give the keys back to Kubri.
