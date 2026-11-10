@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.12.0 — 2026-11-11
+
+- **Arrow keys like tabs.** <kbd>Tab</kbd> moves between the parts of the window: the sidebar, a row of tabs, a toolbar and the list are one stop each, and inside them the arrow keys move, with <kbd>Home</kbd> and <kbd>End</kbd> for the first and last. On the Overview the arrow keys move between the tiles, and <kbd>Shift</kbd>+<kbd>F10</kbd> or the menu key opens the menu of the row under the cursor. See [From k9s](docs/FROM-K9S.md).
+- **A list opens with its first row chosen.** Opening Pods or any other list shows the cursor on the first row at once, with its actions above the list, and the list takes the keys, so <kbd>Enter</kbd> opens that row.
+- **The inspector without the mouse.** <kbd>Tab</kbd> goes into the inspector, <kbd>←</kbd> <kbd>→</kbd> change its tab, <kbd>↑</kbd> <kbd>↓</kbd> and the page keys scroll, and <kbd>Esc</kbd> goes back to the list.
+- **Back with Backspace, and breadcrumbs you can click.** <kbd>Backspace</kbd> goes back, and first closes an open inspector. The breadcrumb above each page leads back too: the context to its Overview, the namespace to the namespace list, and after a drill-down to the list you came from, with the object under the cursor.
+- **The command palette completes.** `:po sh` opens the pods of `shop`. <kbd>Enter</kbd> runs the first suggestion, shown in grey after what you typed, and <kbd>→</kbd> or <kbd>Tab</kbd> takes it into the line. A namespace that does not exist is named in red instead of opening an empty list.
+- **A YAML editor with the usual keys.** Find and replace, go to a line, <kbd>Ctrl</kbd>+<kbd>D</kbd> deletes the line, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> duplicates it, and <kbd>Alt</kbd>+<kbd>J</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> give several cursors. Brackets and quotes close as you type. See [Settings](docs/SETTINGS.md).
+- **Gentler on your clusters.** Pages that cannot watch ask less often (the inspector every 15 seconds, CPU and memory in lists every 30), nothing is asked while the window is minimized or the tab is in the background, and after a change made in Kubri open pages ask again right away. The Clusters page asked every cluster again and again while it was open; it now checks every two minutes. See [Clusters](docs/CLUSTERS.md#how-often-kubri-asks-the-cluster).
+- **Start a port-forward from the Port-forwards page.** **Start a port-forward…** (<kbd>Shift</kbd>+<kbd>F</kbd> there) asks for the namespace, then a deployment, StatefulSet, DaemonSet, service or pod, and the ports. The local port comes first in both port-forward dialogs, and a port typed while the ports load stays.
+
 ## 1.11.1 — 2026-11-10
 
 - Tidier code: duplicated helpers and unused code are gone. Nothing changes in how Kubri works.
