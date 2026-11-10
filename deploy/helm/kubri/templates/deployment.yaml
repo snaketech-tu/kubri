@@ -27,6 +27,10 @@ spec:
       serviceAccountName: {{ include "kubri.serviceAccount" . }}
       securityContext:
         runAsNonRoot: true
+        {{- if .Values.persistence.enabled }}
+        # Makes the volume writable for Kubri's user.
+        fsGroup: 10001
+        {{- end }}
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -88,6 +92,10 @@ spec:
             - name: KUBRI_AUDIT_LOG
               value: {{ . | quote }}
             {{- end }}
+            {{- if .Values.persistence.enabled }}
+            - name: KUBRI_CONFIG_DIR
+              value: /var/lib/kubri
+            {{- end }}
             {{- if .Values.readOnly }}
             - name: KUBRI_READ_ONLY
               value: "true"
@@ -114,6 +122,10 @@ spec:
               mountPath: /home/kubri
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: /var/lib/kubri
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /api/session
@@ -153,6 +165,11 @@ spec:
           emptyDir: {}
         - name: tmp
           emptyDir: {}
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-data" (include "kubri.fullname" .)) }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

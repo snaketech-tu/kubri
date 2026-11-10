@@ -52,6 +52,7 @@ The chart's version is the Kubri version it installs: add `--version 2.0.0` to p
 - If the provider's HTTPS certificate is signed by your own certificate authority, put it in a ConfigMap under `ca.crt` and name it in `oidc.caConfigMap`.
 - `team.activityGroups` lists the groups whose members see everyone's changes on the Activity panel, such as `{platform-team}`.
 - The chart writes the audit log to the pod's log (`auditLog: "-"`).
+- `persistence.enabled=true` keeps the settings everyone shares, such as context colors and locks, integrations and saved searches, on a volume, so they survive restarts and upgrades. Without it they start from the defaults whenever the pod is replaced. `persistence.existingClaim` uses a volume claim you made yourself. The chart's claim is kept on `helm uninstall`; delete it by hand when you no longer need it.
 
 `helm install` prints the redirect URI to register and how to read the audit log. Without an ingress, set `publicUrl` to the address people open Kubri at, so the provider sends them back there. The chart runs one replica: sign-ins and each person's connection live in the pod, so restarting it signs everyone out.
 
@@ -175,6 +176,7 @@ This part is for whoever runs kubri-server for a team. Kubri changes clusters, s
 - **Viewers get `view`, not a separate Kubri.** Bind the `view` ClusterRole to people who should only look, and Kubri offers them no changes. Use `KUBRI_READ_ONLY=true` (`readOnly: true` in the chart) only when nobody at all should change anything through this Kubri, since it applies to everyone.
 - **Only some groups.** Set `oidc.allowedGroups` so that only people who need Kubri can sign in.
 - **Its own namespace.** Install Kubri in a namespace of its own, and let only the platform team read its secrets and exec into its pod: whoever controls the pod can act as anyone Kubri may impersonate.
+- **Keep the settings.** Turn on `persistence.enabled`, so the colors, locks and integrations you set up survive upgrades.
 - **Keep the audit log.** Ship the pod's log, or the file in `KUBRI_AUDIT_LOG`, to wherever you keep logs, and keep it as long as your cluster's own audit log.
 
 The chart already runs the container as a non-root user with a read-only root file system and no added capabilities.
@@ -197,4 +199,4 @@ gh attestation verify oci://ghcr.io/snaketech-tu/kubri:2.0.0 --owner snaketech-t
 
 ### Upgrading
 
-Read the release notes first; they name anything that changes for operators. Then run `helm upgrade` with the same values and the new `--version`. The pod restarts, which signs everyone out and ends their port-forwards and shells, so pick a quiet moment. The chart keeps Kubri's settings in the pod, so a new pod starts with the default settings: set context colors and locks again afterwards. The audit log in the pod's log stays wherever your log system keeps it. To go back, run `helm rollback`.
+Read the release notes first; they name anything that changes for operators. Then run `helm upgrade` with the same values and the new `--version`. The pod restarts, which signs everyone out and ends their port-forwards and shells, so pick a quiet moment. With `persistence.enabled=true` the settings everyone shares are kept; without it, a new pod starts with the default settings, so set context colors and locks again afterwards. The audit log in the pod's log stays wherever your log system keeps it. To go back, run `helm rollback`.
