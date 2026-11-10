@@ -82,11 +82,11 @@ describe('live resource state', () => {
 		const stop = metrics.start('pods', 'shop');
 		await vi.advanceTimersByTimeAsync(1);
 		expect(metrics.get('shop', 'pod')?.cpu).toBe(0);
-		await vi.advanceTimersByTimeAsync(15000);
+		await vi.advanceTimersByTimeAsync(30000);
 		expect(metrics.available).toBe(true);
 		expect(metrics.error).toBe('Unavailable');
 		expect(metrics.get('shop', 'pod')?.cpu).toBe(0);
-		await vi.advanceTimersByTimeAsync(15000);
+		await vi.advanceTimersByTimeAsync(30000);
 		expect(metrics.error).toBeNull();
 		expect(metrics.get('shop', 'pod')).toBeUndefined();
 		stop();

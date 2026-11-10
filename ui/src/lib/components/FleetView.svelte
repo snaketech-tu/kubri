@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '../i18n';
+	import { every } from '../poll';
 	import { backend, type FleetCluster, type KindPulse } from '../api';
 	import { connectError, eachLimited, fleetState, serverHost, workloads } from '../fleet';
 	import { cpuText, errorMessage, memoryText, relative } from '../format';
@@ -61,10 +62,10 @@
 	$effect(() => {
 		if (!contexts.length) return;
 		check();
-		const timer = setInterval(check, REFRESH_MS);
+		const stop = every(REFRESH_MS, check);
 		const clock = setInterval(() => (now = Date.now()), 10_000);
 		return () => {
-			clearInterval(timer);
+			stop();
 			clearInterval(clock);
 		};
 	});
