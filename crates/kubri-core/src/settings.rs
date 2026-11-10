@@ -12,8 +12,9 @@ use serde::{Deserialize, Serialize};
 use crate::{Error, Result};
 
 /// What Kubri remembers about one context.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct ContextSettings {
     /// Shown instead of the context's name when set.
     pub display_name: String,
@@ -52,8 +53,9 @@ pub struct ContextSettings {
 
 /// A port-forward kept to start again on the same local port, with one click or whenever Kubri
 /// connects to its context.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct FavoriteForward {
     /// A pod, Service or workload; the context comes from where the favorite is kept.
     pub target: crate::ObjectRef,
@@ -247,8 +249,9 @@ pub fn labels_match(selector: &str, labels: &BTreeMap<String, String>) -> bool {
 }
 
 /// How a list shows one kind: which columns, in which order, and extra JSONPath columns.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct ColumnSettings {
     /// Columns not shown, by name.
     pub hidden: Vec<String>,
@@ -260,8 +263,9 @@ pub struct ColumnSettings {
     pub custom: Vec<CustomColumn>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct CustomColumn {
     pub name: String,
     /// A JSONPath such as `.spec.nodeName` or `.spec.containers[*].image`.
@@ -295,8 +299,9 @@ impl ColumnSettings {
 }
 
 /// Which actions show a server-side dry-run diff before they run. YAML edits always do.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct DiffSettings {
     pub scale: bool,
     pub restart: bool,
@@ -316,8 +321,9 @@ impl Default for DiffSettings {
 }
 
 /// What AI agents connected to Kubri's MCP server may do.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct AgentSettings {
     /// Serve MCP over HTTP on localhost, from the running app. Over stdio it is always there.
     pub http: bool,
@@ -337,8 +343,9 @@ impl Default for AgentSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct Settings {
     /// Per context, by the context's name.
     pub contexts: BTreeMap<String, ContextSettings>,
@@ -362,8 +369,9 @@ pub struct Settings {
 
 /// The label names a log collector uses for the namespace, pod and container, where they are
 /// not `namespace`, `pod` and `container`, such as `exported_namespace`. Empty keeps the usual.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct LabelTemplate {
     pub name: String,
     pub namespace: String,
@@ -397,8 +405,9 @@ impl LabelTemplate {
 pub const MAX_KEEP_RECENT: u32 = 5;
 
 /// How Kubri keeps connections to contexts.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct ConnectionSettings {
     /// How many recently used contexts stay connected in the background, so switching back to
     /// one is instant. 0 turns it off; at most [`MAX_KEEP_RECENT`].
@@ -412,8 +421,9 @@ impl Default for ConnectionSettings {
 }
 
 /// A search kept in the sidebar.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct SavedSearch {
     pub name: String,
     /// As typed in the search field, like `web kind:deploy,svc -l tier=front`.

@@ -57,8 +57,9 @@ impl LogOptions {
 }
 
 /// One container whose log is being streamed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LogSource {
     #[serde(skip)]
     pub namespace: String,
@@ -67,8 +68,9 @@ pub struct LogSource {
 }
 
 /// How severe a log line is, as far as its text tells.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export, rename = "LogLevel")]
 pub enum Level {
     Debug,
     Info,
@@ -76,24 +78,29 @@ pub enum Level {
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LogLine {
     /// Index into the list of [`LogEvent::Sources`].
     pub source: usize,
     /// The line without the kubelet's timestamp.
     pub text: String,
     /// When the kubelet received the line, as RFC 3339.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time: Option<String>,
     /// The level the line names. Lines that continue the one before, such as the frames of a
     /// stack trace, take its level.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<Level>,
     /// The fields of a JSON or logfmt line.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fields: Option<Map<String, Value>>,
     /// The line continues the one before it from the same container, like a stack frame.
+    #[ts(as = "Option<bool>", optional)]
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub continued: bool,
 }
@@ -325,8 +332,9 @@ fn is_continuation(text: &str) -> bool {
         || trimmed.starts_with("goroutine ")
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export)]
 pub enum LogEvent {
     /// Sent first: the containers being streamed.
     Sources {
@@ -345,6 +353,7 @@ pub enum LogEvent {
     /// container whose log ended. Shown as a line across the log.
     Marker {
         text: String,
+        #[ts(optional)]
         #[serde(skip_serializing_if = "Option::is_none")]
         time: Option<String>,
     },

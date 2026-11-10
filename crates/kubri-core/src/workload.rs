@@ -9,8 +9,9 @@ use crate::k9s::Jump;
 use crate::{Error, ObjectRef, ResourceInfo, ResourceRef, Result, TableScope, selector, template};
 
 /// Where Enter leads from an object: a list of what belongs to it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Drill {
     pub resource: ResourceRef,
     /// `None` lists all namespaces.
@@ -226,8 +227,9 @@ pub(crate) fn job_from_cronjob(cronjob: &Value) -> Result<Value> {
 }
 
 /// A new image for one container.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ContainerImage {
     pub name: String,
     pub image: String,

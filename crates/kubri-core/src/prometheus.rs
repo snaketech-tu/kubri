@@ -17,37 +17,50 @@ const MAX_SERIES: usize = 8;
 const POINTS: u64 = 120;
 
 /// One line of a chart; points are `[unix seconds, value]`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename = "ChartSeries")]
 pub struct Series {
     pub name: String,
     pub points: Vec<[f64; 2]>,
 }
 
 /// A level drawn across a chart, like a container's request or limit.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartLevel {
     pub label: String,
     pub value: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Chart {
     /// `cpu`, `memory`, `restarts`, `network` or `requests`.
     pub id: String,
     pub title: String,
-    /// `millicores`, `bytes`, `count`, `bytesPerSecond` or `perSecond`.
-    pub unit: String,
+    pub unit: ChartUnit,
     pub series: Vec<Series>,
     pub levels: Vec<ChartLevel>,
     /// The PromQL behind it, to copy.
     pub query: String,
 }
 
+/// What the values of a chart count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ChartUnit {
+    Millicores,
+    Bytes,
+    Count,
+    BytesPerSecond,
+    PerSecond,
+}
+
 /// Something that happened in the range, such as a rollout, drawn as a line across every chart.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Marker {
     /// Unix seconds.
@@ -55,8 +68,9 @@ pub struct Marker {
     pub label: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Charts {
     /// Where the numbers come from, like `monitoring/prometheus:9090`.
     pub source: String,
@@ -182,7 +196,7 @@ impl Subject {
 struct Plan {
     id: &'static str,
     title: &'static str,
-    unit: &'static str,
+    unit: ChartUnit,
     queries: Vec<(String, Option<&'static str>)>,
     levels: Vec<ChartLevel>,
 }
@@ -226,7 +240,7 @@ fn plans(subject: &Subject, window: &str, requests: Limits, limits: Limits) -> V
             Plan {
                 id: "cpu",
                 title: "CPU",
-                unit: "millicores",
+                unit: ChartUnit::Millicores,
                 queries: vec![
                     (
                         format!(
@@ -252,7 +266,7 @@ fn plans(subject: &Subject, window: &str, requests: Limits, limits: Limits) -> V
             Plan {
                 id: "memory",
                 title: "Memory",
-                unit: "bytes",
+                unit: ChartUnit::Bytes,
                 queries: vec![
                     (
                         format!(
@@ -274,7 +288,7 @@ fn plans(subject: &Subject, window: &str, requests: Limits, limits: Limits) -> V
             Plan {
                 id: "network",
                 title: "Network",
-                unit: "bytesPerSecond",
+                unit: ChartUnit::BytesPerSecond,
                 queries: vec![
                     (
                         format!(
@@ -296,7 +310,7 @@ fn plans(subject: &Subject, window: &str, requests: Limits, limits: Limits) -> V
             Plan {
                 id: "restarts",
                 title: "Container restarts",
-                unit: "count",
+                unit: ChartUnit::Count,
                 queries: vec![(
                     format!(
                         "sum(increase(kube_pod_container_status_restarts_total[{window}]) * on(namespace, pod) group_left() max by (namespace, pod) (kube_pod_info{{node={node}}}))"
@@ -315,7 +329,7 @@ fn plans(subject: &Subject, window: &str, requests: Limits, limits: Limits) -> V
         Plan {
             id: "cpu",
             title: "CPU",
-            unit: "millicores",
+            unit: ChartUnit::Millicores,
             queries: vec![(
                 format!("{s} (rate(container_cpu_usage_seconds_total{{{containers}}}[{window}])) * 1000"),
                 by,
@@ -325,7 +339,7 @@ fn plans(subject: &Subject, window: &str, requests: Limits, limits: Limits) -> V
         Plan {
             id: "memory",
             title: "Memory",
-            unit: "bytes",
+            unit: ChartUnit::Bytes,
             queries: vec![(
                 format!("{s} (container_memory_working_set_bytes{{{containers}}})"),
                 by,
@@ -335,7 +349,7 @@ fn plans(subject: &Subject, window: &str, requests: Limits, limits: Limits) -> V
         Plan {
             id: "restarts",
             title: "Container restarts",
-            unit: "count",
+            unit: ChartUnit::Count,
             queries: vec![(
                 format!(
                     "{} (increase(kube_pod_container_status_restarts_total{{{pods}}}[{window}]))",
@@ -348,7 +362,7 @@ fn plans(subject: &Subject, window: &str, requests: Limits, limits: Limits) -> V
         Plan {
             id: "network",
             title: "Network",
-            unit: "bytesPerSecond",
+            unit: ChartUnit::BytesPerSecond,
             // Network counters belong to the pod, not to a container.
             queries: vec![(
                 format!(
@@ -394,7 +408,7 @@ fn plans(subject: &Subject, window: &str, requests: Limits, limits: Limits) -> V
         plans.push(Plan {
             id: "requests",
             title: "Requests",
-            unit: "perSecond",
+            unit: ChartUnit::PerSecond,
             queries: vec![
                 (code("http_requests_total", "code"), requests_by),
                 (code("http_requests_total", "status"), requests_by),
@@ -582,7 +596,7 @@ pub(crate) async fn charts(
             Ok(Some((query, series))) => charts.push(Chart {
                 id: plan.id.into(),
                 title: plan.title.into(),
-                unit: plan.unit.into(),
+                unit: plan.unit,
                 series,
                 levels: plan.levels.clone(),
                 query,

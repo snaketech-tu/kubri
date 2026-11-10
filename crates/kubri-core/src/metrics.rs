@@ -6,8 +6,9 @@ use k8s_openapi::api::core::v1::{Container, Node, Pod};
 use serde::Serialize;
 use serde_json::Value;
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Usage {
     pub namespace: Option<String>,
     pub name: String,
@@ -18,20 +19,24 @@ pub struct Usage {
     /// What a pod's containers request and may use at most, for %CPU/R, %CPU/L and the
     /// like. A limit is only known when every container sets one. For a node, `requests` is
     /// what the pods on it request.
+    #[ts(as = "Option<Limits>", optional)]
     #[serde(skip_serializing_if = "Limits::is_empty")]
     pub requests: Limits,
+    #[ts(as = "Option<Limits>", optional)]
     #[serde(skip_serializing_if = "Limits::is_empty")]
     pub limits: Limits,
     /// What a node can give to pods, for its %CPU and %MEM.
+    #[ts(as = "Option<Limits>", optional)]
     #[serde(skip_serializing_if = "Limits::is_empty")]
     pub allocatable: Limits,
     /// For a namespace: how healthy its pods are.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pods: Option<PodCounts>,
 }
 
 /// How many pods are healthy, as the overview counts them.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PodCounts {
     pub total: usize,
@@ -41,11 +46,14 @@ pub struct PodCounts {
 }
 
 /// CPU in millicores and memory in bytes, where they are set.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Limits {
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu: Option<f64>,
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory: Option<f64>,
 }

@@ -26,8 +26,9 @@ pub(crate) struct Kept {
 }
 
 /// One context on the fleet page.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct FleetCluster {
     pub context: String,
     pub server: Option<String>,

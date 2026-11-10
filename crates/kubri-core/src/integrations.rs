@@ -24,8 +24,9 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 pub const OFF: &str = "off";
 
 /// The URLs a context's settings give for its tools; empty finds them, `off` turns them off.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct IntegrationSettings {
     pub prometheus: String,
     pub grafana: String,
@@ -60,8 +61,9 @@ impl IntegrationSettings {
 }
 
 /// How Kubri reaches a tool.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", tag = "via")]
+#[ts(export)]
 pub enum Endpoint {
     /// Through the API server's service proxy.
     #[serde(rename_all = "camelCase")]
@@ -245,8 +247,9 @@ fn short(text: &str) -> String {
 }
 
 /// One tool and how it was found.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Integration {
     /// `prometheus`, `grafana`, `loki`, `flux`, `argocd` or `certManager`.
     pub id: String,
@@ -262,8 +265,9 @@ pub struct Integration {
 }
 
 /// What the cluster runs, as the integrations page shows it.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Integrations {
     pub items: Vec<Integration>,
 }

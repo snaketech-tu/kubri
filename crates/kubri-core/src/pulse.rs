@@ -22,8 +22,9 @@ use crate::{EventInfo, ObjectRef, ResourceRef, Result, Usage, parse_quantity};
 const RECENT: SignedDuration = SignedDuration::from_hours(1);
 const RECENT_WARNINGS: usize = 8;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Pulse {
     pub kinds: Vec<KindPulse>,
     pub events: EventPulse,
@@ -38,8 +39,9 @@ pub struct Pulse {
 }
 
 /// A pod that waits for a node, and what it asks for.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct WaitingPod {
     pub object: ObjectRef,
     /// In millicores.
@@ -51,8 +53,9 @@ pub struct WaitingPod {
 /// Waiting pods the overview names, at most.
 const WAITING_PODS: usize = 100;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct CertificateAlert {
     pub object: ObjectRef,
     pub health: Health,
@@ -64,8 +67,9 @@ pub struct CertificateAlert {
 const CERTIFICATE_ALERTS: usize = 8;
 
 /// How many objects of one kind are healthy.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct KindPulse {
     pub kind: String,
     pub resource: ResourceRef,
@@ -78,7 +82,7 @@ pub struct KindPulse {
 }
 
 /// Events of the last hour.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EventPulse {
     pub normal: usize,
@@ -88,8 +92,9 @@ pub struct EventPulse {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RecentEvent {
     #[serde(flatten)]
     pub event: EventInfo,
@@ -97,20 +102,22 @@ pub struct RecentEvent {
     pub object_kind: String,
     pub object: ObjectRef,
     /// The workload a pod or ReplicaSet belongs to, such as its Deployment.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workload: Option<Workload>,
 }
 
 /// The Deployment, StatefulSet, DaemonSet, Job or CronJob at the top of an object's owners.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Workload {
     pub kind: String,
     pub object: ObjectRef,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Utilization {
     /// Measured by metrics-server; `None` when it is not installed.
     pub used: Option<f64>,

@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 use crate::ResourceRef;
 
 /// Addresses one object.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ObjectRef {
     /// When provided, refuse to resolve this target against a different context.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -39,7 +40,7 @@ impl std::fmt::Display for ObjectRef {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum Propagation {
     #[default]
@@ -48,13 +49,16 @@ pub enum Propagation {
     Orphan,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct DeleteOptions {
     /// Seconds to wait before killing; `Some(0)` with `force` deletes immediately.
     pub grace_period_seconds: Option<u32>,
     /// Delete immediately without waiting for confirmation from the kubelet.
+    #[ts(as = "Option<bool>", optional)]
     pub force: bool,
+    #[ts(as = "Option<Propagation>", optional)]
     pub propagation: Propagation,
 }
 
@@ -87,8 +91,9 @@ pub(crate) fn restart_patch(now: &str) -> serde_json::Value {
 }
 
 /// An event about an object, as shown on its details page.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct EventInfo {
     /// `Normal` or `Warning`.
     pub kind: String,

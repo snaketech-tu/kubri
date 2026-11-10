@@ -9,14 +9,16 @@ use serde_json::Value;
 use crate::{ResourceInfo, ResourceRef};
 
 /// An object that uses the one asked about.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Reference {
     pub resource: ResourceRef,
     pub kind: String,
     pub namespace: Option<String>,
     pub name: String,
     /// How it uses it, when not through its pod spec: `TLS` or `backend`.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub how: Option<String>,
 }

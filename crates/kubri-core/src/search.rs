@@ -35,7 +35,8 @@ const AT_ONCE: usize = 8;
 const DEFAULT_LIMIT: usize = 300;
 
 /// A comparison of a field with a value, like `status.phase!=Running`.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FieldTest {
     /// A JSONPath like those of custom columns, with or without the leading dot.
     pub path: String,
@@ -64,8 +65,9 @@ pub struct SearchRequest {
     pub limit: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SearchHit {
     pub object: ObjectRef,
     pub kind: String,
@@ -73,7 +75,7 @@ pub struct SearchHit {
 }
 
 /// A kind or context that could not be searched, and why.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchProblem {
     pub context: String,
@@ -81,8 +83,9 @@ pub struct SearchProblem {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     /// More matched than the limit.

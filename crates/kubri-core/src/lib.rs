@@ -250,8 +250,9 @@ pub(crate) struct SettingsFile {
 pub const UNLOCK_FOR: Duration = Duration::from_secs(15 * 60);
 
 /// Whether Kubri may change the connected cluster, and why not.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Guard {
     pub read_only: bool,
     /// Why changes are off, when they are.

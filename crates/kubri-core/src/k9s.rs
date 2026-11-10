@@ -50,8 +50,9 @@ pub struct Thresholds {
 }
 
 /// Percentages; k9s ignores values outside 1 to 100 and keeps its defaults.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(default)]
+#[ts(export)]
 pub struct Threshold {
     pub warn: u32,
     pub critical: u32,
@@ -126,8 +127,9 @@ impl Logger {
 
 /// A rule of `jumps.yaml`. Selectors and the namespace may use Go template fields of the
 /// source object, like `app={{.metadata.labels.app}}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Jump {
     /// The source resource, as `group/version/resource` or `v1/pods`.
     #[serde(skip_deserializing)]
@@ -143,23 +145,26 @@ pub struct Jump {
     pub target_namespace: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ConfigFile {
     pub path: String,
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Alias {
     pub name: String,
     /// What it stands for, such as `v1/pods` or `pod kube-system app=dns`.
     pub command: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Hotkey {
     #[serde(skip_deserializing)]
     pub name: String,
@@ -177,8 +182,9 @@ pub struct Hotkey {
     pub override_: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Plugin {
     #[serde(skip_deserializing)]
     pub name: String,
@@ -208,8 +214,9 @@ pub struct Plugin {
     pub inputs: Vec<PluginInput>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct PluginInput {
     pub name: String,
     #[serde(default)]

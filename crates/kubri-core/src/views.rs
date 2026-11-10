@@ -24,7 +24,7 @@ const BUILT_IN: [(&str, &str); 3] = [
 ];
 
 /// One kind's view.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct View {
     /// The API group; empty for the core group.
@@ -52,7 +52,7 @@ pub struct View {
 }
 
 /// A value read from each object.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ViewField {
     pub name: String,
@@ -62,7 +62,7 @@ pub struct ViewField {
 
 /// When an object is in a health state. Without a test, a rule matches when the path finds
 /// anything.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HealthRule {
     pub path: String,
@@ -84,7 +84,7 @@ pub struct HealthRule {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum HealthState {
     Ok,
@@ -102,7 +102,7 @@ impl From<HealthState> for Health {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DetailSection {
     pub title: String,
@@ -111,7 +111,7 @@ pub struct DetailSection {
 
 /// A command for the object's menu, run like a k9s plugin: `$NAME`, `$NAMESPACE`, `$CONTEXT`
 /// and the other k9s variables are replaced in `args`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ViewAction {
     pub name: String,
@@ -136,7 +136,7 @@ pub struct ViewAction {
 }
 
 /// Another object an object refers to, such as a Certificate's Secret.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Relation {
     /// The other object's kind, or a JSONPath to it, like `.spec.sourceRef.kind`.
@@ -149,8 +149,9 @@ pub struct Relation {
 }
 
 /// Every view in use, and what could not be read.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ViewSet {
     pub views: Vec<View>,
     /// Files or views that could not be read, and why.
@@ -160,21 +161,22 @@ pub struct ViewSet {
 }
 
 /// A view applied to one object, for its details.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RenderedView {
     pub health: Option<Judged>,
     pub sections: Vec<RenderedSection>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Judged {
     pub health: Health,
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderedSection {
     pub title: String,

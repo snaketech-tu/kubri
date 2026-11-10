@@ -14,8 +14,9 @@ use crate::fixes::{node_fits, pod_requests};
 use crate::{Error, Kubri, ObjectRef, Result, parse_quantity};
 
 /// CPU in cores and memory in bytes.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Amounts {
     pub cpu: f64,
     pub memory: f64,
@@ -30,8 +31,9 @@ impl Amounts {
 
 /// One node: what it can give to pods, what its pods request, and how much of that is the
 /// workload's own pods.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct NodeRoom {
     pub name: String,
     /// Whether the workload's pods may run here: ready, not cordoned, taints tolerated, node
@@ -47,8 +49,9 @@ pub struct NodeRoom {
 }
 
 /// A ResourceQuota limit on CPU or memory in the namespace, with what is used of it.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct QuotaRoom {
     pub name: String,
     /// `requests.cpu`, `requests.memory`, `limits.cpu` or `limits.memory`.
@@ -58,8 +61,9 @@ pub struct QuotaRoom {
     pub used: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Capacity {
     /// How many pods the workload runs: its replicas, or for a DaemonSet the nodes it wants.
     pub pods: u32,

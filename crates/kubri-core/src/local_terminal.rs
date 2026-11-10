@@ -25,8 +25,9 @@ const STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Where the shell starts and what it runs, from the settings.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct TerminalSettings {
     /// The program to run; empty for the user's login shell, or PowerShell on Windows.
     pub shell: String,
@@ -64,8 +65,9 @@ pub struct LocalTerminalOptions {
 }
 
 /// What a local terminal would run with, shown in its tab before and while it runs.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LocalTerminalInfo {
     /// Whether local terminals are on at all: always in the desktop app, in the web server
     /// only when started with `KUBRI_LOCAL_TERMINAL=true`.

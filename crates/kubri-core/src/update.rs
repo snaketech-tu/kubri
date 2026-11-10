@@ -11,8 +11,9 @@ const LATEST: &str = "https://api.github.com/repos/snaketech-tu/kubri/releases/l
 /// GitHub is asked at most this often; the answer in between is the last one.
 const KEEP: Duration = Duration::from_secs(6 * 60 * 60);
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LatestRelease {
     /// Like `1.0.0`.
     pub version: String,

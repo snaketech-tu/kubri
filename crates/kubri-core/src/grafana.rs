@@ -32,8 +32,9 @@ pub(crate) struct Dashboard {
 pub(crate) type Cached = (std::time::Instant, Vec<Dashboard>, Option<String>);
 
 /// A dashboard to open for an object.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct DashboardLink {
     pub title: String,
     pub folder: String,
@@ -54,8 +55,9 @@ pub(crate) fn search_link(name: &str) -> DashboardLink {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Dashboards {
     pub links: Vec<DashboardLink>,
     /// Why Grafana's own list could not be read, when only ConfigMaps were.

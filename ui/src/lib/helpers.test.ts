@@ -233,7 +233,7 @@ describe('status colors', () => {
 	});
 });
 
-function row(name: string, namespace: string, cells: unknown[], created = '2026-10-01T00:00:00Z'): Row {
+function row(name: string, namespace: string, cells: Row['cells'], created = '2026-10-01T00:00:00Z'): Row {
 	return { key: `${namespace}/${name}`, name, namespace, created, labels: { app: name }, owners: [], cells };
 }
 

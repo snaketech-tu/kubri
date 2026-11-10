@@ -29,8 +29,9 @@ const SHELL_ID: &[u8] = b"\x1b]7777;kubri-shell=";
 const HANGUP_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_CONTAINER_ANNOTATION: &str = "kubectl.kubernetes.io/default-container";
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum TerminalMode {
     /// Run a new shell in the container (`kubectl exec -it`).
     #[default]

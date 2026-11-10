@@ -63,8 +63,9 @@ pub struct PortForwardRequest {
     pub address: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct PortForwardInfo {
     pub id: u32,
     /// The context the forward runs in.
@@ -88,14 +89,14 @@ pub struct PortForwardInfo {
 }
 
 /// How a connection through a forward ended.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionEnd {
     pub at: String,
     pub by: EndedBy,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum EndedBy {
     /// The pod, or the cluster on its way, closed the stream.
@@ -107,8 +108,9 @@ pub enum EndedBy {
 }
 
 /// A favorite forward, and why it could not start if it could not.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct FavoriteStart {
     pub favorite: crate::FavoriteForward,
     pub error: Option<String>,
