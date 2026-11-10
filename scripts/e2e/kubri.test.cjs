@@ -429,3 +429,26 @@ describe('MCP', () => {
 		}
 	});
 });
+
+describe('gentle on the cluster', () => {
+	check('the Clusters page checks each context once, not again and again', async () => {
+		const asked = new Map();
+		const seen = (request) => {
+			if (request.method() !== 'POST' || !request.url().endsWith('/api/call')) return;
+			const body = request.postDataJSON();
+			if (body?.call === 'fleetCluster') asked.set(body.context, (asked.get(body.context) ?? 0) + 1);
+		};
+		page.on('request', seen);
+		try {
+			await page.goto('about:blank');
+			await page.goto(`${server.url}/#/e2e-one/fleet`);
+			await page.getByRole('heading', { name: 'Clusters', level: 1, exact: true }).waitFor();
+			await new Promise((resolve) => setTimeout(resolve, 8000));
+		} finally {
+			page.off('request', seen);
+		}
+		// One round; the next is due in minutes.
+		assert.ok(asked.get('e2e-one') >= 1, 'checks e2e-one');
+		for (const [context, times] of asked) assert.equal(times, 1, `checked ${context} ${times} times in 8 seconds`);
+	});
+});
