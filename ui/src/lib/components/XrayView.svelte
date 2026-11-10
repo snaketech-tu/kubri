@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { plural, t } from '../i18n';
+	import { roving } from '../roving';
 	import { every } from '../poll';
 	import { forControl } from '../keys';
 	import { tick, untrack } from 'svelte';
@@ -233,7 +234,7 @@
 			</label>
 			<SearchField bind:value={filter} bind:input={filterInput} label={t('Filter the trees')} placeholder={t('Filter by name or status')} />
 		</div>
-		<div class="tabs" role="tablist" aria-label={t('Show')}>
+		<div class="tabs" role="tablist" aria-label={t('Show')} {@attach roving({ items: '[role="tab"]', orientation: 'horizontal', activate: true })}>
 			<button role="tab" aria-selected={!issuesOnly} onclick={() => (issuesOnly = false)}>
 				{t('All')} <span class="n">{roots.length}</span>
 			</button>

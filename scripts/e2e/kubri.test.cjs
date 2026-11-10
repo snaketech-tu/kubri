@@ -149,6 +149,61 @@ describe('contexts and addresses', () => {
 	});
 });
 
+describe('arrow keys', () => {
+	/** Presses Tab until the focus is on an element that `matches`, or fails. */
+	async function tabTo(matches, message) {
+		for (let i = 0; i < 40; i++) {
+			await page.keyboard.press('Tab');
+			if (await page.evaluate(matches)) return;
+		}
+		assert.fail(`Tab never reached ${message}`);
+	}
+	const focused = () => page.evaluate(() => document.activeElement?.textContent?.trim() ?? '');
+
+	check('moves through the sidebar and the tabs like tabs', async () => {
+		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods' });
+		await page.evaluate(() => document.activeElement?.blur());
+		await tabTo(() => !!document.activeElement?.closest('nav .items'), 'the sidebar');
+		// The sidebar is one Tab stop, at the current page.
+		assert.match(await focused(), /^Pods/);
+		await page.keyboard.press('ArrowDown');
+		const below = await focused();
+		assert.doesNotMatch(below, /^Pods/);
+		await page.keyboard.press('ArrowUp');
+		assert.match(await focused(), /^Pods/);
+
+		await tabTo(() => document.activeElement?.getAttribute('role') === 'tab', 'the tabs');
+		await page.keyboard.press('ArrowRight');
+		await h.until(async () => (await page.getByRole('tab', { selected: true }).textContent()).startsWith('Needs attention'), {
+			message: 'the next tab to be chosen'
+		});
+		await page.keyboard.press('Home');
+		await h.until(async () => (await page.getByRole('tab', { selected: true }).textContent()).startsWith('All'), {
+			message: 'the first tab to be chosen'
+		});
+	});
+
+	check('makes the list one Tab stop and opens the row menu with Shift+F10', async () => {
+		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods' });
+		await page.locator('.table-wrap').getByRole('button', { name: 'db-0', exact: true }).waitFor();
+		await page.evaluate(() => document.activeElement?.blur());
+		await tabTo(() => document.activeElement?.classList.contains('table-wrap'), 'the list');
+		await page.keyboard.press('Tab');
+		const next = await page.evaluate(() => document.activeElement?.className ?? '');
+		// One stop for the column headings, none for the buttons in each row.
+		assert.match(next, /\bsort\b/);
+		await page.keyboard.press('Tab');
+		assert.equal(await page.evaluate(() => !!document.activeElement?.closest('.table-wrap')), false);
+
+		await page.locator('.table-wrap').focus();
+		await page.keyboard.press('ArrowDown');
+		await page.keyboard.press('Shift+F10');
+		await page.getByRole('menu').waitFor();
+		await page.keyboard.press('Escape');
+		await page.getByRole('menu').waitFor({ state: 'detached' });
+	});
+});
+
 describe('logs and shell', () => {
 	check('streams the logs of every container of a pod', async () => {
 		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods', filter: 'web' });

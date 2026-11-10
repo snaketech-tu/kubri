@@ -16,6 +16,7 @@
 	import { lastLogLine } from '../lastlog';
 	import { app, findResource } from '../state.svelte';
 	import { plural, t } from '../i18n';
+	import { nearestVertically } from '../roving';
 	import { every } from '../poll';
 	import HealthIcon from './HealthIcon.svelte';
 	import OtherContexts from './OtherContexts.svelte';
@@ -208,22 +209,37 @@
 		tick().then(() => body?.querySelector<HTMLElement>(`[data-tile="${cursor}"]`)?.focus());
 	}
 
+	/** Down or up to the nearest tile in the next row, as the tiles sit on the page. */
+	function moveVertically(down: boolean) {
+		const boxes = tiles.map((_, i) => {
+			const r = body?.querySelector<HTMLElement>(`[data-tile="${i}"]`)?.getBoundingClientRect();
+			return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : { left: 0, top: 0, width: 0, height: 0 };
+		});
+		// The first key shows where the cursor is; at an edge it stays.
+		const next = keyboard ? nearestVertically(boxes, cursor, down) : null;
+		move(next === null ? 0 : next - cursor);
+	}
+
 	function onkeydown(e: KeyboardEvent) {
 		if (app.overlayOpen || e.ctrlKey || e.metaKey || e.altKey) return;
 		if (forControl(e)) return;
 		const handled = (() => {
 			switch (e.key) {
 				case 'ArrowRight':
-				case 'ArrowDown':
 				case 'l':
-				case 'j':
 					move(1);
 					return true;
 				case 'ArrowLeft':
-				case 'ArrowUp':
 				case 'h':
-				case 'k':
 					move(-1);
+					return true;
+				case 'ArrowDown':
+				case 'j':
+					moveVertically(true);
+					return true;
+				case 'ArrowUp':
+				case 'k':
+					moveVertically(false);
 					return true;
 				case 'Enter':
 					tiles[cursor]?.();

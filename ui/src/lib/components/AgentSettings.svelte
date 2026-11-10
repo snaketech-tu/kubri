@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '../i18n';
+	import { roving } from '../roving';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { callArguments, httpSnippets, shownToken, stdioSnippets, type AgentSnippet } from '../agents';
 	import { backend, type AgentCall, type AgentConnection } from '../api';
@@ -76,7 +77,7 @@
 		{t('Kubri is an MCP server: AI agents such as Claude Code, Claude Desktop or an IDE assistant can read your clusters through it, with your permissions. Secrets stay hidden and every call is logged here.')}
 	</p>
 
-	<div class="ways" role="tablist" aria-label={t('How agents connect')}>
+	<div class="ways" role="tablist" aria-label={t('How agents connect')} {@attach roving({ items: '[role="tab"]', orientation: 'horizontal', activate: true })}>
 		<button role="tab" aria-selected={way === 'http'} class:active={way === 'http'} onclick={() => (way = 'http')}>
 			{t('Through this Kubri (HTTP)')}
 		</button>

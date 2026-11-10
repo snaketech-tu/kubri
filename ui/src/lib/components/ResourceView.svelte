@@ -24,6 +24,7 @@
 	import ListNotices from './ListNotices.svelte';
 	import ResourceTable from './ResourceTable.svelte';
 	import { midSentence, t } from '../i18n';
+	import { roving } from '../roving';
 	import { store, stored } from '../storage';
 
 	let {
@@ -493,6 +494,15 @@
 			return;
 		}
 		const ctrl = e.ctrlKey || e.metaKey;
+		// The row's menu, as a right click opens it.
+		if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey && !ctrl)) {
+			const at = list?.cursorMenuPoint();
+			if (current && at) {
+				e.preventDefault();
+				openMenu(current, at.x, at.y, 'right');
+			}
+			return;
+		}
 		const handled = (() => {
 			if (ctrl) {
 				switch (e.key.toLowerCase()) {
@@ -700,7 +710,7 @@
 				<kbd>/</kbd>
 			</label>
 		</div>
-		<div class="tabs" role="tablist" aria-label={t('Show')}>
+		<div class="tabs" role="tablist" aria-label={t('Show')} {@attach roving({ items: '[role="tab"]', orientation: 'horizontal', activate: true })}>
 			<button role="tab" aria-selected={!faults && !runningOnly} onclick={() => showTab('all')}>
 				{t('All')} <span class="n">{counts.all}</span>
 			</button>
