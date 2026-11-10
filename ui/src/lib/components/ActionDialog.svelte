@@ -25,6 +25,7 @@
 	import {
 		containerImages,
 		forwardablePorts,
+		portsOnceLoaded,
 		startingPort,
 		type ForwardablePort
 	} from '../pods';
@@ -223,8 +224,8 @@
 						});
 					} else if (dialog.kind === 'portforward') {
 						ports = forwardablePorts(obj);
-						const start = startingPort(obj);
-						if (start) ({ remote: remotePort, local: localPort } = start);
+						// What was typed while the ports loaded stays.
+						({ remote: remotePort, local: localPort } = portsOnceLoaded(startingPort(obj), { remote: remotePort, local: localPort }));
 					} else if (dialog.kind === 'image') {
 						images = containerImages(obj);
 						newImages = Object.fromEntries(images.map((c) => [c.name, c.image]));

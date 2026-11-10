@@ -8,7 +8,7 @@
 	import { t } from '../i18n';
 	import { coreText } from '../i18n/errors';
 	import { kubectlCommand } from '../kubectl';
-	import { forwardablePorts, startingPort, type ForwardablePort } from '../pods';
+	import { forwardablePorts, portsOnceLoaded, startingPort, type ForwardablePort } from '../pods';
 	import { plainOptions, type SelectOption } from '../select';
 	import { ALL_NAMESPACES, app, refOf } from '../state.svelte';
 	import Phrase from './Phrase.svelte';
@@ -89,8 +89,10 @@
 			.then((obj) => {
 				if (target !== chosen) return;
 				ports = forwardablePorts(obj);
-				const start = startingPort(obj);
-				if (start) ({ remote: remotePort, local: localPort } = start);
+				// A port typed while the ports loaded stays, and so does the place someone is typing.
+				const typing = localPort !== null || remotePort !== null;
+				({ remote: remotePort, local: localPort } = portsOnceLoaded(startingPort(obj), { remote: remotePort, local: localPort }));
+				if (typing) return;
 				void tick().then(() => {
 					localField?.focus();
 					if (localField instanceof HTMLInputElement) localField.select();

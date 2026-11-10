@@ -13,6 +13,7 @@ import {
 	registryOf,
 	logMatcher,
 	logRanges,
+	portsOnceLoaded,
 	secretValue,
 	sourceLabels,
 	startingPort,
@@ -142,6 +143,17 @@ describe('k9s port-forward annotations', () => {
 		expect(startingPort({ kind: 'Service', metadata: { name: 'db' }, spec: { ports: [{ port: 5432 }, { port: 80 }] } })).toEqual({ remote: 5432, local: 5432 });
 		expect(startingPort({ kind: 'Service', metadata: { name: 'web' }, spec: { ports: [{ port: 80 }] } })).toEqual({ remote: 80, local: null });
 		expect(startingPort({ kind: 'Service', metadata: { name: 'none' }, spec: {} })).toBeNull();
+	});
+
+	it('keeps a port typed in while the ports loaded', () => {
+		const start = { remote: 8080, local: 8080 };
+		const none = { remote: null, local: null };
+		expect(portsOnceLoaded(start, none)).toEqual(start);
+		expect(portsOnceLoaded(null, none)).toEqual(none);
+		expect(portsOnceLoaded(start, { remote: null, local: 9000 })).toEqual({ remote: 8080, local: 9000 });
+		// A typed container port does not get the local port of another one.
+		expect(portsOnceLoaded(start, { remote: 5432, local: null })).toEqual({ remote: 5432, local: null });
+		expect(portsOnceLoaded(start, { remote: 5432, local: 15432 })).toEqual({ remote: 5432, local: 15432 });
 	});
 });
 
