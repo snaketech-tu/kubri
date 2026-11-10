@@ -13,9 +13,13 @@ To try the installers before releasing, run the Release workflow by hand without
 
 The first time an image is published, GitHub makes the package private: make it public under the package's settings (Package settings → Change visibility) so `docker pull` works without signing in.
 
+## Helm chart
+
+In a run with **publish**, the **Helm chart** job checks that `deploy/helm/kubri/Chart.yaml` has the release's version, then pushes the chart to `oci://ghcr.io/snaketech-tu/charts/kubri`. It needs no secret. After the first push, open the package under **Packages** on GitHub once and set its visibility to public, as for the image.
+
 ## Package managers
 
-After the desktop builds, the **Packages** job fills the templates in [`packaging/`](../packaging) with the version and the checksums of the release's downloads ([`packaging/render.sh`](../packaging/render.sh)), keeps the results as the `packages` workflow artifact, and publishes each one whose secret is set. In a run with **publish** this happens after the release is published. For a release that is still a draft, it only fills them in, since the packages point at downloads that are not public yet; run the job again after publishing.
+After the desktop builds, the **Packages** job fills the templates in [`packaging/`](../packaging) with the version and the checksums of the release's downloads ([`packaging/render.sh`](../packaging/render.sh)), keeps the results as the `packages` workflow artifact, and publishes each one whose secret is set. A channel whose secret is missing shows up as a warning on the run and in its summary, so it is not skipped unnoticed. In a run with **publish** this happens after the release is published. For a release that is still a draft, it only fills them in, since the packages point at downloads that are not public yet; run the job again after publishing.
 
 | Channel | What happens | Secret |
 | --- | --- | --- |

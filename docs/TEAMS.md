@@ -31,10 +31,10 @@ The chart is in [`deploy/helm/kubri`](../deploy/helm/kubri). First register Kubr
 - the scopes `openid email profile groups`, and `offline_access` if your provider wants it for refresh tokens,
 - a `groups` claim in the ID token. Most providers need this switched on, and some call it differently (see `oidc.groupsClaim`).
 
-Then install it from a clone of this repository:
+Then install the chart, which each release publishes next to the image:
 
 ```sh
-helm install kubri deploy/helm/kubri -n kubri --create-namespace \
+helm install kubri oci://ghcr.io/snaketech-tu/charts/kubri -n kubri --create-namespace \
   --set auth=oidc \
   --set oidc.issuer=https://login.example.com/realms/main \
   --set oidc.clientId=kubri \
@@ -43,6 +43,8 @@ helm install kubri deploy/helm/kubri -n kubri --create-namespace \
   --set ingress.host=kubri.example.com \
   --set ingress.tlsSecret=kubri-tls
 ```
+
+The chart's version is the Kubri version it installs: add `--version 2.0.0` to pick one, and use `helm upgrade` with the same settings to move to a newer one. For Kubri 1.10 and older, install from a clone of this repository with `deploy/helm/kubri` in place of the `oci://` address.
 
 - `oidc.issuer` is the issuer URL exactly as the provider names itself, the address before `/.well-known/openid-configuration`.
 - Instead of `oidc.clientSecret`, put the secret in a Kubernetes secret under the key `client-secret` and name it in `oidc.existingSecret`.

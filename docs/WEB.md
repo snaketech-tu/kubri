@@ -99,7 +99,7 @@ kubectl -n kubri port-forward svc/kubri 7878:80
 
 Then open <http://localhost:7878>. What Kubri may do is what the service account may do: bind the `edit` role instead of `view` to change things, open shells and see Secrets and Helm releases, or `cluster-admin` for everything. Keep one replica, since sign-ins and port-forwards live in the pod.
 
-The Helm chart in [`deploy/helm/kubri`](../deploy/helm/kubri) sets up the same with a password (`auth=password`, with `rbac.clusterRole` for the service account's role), or with OpenID Connect for a team (`auth=oidc`, see [Install it with Helm](TEAMS.md#install-it-with-helm)).
+The Helm chart, `oci://ghcr.io/snaketech-tu/charts/kubri` (source in [`deploy/helm/kubri`](../deploy/helm/kubri)), sets up the same with a password (`auth=password`, with `rbac.clusterRole` for the service account's role), or with OpenID Connect for a team (`auth=oidc`, see [Install it with Helm](TEAMS.md#install-it-with-helm)).
 
 ## Behind a reverse proxy
 
