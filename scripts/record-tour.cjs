@@ -27,7 +27,7 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), 'kubri-tour-'));
   await page.goto(base + '/');
   // Start on the first context, whatever the last run switched to.
   await page.evaluate(() =>
-    fetch('api/context', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'lab' }) })
+    fetch('api/call', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ call: 'switchContext', name: 'lab' }) })
   );
   await page.goto(base + '/#/');
   await page.reload();

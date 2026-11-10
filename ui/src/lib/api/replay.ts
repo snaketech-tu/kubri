@@ -42,6 +42,8 @@ export interface Answer {
 /** A recording by key, as the demo looks things up. */
 export interface Replay {
 	http: Map<string, Answer>;
+	/** The last answer to each call of the call table, whatever its arguments. */
+	calls: Map<string, Answer>;
 	sockets: Map<string, Pick<RecordedSocket, 'messages' | 'closed'>>;
 }
 
@@ -88,13 +90,28 @@ export function socketKey(path: string, first?: string | null): string {
 	return `WS ${path}${bodyKey(first)}`;
 }
 
+/** The name of a call to `/call`, from its body. */
+function callName(path: string, body: string | null | undefined): string | null {
+	if (path !== '/call' || !body) return null;
+	try {
+		const name = JSON.parse(body)?.call;
+		return typeof name === 'string' ? name : null;
+	} catch {
+		return null;
+	}
+}
+
 /** Looks a recording up by key; a later answer to the same request wins. */
 export function index(recording: Recording): Replay {
-	const replay: Replay = { http: new Map(), sockets: new Map() };
+	const replay: Replay = { http: new Map(), calls: new Map(), sockets: new Map() };
 	const origin = 'http://demo';
 	for (const r of recording.http) {
 		const path = apiPath(new URL(r.url, origin));
-		if (path !== null) replay.http.set(httpKey(r.method, path, r.body), { status: r.status, type: r.type, body: r.response });
+		if (path === null) continue;
+		const recorded = { status: r.status, type: r.type, body: r.response };
+		replay.http.set(httpKey(r.method, path, r.body), recorded);
+		const name = callName(path, r.body);
+		if (name) replay.calls.set(name, recorded);
 	}
 	for (const s of recording.sockets) {
 		const path = apiPath(new URL(s.url.replace(/^ws/, 'http'), origin));
@@ -103,24 +120,25 @@ export function index(recording: Recording): Replay {
 	return replay;
 }
 
-/** Paths whose answer does not depend on the query or body for the demo, such as times. */
-const ANY_VARIANT = ['/history', '/usage-history', '/charts', '/release', '/integrations'];
+/** Calls whose answer does not depend on their arguments for the demo, such as times. */
+const ANY_VARIANT = ['history', 'usageHistory', 'charts', 'latestRelease', 'integrations'];
+
+/** Calls that change settings, which change in the browser only. */
+const SETTINGS = /^set\w*(Settings|Templates|Searches)$/;
 
 /** The recorded answer to a request, or an error that says the demo has none. */
 export function answer(replay: Replay, method: string, path: string, body?: string | null): Answer {
 	const found = replay.http.get(httpKey(method, path, body));
 	if (found) return found;
-	const bare = path.split('?')[0];
-	if (ANY_VARIANT.includes(bare)) {
-		const prefix = `${method.toUpperCase()} ${bare}`;
-		for (const [key, value] of replay.http) {
-			if (key === prefix || key.startsWith(`${prefix}?`) || key.startsWith(`${prefix} `)) return value;
-		}
+	const name = callName(path, body);
+	if (name && ANY_VARIANT.includes(name)) {
+		const any = replay.calls.get(name);
+		if (any) return any;
 	}
-	// Settings change in the browser only; the demo shows them as they were.
-	if (method.toUpperCase() === 'PUT' && bare.startsWith('/settings/')) {
-		const settings = replay.http.get(httpKey('GET', '/settings'));
-		if (settings) return settings;
+	// The demo shows the settings as they were.
+	if (name && SETTINGS.test(name)) {
+		const reply = replay.calls.get('settings');
+		if (reply?.status === 200) return { ...reply, body: JSON.stringify(JSON.parse(reply.body).settings) };
 	}
 	return { status: 501, type: 'application/json', body: JSON.stringify({ error: NOT_RECORDED }) };
 }

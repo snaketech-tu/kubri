@@ -12,28 +12,37 @@ const created=new Date(Date.now()-1200000).toISOString();
 const rows=['CrashLoopBackOff','Pending','Completed','Running'].map((status,i)=>({key:String(i),name:['emails','inventory','finished-job','api'][i],namespace:'shop',created,labels:{app:['emails','inventory','job','api'][i]},owners:[],cells:[['emails','inventory','finished-job','api'][i],status==='Running'?'1/1':'0/1',status,status==='CrashLoopBackOff'?8:0,'20m']}));
 const pod={apiVersion:'v1',kind:'Pod',metadata:{name:'emails',namespace:'shop',uid:'pod-1',resourceVersion:'10',creationTimestamp:created,labels:{app:'emails'}},spec:{nodeName:'worker-02',containers:[{name:'emails',image:'emails:1.0'}]},status:{phase:'Running',containerStatuses:[{name:'emails',ready:false,restartCount:8,state:{waiting:{reason:'CrashLoopBackOff'}},lastState:{terminated:{exitCode:1,reason:'Error'}}}]}};
 const event={kind:'Warning',reason:'BackOff',message:'Back-off restarting failed container',count:8,source:'kubelet',lastSeen:created,objectKind:'Pod',object:{resource:ref,namespace:'shop',name:'emails'}};
-const pulse={cpu:{used:2700,requested:2000,capacity:8000},memory:{used:900000000,requested:800000000,capacity:1600000000},kinds:[{kind:'Pod',resource:ref,total:4,ok:2,warning:1,failed:1,error:null}],events:{normal:4,warning:8,recent:[event,event],error:null}};
+const pulse={certificates:[],cpu:{used:2700,requested:2000,capacity:8000},memory:{used:900000000,requested:800000000,capacity:1600000000},kinds:[{kind:'Pod',resource:ref,total:4,ok:2,warning:1,failed:1,error:null}],events:{normal:4,warning:8,recent:[event,event],error:null}};
 const k9s={dirs:[],files:[],aliases:[],hotkeys:[],plugins:[],skins:[],skin:null,readOnly:false,defaultView:null,thresholds:{cpu:{warn:70,critical:90},memory:{warn:70,critical:90}},logger:{tail:100,sinceSeconds:-1,showTime:false,textWrap:false,disableAutoscroll:false},portForwardAddress:null,jumps:[]};
-// Calls of the core's call table, as the routes these fixtures answer.
-const CALLS={contexts:'/contexts',reloadContexts:'/contexts/reload',switchContext:'/context'};
-const pathOf=(p,req)=>p==='/call'?(CALLS[req.postDataJSON().call]??`/call/${req.postDataJSON().call}`):p;
+// The method of each change to an object, by its call.
+const CHANGES={replaceObject:'PUT',patchObject:'PATCH',deleteObject:'DELETE'};
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.argv[3]?{executablePath:process.argv[3]}:{})});
  const page=await browser.newPage({viewport:{width:1440,height:900}});
+ await page.addInitScript(()=>localStorage.setItem('kubri.tour','seen'));
  const errors=[], mutations=[];let failSave=false, context='test-cluster', tableSocket;
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/**',async route=>{
-  const req=route.request(),url=new URL(req.url()),p=pathOf(url.pathname.replace('/api',''),req);let data=[];let status=200;
+  // Calls of the core's call table come to /call, named by `call` in the body.
+  const req=route.request(),url=new URL(req.url()),p=url.pathname.replace('/api','');let data=[];let status=200;
+  const c=p==='/call'?req.postDataJSON():{},call=c.call;
   if(p==='/session')data={signedIn:true,required:false};
-  if(p==='/contexts'||p==='/contexts/reload')data={contexts:[{name:context,cluster:'test',namespace:'shop',user:null,isDefault:true}],cluster:{context,server:'https://fixture.invalid',version:'v1.36.0',defaultNamespace:'shop'}};
-  if(p==='/context'){context=JSON.parse(req.postData()).name;data={context,server:'https://fixture.invalid',version:'v1.36.0',defaultNamespace:'shop'};}
-  if(p==='/resources')data=[resource,{...resource,plural:'namespaces',kind:'Namespace',shortNames:['ns'],namespaced:false}];
-  if(p==='/k9s')data=k9s;
-  if(p==='/pulse')data=pulse;
-  if(p==='/object'&&req.method()==='GET')data=pod;
-  if(p==='/events')data=[event];
-  if(p==='/metrics')data=rows.map(r=>({name:r.name,namespace:'shop',cpu:20,memory:10485760,requests:{cpu:100,memory:104857600},limits:{cpu:1000,memory:1048576000}}));
-  if(p==='/object'&&req.method()!=='GET'){mutations.push({method:req.method(),body:JSON.parse(req.postData())});if(failSave){status=409;data={error:'Object changed on server'};}else data=pod;}
+  if(call==='contexts'||call==='reloadContexts')data={contexts:[{name:context,cluster:'test',namespace:'shop',user:null,isDefault:true}],cluster:{context,server:'https://fixture.invalid',version:'v1.36.0',defaultNamespace:'shop'}};
+  if(call==='switchContext'){context=c.name;data={context,server:'https://fixture.invalid',version:'v1.36.0',defaultNamespace:'shop'};}
+  if(call==='resources')data=[resource,{...resource,plural:'namespaces',kind:'Namespace',shortNames:['ns'],namespaced:false}];
+  if(call==='k9sConfig')data=k9s;
+  if(call==='settings')data={error:null,settings:{contexts:{},diff:{scale:false,restart:false,image:true,labels:true},agents:{http:false,port:7879,secrets:false},explain:{provider:'none',baseUrl:'',model:''},debug:{image:'busybox'},columns:{},searches:[],history:{record:false,keepDays:14,maxMb:200}}};
+  if(call==='guard')data={readOnly:false,reason:null,canUnlock:false,unlockedFor:null};
+  if(call==='views')data={views:[],errors:[]};
+  if(call==='managedBy'||call==='schema'||call==='drill')data=null;
+  if(call==='integrations')data={items:[],errors:[]};
+  if(call==='access')data=c.checks.map(()=>true);
+  if(call==='history')data={context,entries:[],more:false,watched:[],recorder:{recording:false,reason:'Off in this check',skipped:[],since:null}};
+  if(call==='pulse')data=pulse;
+  if(call==='getObject')data=pod;
+  if(call==='events')data=[event];
+  if(call==='metrics')data=rows.map(r=>({name:r.name,namespace:'shop',cpu:20,memory:10485760,requests:{cpu:100,memory:104857600},limits:{cpu:1000,memory:1048576000}}));
+  if(CHANGES[call]){mutations.push({method:CHANGES[call],body:c});if(failSave){status=409;data={error:'Object changed on server'};}else data=pod;}
   await route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
  });
  await page.routeWebSocket('**/api/table?**',socket=>{
@@ -66,7 +75,7 @@ const pathOf=(p,req)=>p==='/call'?(CALLS[req.postDataJSON().call]??`/call/${req.
  await page.getByRole('button',{name:'Keep editing',exact:true}).click();
  failSave=false;await page.getByRole('button',{name:'Close',exact:true}).click();await page.getByRole('button',{name:'Discard changes',exact:true}).click();
  await page.getByRole('button',{name:'Pods',exact:true}).click();
- await page.getByRole('button',{name:'emails',exact:true}).click();
+ await page.getByRole('cell',{name:'emails',exact:true}).click();
  await page.screenshot({path:path.join(out,'pods.png')});
  await page.getByRole('button',{name:'Close',exact:true}).click();
  await page.keyboard.press('z');await page.getByRole('dialog',{name:'Delete Pod',exact:true}).waitFor();
@@ -75,7 +84,7 @@ const pathOf=(p,req)=>p==='/call'?(CALLS[req.postDataJSON().call]??`/call/${req.
  assert.equal(await page.evaluate(()=>document.activeElement?.textContent),'Cancel');
  await page.keyboard.press('Enter');assert.equal(mutations.filter(m=>m.method==='DELETE').length,0);
  await page.getByRole('button',{name:'Pods',exact:true}).click();
- await page.getByRole('button',{name:'emails',exact:true}).click();
+ await page.getByRole('cell',{name:'emails',exact:true}).click();
  for(const width of [1440,1280,900,768,390,320]){
   await page.setViewportSize({width,height:width===900?560:900});
   const size=await page.evaluate(()=>({doc:document.documentElement.scrollWidth,win:innerWidth}));assert.ok(size.doc<=width+1,`Inspector overflow at ${width}: ${size.doc}`);

@@ -143,6 +143,7 @@ import type { SearchRequest } from './generated/SearchRequest';
 import type { SearchResult } from './generated/SearchResult';
 import type { ServiceCheck } from './generated/ServiceCheck';
 import type { Settings } from './generated/Settings';
+import type { SettingsReply } from './generated/SettingsReply';
 import type { SizeAdvice } from './generated/SizeAdvice';
 import type { SizeReason } from './generated/SizeReason';
 import type { SnapshotInfo } from './generated/SnapshotInfo';
@@ -302,6 +303,7 @@ export type {
 	SearchResult,
 	ServiceCheck,
 	Settings,
+	SettingsReply,
 	SizeAdvice,
 	SizeReason,
 	SnapshotInfo,
@@ -321,12 +323,6 @@ export type {
 };
 
 export type IntegrationId = Integration['id'];
-
-export interface SettingsReply {
-	settings: Settings;
-	/** Why the settings file could not be read. */
-	error: string | null;
-}
 
 export interface KubeObject {
 	apiVersion?: string;

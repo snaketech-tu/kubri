@@ -22,4 +22,25 @@ describe('callBackend', () => {
 			{ call: 'cancelSwitch' }
 		]);
 	});
+
+	it('sends request objects next to the call and fills left-out arguments with null', async () => {
+		const sent: Request[] = [];
+		const backend = callBackend(async (request) => {
+			sent.push(request);
+			return null;
+		});
+		const target = { resource: { group: '', version: 'v1', plural: 'pods' }, namespace: 'shop', name: 'web' };
+		await backend.startPortForward({ target, remotePort: 80 });
+		await backend.deleteObject(target);
+		await backend.helmRelease('shop', 'web');
+		await backend.access([]);
+		expect(await backend.scale(target, 2)).toBeUndefined();
+		expect(sent).toEqual([
+			{ call: 'startPortForward', target, remotePort: 80 },
+			{ call: 'deleteObject', target, options: null },
+			{ call: 'helmRelease', namespace: 'shop', name: 'web', revision: null },
+			{ call: 'access', checks: [], fresh: false },
+			{ call: 'scale', target, replicas: 2 }
+		]);
+	});
 });

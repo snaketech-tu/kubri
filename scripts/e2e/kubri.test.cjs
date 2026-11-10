@@ -347,12 +347,13 @@ describe('read-only', () => {
 		await roPage.keyboard.press('Control+d');
 		await roPage.getByText(/Delete is not available/).waitFor();
 		assert.equal(await roPage.getByRole('dialog', { name: 'Delete ConfigMap' }).count(), 0);
-		const response = await fetch(`${readOnly.url}/api/object`, {
-			method: 'DELETE',
+		const target = { resource: { group: '', version: 'v1', plural: 'configmaps' }, namespace: 'e2e', name: 'settings' };
+		const response = await fetch(`${readOnly.url}/api/call`, {
+			method: 'POST',
 			headers: { 'content-type': 'application/json', origin: readOnly.url },
-			body: JSON.stringify({ resource: { group: '', version: 'v1', plural: 'configmaps' }, namespace: 'e2e', name: 'settings' })
+			body: JSON.stringify({ call: 'deleteObject', target, options: null })
 		});
-		assert.ok(!response.ok, `the server refuses a delete, answered ${response.status}`);
+		assert.equal(response.status, 403, 'the server refuses a delete');
 		assert.match(h.kubectl('get', 'configmap', 'settings', '-n', 'e2e', '-o', 'name'), /settings/);
 	});
 });

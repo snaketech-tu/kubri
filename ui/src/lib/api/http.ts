@@ -1,6 +1,7 @@
 import { session } from '../session.svelte';
-import { callBackend } from './rpc';
-import type { Backend, ObjectRef, TerminalEvent, TerminalSession } from './types';
+import type { Request } from './generated/Request';
+import { callBackend, caller } from './rpc';
+import type { Backend, TerminalEvent, TerminalSession } from './types';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
 	const response = await fetch(`/api${path}`, {
@@ -14,15 +15,6 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 		throw new Error(payload?.error ?? `${response.status} ${response.statusText}`);
 	}
 	return response.json();
-}
-
-function objectQuery(target: ObjectRef) {
-	return new URLSearchParams({
-		...target.resource,
-		...(target.context ? { context: target.context } : {}),
-		namespace: target.namespace ?? '',
-		name: target.name
-	});
 }
 
 function socketUrl(path: string) {
@@ -90,9 +82,12 @@ function terminalSocket(path: string, request: unknown, onEvent: (event: Termina
 	};
 }
 
+/** A call of the core's call table. */
+const send = (call: Request) => request('POST', '/call', call);
+
 /** Talks to kubri-server over HTTP and WebSockets. */
 export const httpBackend: Backend = {
-	...callBackend((call) => request('POST', '/call', call)),
+	...callBackend(send),
 	chooseKubeconfigFiles: async () => null,
 	addKubeconfigFiles: () => Promise.reject(new Error('In the browser, add contexts from a file instead')),
 	removeKubeconfigFile: () => Promise.reject(new Error('Only the desktop app chooses kubeconfig files')),
@@ -126,39 +121,15 @@ export const httpBackend: Backend = {
 		}
 		return response.json();
 	},
-	closeSnapshot: () => request('DELETE', '/snapshot'),
-	resources: () => request('GET', '/resources'),
-	refreshResources: () => request('POST', '/resources/refresh'),
-	preview: (target, change) => request('POST', '/object/preview', { target, change }),
-	schema: (resource) =>
-		request('GET', `/schema?${new URLSearchParams({ group: resource.group, version: resource.version, plural: resource.plural })}`),
-	access: (checks, fresh = false) => request('POST', '/access', { checks, fresh }),
-	whoAmI: () => request('GET', '/whoami'),
-	readableNamespaces: () => request('GET', '/namespaces/readable'),
-	settings: () => request('GET', '/settings'),
-	setContextSettings: (name, settings) => request('PUT', '/settings/context', { name, settings }),
-	setDiffSettings: (settings) => request('PUT', '/settings/diff', settings),
-	setHistorySettings: (settings) => request('PUT', '/settings/history', settings),
-	setConnectionSettings: (settings) => request('PUT', '/settings/connections', settings),
-	setTerminalSettings: (settings) => request('PUT', '/settings/terminal', settings),
-	setLabelTemplates: (templates) => request('PUT', '/settings/labels', templates),
-	history: (query) => request('POST', '/history', query),
-	historyDetail: (id) => request('GET', `/history/${id}`),
-	setColumnSettings: (kind, columns) => request('PUT', '/settings/columns', { kind, columns }),
-	setAgentSettings: (settings) => request('PUT', '/settings/agents', settings),
 	agentConnection: () => request('GET', '/agents'),
 	newAgentToken: () => request('POST', '/agents/token'),
 	agentRequests: () => request('GET', '/agents/pending'),
 	answerAgent: (id, allow) => request('POST', '/agents/answer', { id, allow }),
 	agentCalls: () => request('GET', '/agents/calls'),
-	setExplainSettings: (settings) => request('PUT', '/settings/explain', settings),
 	explainKey: () => request('GET', '/explain/key'),
 	setExplainKey: (key) => request('PUT', '/explain/key', { key }),
 	explainPrompt: (subject) => request('POST', '/explain/prompt', subject),
 	explain: (text) => request('POST', '/explain', { text }),
-	guard: () => request('GET', '/guard'),
-	unlock: () => request('POST', '/guard/unlock'),
-	lock: () => request('POST', '/guard/lock'),
 
 	watchTable(resource, namespace, scope, onEvent) {
 		const params = new URLSearchParams({ ...resource, namespace: namespace ?? '' });
@@ -178,42 +149,6 @@ export const httpBackend: Backend = {
 			socket.close();
 		};
 	},
-
-	getObject: (target) => request('GET', `/object?${objectQuery(target)}`),
-	getObjectElsewhere: (target) => request('GET', `/object/elsewhere?${objectQuery(target)}`),
-	replaceObject: (target, value) => request('PUT', '/object', { target, value }),
-	patchObject: (target, patch) => request('PATCH', '/object', { target, patch }),
-	deleteObject: (target, options) => request('DELETE', '/object', { target, options: options ?? {} }),
-	scale: (target, replicas) => request('POST', '/object/scale', { target, replicas }),
-	restart: (target) => request('POST', '/object/restart', { target }),
-	debug: (req) => request('POST', '/debug', req),
-	memoryFix: (target, container) => request('POST', '/fix/memory', { target, container }),
-	setMemoryLimit: (target, container, memory) => request('POST', '/fix/memory/apply', { target, container, memory }),
-	scheduling: (target) => request('POST', '/fix/scheduling', { target }),
-	capacity: (target) => request('POST', '/object/capacity', { target }),
-	serviceCheck: (target) => request('POST', '/fix/service', { target }),
-	apply: (body) => request('POST', '/apply', body),
-	fetchManifest: (url) => request('POST', '/apply/fetch', { url }),
-	drill: (target) => request('POST', '/object/drill', { target }),
-	usedBy: (target) => request('POST', '/object/used-by', { target }),
-	triggerCronJob: async (target) => (await request<{ name: string }>('POST', '/cronjob/trigger', { target })).name,
-	suspendCronJob: (target, suspend) => request('POST', '/cronjob/suspend', { target, suspend }),
-	gitops: (target, action) => request('POST', '/gitops', { target, action }),
-	renewCertificate: (target) => request('POST', '/certificate/renew', { target }),
-	search: (body) => request('POST', '/search', body),
-	setSavedSearches: (searches) => request('PUT', '/settings/searches', searches),
-	fleetCluster: (context) => request('GET', `/fleet?${new URLSearchParams({ context })}`),
-	rightSizing: (namespace) => request('GET', `/right-sizing${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ''}`),
-	setResources: (target, containers) => request('POST', '/object/resources', { target, containers }),
-	managedBy: (target) => request('POST', '/object/managed-by', { target }),
-	views: () => request('GET', '/views'),
-	renderView: (resource, object) => request('POST', '/view', { resource, object }),
-	setImages: (target, images) => request('POST', '/object/images', { target, images }),
-	rollback: async (target) => (await request<{ name: string }>('POST', '/replicaset/rollback', { target })).name,
-	events: (namespace, uid) =>
-		request('GET', `/events?${new URLSearchParams({ namespace: namespace ?? '', uid })}`),
-	metrics: (kind, namespace) =>
-		request('GET', `/metrics?${new URLSearchParams({ kind, namespace: namespace ?? '' })}`),
 
 	streamLogs(target, options, onEvent) {
 		let stopped = false;
@@ -237,54 +172,10 @@ export const httpBackend: Backend = {
 
 	openTerminal: (target, options, onEvent) => terminalSocket('/terminal', { target, options }, onEvent),
 
-	portForwards: () => request('GET', '/portforwards'),
-	startPortForward: (req) => request('POST', '/portforwards', req),
-	startFavoriteForwards: () => request('POST', '/portforwards/favorites'),
-	stopPortForward: (id) => request('DELETE', `/portforwards/${id}`),
-	benchmarks: () => request('GET', '/benchmarks'),
-	startBenchmark: (req) => request('POST', '/benchmarks', req),
-	stopBenchmark: (id) => request('POST', `/benchmarks/${id}/stop`),
-	removeBenchmark: (id) => request('DELETE', `/benchmarks/${id}`),
-	cordon: (name, cordoned) => request('POST', '/node/cordon', { name, cordoned }),
-	drain: (name, options) => request('POST', '/node/drain', { name, options }),
-	pulse: (namespace) => request('GET', `/pulse?${new URLSearchParams({ namespace: namespace ?? '' })}`),
-	integrations: (fresh) => request('GET', `/integrations?fresh=${fresh}`),
-	charts: (target, range) => request('POST', '/charts', { target, range }),
-	dashboards: (target) => request('POST', '/grafana/dashboards', { target }),
-	grafanaLogs: (target) => request('POST', '/grafana/logs', { target }),
-	integrationUrl: async (id) => ((await request('POST', '/integrations/url', { id })) as { url: string }).url,
-	lokiLogs: (request_) => request('POST', '/loki/logs', request_),
-	usageHistory: (namespace, seconds) =>
-		request('GET', `/usage-history?${new URLSearchParams({ namespace: namespace ?? '', seconds: String(seconds) })}`),
-	graph: (namespace) => request('GET', `/graph?${new URLSearchParams({ namespace: namespace ?? '' })}`),
-	xray: (resource, namespace) =>
-		request('GET', `/xray?${new URLSearchParams({ ...resource, namespace: namespace ?? '' })}`),
-	sanitize: (namespace) => request('GET', `/sanitize?${new URLSearchParams({ namespace: namespace ?? '' })}`),
-	rbac: (namespace) => request('GET', `/rbac?${new URLSearchParams({ namespace: namespace ?? '' })}`),
-	permissions: (namespace) => request('GET', `/permissions?${new URLSearchParams({ namespace: namespace ?? '' })}`),
-	helmReleases: (namespace) => request('GET', `/helm/releases?${new URLSearchParams({ namespace: namespace ?? '' })}`),
-	helmRelease(namespace, name, revision) {
-		const params = new URLSearchParams({ namespace, name });
-		if (revision !== undefined) params.set('revision', String(revision));
-		return request('GET', `/helm/release?${params}`);
-	},
-	helmHistory: (namespace, name) => request('GET', `/helm/history?${new URLSearchParams({ namespace, name })}`),
-	helmVersion: () => request<{ version: string | null }>('GET', '/helm/version').then((r) => r.version),
-	latestRelease: () => request('GET', '/release'),
-	checkUpdate: () => request('GET', '/release'),
+	checkUpdate: () => caller(send)('latestRelease'),
 	installUpdate: () => Promise.reject(new Error('Kubri in the browser is updated where it runs')),
-	helmRollback: (namespace, name, revision) => request('POST', '/helm/rollback', { namespace, name, revision }),
-	helmUninstall: (namespace, name) => request('POST', '/helm/uninstall', { namespace, name }),
-	helmChange: (change) => request('POST', '/helm/change', change),
-	helmChartValues: (chart) => request('POST', '/helm/chart-values', chart),
-	helmSearch: (query) => request('GET', `/helm/search?${new URLSearchParams({ query })}`),
-	k9sConfig: () => request('GET', '/k9s'),
-	k9sSkin: (name) => request('GET', `/k9s/skins/${encodeURIComponent(name)}`),
-	runPlugin: (run) => request('POST', '/plugins/run', run),
 	openPlugin: (run, onEvent) => terminalSocket('/plugins/terminal', run, onEvent),
-	localClusters: () => request('GET', '/local-cluster'),
 	createLocalCluster: (req, onEvent) => terminalSocket('/local-cluster/create', req, onEvent),
-	localTerminalInfo: () => request('GET', '/terminal/local'),
 	openLocalTerminal: (options, onEvent) => terminalSocket('/terminal/local/open', options, onEvent),
 	desktop: false,
 	async openUrl(url) {
