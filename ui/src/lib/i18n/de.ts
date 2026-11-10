@@ -2093,6 +2093,7 @@ const de: Record<string, string> = {
 	'Choose a deployment, service or pod': 'Deployment, Service oder Pod wählen',
 	'Nothing to forward to in this namespace': 'In diesem Namespace gibt es nichts für einen Port-Forward',
 	'new forward': 'neuer Forward',
+	'Local port {port} is in use by the forward to {target}. Choose another, or leave it empty for any free port.': 'Der lokale Port {port} wird schon vom Forward zu {target} genutzt. Wähle einen anderen oder lass das Feld leer für einen freien Port.',
 	'Favorites in {context}': 'Favoriten in {context}',
 	'Forget this favorite': 'Diesen Favoriten vergessen',
 	'{n} running': '{n} aktiv',

@@ -1,15 +1,17 @@
 <script lang="ts">
 	import { lightDismiss } from '../dismiss';
-	import { untrack } from 'svelte';
-	import { startPortForward } from '../actions';
+	import { tick, untrack } from 'svelte';
+	import { copyLines, startPortForward } from '../actions';
 	import { backend, type ObjectRef } from '../api';
 	import { errorMessage } from '../format';
-	import { forwardKinds, targetKey, targetOptions } from '../forwards';
+	import { forwardKinds, targetOptions } from '../forwards';
 	import { t } from '../i18n';
 	import { coreText } from '../i18n/errors';
+	import { kubectlCommand } from '../kubectl';
 	import { forwardablePorts, startingPort, type ForwardablePort } from '../pods';
 	import { plainOptions, type SelectOption } from '../select';
 	import { ALL_NAMESPACES, app, refOf } from '../state.svelte';
+	import Phrase from './Phrase.svelte';
 	import PortForwardFields from './PortForwardFields.svelte';
 	import Select from './Select.svelte';
 
@@ -34,6 +36,8 @@
 	// k9s `portForwardAddress`, or K9S_DEFAULT_PF_ADDRESS.
 	let address = $state(untrack(() => app.k9s?.portForwardAddress) ?? '127.0.0.1');
 	let keep = $state(false);
+	/** The local port field, which takes the focus once a target is chosen: it is the one people change. */
+	let localField = $state<HTMLInputElement | HTMLTextAreaElement>();
 	let busy = $state(false);
 	let error = $state<string | null>(null);
 
@@ -87,6 +91,10 @@
 				ports = forwardablePorts(obj);
 				const start = startingPort(obj);
 				if (start) ({ remote: remotePort, local: localPort } = start);
+				void tick().then(() => {
+					localField?.focus();
+					if (localField instanceof HTMLInputElement) localField.select();
+				});
 			})
 			.catch((err) => {
 				if (target !== chosen) return;
@@ -122,6 +130,11 @@
 		busy = false;
 		if (ok) app.dialog = null;
 	}
+
+	/** The same as kubectl, as the fields now say. */
+	const commandLine = $derived(
+		target ? kubectlCommand(context, target, { op: 'portForward', local: localPort, remote: remotePort, address: address.trim() }) : null
+	);
 
 	const placeholder = $derived(
 		options === null ? t('Loading…') : options.length ? t('Choose a deployment, service or pod') : t('Nothing to forward to in this namespace')
@@ -176,8 +189,18 @@
 					bind:localPort
 					bind:address
 					bind:keep
+					bind:firstField={localField}
 				/>
 			</div>
+		{/if}
+		{#if commandLine && remotePort}
+			<details class="command-line">
+				<summary><Phrase text={t('Same as {command}')} code={{ command: 'kubectl' }} /></summary>
+				<div class="command-row">
+					<pre>{commandLine}</pre>
+					<button type="button" class="copy" onclick={() => copyLines([commandLine])}>{t('Copy')}</button>
+				</div>
+			</details>
 		{/if}
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 
@@ -244,6 +267,40 @@
 	}
 	.error {
 		color: var(--bad);
+	}
+	.command-line {
+		margin-top: 12px;
+		font-size: 12.5px;
+		color: var(--text-muted);
+	}
+	.command-line summary {
+		cursor: pointer;
+	}
+	.command-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+		margin-top: 6px;
+	}
+	.command-row pre {
+		flex: 1;
+		margin: 0;
+		padding: 7px 9px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--bg);
+		color: var(--text);
+		font-family: var(--mono);
+		font-size: 12px;
+		white-space: pre-wrap;
+		word-break: break-all;
+	}
+	.copy {
+		padding: 4px 9px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface-1);
+		font-size: 12px;
 	}
 	.buttons {
 		display: flex;

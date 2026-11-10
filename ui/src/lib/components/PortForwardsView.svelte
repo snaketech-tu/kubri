@@ -118,7 +118,7 @@
 		subtitle={t('Local ports tunneled to pods. They keep running while you work elsewhere in Kubri, and move to another pod when theirs goes away.')}
 	>
 		{#snippet tools()}
-			{#if canStart}<button class="btn" onclick={choose} title={t('Choose a namespace, a target and a port (Shift+F)')}>{t('Start a port-forward…')}</button>{/if}
+			{#if canStart && forwards.length}<button class="btn" onclick={choose} title={t('Choose a namespace, a target and a port (Shift+F)')}>{t('Start a port-forward…')}</button>{/if}
 		{/snippet}
 	</PageHeader>
 
@@ -177,7 +177,7 @@
 				<div class="empty" role="status">
 					<p>{t('No port-forwards running.')}</p>
 					<p class="muted"><Phrase text={t('Select a pod, deployment or service and press {key} to start one.')} kbd={{ key: 'Shift+F' }} /></p>
-					{#if canStart}<button class="btn" onclick={choose}>{t('Start a port-forward…')}</button>{/if}
+					{#if canStart}<button class="btn" onclick={choose} title={t('Choose a namespace, a target and a port (Shift+F)')}>{t('Start a port-forward…')}</button>{/if}
 				</div>
 			{/if}
 			{#if app.favorites.here.length}
