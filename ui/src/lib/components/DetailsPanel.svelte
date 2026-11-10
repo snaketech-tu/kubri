@@ -6,6 +6,7 @@
 
 <script lang="ts">
 	import { midSentence, t } from '../i18n';
+	import { every } from '../poll';
 	import { store, stored } from '../storage';
 	import { tick, untrack } from 'svelte';
 	import { parse, stringify } from 'yaml';
@@ -16,7 +17,7 @@
 	import { dock } from '../dock.svelte';
 	import { errorMessage, isNotFound, workloadPrefix } from '../format';
 	import { drafts } from '../navigation.svelte';
-	import { focusForKeys } from '../keys';
+	import { focusForKeys, forControl } from '../keys';
 	import { containerNames, hasLogs, hasUsers, isPods, isServices } from '../pods';
 	import { clampWidth, followDrag } from '../resize';
 	import { app, type Details, type DetailsTab } from '../state.svelte';
@@ -45,7 +46,7 @@
 
 	let { details }: { details: Details } = $props();
 
-	const REFRESH = 5000;
+	const REFRESH = 15_000;
 
 	let object = $state<KubeObject | null>(null);
 	let events = $state<EventInfo[]>([]);
@@ -76,11 +77,10 @@
 		object = null;
 		events = [];
 		load();
-		const timer = setInterval(() => {
+		return every(REFRESH, () => {
 			if (details.editing) watchServer();
 			else if (['describe', 'events', 'yaml'].includes(details.tab)) load();
-		}, REFRESH);
-		return () => clearInterval(timer);
+		});
 	});
 
 	/** What uses the object, as k9s `u` finds it, looked up when Describe shows; or why not. */
@@ -367,6 +367,103 @@
 		app.showDetails(details.resource, details.target, value);
 	}
 
+	/** The tabs on offer, in their order, for the arrow keys. */
+	const tabs = $derived<DetailsTab[]>([
+		'describe',
+		'events',
+		'yaml',
+		...(charts ? (['metrics'] as const) : []),
+		...(logs ? (['logs'] as const) : []),
+		...(shell ? (['shell'] as const) : [])
+	]);
+
+	/** Where the focus was before it came into the inspector, to go back to with Esc. */
+	let cameFrom: HTMLElement | null = null;
+	function onfocusin(e: FocusEvent) {
+		const from = e.relatedTarget as HTMLElement | null;
+		if (from && !aside?.contains(from)) cameFrom = from;
+	}
+
+	function focusTab() {
+		void tick().then(() => {
+			const active = aside?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+			if (active) focusForKeys(active);
+		});
+	}
+
+	/** What scrolls on the tab shown: its page, or the YAML. */
+	function scroller() {
+		return aside?.querySelector<HTMLElement>('.body .scroll, .body .cm-scroller') ?? null;
+	}
+
+	/**
+	 * The keys while the focus is in the inspector: ← → change the tab, the browser scrolls with
+	 * ↑ ↓ and the page keys, j k g G scroll as in the lists, and Esc goes back to where the focus
+	 * came from. The list behind does not see these keys, so it keeps its row. Logs, the shell,
+	 * the editor and fields keep their own keys; the action keys (y, e, Ctrl+D …) still work.
+	 */
+	function onkeys(e: KeyboardEvent) {
+		if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+		const el = e.target as HTMLElement;
+		if (forControl(e) || el.closest('.tool')) return;
+		const onTab = el.getAttribute('role') === 'tab';
+		const step = (delta: number) => {
+			const at = tabs.indexOf(details.tab);
+			tab(tabs[(at + delta + tabs.length) % tabs.length]);
+			focusTab();
+		};
+		switch (e.key) {
+			case 'ArrowLeft':
+				step(-1);
+				break;
+			case 'ArrowRight':
+				step(1);
+				break;
+			case 'Home':
+			case 'End':
+				if (!onTab) {
+					// The browser goes to the top or bottom of what scrolls.
+					e.stopPropagation();
+					return;
+				}
+				tab(e.key === 'Home' ? tabs[0] : tabs[tabs.length - 1]);
+				focusTab();
+				break;
+			case 'ArrowDown':
+				if (onTab) {
+					scroller()?.focus();
+					break;
+				}
+				e.stopPropagation();
+				return;
+			case 'ArrowUp':
+			case 'PageUp':
+			case 'PageDown':
+			case ' ':
+				e.stopPropagation();
+				return;
+			case 'j':
+			case 'k':
+				scroller()?.scrollBy({ top: e.key === 'j' ? 40 : -40 });
+				break;
+			case 'g':
+			case 'G': {
+				const box = scroller();
+				box?.scrollTo({ top: e.key === 'g' ? 0 : box.scrollHeight });
+				break;
+			}
+			case 'Escape':
+				if (cameFrom?.isConnected) cameFrom.focus();
+				else (document.activeElement as HTMLElement | null)?.blur();
+				cameFrom = null;
+				break;
+			default:
+				return;
+		}
+		e.preventDefault();
+		e.stopPropagation();
+	}
+
 	/** Moves the logs or shell into the workspace, where they keep running while you browse. */
 	function keep() {
 		const kind = details.tab;
@@ -425,7 +522,16 @@
 	const warnings = $derived(events.filter((e) => e.kind === 'Warning').length);
 </script>
 
-<aside aria-label={t('{kind} inspector', { kind: details.resource.kind })} class:compact={tool} bind:this={aside} bind:clientWidth={width}>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<aside
+	aria-label={t('{kind} inspector', { kind: details.resource.kind })}
+	data-inspector
+	class:compact={tool}
+	bind:this={aside}
+	bind:clientWidth={width}
+	{onfocusin}
+	onkeydown={onkeys}
+>
 	{#if !app.panelWide}
 		<!-- A focusable separator is a widget: it takes the arrow keys. -->
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
@@ -514,20 +620,24 @@
 	</header>
 
 	<nav aria-label={t('Inspector views')}>
-		<button class:active={details.tab === 'describe'} onclick={() => tab('describe')}>{t('Overview')} <kbd>d</kbd></button>
-		<button class:active={details.tab === 'events'} onclick={() => tab('events')}>
-			{t('Events')} <span class="n" class:alert={warnings}>{events.length}</span>
-		</button>
-		<button class:active={details.tab === 'yaml'} onclick={() => tab('yaml')}>YAML <kbd>y</kbd></button>
-		{#if charts}
-			<button class:active={details.tab === 'metrics'} onclick={() => tab('metrics')}>{t('Metrics')} <kbd>m</kbd></button>
-		{/if}
-		{#if logs}
-			<button class:active={details.tab === 'logs'} onclick={() => tab('logs')}>{t('Logs')} <kbd>l</kbd></button>
-		{/if}
-		{#if shell}
-			<button class:active={details.tab === 'shell'} onclick={() => tab('shell')}>{t('Shell')} <kbd>s</kbd></button>
-		{/if}
+		<div class="tabs" role="tablist" aria-label={t('Inspector views')}>
+			{#each tabs as value (value)}
+				<button
+					role="tab"
+					aria-selected={details.tab === value}
+					tabindex={details.tab === value ? 0 : -1}
+					class:active={details.tab === value}
+					onclick={() => tab(value)}
+				>
+					{#if value === 'describe'}{t('Overview')} <kbd>d</kbd>
+					{:else if value === 'events'}{t('Events')} <span class="n" class:alert={warnings}>{events.length}</span>
+					{:else if value === 'yaml'}YAML <kbd>y</kbd>
+					{:else if value === 'metrics'}{t('Metrics')} <kbd>m</kbd>
+					{:else if value === 'logs'}{t('Logs')} <kbd>l</kbd>
+					{:else}{t('Shell')} <kbd>s</kbd>{/if}
+				</button>
+			{/each}
+		</div>
 		<span class="spacer"></span>
 		{#if details.tab === 'yaml'}
 			<span class="view" role="group" aria-label={t('Show in the YAML')}>
@@ -619,13 +729,15 @@
 		{#if details.tab === 'logs' || details.tab === 'shell'}
 			<!-- Shown above. -->
 		{:else if details.tab === 'metrics' && charts}
-			<div class="scroll">
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="scroll" tabindex="0">
 				{#key targetKey}<MetricsPanel target={details.target} />{/key}
 			</div>
 		{:else if !object}
 			{#if !error}<p class="muted">{t('Loading…')}</p>{/if}
 		{:else if details.tab === 'describe'}
-			<div class="scroll">
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="scroll" tabindex="0">
 				<ManagedNote target={details.target} />
 				{#if isPods(details.resource)}<UsageGlance target={details.target} />{/if}
 				<StatusSummary {object} target={details.target} {now} />
@@ -651,7 +763,8 @@
 				{#if details.resource.group === 'apps' && ['deployments', 'statefulsets', 'daemonsets'].includes(details.resource.plural)}<RolloutHistory target={details.target} {now} />{/if}
 			</div>
 		{:else if details.tab === 'events'}
-			<div class="scroll events">
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="scroll events" tabindex="0">
 				<EventTimeline {events} {now} />
 			</div>
 		{:else}
@@ -873,14 +986,21 @@
 	nav > * {
 		flex: none;
 	}
-	nav > button:not(.primary):not(.secondary) {
+	.tabs {
+		display: contents;
+	}
+	.scroll:focus-visible {
+		outline-offset: -2px;
+	}
+	.tabs > button {
+		flex: none;
 		padding: 8px 10px;
 		border: none;
 		border-bottom: 2px solid transparent;
 		background: none;
 		color: var(--text-muted);
 	}
-	nav > button.active {
+	.tabs > button.active {
 		color: var(--accent-strong);
 		border-bottom-color: var(--accent);
 		font-weight: 600;

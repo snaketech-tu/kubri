@@ -45,6 +45,13 @@ describe('viewHints', () => {
 		expect(keys(viewHints(state({ readOnly: true })))).not.toContain('^d');
 	});
 
+	it('offers a new port-forward where there is a cluster to forward to', () => {
+		const forwards = (cluster: object | null) => keys(viewHints(state({ page: 'portforwards', cluster } as Partial<HintState>)));
+		expect(forwards({ context: 'c', snapshot: null })).toContain('⇧f');
+		expect(forwards({ context: 'c', snapshot: { file: 'x.kubri' } })).not.toContain('⇧f');
+		expect(forwards(null)).not.toContain('⇧f');
+	});
+
 	it('offers no row keys for an empty list', () => {
 		expect(keys(viewHints(state({ listRows: 0 })))).toEqual([':', '/', '?']);
 	});

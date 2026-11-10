@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { hintOf, type MenuAction } from '../menu';
 	import { t } from '../i18n';
+	import { roving } from '../roving';
 	import { app } from '../state.svelte';
 
 	let {
@@ -75,7 +76,7 @@
 	}
 </script>
 
-<div class="bar" class:marked class:compact role="toolbar" aria-label={t('Actions')} bind:this={bar} bind:clientWidth={width}>
+<div class="bar" class:marked class:compact role="toolbar" aria-label={t('Actions')} {@attach roving({ items: ':scope > button', orientation: 'horizontal' })} bind:this={bar} bind:clientWidth={width}>
 	{#if children}<span class="subject">{@render children()}</span>{/if}
 	{#each buttons as action, i (i)}
 		{@render button(action)}

@@ -9,10 +9,11 @@
 	import Phrase from '#lib/components/Phrase.svelte';
 	import { isTauri } from '@tauri-apps/api/core';
 	import { untrack } from 'svelte';
-	import { forControl } from '#lib/keys.js';
+	import { focusForKeys, forControl } from '#lib/keys.js';
 	import logo from '#lib/assets/logo.svg';
 	import { listenForBindings } from '#lib/bindings.js';
 	import ActionDialog from '#lib/components/ActionDialog.svelte';
+	import NewForwardDialog from '#lib/components/NewForwardDialog.svelte';
 	import ActionMenu from '#lib/components/ActionMenu.svelte';
 	import ExplainPanel from '#lib/components/ExplainPanel.svelte';
 	import BenchmarksView from '#lib/components/BenchmarksView.svelte';
@@ -232,6 +233,14 @@
 		} else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
 			e.preventDefault();
 			app.go(e.key === 'ArrowLeft' ? -1 : 1);
+		} else if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && app.details && !typing) {
+			// From the list or the overview, Tab goes into the inspector, to its tab on show.
+			const from = document.activeElement;
+			const tab = document.querySelector<HTMLElement>('[data-inspector] [role="tab"][aria-selected="true"]');
+			if (tab && (!from || from === document.body || from.closest('.table-wrap, [data-tile]'))) {
+				e.preventDefault();
+				focusForKeys(tab);
+			}
 		}
 	}
 
@@ -531,6 +540,8 @@
 	<GrafanaDialog dialog={app.dialog} />
 {:else if app.dialog?.kind === 'snapshot'}
 	<SnapshotDialog dialog={app.dialog} />
+{:else if app.dialog?.kind === 'newForward'}
+	<NewForwardDialog />
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}

@@ -6,6 +6,7 @@
 	import { samePin } from '../pins';
 	import { clampWidth, followDrag } from '../resize';
 	import { t } from '../i18n';
+	import { roving } from '../roving';
 	import { app, favoriteLabel, sameResource } from '../state.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 
@@ -97,7 +98,7 @@
 	</div>
 	<div class="list">
 		<div class="scroll" bind:this={scroller} onscroll={measure}>
-			<div class="items" bind:this={items}>
+			<div class="items" bind:this={items} {@attach roving({ items: 'button:not(.unpin)', orientation: 'vertical' })}>
 				{#if app.pins.here.length}
 					<h3 class="first">{t('Pinned')}</h3>
 					{#each app.pins.here as pin (`${pin.group}/${pin.plural}/${pin.namespace ?? ''}/${pin.name}`)}

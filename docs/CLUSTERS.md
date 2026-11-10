@@ -33,11 +33,26 @@ Kubri keeps the 3 most recent contexts this way, each for up to 30 minutes after
 - how much of the nodes' CPU and memory the pods request
 - the name, color and label you gave the context in its settings, and whether it is production
 
-Contexts are checked six at a time, each with its own ten-second limit, so a cluster that is down shows as **Unreachable** without holding up the others. Clusters that fail or cannot be reached are tinted red, those that need a look amber, and a line above the cards counts both. The page checks again every minute while it is open, with the connections it made the first time, so a context that signs in by running a command, like `aws`, does not run it at every check. Your user needs `list` on nodes, pods and the workload kinds across the cluster to see the counts; without it the card says the cluster is reachable but that nothing may be listed.
+Contexts are checked six at a time, each with its own ten-second limit, so a cluster that is down shows as **Unreachable** without holding up the others. Clusters that fail or cannot be reached are tinted red, those that need a look amber, and a line above the cards counts both. The page checks again every two minutes while it is open, with the connections it made the first time, so a context that signs in by running a command, like `aws`, does not run it at every check. Your user needs `list` on nodes, pods and the workload kinds across the cluster to see the counts; without it the card says the cluster is reachable but that nothing may be listed.
 
 Clicking a cluster connects Kubri to it and opens its overview. The overview starts with what the card showed: the health line, the API server and version, ready nodes, pods and workloads, and how much CPU and memory pods request and use. The CPU and memory cards lead with what running pods reserve, because that decides whether a new pod finds room, and show the use measured right now below it. When pods cannot start because they ask for more than is left, the card names them. Resource health lists the kinds the cards do not already count, so it leaves out pods, nodes and ReplicaSets, which follow their Deployments. When Kubri cannot connect at start, the welcome screen has **See all clusters** to find one that works.
 
 Below the overview, **Other contexts** shows up to eight of your other contexts with what Kubri last learned about them: healthy or how many pods fail, or that the API server did not answer, and when. A ring instead of a dot means it did not answer. Clicking one switches to it. Contexts not checked in the last five minutes are checked when the overview opens, if you have at most 20.
+
+## How often Kubri asks the cluster
+
+Lists, logs and the change history follow the cluster through watches, so the API server tells Kubri what changed instead of Kubri asking again. Pages that cannot watch ask on a timer:
+
+| Page | How often |
+| --- | --- |
+| Overview | every 30 seconds; the trend from Prometheus every minute |
+| Inspector (Overview, Events, YAML) | every 15 seconds |
+| CPU and memory in lists | every 30 seconds |
+| Topology | every 30 seconds |
+| Helm releases | every 30 seconds |
+| Clusters | every two minutes |
+
+Nothing is asked while the window is minimized or the browser tab is in the background; the page asks once when you come back. After a change made in Kubri, such as scaling or a restart, open pages ask again right away.
 
 ## Adding clusters
 
