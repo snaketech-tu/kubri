@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 
-use crate::{Error, Result};
+use crate::{Error, Kubri, ObjectRef, Result, debug};
 
 /// Starts bash if the image has it and sh otherwise, like k9s. First it says its process id, in
 /// an escape sequence that Kubri takes out of the output, so that closing the session can end it.
@@ -413,6 +413,27 @@ fn exit_message(status: &k8s_openapi::apimachinery::pkg::apis::meta::v1::Status)
         return None;
     }
     status.message.clone().filter(|m| !m.is_empty())
+}
+
+impl Kubri {
+    /// Opens a shell in a pod's container, or attaches to its main process.
+    pub async fn open_terminal(&self, target: &ObjectRef, options: TerminalOptions) -> Result<Terminal> {
+        // A shell can change anything the container can.
+        self.ensure_writable_in(target.scope()).await?;
+        let session = self.object_session(target).await?;
+        if !session.is_core(&target.resource, "Pod")? {
+            return Err(Error::Unsupported("terminals open in pods".into()));
+        }
+        let subresource = match options.mode {
+            TerminalMode::Attach => "attach",
+            _ => "exec",
+        };
+        session.ensure_may("create", target, subresource).await?;
+        let api = session.pod_api(target.namespace.as_deref())?;
+        let pod = api.get(&target.name).await?;
+        let terminal = open(api.clone(), &pod, options).await?;
+        Ok(debug::end_with_terminal(api, &pod, terminal))
+    }
 }
 
 #[cfg(test)]

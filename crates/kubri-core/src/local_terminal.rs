@@ -17,7 +17,7 @@ use kube::config::{Context, Kubeconfig};
 use serde::{Deserialize, Serialize};
 
 use crate::plugin::{self, Prepared};
-use crate::{Error, Result, Terminal, TerminalOutput};
+use crate::{Error, Guard, Kubri, Result, Terminal, TerminalOutput, team};
 
 /// Overlay files older than this are left from a Kubri that did not exit cleanly.
 const STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
@@ -340,6 +340,112 @@ pub(crate) fn skew(kubectl: &str, server: &str) -> Option<String> {
             "kubectl {kubectl} is more than one minor version away from the cluster's {server}; some commands may not work"
         )
     })
+}
+
+impl Kubri {
+    /// Lets local terminals be opened, and contexts that run a command to sign in or name
+    /// files be added: the desktop app calls this, the web server only when started with
+    /// `KUBRI_LOCAL_TERMINAL=true`, as both run on the server for everyone who signs in.
+    pub fn allow_local_terminal(&self) {
+        self.local_terminal.store(true, Ordering::Relaxed);
+        remove_stale_overlays();
+    }
+
+    /// Why a local terminal cannot be opened for the connected context now, if it cannot.
+    pub(crate) async fn local_terminal_refusal(&self) -> Option<String> {
+        if self.act_as.is_some() {
+            return Some(team::NO_LOCAL_TERMINAL.into());
+        }
+        if !self.local_terminal.load(Ordering::Relaxed) {
+            return Some(
+                "The local terminal is off here: it would be a shell on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it."
+                    .into(),
+            );
+        }
+        if self.agent.load(Ordering::Relaxed) {
+            return Some("AI agents cannot open a local terminal.".into());
+        }
+        let Some(cluster) = self.cluster().await else {
+            return Some("Kubri is not connected to a context.".into());
+        };
+        if cluster.snapshot.is_some() {
+            return Some("A snapshot has no cluster for kubectl to talk to.".into());
+        }
+        match self.guard().await {
+            Guard {
+                read_only: true,
+                reason,
+                ..
+            } => {
+                let reason = reason.unwrap_or_else(|| "changes are off for this context".into());
+                let reason = reason.trim_end_matches('.');
+                let mut chars = reason.chars();
+                let first = chars.next().map(|c| c.to_uppercase().collect::<String>());
+                Some(format!(
+                    "{}{}. A local terminal would get around that, so it stays closed.",
+                    first.unwrap_or_default(),
+                    chars.as_str()
+                ))
+            }
+            _ => None,
+        }
+    }
+
+    /// What a local terminal would run with, and whether one can be opened now.
+    pub async fn local_terminal_info(&self) -> LocalTerminalInfo {
+        let reason = self.local_terminal_refusal().await;
+        let cluster = self.cluster().await.filter(|c| c.snapshot.is_none());
+        let settings = self.settings().terminal;
+        let (kubectl, helm) = if reason.is_none() {
+            tokio::task::spawn_blocking(tools).await.unwrap_or_default()
+        } else {
+            (None, None)
+        };
+        let server = cluster.as_ref().map(|c| c.version.clone());
+        let skew = kubectl
+            .as_deref()
+            .zip(server.as_deref())
+            .and_then(|(k, s)| skew(k, s));
+        LocalTerminalInfo {
+            enabled: self.local_terminal.load(Ordering::Relaxed),
+            allowed: reason.is_none(),
+            reason,
+            context: cluster.map(|c| c.context),
+            shell: shell(&settings).0,
+            kubectl,
+            helm,
+            server,
+            skew,
+        }
+    }
+
+    /// Opens a shell on this computer with `kubectl` and `helm` pointing at the connected
+    /// context and `options.namespace`.
+    pub async fn open_local_terminal(&self, options: &LocalTerminalOptions) -> Result<Terminal> {
+        if let Some(reason) = self.local_terminal_refusal().await {
+            return Err(Error::Unsupported(reason));
+        }
+        let cluster = self.cluster().await.ok_or(Error::NotConnected)?;
+        let kubeconfig = match &*self.kubeconfig.read().await {
+            Ok(kubeconfig) => kubeconfig.clone(),
+            Err(err) => return Err(Error::NoKubeconfig(err.clone())),
+        };
+        let settings = self.settings();
+        let warning = settings.context(&cluster.context).production.then(|| {
+            format!(
+                "Production: commands here run against {} without Kubri's checks.",
+                cluster.context
+            )
+        });
+        tracing::info!(context = cluster.context, "opening a local terminal");
+        open(
+            &settings.terminal,
+            &kubeconfig,
+            &cluster.context,
+            options,
+            warning,
+        )
+    }
 }
 
 #[cfg(test)]

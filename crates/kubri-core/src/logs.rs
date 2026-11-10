@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::sync::mpsc;
 
+use crate::{Error, Kubri, ObjectRef, Result};
+
 /// More streams than this would flood the UI; `kubectl logs -l` stops at 5 by default.
 pub(crate) const MAX_STREAMS: usize = 50;
 /// Lines sent in one event at most, so a burst does not become one huge message.
@@ -695,6 +697,50 @@ fn decode_line(mut buf: Vec<u8>) -> String {
         }
     }
     String::from_utf8(buf).unwrap_or_else(|err| String::from_utf8_lossy(err.as_bytes()).into_owned())
+}
+
+impl Kubri {
+    /// Streams container logs of a pod, or of every pod a workload or Service selects.
+    pub async fn logs(
+        &self,
+        target: &ObjectRef,
+        options: LogOptions,
+    ) -> Result<impl Stream<Item = LogEvent> + Send + 'static> {
+        // Reading only: a log tab kept open from another context reads from that context.
+        let session = self.read_session(target.context.as_deref()).await?;
+        let (pods, selector) = session.pods_and_selector(target).await?;
+        let mut sources = sources(&pods, options.container.as_deref());
+        if sources.is_empty() {
+            return Err(Error::Unsupported(format!("{} has no pods", target.name)));
+        }
+        let notice = (sources.len() > MAX_STREAMS).then(|| LogEvent::Error {
+            source: None,
+            message: format!(
+                "showing the first {} of {} containers",
+                MAX_STREAMS,
+                sources.len()
+            ),
+        });
+        sources.truncate(MAX_STREAMS);
+        let joiner = match (selector, target.namespace.as_deref()) {
+            (Some(selector), Some(namespace)) => Some(Joiner {
+                api: Api::namespaced(session.client.clone(), namespace),
+                selector,
+                started: pods
+                    .iter()
+                    .filter(|p| pod_started(p))
+                    .filter_map(|p| p.metadata.name.clone())
+                    .collect(),
+            }),
+            _ => None,
+        };
+        let events = stream_logs(session.client.clone(), sources, options, joiner);
+        // The notice goes after the sources, which always come first.
+        Ok(events.enumerate().flat_map(move |(i, event)| {
+            let notice = if i == 0 { notice.clone() } else { None };
+            futures::stream::iter(std::iter::once(event).chain(notice))
+        }))
+    }
 }
 
 #[cfg(test)]

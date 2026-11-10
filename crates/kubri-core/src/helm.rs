@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::team::HelmAccess;
 use crate::typed::scoped;
-use crate::{Error, Result};
+use crate::{Error, Kubri, Result};
 
 /// How long `helm rollback` and `helm uninstall` may take, hooks included: a little longer
 /// than the `--timeout 5m` they get, so helm can say itself what it was waiting for.
@@ -828,6 +828,70 @@ pub(crate) async fn uninstall(
         context,
     )
     .await
+}
+
+impl Kubri {
+    /// The latest revision of every Helm release, like `helm list --all`.
+    pub async fn helm_releases(&self, namespace: Option<&str>) -> Result<Vec<HelmRelease>> {
+        releases(self.session().await?.client.clone(), namespace).await
+    }
+
+    /// A Helm release with its values, notes and manifest; the latest revision by default.
+    pub async fn helm_release(
+        &self,
+        namespace: &str,
+        name: &str,
+        revision: Option<u32>,
+    ) -> Result<HelmReleaseDetails> {
+        release(self.session().await?.client.clone(), namespace, name, revision).await
+    }
+
+    /// All revisions of a Helm release, newest first.
+    pub async fn helm_history(&self, namespace: &str, name: &str) -> Result<Vec<HelmRelease>> {
+        history(self.session().await?.client.clone(), namespace, name).await
+    }
+
+    /// The version of the `helm` command that rollbacks and uninstalls run, if it is installed.
+    pub async fn helm_version(&self) -> Option<String> {
+        cli_version().await
+    }
+
+    /// Rolls a release back to `revision` with `helm rollback`, on the connected context.
+    pub async fn helm_rollback(&self, namespace: &str, name: &str, revision: u32) -> Result<String> {
+        self.ensure_writable_in(Some(namespace)).await?;
+        let context = self.session().await?.info.context.clone();
+        rollback(&self.helm_access().await?, &context, namespace, name, revision).await
+    }
+
+    /// Installs or upgrades a release, on the connected context. A dry run renders it against
+    /// the cluster without changing anything, so it is allowed when Kubri may not change it.
+    pub async fn helm_change(&self, change: &HelmChange) -> Result<HelmOutcome> {
+        if !change.dry_run {
+            self.ensure_writable_in(Some(&change.namespace)).await?;
+        }
+        let session = self.session().await?;
+        let access = self.helm_access().await?;
+        self::change(session.client.clone(), &access, &session.info.context, change).await
+    }
+
+    /// A chart's default values as YAML, like `helm show values`.
+    pub async fn helm_chart_values(&self, chart: &HelmChartRef) -> Result<String> {
+        let context = self.session().await?.info.context.clone();
+        show_values(&self.helm_access().await?, &context, chart).await
+    }
+
+    /// Charts on Artifact Hub matching `query`, like `helm search hub`.
+    pub async fn helm_search(&self, query: &str) -> Result<Vec<HubChart>> {
+        let context = self.session().await?.info.context.clone();
+        search_hub(&self.helm_access().await?, &context, query).await
+    }
+
+    /// Uninstalls a release with `helm uninstall`, on the connected context.
+    pub async fn helm_uninstall(&self, namespace: &str, name: &str) -> Result<String> {
+        self.ensure_writable_in(Some(namespace)).await?;
+        let context = self.session().await?.info.context.clone();
+        uninstall(&self.helm_access().await?, &context, namespace, name).await
+    }
 }
 
 #[cfg(test)]

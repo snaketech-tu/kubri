@@ -4,12 +4,13 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{Error, Result};
+use crate::{Error, Kubri, Result};
 
 /// Everything Kubri takes from the k9s configuration, for one context.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
@@ -653,6 +654,57 @@ pub(crate) fn skin(dirs: &Dirs, name: &str) -> Result<Value> {
         }
     }
     Err(Error::NotFound(format!("skin {name}")))
+}
+
+impl Kubri {
+    /// The k9s aliases, hotkeys, plugins, skins and settings, with those of the connected
+    /// context. [`K9sConfig::read_only`] is also set when Kubri was started read-only.
+    pub async fn k9s_config(&self) -> K9sConfig {
+        let mut config = self.k9s_files().await;
+        config.read_only |= self.read_only.load(Ordering::Relaxed);
+        if self.act_as.is_some() {
+            config.plugins.clear();
+            return config;
+        }
+        // Views' actions run as plugins of their kind.
+        if let Ok(session) = self.session().await {
+            for view in self.views().await.views {
+                let found = session
+                    .resources
+                    .iter()
+                    .find(|r| view.is_for(&r.reference.group, &r.kind));
+                if let Some(resource) = found {
+                    config.plugins.extend(view.plugins(&resource.reference.plural));
+                }
+            }
+        }
+        config
+    }
+
+    /// The k9s configuration as the files have it.
+    pub(crate) async fn k9s_files(&self) -> K9sConfig {
+        let Some(dirs) = Dirs::from_env() else {
+            return K9sConfig::default();
+        };
+        let context = self.context_info().await;
+        let key = context.as_ref().map(|c| ContextKey {
+            cluster: c.cluster.clone().unwrap_or_default(),
+            context: c.name.clone(),
+        });
+        let env = Env::read();
+        tokio::task::spawn_blocking(move || load(&dirs, key.as_ref(), &env))
+            .await
+            .unwrap_or_default()
+    }
+
+    /// A k9s skin by name, as JSON.
+    pub async fn k9s_skin(&self, name: &str) -> Result<Value> {
+        let dirs = Dirs::from_env().ok_or_else(|| Error::NotFound("the k9s config directory".into()))?;
+        let name = name.to_owned();
+        tokio::task::spawn_blocking(move || skin(&dirs, &name))
+            .await
+            .map_err(|e| Error::Unsupported(e.to_string()))?
+    }
 }
 
 #[cfg(test)]

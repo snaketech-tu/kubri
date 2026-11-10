@@ -2,11 +2,12 @@
 //! and validation beside the YAML editor (what `kubectl explain` shows).
 
 use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 use kube::Client;
 use serde_json::{Map, Value};
 
-use crate::{Error, Result};
+use crate::{Error, Kubri, ResourceRef, Result};
 
 const REF_PREFIX: &str = "#/components/schemas/";
 
@@ -133,6 +134,36 @@ fn trim(value: &Value) -> Value {
                 .collect(),
         ),
         other => other.clone(),
+    }
+}
+
+impl Kubri {
+    /// The OpenAPI v3 schema of a kind: `{ root, schemas }`, with the schemas it refers to by
+    /// name. `None` where the API server publishes none for it.
+    pub async fn schema(&self, resource: &ResourceRef) -> Result<Arc<Option<Value>>> {
+        let session = self.session().await?;
+        if let Some(found) = session
+            .schemas
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(resource)
+        {
+            return Ok(found.clone());
+        }
+        let info = session.info_for(resource)?;
+        let document = group_version_document(&session.client, &resource.group, &resource.version).await?;
+        let found = Arc::new(kind_schema(
+            &document,
+            &resource.group,
+            &resource.version,
+            &info.kind,
+        ));
+        session
+            .schemas
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(resource.clone(), found.clone());
+        Ok(found)
     }
 }
 

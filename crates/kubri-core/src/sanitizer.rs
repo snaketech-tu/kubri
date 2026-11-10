@@ -29,7 +29,7 @@ use crate::health::{self, Health};
 use crate::metrics::{Usage, parse_quantity};
 use crate::typed::{list, resource_ref, scoped};
 use crate::xray::{RefKind, is_ready, references, selects};
-use crate::{ResourceRef, Result};
+use crate::{Kubri, MetricsKind, ResourceRef, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -1330,6 +1330,16 @@ fn node(node: &Node, usage: Option<&Usage>) -> Vec<Issue> {
         }
     }
     issues
+}
+
+impl Kubri {
+    /// Checks the objects of `namespace`, or of the whole cluster with nodes, volumes and
+    /// cluster roles, for problems and risky settings, like Popeye.
+    pub async fn sanitize(&self, namespace: Option<&str>) -> Result<SanitizerReport> {
+        let session = self.session().await?;
+        let usage = session.metrics(MetricsKind::Nodes, None);
+        Ok(scan(session.client.clone(), namespace, usage, session.now()).await)
+    }
 }
 
 #[cfg(test)]

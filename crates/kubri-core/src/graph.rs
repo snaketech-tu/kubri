@@ -19,7 +19,7 @@ use crate::health::{self, Health, Status};
 use crate::typed::{list, names, resource_ref, scoped};
 use crate::views::View;
 use crate::xray::{RefKind, is_ready, references, selects};
-use crate::{ResourceInfo, ResourceRef, Result};
+use crate::{Kubri, ResourceInfo, ResourceRef, Result};
 
 /// Pods shown per owner, those with problems first; the owner says how many more there are.
 const PODS_PER_OWNER: usize = 8;
@@ -940,6 +940,18 @@ fn inherit_apps(b: &mut Builder) {
         if !changed {
             break;
         }
+    }
+}
+
+impl Kubri {
+    /// The objects of `namespace`, or of all namespaces, as a graph of how they connect, with
+    /// the request path of every Ingress rule.
+    pub async fn graph(&self, namespace: Option<&str>) -> Result<Graph> {
+        let session = self.session().await?;
+        let mut graph = gather(session.client.clone(), namespace).await?;
+        let views = self.views().await.views;
+        add_views(&mut graph, &session.client, &session.resources, &views, namespace).await;
+        Ok(graph)
     }
 }
 

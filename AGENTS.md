@@ -8,7 +8,7 @@ Kubri is a Kubernetes GUI for desktop and browser that covers what k9s does, by 
 
 | Path | What it is |
 | --- | --- |
-| `crates/kubri-core` | All cluster access (kube-rs). `Kubri` in `src/lib.rs` owns the merged kubeconfig and the connection; features add `impl Kubri` blocks in their own module. Built-in views for custom resources live in `views/`. |
+| `crates/kubri-core` | All cluster access (kube-rs). `Kubri` in `src/lib.rs` owns the merged kubeconfig and the connection (`Session` in `session.rs`); every feature adds its `impl Kubri` block in its own module, such as `context.rs`, `guard.rs` or `objects.rs`, so keep `lib.rs` to the struct and its constructors. Tests of `Kubri` itself are in `tests.rs`. Built-in views for custom resources live in `views/`. |
 | `crates/kubri-server` | Web mode: axum REST + WebSocket API (`api.rs`), sign-in (`auth.rs`, OpenID Connect in `oidc.rs`), a Kubri per signed-in person (`team.rs`), audit log (`audit.rs`), Host/Origin guard (`guard.rs`), serves `ui/build`. |
 | `crates/kubri-mcp` | MCP server (stdio and HTTP) on top of the core. |
 | `crates/kubri-cli` | `lint` and `snapshot` commands without a window; both `kubri` and `kubri-server` run them when they are the first argument. `actions/lint` is the GitHub Action around it. |

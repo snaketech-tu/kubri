@@ -3,8 +3,12 @@
 use std::collections::HashMap;
 
 use k8s_openapi::api::core::v1::{Container, Node, Pod};
+use kube::Api;
+use kube::api::ListParams;
 use serde::Serialize;
 use serde_json::Value;
+
+use crate::{Kubri, Result, typed};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -294,6 +298,47 @@ pub fn parse_quantity(text: &str) -> Option<f64> {
         _ => return None,
     };
     Some(number * factor)
+}
+
+impl Kubri {
+    /// Current CPU and memory usage from metrics-server, with the requests and limits of pods
+    /// and what nodes can give. Fails with [`Error::UnknownResource`] when metrics-server is
+    /// not installed.
+    pub async fn metrics(&self, kind: MetricsKind, namespace: Option<&str>) -> Result<Vec<Usage>> {
+        let session = self.session().await?;
+        let client = session.client.clone();
+        if kind == MetricsKind::Namespaces {
+            let usage = session.metrics(MetricsKind::Pods, None).await?;
+            let pods = typed::list(Api::<Pod>::all(client)).await.unwrap_or_default();
+            return Ok(by_namespace(&usage, &pods));
+        }
+        let mut usage = session.metrics(kind, namespace).await?;
+        // Without them the percentages stay empty; the usage itself is still worth showing.
+        match kind {
+            MetricsKind::Pods => {
+                let api: Api<Pod> = match namespace {
+                    Some(ns) => Api::namespaced(client, ns),
+                    None => Api::all(client),
+                };
+                if let Ok(pods) = typed::list(api).await {
+                    add_pod_limits(&mut usage, &pods);
+                }
+            }
+            MetricsKind::Namespaces => {}
+            MetricsKind::Nodes => {
+                if let Ok(nodes) = typed::list(Api::<Node>::all(client.clone())).await {
+                    add_node_allocatable(&mut usage, &nodes);
+                }
+                // What the pods on each node request, for the room left. Without the right to
+                // list every pod, the columns stay empty.
+                let scheduled = ListParams::default().fields("spec.nodeName!=");
+                if let Ok(pods) = Api::<Pod>::all(client).list(&scheduled).await {
+                    add_node_requests(&mut usage, &pods.items);
+                }
+            }
+        }
+        Ok(usage)
+    }
 }
 
 #[cfg(test)]
