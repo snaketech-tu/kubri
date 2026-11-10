@@ -80,6 +80,12 @@ impl Terminals {
 
 type CommandResult<T> = Result<T, String>;
 
+/// Every call in the core's call table, named by `call` in `request`.
+#[tauri::command]
+async fn call(kubri: State<'_, Arc<Kubri>>, request: kubri_core::Request) -> CommandResult<Value> {
+    kubri.call(request).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn contexts(kubri: State<'_, Arc<Kubri>>) -> CommandResult<ContextList> {
     kubri.contexts().await.map_err(|e| e.to_string())
@@ -1229,6 +1235,7 @@ pub fn run() {
         .manage(Arc::new(Terminals::default()))
         .manage(update::Pending::default())
         .invoke_handler(tauri::generate_handler![
+            call,
             contexts,
             reload_contexts,
             switch_context,

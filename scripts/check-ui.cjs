@@ -14,13 +14,16 @@ const pod={apiVersion:'v1',kind:'Pod',metadata:{name:'emails',namespace:'shop',u
 const event={kind:'Warning',reason:'BackOff',message:'Back-off restarting failed container',count:8,source:'kubelet',lastSeen:created,objectKind:'Pod',object:{resource:ref,namespace:'shop',name:'emails'}};
 const pulse={cpu:{used:2700,requested:2000,capacity:8000},memory:{used:900000000,requested:800000000,capacity:1600000000},kinds:[{kind:'Pod',resource:ref,total:4,ok:2,warning:1,failed:1,error:null}],events:{normal:4,warning:8,recent:[event,event],error:null}};
 const k9s={dirs:[],files:[],aliases:[],hotkeys:[],plugins:[],skins:[],skin:null,readOnly:false,defaultView:null,thresholds:{cpu:{warn:70,critical:90},memory:{warn:70,critical:90}},logger:{tail:100,sinceSeconds:-1,showTime:false,textWrap:false,disableAutoscroll:false},portForwardAddress:null,jumps:[]};
+// Calls of the core's call table, as the routes these fixtures answer.
+const CALLS={contexts:'/contexts',reloadContexts:'/contexts/reload',switchContext:'/context'};
+const pathOf=(p,req)=>p==='/call'?(CALLS[req.postDataJSON().call]??`/call/${req.postDataJSON().call}`):p;
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.argv[3]?{executablePath:process.argv[3]}:{})});
  const page=await browser.newPage({viewport:{width:1440,height:900}});
  const errors=[], mutations=[];let failSave=false, context='test-cluster', tableSocket;
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/**',async route=>{
-  const req=route.request(),url=new URL(req.url()),p=url.pathname.replace('/api','');let data=[];let status=200;
+  const req=route.request(),url=new URL(req.url()),p=pathOf(url.pathname.replace('/api',''),req);let data=[];let status=200;
   if(p==='/session')data={signedIn:true,required:false};
   if(p==='/contexts'||p==='/contexts/reload')data={contexts:[{name:context,cluster:'test',namespace:'shop',user:null,isDefault:true}],cluster:{context,server:'https://fixture.invalid',version:'v1.36.0',defaultNamespace:'shop'}};
   if(p==='/context'){context=JSON.parse(req.postData()).name;data={context,server:'https://fixture.invalid',version:'v1.36.0',defaultNamespace:'shop'};}

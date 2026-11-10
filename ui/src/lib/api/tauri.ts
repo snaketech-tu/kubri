@@ -1,5 +1,6 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { writeQueue } from './queue';
+import { callBackend } from './rpc';
 import type { Backend, LogEvent, TableEvent, TerminalEvent, TerminalSession, UpdateProgress } from './types';
 
 /** Opens a terminal with `command`; all terminals share the write, resize and close commands. */
@@ -58,17 +59,10 @@ function terminalChannel(
 
 /** Talks to the Rust side of the desktop app through Tauri commands. */
 export const tauriBackend: Backend = {
-	contexts: () => invoke('contexts'),
-	reloadContexts: () => invoke('reload_contexts'),
-	inspectKubeconfig: (text) => invoke('inspect_kubeconfig', { text }),
-	addContexts: (text, names) => invoke('add_contexts', { text, names }),
-	removeContext: (name) => invoke('remove_context', { name }),
-	kubeconfigFiles: () => invoke('kubeconfig_files'),
+	...callBackend((request) => invoke('call', { request })),
 	chooseKubeconfigFiles: () => invoke('choose_kubeconfig_files'),
 	addKubeconfigFiles: (paths) => invoke('add_kubeconfig_files', { paths }),
 	removeKubeconfigFile: (path) => invoke('remove_kubeconfig_file', { path }),
-	switchContext: (name) => invoke('switch_context', { name }),
-	cancelSwitch: () => invoke('cancel_switch'),
 	takeSnapshot: (namespace) => invoke('take_snapshot', { namespace }),
 	openSnapshot: async (file) =>
 		invoke('open_snapshot', new Uint8Array(await file.arrayBuffer()), { headers: { 'x-name': encodeURIComponent(file.name) } }),
