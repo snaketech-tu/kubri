@@ -64,7 +64,7 @@ Download Kubri from the [latest release](https://github.com/snaketech-tu/kubri/r
 
 | System | File |
 | --- | --- |
-| Windows | `.msi` or `-setup.exe` |
+| Windows | `.msi` or `-setup.exe`; on Arm, `arm64-setup.exe` |
 | macOS | `.dmg` |
 | Linux | `.deb`, `.rpm` or `.AppImage` |
 

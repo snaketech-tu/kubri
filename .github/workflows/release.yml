@@ -113,6 +113,11 @@ jobs:
           - name: Windows, x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
+          # Built on x64: Tauri's MSI tooling has no Arm build, so only the setup.exe.
+          - name: Windows, Arm
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            bundles: --bundles nsis
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -165,7 +170,7 @@ jobs:
           projectPath: ui
           releaseId: ${{ needs.draft.outputs.id }}
           uploadUpdaterJson: false
-          args: --target ${{ matrix.target }} ${{ steps.updater.outputs.args }}
+          args: --target ${{ matrix.target }} ${{ matrix.bundles }} ${{ steps.updater.outputs.args }}
       - if: needs.draft.outputs.id == ''
         uses: actions/upload-artifact@v7
         with:
@@ -405,6 +410,7 @@ jobs:
           $draft = gh api "repos/$env:GITHUB_REPOSITORY/releases/${{ needs.draft.outputs.id }}" --jq .draft
           if ($draft -eq 'true') { Write-Output 'The release is a draft; run this job again once it is published.'; exit 0 }
           $version = $env:VERSION
-          $url = "https://github.com/snaketech-tu/kubri/releases/download/v$version/Kubri_${version}_x64-setup.exe"
+          $base = "https://github.com/snaketech-tu/kubri/releases/download/v$version"
+          $urls = "$base/Kubri_${version}_x64-setup.exe", "$base/Kubri_${version}_arm64-setup.exe"
           Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-          .\wingetcreate.exe update SnakeTech.Kubri --version $version --urls $url --submit --token $env:WINGET_TOKEN
+          .\wingetcreate.exe update SnakeTech.Kubri --version $version --urls $urls --submit --token $env:WINGET_TOKEN

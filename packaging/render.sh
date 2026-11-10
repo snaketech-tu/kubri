@@ -22,6 +22,7 @@ declare -A values=(
   [SHA256_DEB_AMD64]=$(sum "Kubri_${version}_amd64.deb")
   [SHA256_DEB_ARM64]=$(sum "Kubri_${version}_arm64.deb")
   [SHA256_EXE_X64]=$(sum "Kubri_${version}_x64-setup.exe")
+  [SHA256_EXE_ARM64]=$(sum "Kubri_${version}_arm64-setup.exe")
 )
 
 for dir in homebrew winget aur flatpak; do
