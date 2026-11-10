@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.1 — 2026-11-10
+
+- Tidier code: duplicated helpers and unused code are gone. Nothing changes in how Kubri works.
+
 ## 1.11.0 — 2026-11-10
 
 - **Kubri for Windows on Arm.** A native installer for Windows arm64 comes with each release, next to the one for x64.

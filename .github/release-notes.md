@@ -1,11 +1,6 @@
 ## What's new
 
-- **Windows on Arm:** a native installer for Windows arm64.
-- **The Helm chart as a package:** `helm install kubri oci://ghcr.io/snaketech-tu/charts/kubri`, no clone needed.
-- **Settings that survive upgrades:** `persistence.enabled=true` keeps Kubri's settings on a volume.
-- **Builds you can check:** attestations for the installers and the image, and an SBOM for the image.
-- **Running a team Kubri safely:** a new section of the [team guide](https://github.com/snaketech-tu/kubri/blob/main/docs/TEAMS.md#running-it-safely).
-- The desktop app and the web server now talk to the core in the same way. The web server's internal API changed; nothing outside Kubri used it.
+A maintenance release. Duplicated helpers and unused code were removed; nothing changes in how Kubri works. For the new features of 1.11, see the [1.11.0 release](https://github.com/snaketech-tu/kubri/releases/tag/v1.11.0).
 
 ## Install
 
