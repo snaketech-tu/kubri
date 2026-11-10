@@ -75,7 +75,7 @@ const CHANGES={replaceObject:'PUT',patchObject:'PATCH',deleteObject:'DELETE'};
  await page.getByRole('button',{name:'Keep editing',exact:true}).click();
  failSave=false;await page.getByRole('button',{name:'Close',exact:true}).click();await page.getByRole('button',{name:'Discard changes',exact:true}).click();
  await page.getByRole('button',{name:'Pods',exact:true}).click();
- await page.getByRole('cell',{name:'emails',exact:true}).click();
+ await page.getByRole('cell',{name:'emails',exact:true}).click();await page.keyboard.press('d');
  await page.screenshot({path:path.join(out,'pods.png')});
  await page.getByRole('button',{name:'Close',exact:true}).click();
  await page.keyboard.press('z');await page.getByRole('dialog',{name:'Delete Pod',exact:true}).waitFor();
@@ -84,9 +84,9 @@ const CHANGES={replaceObject:'PUT',patchObject:'PATCH',deleteObject:'DELETE'};
  assert.equal(await page.evaluate(()=>document.activeElement?.textContent),'Cancel');
  await page.keyboard.press('Enter');assert.equal(mutations.filter(m=>m.method==='DELETE').length,0);
  await page.getByRole('button',{name:'Pods',exact:true}).click();
- await page.getByRole('cell',{name:'emails',exact:true}).click();
+ await page.getByRole('cell',{name:'emails',exact:true}).click();await page.keyboard.press('d');
  for(const width of [1440,1280,900,768,390,320]){
-  await page.setViewportSize({width,height:width===900?560:900});
+  await page.setViewportSize({width,height:width===900?560:900});await page.waitForTimeout(1000);
   const size=await page.evaluate(()=>({doc:document.documentElement.scrollWidth,win:innerWidth}));assert.ok(size.doc<=width+1,`Inspector overflow at ${width}: ${size.doc}`);
  }
  await page.screenshot({path:path.join(out,'inspector-mobile.png'),fullPage:true});
@@ -99,10 +99,10 @@ const CHANGES={replaceObject:'PUT',patchObject:'PATCH',deleteObject:'DELETE'};
  tableSocket.send(JSON.stringify({type:'error',message:'403 Forbidden'}));
  await page.getByText(/^Connection interrupted. Showing the rows from/).waitFor();
  assert.ok(await page.locator('tbody tr').count()>0);
- for(const [command,title] of [['pf','Port-forwards'],['bench','Benchmarks'],['config','k9s configuration']]){
+ for(const [command,title,crumb] of [['pf','Port-forwards',/^\s*test-cluster/],['bench','Benchmarks',/^\s*test-cluster/],['config','Settings',/^\s*Settings/]]){
   await page.keyboard.press('Escape');await page.keyboard.type(':'+command);await page.keyboard.press('Enter');
   await page.getByRole('heading',{name:title,exact:true,level:1}).waitFor();
-  assert.match(await page.getByRole('navigation',{name:'Breadcrumb'}).textContent(),/^\s*Explore/);
+  assert.match(await page.getByRole('navigation',{name:'Breadcrumb'}).textContent(),crumb);
   for(const width of [900,390]){
    await page.setViewportSize({width,height:900});
    const size=await page.evaluate(()=>document.documentElement.scrollWidth);assert.ok(size<=width+1,`${title} overflow at ${width}: ${size}`);
@@ -111,7 +111,7 @@ const CHANGES={replaceObject:'PUT',patchObject:'PATCH',deleteObject:'DELETE'};
  }
  const help=page.getByRole('button',{name:'Shortcuts & help',exact:true});await help.focus();await page.keyboard.press('Enter');
  await page.getByRole('dialog',{name:'Keyboard shortcuts'}).waitFor();
- await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Keyboard shortcuts');
+ await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'Filter the shortcuts');
  await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement?.textContent.trim()),'Shortcuts & help');
  assert.deepEqual(errors,[]);
  await browser.close();console.log('PASS: production UI navigation, warning grouping, previous logs, dirty-edit exits, failed saves, cleanup, stale data, responsive layouts, tool pages and help focus.');
