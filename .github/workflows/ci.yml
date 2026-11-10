@@ -62,6 +62,14 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # cargo test writes the UI's types from the Rust types; they must be committed as written.
+      - name: Check the generated TypeScript types
+        run: |
+          git add -N ui/src/lib/api/generated
+          git diff --exit-code -- ui/src/lib/api/generated || {
+            echo "::error::ui/src/lib/api/generated is out of date: run cargo test and commit the result"
+            exit 1
+          }
 
   # Known vulnerabilities, licenses and sources of every dependency; see deny.toml.
   dependencies:

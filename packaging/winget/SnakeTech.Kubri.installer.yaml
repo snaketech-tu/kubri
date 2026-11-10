@@ -15,5 +15,8 @@ Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/snaketech-tu/kubri/releases/download/v@VERSION@/Kubri_@VERSION@_x64-setup.exe
     InstallerSha256: @SHA256_EXE_X64@
+  - Architecture: arm64
+    InstallerUrl: https://github.com/snaketech-tu/kubri/releases/download/v@VERSION@/Kubri_@VERSION@_arm64-setup.exe
+    InstallerSha256: @SHA256_EXE_ARM64@
 ManifestType: installer
 ManifestVersion: 1.6.0
