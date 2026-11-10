@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-use crate::{Error, ObjectRef, PortForwardInfo, Result};
+use crate::{Error, Kubri, ObjectRef, PortForwardInfo, Result};
 
 const MAX_CONCURRENCY: u32 = 200;
 const MAX_REQUESTS: u32 = 1_000_000;
@@ -590,6 +590,32 @@ fn histogram(sorted: &[f64]) -> Vec<Bucket> {
         buckets[i].count += 1;
     }
     buckets
+}
+
+impl Kubri {
+    /// HTTP benchmarks, newest first, with live progress while they run.
+    pub fn benchmarks(&self) -> Vec<BenchInfo> {
+        self.benchmarks.lock().unwrap().list()
+    }
+
+    /// Starts an HTTP benchmark through a running port-forward, like k9s does with `hey`.
+    pub fn start_benchmark(&self, request: &BenchRequest) -> Result<BenchInfo> {
+        let forward = self
+            .port_forwards()
+            .into_iter()
+            .find(|f| f.id == request.forward_id)
+            .ok_or_else(|| Error::NotFound(format!("port-forward {}", request.forward_id)))?;
+        start(&self.benchmarks, request, &forward)
+    }
+
+    /// Stops a running benchmark early; it keeps the results of what finished.
+    pub fn stop_benchmark(&self, id: u32) -> Result<()> {
+        self.benchmarks.lock().unwrap().stop(id)
+    }
+
+    pub fn remove_benchmark(&self, id: u32) -> Result<()> {
+        self.benchmarks.lock().unwrap().remove(id)
+    }
 }
 
 #[cfg(test)]

@@ -102,7 +102,7 @@ describe('i18n', () => {
 	});
 
 	it('knows the notices above a list', () => {
-		const rust = readFileSync(new URL('../../../../crates/kubri-core/src/lib.rs', import.meta.url), 'utf8');
+		const rust = readFileSync(new URL('../../../../crates/kubri-core/src/table.rs', import.meta.url), 'utf8');
 		const numbered = (format: string) => {
 			let i = 0;
 			return format.replace(/\{\w*\}/g, () => `{${i++}}`);

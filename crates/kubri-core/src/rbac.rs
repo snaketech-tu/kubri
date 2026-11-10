@@ -12,7 +12,7 @@ use kube::{Api, Client};
 use serde::Serialize;
 
 use crate::typed::{list, scoped};
-use crate::{Error, Result};
+use crate::{Error, Kubri, Result};
 
 /// One rule of a role, as Kubernetes stores it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
@@ -279,6 +279,23 @@ pub(crate) fn build(
         }
     }
     subjects.into_values().collect()
+}
+
+impl Kubri {
+    /// Every subject of a role binding with the rules it is granted. `namespace` limits role
+    /// bindings to one namespace; cluster role bindings are always included.
+    pub async fn rbac(&self, namespace: Option<&str>) -> Result<Rbac> {
+        let session = self.session().await?;
+        Ok(gather(session.client.clone(), namespace).await)
+    }
+
+    /// What the current user may do in `namespace` (by default the context's), like
+    /// `kubectl auth can-i --list`.
+    pub async fn permissions(&self, namespace: Option<&str>) -> Result<Permissions> {
+        let session = self.session().await?;
+        let namespace = namespace.unwrap_or(&session.info.default_namespace);
+        permissions(session.client.clone(), namespace).await
+    }
 }
 
 #[cfg(test)]

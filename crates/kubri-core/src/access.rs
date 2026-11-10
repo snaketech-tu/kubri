@@ -16,7 +16,7 @@ use kube::api::PostParams;
 use kube::{Api, Client};
 use serde::{Deserialize, Serialize};
 
-use crate::ResourceRef;
+use crate::{Error, Kubri, ResourceRef, Result};
 
 /// How long an answer is trusted. Roles rarely change while someone works.
 const TTL: Duration = Duration::from_secs(60);
@@ -183,6 +183,30 @@ pub(crate) async fn who_am_i(client: &Client) -> Option<Identity> {
         username: user.username?,
         groups: user.groups.unwrap_or_default(),
     })
+}
+
+impl Kubri {
+    /// Whether the current user may do each of `checks`, like `kubectl auth can-i`. `None`
+    /// where the API server could not say. `fresh` forgets earlier answers first, after a
+    /// role may have changed.
+    pub async fn access(&self, checks: &[AccessCheck], fresh: bool) -> Result<Vec<Option<bool>>> {
+        if checks.len() > MAX_CHECKS {
+            return Err(Error::Unsupported(format!(
+                "at most {} checks at once",
+                MAX_CHECKS
+            )));
+        }
+        let session = self.session().await?;
+        if fresh {
+            session.access.clear();
+        }
+        Ok(check_all(&session.client, &session.access, checks).await)
+    }
+
+    /// Who the cluster takes the current user for, like `kubectl auth whoami`.
+    pub async fn who_am_i(&self) -> Result<Option<Identity>> {
+        Ok(who_am_i(&self.session().await?.client).await)
+    }
 }
 
 #[cfg(test)]
