@@ -8,7 +8,7 @@ export type Integration = {
 /**
  * `prometheus`, `grafana`, `loki`, `flux`, `argocd` or `certManager`.
  */
-id: string, name: string, 
+id: 'prometheus' | 'grafana' | 'loki' | 'flux' | 'argocd' | 'certManager', name: string, 
 /**
  * Where Kubri reaches it, for the tools it talks to.
  */

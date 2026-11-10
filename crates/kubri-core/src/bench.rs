@@ -31,17 +31,21 @@ const KEPT: usize = 20;
 const PERCENTILES: [u8; 7] = [10, 25, 50, 75, 90, 95, 99];
 const BUCKETS: usize = 12;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct BenchRequest {
     /// The port-forward to send the requests through.
     pub forward_id: u32,
     #[serde(default = "default_method")]
+    #[ts(as = "Option<String>", optional)]
     pub method: String,
     #[serde(default = "default_path")]
+    #[ts(as = "Option<String>", optional)]
     pub path: String,
     /// Extra headers; `Host` overrides the default `localhost:<port>`.
     #[serde(default)]
+    #[ts(as = "Option<BTreeMap<String, String>>", optional)]
     pub headers: BTreeMap<String, String>,
     #[serde(default)]
     pub body: Option<String>,

@@ -151,8 +151,9 @@ pub struct Span {
 }
 
 /// Which changes to read.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct HistoryQuery {
     /// The context; the connected one when left out.
     pub context: Option<String>,
@@ -166,6 +167,7 @@ pub struct HistoryQuery {
     pub since: Option<i64>,
     pub until: Option<i64>,
     /// Only these kinds of change; all when empty.
+    #[ts(as = "Option<Vec<ChangeKind>>", optional)]
     pub changes: Vec<ChangeKind>,
     /// Part of the name, kind or summary.
     pub text: Option<String>,

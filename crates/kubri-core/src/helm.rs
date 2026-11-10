@@ -426,8 +426,9 @@ async fn run_with(access: &HelmAccess, args: &[&str], context: &str, stdin: Opti
 
 /// A chart to install or upgrade to: a name in a repository given by URL, a chart from a
 /// repository added to helm (`repo/chart`), an `oci://` reference or a local path.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct HelmChartRef {
     pub chart: String,
     /// The repository URL, for a chart given by name.
@@ -473,8 +474,9 @@ impl HelmChartRef {
 }
 
 /// An install or upgrade, previewed with a dry run first.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct HelmChange {
     pub namespace: String,
     pub name: String,
@@ -484,15 +486,19 @@ pub struct HelmChange {
     /// The values as YAML. They replace the values the release was given before, like
     /// `helm upgrade --reset-values --values`.
     #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
     pub values: String,
     /// Installs a new release instead of upgrading one.
     #[serde(default)]
+    #[ts(as = "Option<bool>", optional)]
     pub install: bool,
     /// Creates the namespace for an install when it is missing.
     #[serde(default)]
+    #[ts(as = "Option<bool>", optional)]
     pub create_namespace: bool,
     /// Renders against the cluster without changing it, like `helm upgrade --dry-run=server`.
     #[serde(default)]
+    #[ts(as = "Option<bool>", optional)]
     pub dry_run: bool,
 }
 

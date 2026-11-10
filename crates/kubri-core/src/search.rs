@@ -45,8 +45,9 @@ pub struct FieldTest {
     pub value: String,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct SearchRequest {
     /// Part of the name, any case; `/…/` for a regular expression; empty for any name.
     pub text: String,
@@ -62,6 +63,7 @@ pub struct SearchRequest {
     /// The contexts to search; empty for the connected one.
     pub contexts: Vec<String>,
     /// The most objects returned; 300 when not set.
+    #[ts(as = "Option<usize>", optional)]
     pub limit: usize,
 }
 

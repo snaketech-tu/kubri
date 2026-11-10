@@ -9,14 +9,18 @@ use serde::{Deserialize, Serialize};
 const MIRROR_POD_ANNOTATION: &str = "kubernetes.io/config.mirror";
 const PARALLEL_EVICTIONS: usize = 8;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct DrainOptions {
     /// Leave DaemonSet pods running; their controller would recreate them on the node anyway.
+    #[ts(as = "Option<bool>", optional)]
     pub ignore_daemonsets: bool,
     /// Evict pods with `emptyDir` volumes, losing that data.
+    #[ts(as = "Option<bool>", optional)]
     pub delete_emptydir_data: bool,
     /// Also evict pods that no controller will recreate.
+    #[ts(as = "Option<bool>", optional)]
     pub force: bool,
     pub grace_period_seconds: Option<u32>,
 }

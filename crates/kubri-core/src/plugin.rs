@@ -20,8 +20,9 @@ use crate::terminal::{Terminal, TerminalInput, TerminalOutput};
 use crate::{Error, ObjectRef, ResourceInfo, ResourceRef, Result};
 
 /// What the UI asks to run: a plugin by name, for the selected object.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct PluginRun {
     pub plugin: String,
     pub target: Option<ObjectRef>,
@@ -34,21 +35,27 @@ pub struct PluginRun {
     /// The list filter, as `$FILTER`.
     pub filter: Option<String>,
     /// The selected row's cells, in column order, for `$COL-<NAME>`.
+    #[ts(as = "Option<Vec<Cell>>", optional)]
     pub columns: Vec<Cell>,
     /// Values for the plugin's inputs, by name, as `$INPUT_<NAME>`.
+    #[ts(as = "Option<BTreeMap<String, String>>", optional)]
     pub inputs: BTreeMap<String, String>,
+    #[ts(as = "Option<u16>", optional)]
     pub cols: u16,
+    #[ts(as = "Option<u16>", optional)]
     pub rows: u16,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, ts_rs::TS)]
+#[ts(export, rename = "PluginRelease")]
 pub struct Release {
     pub namespace: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct Cell {
     pub name: String,
     pub value: String,
