@@ -162,6 +162,8 @@ describe('arrow keys', () => {
 
 	check('moves through the sidebar and the tabs like tabs', async () => {
 		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods' });
+		// The "Needs attention" tab shows once the list knows its columns, with the first rows.
+		await page.getByRole('tab', { name: /^Needs attention/ }).waitFor();
 		await page.evaluate(() => document.activeElement?.blur());
 		await tabTo(() => !!document.activeElement?.closest('nav .items'), 'the sidebar');
 		// The sidebar is one Tab stop, at the current page.

@@ -100,6 +100,20 @@ export function startingPort(object: KubeObject | null | undefined): { remote: n
 	return first ? { remote: first.port, local: suggestedLocalPort(first.port) } : null;
 }
 
+/**
+ * The ports a forward dialog shows once the object's ports are known: the starting port, but a
+ * port typed in while they loaded stays, and a typed container port is not paired with another's
+ * local port.
+ */
+export function portsOnceLoaded(
+	start: { remote: number; local: number | null } | null,
+	typed: { remote: number | null; local: number | null }
+): { remote: number | null; local: number | null } {
+	const remote = typed.remote ?? start?.remote ?? null;
+	const local = typed.local ?? (typed.remote === null ? (start?.local ?? null) : null);
+	return { remote, local };
+}
+
 /** A value of a Secret's data: its size, and its text when it is UTF-8. */
 export function secretValue(base64: string): { bytes: number; text: string | null } {
 	let raw: string;
