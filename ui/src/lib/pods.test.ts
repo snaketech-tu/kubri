@@ -15,6 +15,7 @@ import {
 	logRanges,
 	secretValue,
 	sourceLabels,
+	startingPort,
 	stripAnsi,
 	suggestedLocalPort
 } from './pods';
@@ -133,6 +134,14 @@ describe('k9s port-forward annotations', () => {
 		};
 		expect(annotatedForwards(deployment, AUTO_PORT_FORWARDS_KEY)).toEqual([{ remote: 80, local: null }]);
 		expect(annotatedForwards(deployment, PORT_FORWARDS_KEY)).toEqual([]);
+	});
+
+	it('starts a forward on the port the annotation names, else on the first one', () => {
+		const annotated = { ...pod, metadata: { name: 'web-1', annotations: { [PORT_FORWARDS_KEY]: '9000:http' } } };
+		expect(startingPort(annotated)).toEqual({ remote: 8080, local: 9000 });
+		expect(startingPort({ kind: 'Service', metadata: { name: 'db' }, spec: { ports: [{ port: 5432 }, { port: 80 }] } })).toEqual({ remote: 5432, local: 5432 });
+		expect(startingPort({ kind: 'Service', metadata: { name: 'web' }, spec: { ports: [{ port: 80 }] } })).toEqual({ remote: 80, local: null });
+		expect(startingPort({ kind: 'Service', metadata: { name: 'none' }, spec: {} })).toBeNull();
 	});
 });
 

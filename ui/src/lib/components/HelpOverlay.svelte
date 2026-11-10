@@ -129,6 +129,7 @@
 		[
 			t('Port-forwards'),
 			[
+				['Shift+F', t('Start a port-forward')],
 				['b', t('HTTP benchmark')],
 				['o', t('Open in the browser')],
 				['c  or  Enter', t('Copy URL')],
