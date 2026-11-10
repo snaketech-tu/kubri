@@ -5,9 +5,9 @@ const recording: Recording = {
 	version: 1,
 	http: [
 		{ method: 'GET', url: 'http://127.0.0.1:7899/api/object?name=web&namespace=shop&plural=pods', body: null, status: 200, type: 'application/json', response: '{"kind":"Pod"}' },
-		{ method: 'POST', url: '/api/access', body: '{"checks":[{"verb":"get"}],"fresh":false}', status: 200, type: 'application/json', response: '[true]' },
-		{ method: 'POST', url: '/api/history', body: '{"until":1}', status: 200, type: 'application/json', response: '{"entries":[]}' },
-		{ method: 'GET', url: '/api/settings', body: null, status: 200, type: 'application/json', response: '{"theme":"dark"}' }
+		{ method: 'POST', url: '/api/call', body: '{"call":"access","checks":[{"verb":"get"}],"fresh":false}', status: 200, type: 'application/json', response: '[true]' },
+		{ method: 'POST', url: '/api/call', body: '{"call":"history","until":1}', status: 200, type: 'application/json', response: '{"entries":[]}' },
+		{ method: 'POST', url: '/api/call', body: '{"call":"settings"}', status: 200, type: 'application/json', response: '{"settings":{"theme":"dark"},"error":null}' }
 	],
 	sockets: [
 		{ url: 'ws://127.0.0.1:7899/api/table?plural=pods&namespace=shop', first: null, messages: [{ text: '{"type":"rows"}' }], closed: false },
@@ -28,19 +28,23 @@ describe('the live demo', () => {
 
 	it('answers what was recorded, wherever the page is', () => {
 		expect(answer(replay, 'GET', '/object?name=web&namespace=shop&plural=pods').body).toBe('{"kind":"Pod"}');
-		expect(answer(replay, 'post', '/access', '{"fresh":false,"checks":[{"verb":"get"}]}').body).toBe('[true]');
+		expect(answer(replay, 'post', '/call', '{"fresh":false,"checks":[{"verb":"get"}],"call":"access"}').body).toBe('[true]');
 	});
 
 	it('says what it cannot show', () => {
 		const missing = answer(replay, 'GET', '/object?name=api&namespace=shop&plural=pods');
 		expect(missing.status).toBe(501);
 		expect(JSON.parse(missing.body).error).toBe(NOT_RECORDED);
+		expect(answer(replay, 'POST', '/call', '{"call":"access","checks":[],"fresh":false}').status).toBe(501);
 	});
 
 	it('answers requests that differ by time with any recorded one', () => {
-		expect(answer(replay, 'POST', '/history', '{"until":2}').body).toBe('{"entries":[]}');
+		expect(answer(replay, 'POST', '/call', '{"call":"history","until":2}').body).toBe('{"entries":[]}');
 		// Settings changed in the demo stay as they were.
-		expect(answer(replay, 'PUT', '/settings/columns', '{"kind":"Pod"}').body).toBe('{"theme":"dark"}');
+		const columns = answer(replay, 'POST', '/call', '{"call":"setColumnSettings","kind":"Pod","columns":{}}');
+		expect(JSON.parse(columns.body)).toEqual({ theme: 'dark' });
+		expect(answer(replay, 'POST', '/call', '{"call":"setSavedSearches","searches":[]}').status).toBe(200);
+		expect(answer(replay, 'POST', '/call', '{"call":"scale","replicas":2}').status).toBe(501);
 	});
 
 	it('plays sockets by their address and first request', () => {

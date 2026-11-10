@@ -3,7 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use kubri_core::{AgentSettings, Kubri, Settings};
+use kubri_core::Kubri;
 use kubri_mcp::http::HttpState;
 use kubri_mcp::{CallRecord, ConfirmRequest, Connection, Hub, Mcp, Transport};
 use tauri::State;
@@ -121,17 +121,6 @@ pub fn serve_stdio() {
 #[tauri::command]
 pub async fn agents_connection(agents: State<'_, Arc<Agents>>) -> CommandResult<Connection> {
     Ok(agents.connection().await)
-}
-
-#[tauri::command]
-pub async fn set_agent_settings(
-    kubri: State<'_, Arc<Kubri>>,
-    agents: State<'_, Arc<Agents>>,
-    settings: AgentSettings,
-) -> CommandResult<Settings> {
-    let saved = kubri.set_agent_settings(settings).map_err(|e| e.to_string())?;
-    agents.follow_settings().await;
-    Ok(saved)
 }
 
 #[tauri::command]
