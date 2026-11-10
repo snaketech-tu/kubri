@@ -260,7 +260,7 @@
 		details = null;
 		history = [];
 		app.details = null;
-		app.maximized = false;
+		app.layout.maximized = false;
 		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
 	}
 
@@ -415,12 +415,12 @@
 					return true;
 				case 'f':
 					if (!app.details) return false;
-					app.maximized = !app.maximized;
+					app.layout.maximized = !app.layout.maximized;
 					return true;
 				case 'Escape':
 					if (app.details) {
 						app.details = null;
-						app.maximized = false;
+						app.layout.maximized = false;
 					} else if (opened) {
 						back();
 					} else if (filter) {

@@ -1,4 +1,3 @@
-import type { Fill } from './resources';
 import { tick } from 'svelte';
 import { drafts } from './navigation.svelte';
 import { access } from './access.svelte';
@@ -9,273 +8,83 @@ import { dock } from './dock.svelte';
 import { reach } from './reach.svelte';
 import {
 	backend,
-	type AccessCheck,
 	type ClusterInfo,
-	type UpdateCheck,
-	type ColumnSettings,
-	type FavoriteForward,
-	type FavoriteStart,
-	type GitOpsAction,
 	type BenchInfo,
 	type ContextInfo,
-	type ContextSettings,
 	type Drill,
 	type ExplainSubject,
-	type Guard,
-	type MemoryFix,
-	type HelmRelease,
-	type IntegrationId,
-	type Integrations,
 	type K9sConfig,
 	type ObjectRef,
 	type Plugin,
 	type PluginRun,
 	type PortForwardInfo,
-	type ResourceInfo,
-	type ResourceRef,
-	type SavedSearch,
-	type Settings,
-	type TableScope,
-	type TerminalMode,
-	type KindView,
-	type ViewSet
+	type ResourceInfo
 } from './api';
 import { suggest, type Action, type ConfigSection, type PaletteConfig } from './commands';
 import { errorMessage } from './format';
 import { plural, t } from './i18n';
 import { coreText } from './i18n/errors';
-import { feedbackLink } from './feedback';
-import { readOnlyReason } from './guard';
-import { applyZoom, storedZoom } from './appearance';
-import { dismissRelease, dismissedRelease, releaseChecks, setReleaseChecks } from './releases';
-import { loadPins, savePins, samePin, toggled as togglePinIn, type Pin } from './pins';
 import { Places, type Place } from './places';
 import { fromHash, toHash, type Address } from './address';
 import { keepViews, lastContext, rememberContext, saveView, savedView, startContext, startSetting } from './startup';
-import { recentObjects, remember, type RecentObject } from './search';
-import { skinTheme, type Focus, type PluginView } from './k9s';
+import type { Focus, PluginView } from './k9s';
 import type { Menu, MenuAction } from './menu';
-import { applyScheme, applyTheme, resolveColor, storeSkin, storedScheme, storedSkin, type Scheme } from './skin';
 import { xrayResources } from './xray';
 import { productionRule, withMarked, type ProductionRule } from './production';
 import type { ToolId } from './nav';
+import { Activities } from './state/activity.svelte';
+import { Appearance } from './state/appearance.svelte';
+import { FavoriteForwards } from './state/favorites.svelte';
+import { GuardRails } from './state/guard.svelte';
+import { History } from './state/history.svelte';
+import { ClusterIntegrations } from './state/integrations.svelte';
+import { Layout } from './state/layout.svelte';
+import {
+	ALL_NAMESPACES,
+	PAGES,
+	findResource,
+	refOf,
+	sameObject,
+	sameResource,
+	sameView,
+	type Details,
+	type DetailsExtra,
+	type DetailsTab,
+	type Dialog,
+	type ListScope,
+	type Page,
+	type Toast,
+	type View
+} from './state/model';
+import { Pins } from './state/pins.svelte';
+import { Releases } from './state/releases.svelte';
+import { run as runAction } from './state/run';
+import { Preferences } from './state/settings.svelte';
+import { KindViews } from './state/views.svelte';
 
-export const ALL_NAMESPACES = '';
+export * from './state/model';
+export { NO_CONTEXT_SETTINGS, legacyContextSettings } from './state/settings.svelte';
+export { favoriteLabel, isForwardOf } from './state/favorites.svelte';
 
-export type DetailsTab = 'describe' | 'events' | 'yaml' | 'metrics' | 'logs' | 'shell';
+/**
+ * Global app state: kubeconfig contexts, the connected cluster and what is being browsed. The
+ * settings, guard rails, appearance, layout, integrations, kind views, pins, favorite
+ * port-forwards, activity and releases have stores of their own in `state/`.
+ */
+export class AppState {
+	/** Kubri's settings file: names, colors and guard rails per context, and preferences. */
+	prefs = new Preferences(this);
+	/** Whether the core lets Kubri change the connected cluster. */
+	rails = new GuardRails(this);
+	pins = new Pins(this);
+	favorites = new FavoriteForwards(this);
+	activity = new Activities(this);
+	releases = new Releases(this);
+	appearance = new Appearance(this);
+	layout = new Layout();
+	integrations = new ClusterIntegrations(this);
+	views = new KindViews();
 
-export interface Details {
-	target: ObjectRef;
-	resource: ResourceInfo;
-	tab: DetailsTab;
-	editing: boolean;
-	/** Start the logs with the previous container instance. */
-	previous?: boolean;
-	/** How the shell tab connects. */
-	mode?: TerminalMode;
-	/** The container the shell tab connects to, such as a debug container just started. */
-	container?: string;
-	/** Show the decoded values of a Secret, like k9s `x`. */
-	decoded?: boolean;
-}
-
-export type DetailsExtra = Partial<Pick<Details, 'editing' | 'previous' | 'mode' | 'decoded' | 'container'>>;
-
-/** A resource list narrowed to what belongs to one object, like the pods of a Deployment. */
-export interface ListScope {
-	/** Such as `Pods of Deployment web`. */
-	title: string;
-	scope: TableScope;
-	/** Keeps only what this UID owns. */
-	ownerUid: string | null;
-}
-
-/** A place in Kubri, for going back and forth like k9s `[`, `]` and `-`. */
-interface View {
-	page: Page;
-	resource: ResourceRef | null;
-	namespace: string;
-	scope: ListScope | null;
-	xray: ResourceRef | null;
-}
-
-const HISTORY = 50;
-
-/** Where Kubri 0.2 kept per-context choices in the browser; moved to the settings file once. */
-const READ_ONLY_KEY = 'kubri.readonly.';
-const ENVIRONMENT_KEY = 'kubri.environment.';
-const TOOLS_BESIDE_KEY = 'kubri.toolsBeside';
-const PANEL_WIDTH_KEY = 'kubri.panelWidth';
-const SIDEBAR_WIDTH_KEY = 'kubri.sidebarWidth';
-
-function stored(key: string): string | null {
-	try {
-		return localStorage.getItem(key);
-	} catch {
-		return null;
-	}
-}
-
-/** Keeps a per-context choice; null forgets it. Without storage it lasts until the page reloads. */
-function store(key: string, value: string | null) {
-	try {
-		if (value === null) localStorage.removeItem(key);
-		else localStorage.setItem(key, value);
-	} catch {
-		// Kept in memory only.
-	}
-}
-
-export const NO_CONTEXT_SETTINGS: ContextSettings = {
-	displayName: '',
-	label: '',
-	color: '',
-	production: false,
-	productionNamespaces: [],
-	productionLabels: [],
-	readOnly: false,
-	locked: false,
-	namespace: '',
-	namespaces: [],
-	namespaceSelector: '',
-	agentWrites: false,
-	forwards: [],
-	integrations: { prometheus: '', grafana: '', grafanaToken: '', loki: '', grafanaLogs: '', labels: '' }
-};
-
-const DEFAULT_SETTINGS: Settings = {
-	contexts: {},
-	diff: { scale: false, restart: false, image: true, labels: true },
-	agents: { http: false, port: 7879, secrets: false },
-	explain: { provider: 'none', baseUrl: '', model: '' },
-	debug: { image: 'busybox' },
-	columns: {},
-	searches: [],
-	history: { record: true, keepDays: 14, maxMb: 200 },
-	connections: { keepRecent: 3 },
-	terminal: { shell: '', args: [], startDir: '', fontSize: 13, fontFamily: '' },
-	labelTemplates: []
-};
-
-/** Per-context choices Kubri 0.2 kept in the browser, as settings, for contexts that have none yet. */
-export function legacyContextSettings(
-	keys: string[],
-	read: (key: string) => string | null,
-	existing: Record<string, ContextSettings>
-): Record<string, ContextSettings> {
-	const found: Record<string, ContextSettings> = {};
-	for (const key of keys) {
-		const [prefix, name] = key.startsWith(READ_ONLY_KEY)
-			? [READ_ONLY_KEY, key.slice(READ_ONLY_KEY.length)]
-			: key.startsWith(ENVIRONMENT_KEY)
-				? [ENVIRONMENT_KEY, key.slice(ENVIRONMENT_KEY.length)]
-				: [null, ''];
-		if (!prefix || !name || existing[name]) continue;
-		const value = read(key) ?? '';
-		const settings = (found[name] ??= { ...NO_CONTEXT_SETTINGS });
-		if (prefix === READ_ONLY_KEY) settings.readOnly = value === 'true';
-		else {
-			settings.label = value.trim();
-			settings.production = /\bprod(uction)?\b/i.test(value);
-		}
-	}
-	return found;
-}
-
-export const PAGES = [
-	'resources',
-	'portforwards',
-	'benchmarks',
-	'pulses',
-	'xray',
-	'graph',
-	'rbac',
-	'helm',
-	'create',
-	'sanitizer',
-	'integrations',
-	'rightsizing',
-	'fleet',
-	'search',
-	'changes',
-	'config',
-	'tools',
-	'kinds'
-] as const;
-
-export type Page = (typeof PAGES)[number];
-
-export type Dialog =
-	| { kind: 'delete'; resource: ResourceInfo; targets: ObjectRef[]; statuses?: Record<string, string> }
-	| { kind: 'scale'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'restart'; resource: ResourceInfo; target: ObjectRef }
-	/** Several marked objects at once. */
-	| { kind: 'scaleMany'; resource: ResourceInfo; targets: ObjectRef[] }
-	| { kind: 'restartMany'; resource: ResourceInfo; targets: ObjectRef[] }
-	| { kind: 'labels'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'portforward'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'benchmark'; forward: PortForwardInfo; preset?: BenchInfo }
-	| { kind: 'drain'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'helmRollback'; release: HelmRelease; revision: number; done: () => void }
-	| { kind: 'helmUninstall'; release: HelmRelease; done: () => void }
-	| { kind: 'plugin'; plugin: Plugin; run: PluginRun; variables: Record<string, string> }
-	| { kind: 'trigger'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'suspend'; resource: ResourceInfo; target: ObjectRef; suspend: boolean }
-	| { kind: 'image'; resource: ResourceInfo; target: ObjectRef }
-	| { kind: 'rollback'; resource: ResourceInfo; target: ObjectRef; owner?: { kind: string; plural: string; name: string }; revision?: number }
-	/** A Flux or Argo CD action; `autoSync` turns Argo CD's auto-sync off or on, as it is now. */
-	| { kind: 'gitops'; resource: ResourceInfo; target: ObjectRef; action: GitOpsAction | 'autoSync' }
-	/**
-	 * The requests and limits of a workload's containers, with the room on its nodes. `fill`
-	 * prefills values, as right-sizing advice suggests them; the cursor starts at the first.
-	 */
-	| {
-			kind: 'resources';
-			resource: ResourceInfo;
-			target: ObjectRef;
-			fill?: Fill[];
-			/** Why, as the advice says it. */
-			note?: string;
-	  }
-	/** Has cert-manager issue a Certificate again now. */
-	| { kind: 'renew'; resource: ResourceInfo; target: ObjectRef }
-	/** A debug container in a pod, a debug copy of it, or a shell on a node. */
-	| { kind: 'debug'; on: 'pod' | 'node'; target: ObjectRef; way?: 'ephemeral' | 'copy'; container?: string }
-	/** The same object in another context or namespace, side by side. */
-	| { kind: 'compare'; resource: ResourceInfo; target: ObjectRef }
-	/** The Grafana dashboards and the context's links for an object. */
-	| { kind: 'grafana'; target: ObjectRef }
-	/** A higher memory limit for a container, on the workload that owns its pod. */
-	| { kind: 'memory'; resource: ResourceInfo; target: ObjectRef; fix: MemoryFix }
-	/** The kubectl commands for an object's actions, to copy. */
-	| { kind: 'kubectl'; title: string; commands: { label: string; command: string }[] }
-	/** Explains an action RBAC refuses, and what would allow it. */
-	| { kind: 'forbidden'; action: string; check: AccessCheck; target: ObjectRef | null }
-	/** Saves a namespace or the cluster to a snapshot file, or opens one; `namespace` null is the cluster. */
-	| { kind: 'snapshot'; namespace: string | null };
-
-let activityId = 0;
-
-/** One change made in this session. */
-export interface Activity {
-	id: number;
-	at: number;
-	context: string;
-	text: string;
-	ok: boolean;
-	/** Sets things back, where Kubernetes allows it. */
-	undo?: () => Promise<unknown>;
-	undone: boolean;
-}
-
-export interface Toast {
-	id: number;
-	tone: 'ok' | 'bad';
-	text: string;
-}
-
-/** Global app state: kubeconfig contexts, the connected cluster and what is being browsed. */
-class AppState {
 	contexts = $state<ContextInfo[]>([]);
 	/** Contexts kept connected in the background, most recent first. */
 	warm = $state<string[]>([]);
@@ -333,39 +142,10 @@ class AppState {
 		if (drafts.block(() => (this.details = value))) return;
 		this.#details = value;
 	}
-	/** The details panel fills the window, sidebar included. */
-	maximized = $state(false);
-	/** Logs and shells take the place of the list, unless asked to stay beside it. */
-	#toolsBeside = $state(stored(TOOLS_BESIDE_KEY) === 'true');
-	get toolsBeside() {
-		return this.#toolsBeside;
-	}
-	set toolsBeside(value: boolean) {
-		this.#toolsBeside = value;
-		store(TOOLS_BESIDE_KEY, value ? 'true' : null);
-	}
-	/** The width the details panel was dragged to beside the list, or null for the default. */
-	#panelWidth = $state(Number(stored(PANEL_WIDTH_KEY)) || null);
-	get panelWidth() {
-		return this.#panelWidth;
-	}
-	set panelWidth(value: number | null) {
-		this.#panelWidth = value;
-		store(PANEL_WIDTH_KEY, value ? String(Math.round(value)) : null);
-	}
-	/** The width the sidebar was dragged to, or null for the default. */
-	#sidebarWidth = $state(Number(stored(SIDEBAR_WIDTH_KEY)) || null);
-	get sidebarWidth() {
-		return this.#sidebarWidth;
-	}
-	set sidebarWidth(value: number | null) {
-		this.#sidebarWidth = value;
-		store(SIDEBAR_WIDTH_KEY, value ? String(Math.round(value)) : null);
-	}
 	/** The details panel takes the place of the list: maximized, or showing logs or a shell. */
 	get panelWide(): boolean {
 		const tab = this.#details?.tab;
-		return !!this.#details && (this.maximized || ((tab === 'logs' || tab === 'shell') && !this.#toolsBeside));
+		return !!this.#details && (this.layout.maximized || ((tab === 'logs' || tab === 'shell') && !this.layout.toolsBeside));
 	}
 	dialog = $state<Dialog | null>(null);
 	/** The dialog that offers to install the new `release`. */
@@ -398,29 +178,6 @@ class AppState {
 		this.tourOpen = true;
 	}
 
-	/** Every change made from here in this session, newest first. */
-	activity = $state.raw<Activity[]>([]);
-	activityOpen = $state(false);
-
-	/** Adds a change to the session activity; an entry with `undo` can be taken back. */
-	record(entry: Omit<Activity, 'id' | 'at' | 'context' | 'undone'>): number {
-		const id = ++activityId;
-		this.activity = [{ ...entry, id, at: Date.now(), context: this.cluster?.context ?? '', undone: false }, ...this.activity].slice(0, 200);
-		return id;
-	}
-
-	/** Takes back an entry that can be, and records that it was. */
-	async undoActivity(id: number) {
-		const entry = this.activity.find((a) => a.id === id);
-		if (!entry?.undo || entry.undone) return;
-		try {
-			await entry.undo();
-			this.activity = this.activity.map((a) => (a.id === id ? { ...a, undone: true } : a));
-			this.toast(t('Undone: {what}', { what: entry.text }));
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-		}
-	}
 	contextMenuOpen = $state(false);
 	/** The dialog listing the kubeconfig files Kubri reads, where more can be loaded; 'copy' opens
 	 * straight to adding contexts from a file, as the browser's start page does. */
@@ -436,18 +193,6 @@ class AppState {
 
 	/** The k9s configuration of the connected context. */
 	k9s = $state<K9sConfig | null>(null);
-	/** The tools the connected cluster runs, like Prometheus or Flux. */
-	integrations = $state<Integrations | null>(null);
-	/** How custom resource kinds show: columns, health, details and actions from YAML files. */
-	views = $state<ViewSet | null>(null);
-	/** The skin picked for this context: undefined follows k9s, null is Kubri's own colors. */
-	skinChoice = $state<string | null | undefined>(undefined);
-	/** The skin on screen, and why the wanted one is not. */
-	skin = $state<string | null>(null);
-	skinError = $state<string | null>(null);
-	/** Whether the skin on screen is dark. */
-	skinDark = $state(false);
-	#skinRequest = 0;
 	/** The section the config page scrolls to. */
 	configSection = $state<ConfigSection | undefined>(undefined);
 	/** A foreground plugin, which gets a terminal over the whole window. */
@@ -462,10 +207,8 @@ class AppState {
 	cursorRequest = $state<{ namespace: string | null; name: string } | null>(null);
 	/** Narrows the resource list, after Enter on a workload, CronJob or node. */
 	scope = $state<ListScope | null>(null);
-	#history = $state.raw<View[]>([]);
-	#historyAt = $state(-1);
-	/** The view before the current one, for `-`. */
-	#lastView: View | null = null;
+	#history = new History<View>(sameView);
+	/** Set when going back or forth, so the view it brings up is not recorded again. */
 	#restoring = false;
 	/** The k9s `defaultView` applies once, when Kubri starts. */
 	#startup = true;
@@ -512,17 +255,8 @@ class AppState {
 	paletteConfig = $derived<PaletteConfig>({ aliases: this.k9s?.aliases ?? [], skins: this.k9s?.skins ?? [], terminal: this.localTerminal });
 
 	/** Kubri's settings file: names, colors and guard rails per context, and preferences. */
-	settings = $state<Settings>(DEFAULT_SETTINGS);
-	/** Why the settings file could not be read. */
-	settingsError = $state<string | null>(null);
-	/** Whether the core lets Kubri change the connected cluster, which it enforces. */
-	guard = $state<Guard>({ readOnly: false, reason: null, canUnlock: false, unlockedFor: null, fixed: false });
-	/** When an unlocked context locks again, in milliseconds since the epoch. */
-	unlockedUntil = $state<number | null>(null);
-	#guardTimer: ReturnType<typeof setTimeout> | null = null;
-	#guardRequest = 0;
 	/** The settings of the connected context. */
-	contextSettings = $derived(this.contextSettingsOf(this.cluster?.context));
+	contextSettings = $derived(this.prefs.contextSettingsOf(this.cluster?.context));
 	/** A label such as "Production" for this context, set by the user; Kubri never guesses it from names. */
 	environment = $derived(this.contextSettings.label);
 	/** Marked as production by the user: a red stripe and badge, and typed names before destructive actions. */
@@ -549,8 +283,8 @@ class AppState {
 		// A name a pattern or label rule already marks needs no entry of its own.
 		const names = (typeof namespaces === 'string' ? [namespaces] : namespaces).filter((n) => !production || !this.productionRuleOf(n));
 		if (!context || !names.length) return;
-		const settings = this.contextSettingsOf(context);
-		if (await this.setContextSettings(context, { ...settings, productionNamespaces: withMarked(settings, names, production) })) {
+		const settings = this.prefs.contextSettingsOf(context);
+		if (await this.prefs.setContextSettings(context, { ...settings, productionNamespaces: withMarked(settings, names, production) })) {
 			const name = names.join(', ');
 			const n = names.length;
 			// Unmarked by name, but a pattern or label rule still marks it.
@@ -562,254 +296,7 @@ class AppState {
 		}
 	}
 	/** k9s `readOnly`, read-only or locked in Kubri: nothing that changes the cluster is offered. */
-	readOnly = $derived((this.k9s?.readOnly ?? false) || this.guard.readOnly);
-	/** Light or dark picked in Kubri; null follows the system. Skins pick their own. */
-	scheme = $state<Scheme>(storedScheme());
-	/** Whether the system is set to dark; the page follows its changes. */
-	systemDark = $state(typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches);
-	/** Whether the colors on screen are dark now, a skin's or Kubri's own. */
-	dark = $derived(this.skin ? this.skinDark : this.scheme ? this.scheme === 'dark' : this.systemDark);
-
-	contextSettingsOf(context: string | undefined | null): ContextSettings {
-		return (context && this.settings.contexts[context]) || NO_CONTEXT_SETTINGS;
-	}
-
-	/** The name to show for a context: the display name set in Kubri, or its own. */
-	contextName(context: string): string {
-		return this.contextSettingsOf(context).displayName || context;
-	}
-
-	async loadSettings() {
-		try {
-			const reply = await backend.settings();
-			this.settings = reply.settings;
-			this.settingsError = reply.error;
-			if (!reply.error) await this.migrateLegacySettings();
-		} catch (err) {
-			this.settingsError = errorMessage(err);
-		}
-	}
-
-	/** Moves the read-only choices and labels of Kubri 0.2 from the browser to the settings file. */
-	private async migrateLegacySettings() {
-		let keys: string[] = [];
-		try {
-			keys = Object.keys(localStorage).filter((k) => k.startsWith(READ_ONLY_KEY) || k.startsWith(ENVIRONMENT_KEY));
-		} catch {
-			return;
-		}
-		const found = legacyContextSettings(keys, stored, this.settings.contexts);
-		for (const [name, settings] of Object.entries(found)) {
-			try {
-				this.settings = await backend.setContextSettings(name, settings);
-			} catch {
-				return;
-			}
-		}
-		for (const key of keys) store(key, null);
-	}
-
-	/** Saves the settings of a context; the connected one's guard follows. */
-	async setContextSettings(context: string, settings: ContextSettings): Promise<boolean> {
-		try {
-			this.settings = await backend.setContextSettings(context, settings);
-			if (context === this.cluster?.context) await this.refreshGuard();
-			return true;
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-			return false;
-		}
-	}
-
-	/** Replaces the label templates for logs. */
-	async setLabelTemplates(templates: Settings['labelTemplates']): Promise<boolean> {
-		try {
-			this.settings = await backend.setLabelTemplates(templates);
-			return true;
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-			return false;
-		}
-	}
-
-	/** Replaces the searches kept in the sidebar. */
-	async setSavedSearches(searches: SavedSearch[]): Promise<boolean> {
-		try {
-			this.settings = await backend.setSavedSearches(searches);
-			return true;
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-			return false;
-		}
-	}
-
-	/** Saves how lists show a kind. */
-	async setColumnSettings(kind: string, columns: ColumnSettings) {
-		try {
-			this.settings = await backend.setColumnSettings(kind, columns);
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-		}
-	}
-
-	async setDiffSettings(diff: Settings['diff']) {
-		try {
-			this.settings = await backend.setDiffSettings(diff);
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-		}
-	}
-
-	async setConnectionSettings(connections: Settings['connections']) {
-		try {
-			this.settings = await backend.setConnectionSettings(connections);
-			this.refreshWarm();
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-		}
-	}
-
-	async setTerminalSettings(terminal: Settings['terminal']) {
-		try {
-			this.settings = await backend.setTerminalSettings(terminal);
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-		}
-	}
-
-	async setHistorySettings(history: Settings['history']) {
-		try {
-			this.settings = await backend.setHistorySettings(history);
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-		}
-	}
-
-	async setAgentSettings(agents: Settings['agents']) {
-		try {
-			this.settings = await backend.setAgentSettings(agents);
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-		}
-	}
-
-	async setExplainSettings(explain: Settings['explain']) {
-		try {
-			this.settings = await backend.setExplainSettings(explain);
-		} catch (err) {
-			this.toast(errorMessage(err), 'bad');
-		}
-	}
-
-	async refreshGuard() {
-		await this.#askGuard(() => backend.guard(), true);
-	}
-
-	/** Asks the core for the guard; only the latest answer counts, so a slow one cannot undo an unlock. */
-	async #askGuard(ask: () => Promise<Guard>, quiet = false): Promise<boolean> {
-		const request = ++this.#guardRequest;
-		try {
-			const guard = await ask();
-			if (request === this.#guardRequest) this.applyGuard(guard);
-			return true;
-		} catch (err) {
-			// Quietly keep the last state; the core still refuses what it must.
-			if (!quiet) this.toast(errorMessage(err), 'bad');
-			return false;
-		}
-	}
-
-	private applyGuard(guard: Guard) {
-		this.guard = guard;
-		this.unlockedUntil = guard.unlockedFor ? Date.now() + guard.unlockedFor * 1000 : null;
-		if (this.#guardTimer) clearTimeout(this.#guardTimer);
-		this.#guardTimer = null;
-		// Lock again on screen when the core does.
-		if (guard.unlockedFor) this.#guardTimer = setTimeout(() => this.refreshGuard(), guard.unlockedFor * 1000 + 500);
-	}
-
-	/** Unlocks a locked context for 15 minutes. */
-	async unlock() {
-		if (drafts.block(() => this.unlock())) return;
-		if (await this.#askGuard(() => backend.unlock())) this.toast(t('Unlocked for 15 minutes'));
-	}
-
-	async lock() {
-		if (drafts.block(() => this.lock())) return;
-		await this.#askGuard(() => backend.lock());
-	}
-
-	/** Says why an action that changes the cluster did nothing, and how to allow it where that is possible. */
-	explainReadOnly(action: string) {
-		const what = action.replace(/…$/, '');
-		this.toast(t('{action} is not available: {reason}', { action: what, reason: readOnlyReason(this.guard, this.contextSettings.readOnly, this.k9s?.readOnly ?? false) }), 'bad');
-	}
-
-	/** The header's lock button: read-only on and off, or a locked context unlocked and locked. */
-	toggleReadOnly() {
-		if (drafts.block(() => this.toggleReadOnly())) return;
-		const context = this.cluster?.context;
-		if (!context) return;
-		const settings = this.contextSettings;
-		if (settings.readOnly) {
-			this.setContextSettings(context, { ...settings, readOnly: false });
-		} else if (this.guard.canUnlock) {
-			if (this.guard.readOnly) this.unlock();
-			else this.lock();
-		} else {
-			this.setContextSettings(context, { ...settings, readOnly: true });
-		}
-	}
-
-	/** Switches to Kubri's other colors; with a skin on screen, takes it off for this context. */
-	toggleScheme() {
-		this.setScheme(this.dark ? 'light' : 'dark');
-		if (this.skin) void this.setSkin(null);
-	}
-
-	/** Light, dark, or null to follow the system. */
-	setScheme(scheme: Scheme) {
-		this.scheme = scheme;
-		applyScheme(scheme);
-	}
-
-	/** The desktop app's zoom level, kept for the next start. */
-	zoom = $state(storedZoom());
-
-	setZoom(zoom: number) {
-		this.zoom = zoom;
-		applyZoom(zoom).catch((err) => this.toast(t('Could not zoom: {error}', { error: errorMessage(err) }), 'bad'));
-	}
-
-	/** Whether Kubri asks GitHub for new releases when it starts. */
-	releaseChecks = $state(releaseChecks());
-	/** A release newer than this one, until the user waves it away. */
-	release = $state<UpdateCheck | null>(null);
-
-	setReleaseChecks(on: boolean) {
-		this.releaseChecks = on;
-		setReleaseChecks(on);
-		if (on) this.checkRelease();
-		else this.release = null;
-	}
-
-	/** With `offer`, as when Kubri starts, opens the update dialog if Kubri can install the release. */
-	async checkRelease(offer = false) {
-		if (!this.releaseChecks) return;
-		try {
-			const latest = await backend.checkUpdate();
-			this.release = latest.newer && latest.version !== dismissedRelease() ? latest : null;
-			if (offer && this.release?.installable) this.updateOpen = true;
-		} catch {
-			// Offline or rate-limited: no notice, and the next start asks again.
-		}
-	}
-
-	dismissRelease() {
-		if (this.release) dismissRelease(this.release.version);
-		this.release = null;
-		this.updateOpen = false;
-	}
+	readOnly = $derived((this.k9s?.readOnly ?? false) || this.rails.guard.readOnly);
 
 	/** Where Kubri is, for the history. */
 	view = $derived<View>({
@@ -855,9 +342,9 @@ class AppState {
 	}
 
 	async load() {
-		this.checkRelease(true);
+		this.releases.check(true);
 		try {
-			await this.loadSettings();
+			await this.prefs.load();
 			let list: Awaited<ReturnType<typeof backend.contexts>>;
 			try {
 				list = await backend.contexts();
@@ -1014,7 +501,7 @@ class AppState {
 		});
 		this.toast(
 			this.cluster
-				? t('Stopped connecting to {name}; still on {current}', { name, current: this.contextName(this.cluster.context) })
+				? t('Stopped connecting to {name}; still on {current}', { name, current: this.prefs.contextName(this.cluster.context) })
 				: t('Stopped connecting to {name}', { name })
 		);
 	}
@@ -1066,29 +553,22 @@ class AppState {
 			this.#restoring = false;
 			return;
 		}
-		const current = this.#history[this.#historyAt];
-		if (current && sameView(current, view)) return;
-		if (current) this.#lastView = current;
-		this.#history = [...this.#history.slice(0, this.#historyAt + 1), view].slice(-HISTORY);
-		this.#historyAt = this.#history.length - 1;
+		this.#history.push(view);
 	}
 
 	/** Goes back (`[`) or forward (`]`) in the history; false when there is nowhere to go. */
 	get canGoBack() {
-		return this.#historyAt > 0;
+		return this.#history.canGoBack;
 	}
 
 	get canGoForward() {
-		return this.#historyAt < this.#history.length - 1;
+		return this.#history.canGoForward;
 	}
 
 	go(delta: -1 | 1): boolean {
 		if (drafts.block(() => this.go(delta))) return false;
-		const at = this.#historyAt + delta;
-		const view = this.#history[at];
+		const view = this.#history.step(delta);
 		if (!view) return false;
-		this.#lastView = this.#history[this.#historyAt] ?? null;
-		this.#historyAt = at;
 		this.restore(view);
 		return true;
 	}
@@ -1096,11 +576,8 @@ class AppState {
 	/** Returns to the view before this one, and back again (`-`). */
 	toggleLast(): boolean {
 		if (drafts.block(() => this.toggleLast())) return false;
-		const last = this.#lastView;
+		const last = this.#history.toggleLast();
 		if (!last) return false;
-		const at = this.#history.findLastIndex((v) => sameView(v, last));
-		this.#lastView = this.#history[this.#historyAt] ?? null;
-		if (at !== -1) this.#historyAt = at;
 		this.restore(last);
 		return true;
 	}
@@ -1119,8 +596,7 @@ class AppState {
 		if (xray) this.xrayResource = xray;
 		this.namespace = view.namespace;
 		this.scope = view.scope;
-		this.#history = history;
-		this.#historyAt = historyAt;
+		this.#history.reset(history, historyAt);
 		// The history already holds this view; the effect that records views must skip it.
 		this.#restoring = !sameView(view, shown);
 		// For the list of this context, which mounts after this update; the one leaving must
@@ -1185,107 +661,17 @@ class AppState {
 		this.details = null;
 	}
 	/** Runs a palette command or hotkey. */
-	async run(action: Action) {
-		switch (action.type) {
-			case 'resource': {
-				let resource: ResourceInfo | undefined = action.resource;
-				if (action.context && action.context !== this.cluster?.context) {
-					await this.switchContext(action.context);
-					if (this.cluster?.context !== action.context) return;
-					resource = findResource(this.resources, action.resource);
-					if (!resource) {
-						this.toast(t('{context} has no {kind}', { context: action.context, kind: action.resource.plural }), 'bad');
-						return;
-					}
-				}
-				this.open(resource, action.namespace, action.filter);
-				break;
-			}
-			case 'context': {
-				const name = action.name === '-' ? this.previousContext : action.name;
-				if (!name) this.toast(t('There is no previous context yet'), 'bad');
-				else if (name !== this.cluster?.context) await this.switchContext(name);
-				break;
-			}
-			case 'namespace':
-				this.namespace = action.name;
-				break;
-			case 'pulses':
-				this.showPulses(action.namespace);
-				break;
-			case 'xray':
-				this.showXray(action.resource, action.namespace);
-				break;
-			case 'rbac':
-				this.showRbac(action.namespace);
-				break;
-			case 'helm':
-				this.showHelm(action.namespace);
-				break;
-			case 'new':
-				this.showCreate(action.resource, action.params);
-				break;
-			case 'sanitizer':
-				this.showSanitizer(action.namespace);
-				break;
-			case 'benchmarks':
-				this.showBenchmarks();
-				break;
-			case 'integrations':
-				this.showIntegrations();
-				break;
-			case 'rightsizing':
-				this.showRightSizing();
-				break;
-			case 'tools':
-				this.showTools();
-				break;
-			case 'kinds':
-				this.showKinds(action.filter);
-				break;
-			case 'fleet':
-				this.showFleet();
-				break;
-			case 'terminal':
-				this.openLocalTerminal(action.another);
-				break;
-			case 'search':
-				this.showSearch(action.query);
-				break;
-			case 'graph':
-				this.showGraph(action.namespace);
-				break;
-			case 'changes':
-				this.showChanges(action.filter);
-				break;
-			case 'snapshot':
-				this.showSnapshot(action.namespace);
-				break;
-			case 'kubeconfig':
-				this.kubeconfigFilesOpen = true;
-				break;
-			case 'object':
-				await this.openObject(action.target, action.kind);
-				break;
-			case 'portforwards':
-				this.showPortForwards();
-				break;
-			case 'config':
-				this.showConfig(action.section);
-				break;
-			case 'skin':
-				this.setSkin(action.name);
-				break;
-			case 'help':
-				this.helpOpen = true;
-				break;
-			case 'feedback':
-				backend.openUrl(feedbackLink(action.kind, backend.desktop)).catch((err) => this.toast(errorMessage(err), 'bad'));
-				break;
-			case 'call':
-				action.run();
-				break;
-		}
+	run(action: Action) {
+		return runAction(this, action);
+	}
+
+	/** Opens `page`, and closes the details; false while an unsaved YAML draft holds it until `again` runs. */
+	#show(page: Page, again: () => void, namespace?: string): boolean {
+		if (drafts.block(again)) return false;
+		this.page = page;
+		this.details = null;
+		this.setNamespace(namespace);
+		return true;
 	}
 
 	private setNamespace(namespace: string | undefined) {
@@ -1301,68 +687,7 @@ class AppState {
 			return;
 		}
 		this.details = { resource, target: { ...target, context: this.cluster?.context }, tab, editing: false, ...extra };
-		if (this.cluster) {
-			this.recent = remember({
-				context: this.cluster.context,
-				kind: resource.kind,
-				...refOf(resource),
-				namespace: target.namespace,
-				name: target.name
-			});
-		}
-	}
-
-	/** Objects opened lately, newest first, in any context. */
-	recent = $state.raw<RecentObject[]>(recentObjects());
-
-	/** Kinds and objects kept in the sidebar, for every context; the sidebar shows the current one's. */
-	pins = $state.raw<Pin[]>(loadPins());
-
-	/** The pins of the connected context, in the order they were made. */
-	get pinsHere(): Pin[] {
-		const context = this.cluster?.context;
-		return context ? this.pins.filter((p) => p.context === context) : [];
-	}
-
-	pinFor(resource: ResourceInfo, target?: { namespace: string | null; name: string }): Pin | null {
-		const context = this.cluster?.context;
-		if (!context) return null;
-		return {
-			context,
-			kind: resource.kind,
-			...refOf(resource),
-			namespace: target?.namespace ?? null,
-			name: target?.name ?? ''
-		};
-	}
-
-	isPinned(pin: Pin | null): boolean {
-		return !!pin && this.pins.some((p) => samePin(p, pin));
-	}
-
-	togglePin(pin: Pin | null) {
-		if (!pin) return;
-		const was = this.isPinned(pin);
-		this.pins = togglePinIn(this.pins, pin);
-		savePins(this.pins);
-		this.toast(was ? t('Unpinned {name}', { name: pin.name || pin.kind }) : t('Pinned {name} to the sidebar', { name: pin.name || pin.kind }));
-	}
-
-	/** Opens a pin or a recent object: the list of a kind, a namespace's pods, or an object in its list. */
-	openPin(pin: RecentObject) {
-		const resource = findResource(this.resources, { group: pin.group, version: pin.version, plural: pin.plural });
-		if (!resource) {
-			this.toast(t('The cluster does not serve {kind}', { kind: pin.plural }), 'bad');
-			return;
-		}
-		if (!pin.name) {
-			this.open(resource);
-		} else if (resource.plural === 'namespaces' && resource.group === '') {
-			const pods = findResource(this.resources, { group: '', version: 'v1', plural: 'pods' });
-			if (pods) this.open(pods, pin.name, '');
-		} else {
-			this.openAt(resource, pin.namespace, pin.name);
-		}
+		this.pins.opened(resource, target);
 	}
 
 	/**
@@ -1387,39 +712,29 @@ class AppState {
 
 	/** Searches objects by name, label and field, here or in several contexts. */
 	showSearch(query?: string) {
-		if (drafts.block(() => this.showSearch(query))) return;
-		this.page = 'search';
-		this.details = null;
+		if (!this.#show('search', () => this.showSearch(query))) return;
 		if (query !== undefined) this.searchQuery = query;
 	}
 
 	/** What changed: the changes Kubri recorded, for the namespace or one object. */
 	showChanges(filter: ChangesFilter = {}) {
-		if (drafts.block(() => this.showChanges(filter))) return;
-		this.page = 'changes';
-		this.details = null;
+		if (!this.#show('changes', () => this.showChanges(filter))) return;
 		this.changesFilter = { namespace: this.namespace || undefined, ...filter };
 	}
 
 	/** What the cluster runs that Kubri uses: Prometheus, Grafana, Loki, Flux, Argo CD, cert-manager. */
 	showIntegrations() {
-		if (drafts.block(() => this.showIntegrations())) return;
-		this.page = 'integrations';
-		this.details = null;
+		this.#show('integrations', () => this.showIntegrations());
 	}
 
 	/** Every context at once, without connecting to them. */
 	showFleet() {
-		if (drafts.block(() => this.showFleet())) return;
-		this.page = 'fleet';
-		this.details = null;
+		this.#show('fleet', () => this.showFleet());
 	}
 
 	/** Every tool beyond the lists, on one page. */
 	showTools() {
-		if (drafts.block(() => this.showTools())) return;
-		this.page = 'tools';
-		this.details = null;
+		this.#show('tools', () => this.showTools());
 	}
 
 	/** Opens a tool of the sidebar or the Tools page. */
@@ -1449,57 +764,39 @@ class AppState {
 
 	/** Every kind the cluster serves, to find one by name. */
 	showKinds(filter = '') {
-		if (drafts.block(() => this.showKinds(filter))) return;
-		this.page = 'kinds';
-		this.details = null;
+		if (!this.#show('kinds', () => this.showKinds(filter))) return;
 		this.kindsFilter = filter;
 	}
 
 	/** Containers whose requests or limits are far from what they use. */
 	showRightSizing() {
-		if (drafts.block(() => this.showRightSizing())) return;
-		this.page = 'rightsizing';
-		this.details = null;
+		this.#show('rightsizing', () => this.showRightSizing());
 	}
 
 	/** The Overview, optionally switching namespace like `:pulses kube-system`. */
 	showPulses(namespace?: string) {
-		if (drafts.block(() => this.showPulses(namespace))) return;
-		this.page = 'pulses';
-		this.details = null;
-		this.setNamespace(namespace);
+		this.#show('pulses', () => this.showPulses(namespace), namespace);
 	}
 
 	/** The XRay trees of `resource`, like k9s `:xray deploy`. */
 	showXray(resource: ResourceInfo, namespace?: string) {
-		if (drafts.block(() => this.showXray(resource, namespace))) return;
-		this.page = 'xray';
+		if (!this.#show('xray', () => this.showXray(resource, namespace), namespace)) return;
 		this.xrayResource = resource;
-		this.details = null;
-		this.setNamespace(namespace);
 	}
 
 	/** XRay as one graph of how the objects connect, with the request paths of Ingresses. */
 	showGraph(namespace?: string) {
-		if (drafts.block(() => this.showGraph(namespace))) return;
-		this.page = 'graph';
-		this.details = null;
-		this.setNamespace(namespace);
+		this.#show('graph', () => this.showGraph(namespace), namespace);
 	}
 
 	/** Who may do what, like k9s `:rbac`. */
 	showRbac(namespace?: string) {
-		if (drafts.block(() => this.showRbac(namespace))) return;
-		this.page = 'rbac';
-		this.details = null;
-		this.setNamespace(namespace);
+		this.#show('rbac', () => this.showRbac(namespace), namespace);
 	}
 
 	/** The Create page; with `resource`, starting from its template, like `:new deploy web --image nginx`. */
 	showCreate(resource?: ResourceInfo, params: TemplateParams = {}) {
-		if (drafts.block(() => this.showCreate(resource, params))) return;
-		this.page = 'create';
-		this.details = null;
+		if (!this.#show('create', () => this.showCreate(resource, params))) return;
 		if (resource) {
 			const namespace = params.namespace ?? (resource.namespaced && this.namespace ? this.namespace : undefined);
 			creating.start(resource, { ...params, namespace });
@@ -1508,25 +805,17 @@ class AppState {
 
 	/** Helm releases, like k9s `:helm`. */
 	showHelm(namespace?: string) {
-		if (drafts.block(() => this.showHelm(namespace))) return;
-		this.page = 'helm';
-		this.details = null;
-		this.setNamespace(namespace);
+		this.#show('helm', () => this.showHelm(namespace), namespace);
 	}
 
 	/** Problems and risky settings, like Popeye; `:popeye kube-system` switches namespace. */
 	showSanitizer(namespace?: string) {
-		if (drafts.block(() => this.showSanitizer(namespace))) return;
-		this.page = 'sanitizer';
-		this.details = null;
-		this.setNamespace(namespace);
+		this.#show('sanitizer', () => this.showSanitizer(namespace), namespace);
 	}
 
 	/** HTTP benchmarks, optionally showing one of them. */
 	showBenchmarks(id?: number) {
-		if (drafts.block(() => this.showBenchmarks(id))) return;
-		this.page = 'benchmarks';
-		this.details = null;
+		if (!this.#show('benchmarks', () => this.showBenchmarks(id))) return;
 		if (id !== undefined) this.benchmarkId = id;
 		this.refreshBenchmarks();
 	}
@@ -1541,9 +830,7 @@ class AppState {
 
 	/** The k9s configuration: skins, hotkeys, plugins and aliases. */
 	showConfig(section?: ConfigSection) {
-		if (drafts.block(() => this.showConfig(section))) return;
-		this.page = 'config';
-		this.details = null;
+		if (!this.#show('config', () => this.showConfig(section))) return;
 		this.configSection = section;
 	}
 
@@ -1555,7 +842,7 @@ class AppState {
 			if (this.cluster?.context !== context) return;
 			this.k9s = config;
 			// The k9s files can turn read-only on or off.
-			this.refreshGuard();
+			this.rails.refresh();
 			// k9s opens its `defaultView` when it starts.
 			const start = this.#startup && config.defaultView;
 			this.#startup = false;
@@ -1569,42 +856,11 @@ class AppState {
 		} finally {
 			this.starting = false;
 		}
-		this.skinChoice = context ? storedSkin(context) : undefined;
-		await this.applySkin();
-	}
-
-	/** Picks a skin for this context: a name, null for Kubri's colors, undefined to follow k9s. */
-	async setSkin(name: string | null | undefined) {
-		this.skinChoice = name;
-		if (this.cluster) storeSkin(this.cluster.context, name);
-		await this.applySkin();
-	}
-
-	private async applySkin() {
-		const request = ++this.#skinRequest;
-		const name = this.skinChoice === undefined ? (this.k9s?.skin ?? null) : this.skinChoice;
-		let theme = null;
-		let error = null;
-		if (name) {
-			try {
-				theme = skinTheme(await backend.k9sSkin(name), resolveColor);
-				if (!theme) error = t('The skin {name} sets no colors Kubri can use.', { name });
-			} catch (err) {
-				error = t('Could not load the skin {name}: {error}', { name, error: errorMessage(err) });
-			}
-		}
-		// A later choice may have finished first.
-		if (request !== this.#skinRequest) return;
-		applyTheme(theme);
-		this.skin = theme ? name : null;
-		this.skinDark = theme?.scheme === 'dark';
-		this.skinError = error;
+		await this.appearance.loadSkin(context);
 	}
 
 	showPortForwards() {
-		if (drafts.block(() => this.showPortForwards())) return;
-		this.page = 'portforwards';
-		this.details = null;
+		if (!this.#show('portforwards', () => this.showPortForwards())) return;
 		this.refreshForwards();
 	}
 
@@ -1630,15 +886,15 @@ class AppState {
 		const target = focus?.target;
 		this.#places.save(cluster.context, {
 			view: this.view,
-			history: this.#history,
-			historyAt: this.#historyAt,
+			history: this.#history.entries,
+			historyAt: this.#history.at,
 			filter: focus?.filter ?? '',
 			cursor: target ? { namespace: target.namespace ?? null, name: target.name } : null
 		});
 	}
 
 	/** Asks which contexts the core keeps connected, after a switch changed them. */
-	private async refreshWarm() {
+	async refreshWarm() {
 		try {
 			this.warm = (await backend.contexts()).warm ?? [];
 		} catch {
@@ -1685,21 +941,17 @@ class AppState {
 		this.cluster = cluster;
 		this.k9s = null;
 		access.reset(cluster.context);
-		this.#guardRequest++;
-		this.applyGuard({ readOnly: true, reason: t('Kubri is still checking whether it may change this cluster'), canUnlock: false, unlockedFor: null, fixed: false });
-		this.refreshGuard();
+		this.rails.checking();
 		this.askLocalTerminal();
 		this.resources = resources;
 		const closed = dock.keepContexts([...this.contexts.map((c) => c.name), cluster.context]);
 		if (closed) this.toast(plural(closed, 'Closed {n} workspace tab of a context that is gone', 'Closed {n} workspace tabs of a context that is gone'));
 		this.namespace = cluster.snapshot
 			? (cluster.snapshot.namespace ?? ALL_NAMESPACES)
-			: this.contextSettingsOf(cluster.context).namespace || ALL_NAMESPACES;
+			: this.prefs.contextSettingsOf(cluster.context).namespace || ALL_NAMESPACES;
 		this.scope = null;
 		// Views of the last cluster may not exist in this one.
-		this.#history = [];
-		this.#historyAt = -1;
-		this.#lastView = null;
+		this.#history.reset();
 		this.selected =
 			resources.find((r) => previous && sameResource(r, previous)) ??
 			resources.find((r) => r.group === '' && r.plural === 'pods') ??
@@ -1717,10 +969,10 @@ class AppState {
 		this.#addressed = null;
 		// Hotkeys, plugins and skins can differ per context.
 		this.loadK9s();
-		this.startFavoriteForwards();
-		this.integrations = null;
-		this.loadIntegrations(false);
-		this.loadViews();
+		this.favorites.startAll();
+		this.integrations.found = null;
+		this.integrations.load(false);
+		this.views.load();
 		if (cluster.resumed) this.refreshResources(cluster.context);
 	}
 
@@ -1741,195 +993,6 @@ class AppState {
 			// The kept list stays; the next switch or reload asks again.
 		}
 	}
-
-	/** Reads the view files again, so an edited one shows on the next connect or reload. */
-	async loadViews() {
-		try {
-			this.views = await backend.views();
-		} catch {
-			// Without them, custom resources show the server's columns.
-		}
-	}
-
-	/** The view of a kind, if one is loaded. */
-	viewOf(resource: Pick<ResourceInfo, 'group' | 'kind'>): KindView | undefined {
-		return this.views?.views.find((v) => v.group === resource.group && v.kind === resource.kind);
-	}
-
-	/** Finds the cluster's tools; `fresh` looks again and asks each whether it answers. */
-	async loadIntegrations(fresh: boolean) {
-		const context = this.cluster?.context;
-		try {
-			const found = await backend.integrations(fresh);
-			if (this.cluster?.context === context) this.integrations = found;
-		} catch {
-			// Without them, Kubri works as before.
-		}
-	}
-
-	/** Whether the cluster runs `id` and Kubri may use it. */
-	has(id: IntegrationId): boolean {
-		const item = this.integrations?.items.find((i) => i.id === id);
-		return !!item && (item.source === 'found' || item.source === 'settings');
-	}
-
-	/** Starts the connected context's favorite port-forwards, as after connecting. */
-	async startFavoriteForwards() {
-		let results: FavoriteStart[];
-		try {
-			results = await backend.startFavoriteForwards();
-		} catch {
-			return;
-		}
-		if (!results.length) return;
-		this.refreshForwards();
-		const failed = results.filter((r) => r.error);
-		const started = results.length - failed.length;
-		if (started) this.toast(plural(started, 'Started {n} favorite port-forward', 'Started {n} favorite port-forwards'));
-		for (const { favorite, error } of failed) {
-			this.toast(t('{name} did not start: {error}', { name: favoriteLabel(favorite), error: coreText(error ?? '') }), 'bad');
-		}
-	}
-
-	/** The favorite a running forward is, if it is one. */
-	favoriteOf(forward: PortForwardInfo): FavoriteForward | undefined {
-		return this.contextSettingsOf(forward.context).forwards?.find((f) => isForwardOf(f, forward));
-	}
-
-	/** The connected context's favorite port-forwards. */
-	get favoritesHere(): FavoriteForward[] {
-		return this.cluster ? (this.contextSettingsOf(this.cluster.context).forwards ?? []) : [];
-	}
-
-	/** The running forward of a favorite of the connected context, if it runs. */
-	runningFavorite(favorite: FavoriteForward): PortForwardInfo | undefined {
-		return this.forwards.find((f) => f.context === this.cluster?.context && isForwardOf(favorite, f));
-	}
-
-	/** Favorites being started or stopped, so a second click waits for the first. */
-	switchingFavorites = $state.raw<FavoriteForward[]>([]);
-
-	/** Starts a favorite of the connected context, or stops it if it runs. */
-	async switchFavorite(favorite: FavoriteForward) {
-		const context = this.cluster?.context;
-		if (!context || this.switchingFavorites.includes(favorite)) return;
-		this.switchingFavorites = [...this.switchingFavorites, favorite];
-		let running: PortForwardInfo | undefined;
-		try {
-			await this.refreshForwards();
-			running = this.runningFavorite(favorite);
-			if (running) {
-				await backend.stopPortForward(running.id);
-				this.toast(t('Stopped {name}', { name: favoriteLabel(favorite) }));
-			} else {
-				const f = await backend.startPortForward({
-					target: { ...favorite.target, context },
-					remotePort: favorite.remotePort,
-					localPort: favorite.localPort,
-					address: favorite.address || null
-				});
-				this.toast(t('Forwarding {local} to {pod}', { local: `${f.address}:${f.localPort}`, pod: `${f.pod}:${f.podPort}` }));
-			}
-		} catch (err) {
-			this.toast(running ? errorMessage(err) : t('{name} did not start: {error}', { name: favoriteLabel(favorite), error: errorMessage(err) }), 'bad');
-		} finally {
-			this.switchingFavorites = this.switchingFavorites.filter((f) => f !== favorite);
-			await this.refreshForwards();
-		}
-	}
-
-	/** Whether a favorite of the connected context starts whenever Kubri connects. */
-	async setStartOnConnect(favorite: FavoriteForward, startOnConnect: boolean) {
-		const context = this.cluster?.context;
-		if (!context) return;
-		const settings = this.contextSettingsOf(context);
-		const forwards = (settings.forwards ?? []).map((f) => (f === favorite ? { ...f, startOnConnect } : f));
-		await this.setContextSettings(context, { ...settings, forwards });
-	}
-
-	/** Keeps a running forward as a favorite of its context, or forgets it. */
-	async toggleFavorite(forward: PortForwardInfo) {
-		const settings = this.contextSettingsOf(forward.context);
-		const kept = settings.forwards ?? [];
-		const known = this.favoriteOf(forward);
-		const { context: _, ...target } = forward.target;
-		const forwards = known
-			? kept.filter((f) => f !== known)
-			: [
-					...kept,
-					{
-						target,
-						remotePort: forward.remotePort,
-						localPort: forward.localPort,
-						address: forward.address === '127.0.0.1' ? '' : forward.address,
-						startOnConnect: false
-					}
-				];
-		if (await this.setContextSettings(forward.context, { ...settings, forwards })) {
-			this.toast(
-			known
-				? t('{name} is no longer a favorite', { name: favoriteLabel(known) })
-				: t('{name} is a favorite: start it with one click under Port-forwards in the sidebar', { name: favoriteLabel(forwards.at(-1)!) })
-		);
-		}
-	}
-
-	/** Forgets a favorite of the connected context. */
-	async removeFavorite(favorite: FavoriteForward) {
-		const context = this.cluster?.context;
-		if (!context) return;
-		const settings = this.contextSettingsOf(context);
-		await this.setContextSettings(context, { ...settings, forwards: (settings.forwards ?? []).filter((f) => f !== favorite) });
-	}
-}
-
-/** Whether a running forward is a favorite. */
-export function isForwardOf(favorite: FavoriteForward, forward: PortForwardInfo) {
-	return (
-		sameResource(favorite.target.resource, forward.target.resource) &&
-		(favorite.target.namespace ?? null) === (forward.target.namespace ?? null) &&
-		favorite.target.name === forward.target.name &&
-		favorite.remotePort === forward.remotePort &&
-		favorite.localPort === forward.localPort
-	);
-}
-
-export function favoriteLabel(f: FavoriteForward) {
-	return t('{target} on port {port}', { target: `${f.target.resource.plural}/${f.target.name}:${f.remotePort}`, port: f.localPort });
-}
-
-export function sameResource(a: ResourceRef, b: ResourceRef) {
-	return a.group === b.group && a.version === b.version && a.plural === b.plural;
-}
-
-function sameRef(a: ResourceRef | null, b: ResourceRef | null) {
-	return a === b || (!!a && !!b && sameResource(a, b));
-}
-
-function sameView(a: View, b: View) {
-	return (
-		a.page === b.page &&
-		a.namespace === b.namespace &&
-		sameRef(a.resource, b.resource) &&
-		sameRef(a.xray, b.xray) &&
-		JSON.stringify(a.scope) === JSON.stringify(b.scope)
-	);
-}
-
-export function sameObject(a: ObjectRef, b: ObjectRef) {
-	return sameResource(a.resource, b.resource) && a.namespace === b.namespace && a.name === b.name;
-}
-
-/** The served resource type `ref` names, ignoring the version if the cluster serves another. */
-export function findResource(resources: ResourceInfo[], ref: ResourceRef): ResourceInfo | undefined {
-	return (
-		resources.find((r) => sameResource(r, ref)) ??
-		resources.find((r) => r.group === ref.group && r.plural === ref.plural)
-	);
-}
-
-export function refOf(resource: ResourceRef): ResourceRef {
-	return { group: resource.group, version: resource.version, plural: resource.plural };
 }
 
 export const app = new AppState();

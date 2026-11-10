@@ -33,14 +33,14 @@
 		<ul>
 			{#each others.slice(0, SHOWN) as ctx (ctx.name)}
 				{@const known = reach.of[ctx.name]}
-				{@const settings = app.contextSettingsOf(ctx.name)}
+				{@const settings = app.prefs.contextSettingsOf(ctx.name)}
 				<li>
 					<button class="context" onclick={() => app.switchContext(ctx.name)} title={known?.error ? t('Switch to {name}. Last error: {error}', { name: ctx.name, error: known.error }) : t('Switch to {name}', { name: ctx.name })}>
 						<span class="dot {tone(known)}" aria-hidden="true"></span>
 						<span class="text">
 							<span class="name">
 								{#if settings.color}<span class="swatch" style:background={settings.color}></span>{/if}
-								{app.contextName(ctx.name)}
+								{app.prefs.contextName(ctx.name)}
 								{#if settings.production}<span class="badge">{t('production')}</span>{/if}
 							</span>
 							<span class="state">{known ? `${known.summary}, ${relative(new Date(known.at).toISOString(), Date.now())}` : t('Not checked yet')}</span>

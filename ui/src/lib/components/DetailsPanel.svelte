@@ -147,7 +147,7 @@
 	});
 
 	const logs = $derived(hasLogs(details.resource, object));
-	const charts = $derived(hasCharts(details.resource) && (app.has('prometheus') || app.has('grafana')));
+	const charts = $derived(hasCharts(details.resource) && (app.integrations.has('prometheus') || app.integrations.has('grafana')));
 	// Shells change what runs in the cluster, so read-only leaves them out.
 	const shell = $derived(isPods(details.resource) && !app.readOnly);
 	const containers = $derived(containerNames(object));
@@ -155,7 +155,7 @@
 
 	function close() {
 		app.details = null;
-		app.maximized = false;
+		app.layout.maximized = false;
 	}
 
 	/** Logs and shells, which take the place of the list unless kept beside it. */
@@ -180,7 +180,7 @@
 	/** Sets the width beside the list, keeping 320px for each side. */
 	function resize(width: number) {
 		const room = aside?.parentElement?.clientWidth ?? window.innerWidth;
-		app.panelWidth = clampWidth(width, MIN_WIDTH, room - MIN_WIDTH);
+		app.layout.panelWidth = clampWidth(width, MIN_WIDTH, room - MIN_WIDTH);
 	}
 
 	/** Drags the left edge of the panel. */
@@ -194,7 +194,7 @@
 		const step = e.shiftKey ? 80 : 20;
 		if (e.key === 'ArrowLeft') resize(width + step);
 		else if (e.key === 'ArrowRight') resize(width - step);
-		else if (e.key === 'Home') app.panelWidth = null;
+		else if (e.key === 'Home') app.layout.panelWidth = null;
 		else return;
 		e.preventDefault();
 		e.stopPropagation();
@@ -450,7 +450,7 @@
 			tabindex="0"
 			title={t('Drag to resize, double-click for the default width')}
 			{onpointerdown}
-			ondblclick={() => (app.panelWidth = null)}
+			ondblclick={() => (app.layout.panelWidth = null)}
 			onkeydown={onresizekey}
 		></div>
 	{/if}
@@ -458,7 +458,7 @@
 		<div class="title">
 			<span class="kind">{t('{kind} inspector', { kind: details.resource.kind })}</span>
 			<h2 title={details.target.name}>{details.target.name}</h2>
-			<p class="context-path">{app.cluster ? app.contextName(app.cluster.context) : ''} / {details.target.namespace ?? 'cluster-scoped'}</p>
+			<p class="context-path">{app.cluster ? app.prefs.contextName(app.cluster.context) : ''} / {details.target.namespace ?? 'cluster-scoped'}</p>
 			{#if status}
 				<p class="status {status.tone}">
 					<Icon name={status.tone === 'ok' ? 'ok' : status.tone === 'bad' ? 'critical' : 'pending'} size={15} />
@@ -481,29 +481,29 @@
 					aria-label={t('Move to the workspace')}><Icon name="popout" size={16} /></button
 				>
 			{/if}
-			{#if tool && !app.maximized}
+			{#if tool && !app.layout.maximized}
 				<button
 					class="icon beside"
-					class:on={app.toolsBeside}
-					onclick={() => (app.toolsBeside = !app.toolsBeside)}
+					class:on={app.layout.toolsBeside}
+					onclick={() => (app.layout.toolsBeside = !app.layout.toolsBeside)}
 					onmousedown={(e) => e.preventDefault()}
 					title={details.tab === 'shell'
-						? app.toolsBeside
+						? app.layout.toolsBeside
 							? t('Hide the list and give the whole width to the shell')
 							: t('Show the list beside the shell')
-						: app.toolsBeside
+						: app.layout.toolsBeside
 							? t('Hide the list and give the whole width to the logs')
 							: t('Show the list beside the logs')}
 					aria-label={t('Show the list beside')}
-					aria-pressed={app.toolsBeside}><Icon name="resource" size={17} /></button
+					aria-pressed={app.layout.toolsBeside}><Icon name="resource" size={17} /></button
 				>
 			{/if}
 			<button
 				class="icon"
-				onclick={() => (app.maximized = !app.maximized)}
+				onclick={() => (app.layout.maximized = !app.layout.maximized)}
 				onmousedown={(e) => e.preventDefault()}
-				title={app.maximized ? t('Restore (f)') : t('Maximize (f)')}
-				aria-label={app.maximized ? t('Restore') : t('Maximize')}>{app.maximized ? '⤡' : '⤢'}</button
+				title={app.layout.maximized ? t('Restore (f)') : t('Maximize (f)')}
+				aria-label={app.layout.maximized ? t('Restore') : t('Maximize')}>{app.layout.maximized ? '⤡' : '⤢'}</button
 			>
 			<button class="icon close" onclick={close} title={t('Close (Esc)')} aria-label={t('Close')}><Icon name="close" /></button>
 		</div>

@@ -527,7 +527,7 @@
 
 	/** The change to dry-run before this action runs, when the settings ask for a diff. */
 	function previewChange(): Change | null {
-		const wanted = app.settings.diff;
+		const wanted = app.prefs.settings.diff;
 		switch (dialog.kind) {
 			case 'scale':
 				return wanted.scale && validReplicas(replicas) ? { type: 'scale', replicas } : null;
@@ -823,7 +823,7 @@
 >
 	<h2>{title}</h2>
 	<p class="action-context">
-		<strong>{context ? app.contextName(context) : ''}</strong>{app.environment ? ` · ${app.environment}` : ''} ·
+		<strong>{context ? app.prefs.contextName(context) : ''}</strong>{app.environment ? ` · ${app.environment}` : ''} ·
 		{dialog.kind === 'delete' || dialog.kind === 'scaleMany' || dialog.kind === 'restartMany'
 			? t('{n} selected', { n: dialog.targets.length })
 			: t('Review the target before you continue')}

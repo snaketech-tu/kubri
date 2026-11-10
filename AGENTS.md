@@ -14,6 +14,7 @@ Kubri is a Kubernetes GUI for desktop and browser that covers what k9s does, by 
 | `crates/kubri-cli` | `lint` and `snapshot` commands without a window; both `kubri` and `kubri-server` run them when they are the first argument. `actions/lint` is the GitHub Action around it. |
 | `ui/src-tauri` | Desktop app (crate `kubri-desktop`, binary `kubri`): Tauri commands in `src/lib.rs` call the core directly, the call table through `call`. |
 | `ui` | SvelteKit + TypeScript (Svelte 5 runes), static SPA shared by both apps. |
+| `ui/src/lib/state.svelte.ts`, `ui/src/lib/state/` | The app state `app`: the connection, the page and the details it owns itself; settings, guard rails, pins, favorite port-forwards and the other concerns are stores in `state/`, reached as `app.prefs`, `app.rails`, `app.pins` and so on. |
 | `ui/src/lib/api` | The `Backend` interface (`types.ts`) with two implementations: `http.ts` (web) and `tauri.ts` (desktop). |
 | `docs/` | User documentation, linked from the README. |
 | `deploy/` | Manifest and Helm chart (`deploy/helm/kubri`) for running kubri-server in a cluster. |

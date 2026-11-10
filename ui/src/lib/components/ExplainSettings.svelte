@@ -6,7 +6,7 @@
 	import { app } from '../state.svelte';
 	import Phrase from './Phrase.svelte';
 
-	const explain = $derived(app.settings.explain);
+	const explain = $derived(app.prefs.settings.explain);
 	let hasKey = $state<boolean | null>(null);
 	let key = $state('');
 	let saving = $state(false);
@@ -25,7 +25,7 @@
 	});
 
 	function update(change: Partial<ExplainSettings>) {
-		app.setExplainSettings({ ...explain, ...change });
+		app.prefs.setExplainSettings({ ...explain, ...change });
 	}
 
 	async function saveKey(value: string | null) {

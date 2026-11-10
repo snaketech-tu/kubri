@@ -181,12 +181,12 @@
 					return true;
 				case 'f':
 					if (!app.details) return false;
-					app.maximized = !app.maximized;
+					app.layout.maximized = !app.layout.maximized;
 					return true;
 				case 'Escape':
 					if (app.details) {
 						app.details = null;
-						app.maximized = false;
+						app.layout.maximized = false;
 					} else if (filter) {
 						filter = '';
 					}

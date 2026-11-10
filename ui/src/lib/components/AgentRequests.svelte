@@ -14,7 +14,7 @@
 	// While agents can connect, ask for changes they wait on. Asking also tells the MCP server
 	// that a window is open to confirm them.
 	$effect(() => {
-		if (!app.settings.agents.http) {
+		if (!app.prefs.settings.agents.http) {
 			requests = [];
 			return;
 		}
@@ -55,7 +55,7 @@
 			requests = requests.filter((r) => r.id !== id);
 		}
 		app.toast(allow ? t('Allowed the change') : t('Refused the change'));
-		if (allow) app.refreshGuard();
+		if (allow) app.rails.refresh();
 	}
 </script>
 
@@ -70,12 +70,12 @@
 	}}
 >
 	{#if request}
-		{@const settings = app.contextSettingsOf(request.context)}
+		{@const settings = app.prefs.contextSettingsOf(request.context)}
 		<h2>{t('An AI agent asks to make a change')}</h2>
 		<p class="summary">{request.summary}</p>
 		<p class="muted">
 			{#each parts(t('On {context}. Nothing happens unless you allow it.')) as part, i (i)}{#if 'text' in part}{part.text}{:else}<strong
-						style:color={settings.color || null}>{request.context ? app.contextName(request.context) : t('the current context')}</strong
+						style:color={settings.color || null}>{request.context ? app.prefs.contextName(request.context) : t('the current context')}</strong
 					>{#if settings.label}&nbsp;<span class="tag">{settings.label}</span>{/if}{/if}{/each}
 		</p>
 		<details>
