@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/kubri-core", "crates/kubri-mcp", "crates/kubri-cli", "crates/kubri-server", "ui/src-tauri"]
 
 [workspace.package]
-version = "1.10.1"
+version = "1.11.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/snaketech-tu/kubri"

@@ -1,10 +1,11 @@
 ## What's new
 
-A small release with fixes and updates:
-
-- **Shells close cleanly:** input typed after a shell ended goes nowhere, and its end shows once.
-- **AI agent requests that were given up go away** from the approval window and can no longer be allowed.
-- **Newer libraries:** kube 5 and the Kubernetes 1.37 types, and every other library up to date.
+- **Windows on Arm:** a native installer for Windows arm64.
+- **The Helm chart as a package:** `helm install kubri oci://ghcr.io/snaketech-tu/charts/kubri`, no clone needed.
+- **Settings that survive upgrades:** `persistence.enabled=true` keeps Kubri's settings on a volume.
+- **Builds you can check:** attestations for the installers and the image, and an SBOM for the image.
+- **Running a team Kubri safely:** a new section of the [team guide](https://github.com/snaketech-tu/kubri/blob/main/docs/TEAMS.md#running-it-safely).
+- The desktop app and the web server now talk to the core in the same way. The web server's internal API changed; nothing outside Kubri used it.
 
 ## Install
 
