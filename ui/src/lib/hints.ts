@@ -19,6 +19,8 @@ export function viewHints(app: HintState): Hint[] {
 	// The view waits under the connecting card; only cancelling works.
 	if (app.connecting && app.cluster && app.contexts.some((c) => c.name === app.connecting)) return [['esc', t('cancel')]];
 	const panel: Hint[] = app.details ? [['f', app.layout.maximized ? t('restore') : t('maximize')], ['esc', t('close')]] : [];
+	// Logs and shells take the keys themselves; the other tabs are reached with Tab.
+	const into: Hint[] = app.details && app.details.tab !== 'logs' && app.details.tab !== 'shell' ? [['tab', t('into the inspector')]] : [];
 	// The log keys, while the logs are on screen.
 	if (app.details?.tab === 'logs') {
 		return [
@@ -52,7 +54,7 @@ export function viewHints(app: HintState): Hint[] {
 		];
 	}
 	if (app.page === 'pulses') {
-		return [[':', t('command')], ['←→', t('move')], ['enter', t('open list')], ...panel, ['?', t('help')]];
+		return [[':', t('command')], ['←→', t('move')], ['enter', t('open list')], ...into, ...panel, ['?', t('help')]];
 	}
 	if (app.page === 'xray') {
 		return [
@@ -145,6 +147,7 @@ export function viewHints(app: HintState): Hint[] {
 	if (canScale(r) && !isPods(r) && writable) h.push(['s', t('scale')]);
 	if (canRestart(r) && writable) h.push(['r', t('restart')]);
 	if (app.scope) h.push(['esc', t('back')]);
+	h.push(...into);
 	if (app.details) h.push(['f', app.layout.maximized ? t('restore') : t('maximize')]);
 	h.push(['?', t('help')]);
 	return h;

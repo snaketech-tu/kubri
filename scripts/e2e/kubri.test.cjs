@@ -44,6 +44,29 @@ after(async () => {
 	await server?.stop();
 });
 
+describe('inspector', () => {
+	check('Tab goes into the inspector, arrows change its tabs, Esc goes back', async () => {
+		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods', filter: '/^db-/' });
+		await page.keyboard.press('d');
+		const inspector = page.getByRole('complementary', { name: 'Pod inspector' });
+		await inspector.waitFor();
+		await page.keyboard.press('Tab');
+		await h.until(() => inspector.getByRole('tab', { name: /Overview/, selected: true }).evaluate((el) => el === document.activeElement));
+		await page.keyboard.press('ArrowRight');
+		await inspector.getByRole('tab', { name: /Events/, selected: true }).waitFor();
+		await page.keyboard.press('ArrowRight');
+		await inspector.getByRole('tab', { name: /YAML/, selected: true }).waitFor();
+		await page.keyboard.press('ArrowLeft');
+		await page.keyboard.press('ArrowLeft');
+		await inspector.getByRole('tab', { name: /Overview/, selected: true }).waitFor();
+		// Esc leaves the inspector open and gives the keys back to the list; Esc again closes it.
+		await page.keyboard.press('Escape');
+		assert.equal(await inspector.count(), 1);
+		await page.keyboard.press('Escape');
+		await inspector.waitFor({ state: 'detached' });
+	});
+});
+
 describe('lists', () => {
 	check('lists the pods of a namespace', async () => {
 		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods' });
