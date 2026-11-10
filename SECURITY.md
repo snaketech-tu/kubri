@@ -9,6 +9,17 @@ Please do not open a public issue for a security problem. Report it privately in
 
 You get an answer within a week. Once a fix is released, the advisory is published and names you, unless you would rather not be named.
 
+## Checking a download
+
+Every installer and every Docker image is built by the Release workflow in this repository, which signs a record of the commit it built from. With the [GitHub CLI](https://cli.github.com), check a file before you install it:
+
+```sh
+gh attestation verify Kubri_2.0.0_x64-setup.exe --owner snaketech-tu
+gh attestation verify oci://ghcr.io/snaketech-tu/kubri:2.0.0 --owner snaketech-tu
+```
+
+The image also carries a list of the software in it (an SBOM), which `docker buildx imagetools inspect ghcr.io/snaketech-tu/kubri:2.0.0 --format '{{ json .SBOM }}'` shows. Releases before 2.0 have no such records.
+
 ## Supported versions
 
 Fixes go into the newest release. Kubri updates itself on the desktop, and the Docker image tag `latest` and the Helm chart always point at the newest version, so please update before you report.

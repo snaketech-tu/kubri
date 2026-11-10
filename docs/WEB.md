@@ -48,7 +48,7 @@ Signing in lasts a week (`KUBRI_SESSION_HOURS`), until you sign out, or until th
 
 ## With Docker
 
-The image `ghcr.io/snaketech-tu/kubri` (for amd64 and arm64) has kubri-server, the UI, `helm` for rolling back and uninstalling releases, and `kubectl` for k9s plugins. To use your kubeconfig:
+The image `ghcr.io/snaketech-tu/kubri` (for amd64 and arm64, [verifiable](../SECURITY.md#checking-a-download) from 2.0 on) has kubri-server, the UI, `helm` for rolling back and uninstalling releases, and `kubectl` for k9s plugins. To use your kubeconfig:
 
 ```sh
 docker run --rm -p 127.0.0.1:7878:7878 \
