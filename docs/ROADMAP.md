@@ -1,62 +1,32 @@
 # Roadmap
 
-Kubri aims for feature parity with k9s. The work is split into four steps that build on each other.
+What is coming in Kubri, roughly in order. Plans change with what people report, so [tell us](https://github.com/snaketech-tu/kubri/issues/new?template=idea.yml) what you are missing. What has already shipped is in the [changelog](../CHANGELOG.md).
 
-## 1. Foundation ✅
+## Now: 2.0, a solid base
 
-- Rust workspace with a shared core on kube-rs: kubeconfig loading (merged `KUBECONFIG`), contexts, API discovery including CRDs, live watches.
-- Tauri 2 desktop app and axum web server, both serving the same SvelteKit UI.
-- Global context switcher, namespace picker, live resource list.
-- CI, Apache 2.0 license.
+2.0 adds few new features. It makes Kubri easier to trust, to install and to work on.
 
-## 2. Resource browser ✅
+- **Signed apps.** The macOS app is signed and notarized, and the Windows installer is signed, so neither shows a warning on first start.
+- **More ways to install.** An apt repository for Debian and Ubuntu, Homebrew, winget and the AUR, and the Helm chart as an OCI package.
+- **Windows on Arm.** A native build for Windows arm64.
+- **Checked dependencies.** Every change is checked for known vulnerabilities and licenses, dependencies are updated every week, and the Docker image is signed.
+- **One way to talk to the core.** The desktop app and the web server use the same calls, generated from one description, so they cannot drift apart. This changes the web server's internal API.
+- **Clearer drain.** Draining a node first checks that you may evict its pods.
+- **Docs for operators.** How to run kubri-server safely for a team.
 
-- Global context switcher everywhere, including `:ctx` in the command palette.
-- Lists and details for every resource type, with the columns `kubectl get` shows.
-- Namespace switching, filtering and search, command palette (`:pods`, `:deploy`, …), full keyboard control.
-- View and edit YAML, describe, events.
-- Actions: delete, scale, restart, labels and annotations.
-- CPU and memory metrics from metrics-server.
+## Next
 
-## 3. Pod and node tools ✅
+Chosen after 2.0 from what people ask for most. Ideas we already have:
 
-- Live log streaming for pods, workloads and services, with filtering, multiple containers, previous logs.
-- Shell into containers (xterm.js), attach.
-- Port forwarding to pods, workloads and services, with a list of running forwards.
-- Node cordon, uncordon and drain.
+- Forms for common objects, so you can create and change them without YAML.
+- Alerts when something in a cluster you watch goes wrong.
+- Saved views: a list with its filter, columns and namespaces under a name.
 
-## 4. Advanced features and release ✅
+## Later
 
-- ✅ XRay (resource relationships) and Pulses (cluster dashboard).
-- ✅ RBAC view, Helm releases.
-- ✅ Cluster sanitizer (Popeye), HTTP benchmarks.
-- ✅ Plugins, hotkeys, aliases and skins, compatible with k9s configuration files.
-- ✅ Packages for Windows, macOS and Linux; Docker image for the web mode with login; documentation.
+- Kubri on Flathub.
+- More integrations, chosen by request.
 
-## 0.3 to 1.0
+## Releases
 
-The plan for 0.3 to 1.0 is in [IMPLEMENTATION-PLAN-v2.md](IMPLEMENTATION-PLAN-v2.md).
-
-- ✅ 0.3 Work safely: context names, colors and guard rails, permission-aware actions, copy as kubectl, dry-run diffs, editor help.
-- ✅ 0.4 AI: Kubri as an MCP server for AI agents, and Explain with your own model.
-- ✅ 0.5 Logs and debugging: structured logs, a workspace of log and shell tabs, debug containers and node shells, and fixes from the likely problem.
-- ✅ 0.6 Create and change: Create from templates, files and URLs with a dry run, forms and cloning, Helm install, upgrade, compare and drift, columns, bulk changes and port-forwards that stay.
-- ✅ 0.7 Integrations: Prometheus charts, Grafana dashboards, Loki history, Flux and Argo CD status and actions, cert-manager expiry and renewal, and right-sizing.
-- ✅ 0.8 Overview: a Clusters page for every context, contexts added in the app, namespace limits, compare across clusters, search with saved searches, the topology graph with request paths, and the blast radius of a delete.
-- ✅ 0.9 Memory: What changed, a timeline of changes with diffs and the times Kubri was not watching; snapshots of a namespace or cluster opened offline; and views that give CRDs columns, health, details, actions and graph edges from YAML.
-- ✅ 1.0 Finish: speed measured in CI with 10,000 pods, zoom and readable skins, a notice for new releases, packages for Homebrew, winget, the AUR and Flathub, and a review pass.
-
-## Next: UX after 1.0
-
-The plan for 1.1 to 1.4 is in [IMPLEMENTATION-PLAN-UX.md](IMPLEMENTATION-PLAN-UX.md).
-
-- 1.1 Act only on what you chose: visible action targets, no warnings for vanished objects, HPA and GitOps notes on changes, drill-down that keeps the namespace.
-- 1.2 One place for each thing: fewer duplicate actions, breadcrumbs that are a path, a sidebar grouped by task, a clearer header, narrow windows.
-- 1.3 Say it plainly: plain warning texts, honest health bars, list tones for throttling, actions that fit the object, simpler logs toolbar.
-- 1.4 What was missing: pins and recents, actions in the palette, session activity with undo, related objects, rollout history, trends in lists, a first-run tour.
-
-## 1.9
-
-The plan is in [IMPLEMENTATION-PLAN-1.9.md](IMPLEMENTATION-PLAN-1.9.md).
-
-- ✅ 1.9 Smoother everyday work: start in the last context and view, port-forwards that stay open, limits in the pod list, and one dialog for requests and limits with the room the nodes still have.
+A new minor version comes out every two to four weeks, and a patch only when a bug needs fixing sooner. Before each minor version, Kubri is used daily for a week on real clusters.
