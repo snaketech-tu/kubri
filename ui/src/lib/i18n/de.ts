@@ -615,7 +615,6 @@ const de: Record<string, string> = {
 	'Filter by name, /regex/, -l app=web or -f text': 'Nach Name, /Regex/, -l app=web oder -f Text filtern',
 	'Only rows that need a look (Ctrl+Z)': 'Nur Zeilen, die einen Blick brauchen (Ctrl+Z)',
 	'{n} marked': '{n} markiert',
-	'Click a row or press {key} to act on it': 'Klicke eine Zeile an oder drücke {key}',
 	'Actions': 'Aktionen',
 	'Mark {name}': '{name} markieren',
 	'Describe {name}': '{name} beschreiben',
