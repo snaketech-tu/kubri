@@ -1,4 +1,5 @@
 import type { ObjectRef, ResourceInfo, TerminalMode } from './api';
+import { store, stored } from './storage';
 
 /** A tab kept open in the workspace while you browse. */
 export type DockSession = ObjectSession | LocalSession;
@@ -37,22 +38,6 @@ export type DockSide = 'bottom' | 'right';
 
 const SIDE_KEY = 'kubri.dock.side';
 const SIZE_KEY = 'kubri.dock.size';
-
-function stored(key: string): string | null {
-	try {
-		return localStorage.getItem(key);
-	} catch {
-		return null;
-	}
-}
-
-function store(key: string, value: string) {
-	try {
-		localStorage.setItem(key, value);
-	} catch {
-		// Kept in memory only.
-	}
-}
 
 /** Same object and kind, so opening it again shows the open tab instead. */
 function same(a: NewSession, b: NewSession) {

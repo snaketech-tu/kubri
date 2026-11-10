@@ -1,4 +1,4 @@
-import type { ChartRange, ChartSeries, ChartUnit, ResourceRef } from './api';
+import type { ChartSeries, ChartUnit, ResourceRef } from './api';
 import { cpu, memory } from './format';
 
 /** The time ranges the charts offer, as on most dashboards. */
@@ -8,8 +8,6 @@ export const RANGES: { label: string; seconds: number }[] = [
 	{ label: '24h', seconds: 24 * 3600 },
 	{ label: '7d', seconds: 7 * 24 * 3600 }
 ];
-
-export const DEFAULT_RANGE: ChartRange = { seconds: 3600 };
 
 /** A value in the chart's unit, short enough for an axis. */
 export function formatValue(unit: ChartUnit, value: number): string {

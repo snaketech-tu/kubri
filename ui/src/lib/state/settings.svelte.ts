@@ -1,7 +1,7 @@
 import { backend, type ColumnSettings, type ContextSettings, type SavedSearch, type Settings } from '../api';
 import { errorMessage } from '../format';
 import type { AppState } from '../state.svelte';
-import { store, stored } from './model';
+import { store, stored } from '../storage';
 
 /** Where Kubri 0.2 kept per-context choices in the browser; moved to the settings file once. */
 const READ_ONLY_KEY = 'kubri.readonly.';

@@ -33,7 +33,7 @@ export function shellQuote(word: string): string {
 }
 
 /** The resource as kubectl names it unambiguously: `pods`, `deployments.apps`. */
-export function kubectlResource(resource: Pick<ResourceRef, 'group' | 'plural'>): string {
+function kubectlResource(resource: Pick<ResourceRef, 'group' | 'plural'>): string {
 	return resource.group ? `${resource.plural}.${resource.group}` : resource.plural;
 }
 

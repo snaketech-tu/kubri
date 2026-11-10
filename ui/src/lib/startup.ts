@@ -3,6 +3,8 @@
  * `current-context` changed since, which is the newer wish.
  */
 
+import { store, stored } from './storage';
+
 /** What Kubri connects to when it starts. */
 export type StartSetting = 'last' | 'kubeconfig';
 
@@ -26,23 +28,6 @@ const VIEWS_KEY = 'kubri.views';
 /** Contexts whose view is kept. */
 export const MAX_VIEWS = 10;
 
-function read(key: string): string | null {
-	try {
-		return localStorage.getItem(key);
-	} catch {
-		return null;
-	}
-}
-
-function write(key: string, value: string | null) {
-	try {
-		if (value === null) localStorage.removeItem(key);
-		else localStorage.setItem(key, value);
-	} catch {
-		// Without storage, Kubri starts as the kubeconfig says.
-	}
-}
-
 function parse<T>(text: string | null): T | null {
 	if (!text) return null;
 	try {
@@ -53,20 +38,20 @@ function parse<T>(text: string | null): T | null {
 }
 
 export function startSetting(): StartSetting {
-	return read(START_KEY) === 'kubeconfig' ? 'kubeconfig' : 'last';
+	return stored(START_KEY) === 'kubeconfig' ? 'kubeconfig' : 'last';
 }
 
 export function setStartSetting(value: StartSetting) {
-	write(START_KEY, value === 'last' ? null : value);
+	store(START_KEY, value === 'last' ? null : value);
 }
 
 export function lastContext(): LastContext | null {
-	const last = parse<LastContext>(read(LAST_KEY));
+	const last = parse<LastContext>(stored(LAST_KEY));
 	return last && typeof last.context === 'string' ? { context: last.context, kubeconfig: last.kubeconfig ?? null } : null;
 }
 
 export function rememberContext(context: string, kubeconfig: string | null) {
-	write(LAST_KEY, JSON.stringify({ context, kubeconfig } satisfies LastContext));
+	store(LAST_KEY, JSON.stringify({ context, kubeconfig } satisfies LastContext));
 }
 
 /**
@@ -88,7 +73,7 @@ export function startContext(
 }
 
 function savedViews(): Record<string, SavedView & { at: number }> {
-	const views = parse<Record<string, SavedView & { at: number }>>(read(VIEWS_KEY));
+	const views = parse<Record<string, SavedView & { at: number }>>(stored(VIEWS_KEY));
 	return views && typeof views === 'object' && !Array.isArray(views) ? views : {};
 }
 
@@ -99,7 +84,7 @@ export function saveView(context: string, view: SavedView, now = Date.now()) {
 	const kept = Object.entries(views)
 		.sort(([, a], [, b]) => (b.at ?? 0) - (a.at ?? 0))
 		.slice(0, MAX_VIEWS);
-	write(VIEWS_KEY, JSON.stringify(Object.fromEntries(kept)));
+	store(VIEWS_KEY, JSON.stringify(Object.fromEntries(kept)));
 }
 
 /** The view `context` showed when Kubri last ran there. */
@@ -113,5 +98,5 @@ export function savedView(context: string): SavedView | null {
 export function keepViews(contexts: string[]) {
 	const views = savedViews();
 	const kept = Object.entries(views).filter(([name]) => contexts.includes(name));
-	if (kept.length !== Object.keys(views).length) write(VIEWS_KEY, JSON.stringify(Object.fromEntries(kept)));
+	if (kept.length !== Object.keys(views).length) store(VIEWS_KEY, JSON.stringify(Object.fromEntries(kept)));
 }

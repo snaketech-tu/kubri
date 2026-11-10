@@ -7,7 +7,7 @@ import { app } from './state.svelte';
 export const DEMO_FILE = 'demo.kubri';
 
 /** Where the demo is, next to the page in both apps and on a web server under a path. */
-export function demoUrl(base: string): URL {
+function demoUrl(base: string): URL {
 	return new URL(DEMO_FILE, base);
 }
 

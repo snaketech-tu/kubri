@@ -19,10 +19,6 @@ export function xrayResources(resources: ResourceInfo[]): ResourceInfo[] {
 	);
 }
 
-export function canXray(resource: ResourceInfo) {
-	return ROOTS.some(([group, kind]) => resource.group === group && resource.kind === kind);
-}
-
 const SHORT: Record<string, string> = {
 	Deployment: 'deploy',
 	StatefulSet: 'sts',

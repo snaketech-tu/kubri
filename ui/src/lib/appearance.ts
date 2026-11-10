@@ -1,6 +1,7 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { plural, t } from './i18n';
 import type { SkinTheme } from './k9s';
+import { store, stored } from './storage';
 
 /** The zoom levels Ctrl+ and Ctrl− step through, as browsers offer them. */
 export const ZOOMS = [0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2] as const;
@@ -8,12 +9,8 @@ const ZOOM_KEY = 'kubri.zoom';
 
 /** The zoom level kept from the last time; 1 without one. */
 export function storedZoom(): number {
-	try {
-		const value = Number(localStorage.getItem(ZOOM_KEY));
-		return ZOOMS.includes(value as (typeof ZOOMS)[number]) ? value : 1;
-	} catch {
-		return 1;
-	}
+	const value = Number(stored(ZOOM_KEY));
+	return ZOOMS.includes(value as (typeof ZOOMS)[number]) ? value : 1;
 }
 
 /** The next level up (`1`) or down (`-1`) from `zoom`; `0` goes back to 100%. */
@@ -29,11 +26,7 @@ export function stepZoom(zoom: number, step: -1 | 0 | 1): number {
  */
 export async function applyZoom(zoom: number) {
 	if (!isTauri()) return;
-	try {
-		localStorage.setItem(ZOOM_KEY, String(zoom));
-	} catch {
-		// Lasts until the app is closed.
-	}
+	store(ZOOM_KEY, String(zoom));
 	const { getCurrentWebview } = await import('@tauri-apps/api/webview');
 	await getCurrentWebview().setZoom(zoom);
 }

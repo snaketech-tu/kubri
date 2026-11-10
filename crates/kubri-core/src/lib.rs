@@ -37,6 +37,7 @@ mod loki;
 mod metrics;
 mod node;
 mod objects;
+mod percent;
 mod plugin;
 mod portforward;
 mod preview;

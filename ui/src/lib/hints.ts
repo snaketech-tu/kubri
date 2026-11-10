@@ -151,7 +151,7 @@ export function viewHints(app: HintState): Hint[] {
 }
 
 /** The view's plugins, as k9s lists them in its menu; a key the view uses stays the view's. */
-export function pluginHints(app: HintState, taken: Set<string>): Hint[] {
+function pluginHints(app: HintState, taken: Set<string>): Hint[] {
 	return (app.k9s?.plugins ?? [])
 		.filter((p) => pluginApplies(p, app.pluginView))
 		.flatMap((p): Hint[] => {

@@ -95,18 +95,6 @@ impl ChangeKind {
     fn parse(text: &str) -> Option<Self> {
         serde_json::from_value(Value::String(text.to_owned())).ok()
     }
-
-    /// Changes that start new pods, worth a line across charts and log histograms.
-    pub fn is_rollout(self) -> bool {
-        matches!(
-            self,
-            ChangeKind::Image
-                | ChangeKind::Restarted
-                | ChangeKind::Rollout
-                | ChangeKind::Scaled
-                | ChangeKind::Data
-        )
-    }
 }
 
 /// One change, without the object's states before and after.

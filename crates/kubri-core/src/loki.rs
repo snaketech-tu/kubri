@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::integrations::Endpoint;
+use crate::percent::encode;
 use crate::{Error, LogLine, LogSource, Result};
 
 /// The most lines one query returns.
@@ -126,17 +127,6 @@ pub(crate) fn default_query(
         matchers.push(format!("{container_label}={}", quoted(container)));
     }
     format!("{{{}}}", matchers.join(", "))
-}
-
-fn encode(text: &str) -> String {
-    let mut out = String::new();
-    for byte in text.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
-            _ => out.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    out
 }
 
 /// Runs `query` over the last `seconds`, newest lines first as Loki returns them, then puts

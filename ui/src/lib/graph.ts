@@ -65,7 +65,7 @@ function groupOf(node: GraphNode, by: GroupBy): string | null {
 }
 
 /** The objects shown: nodes only when grouping by them, where each band ends in its node. */
-export function shownNodes(graph: Graph, by: GroupBy): GraphNode[] {
+function shownNodes(graph: Graph, by: GroupBy): GraphNode[] {
 	return graph.nodes.filter((n) => n.kind !== 'Node' || by === 'node');
 }
 

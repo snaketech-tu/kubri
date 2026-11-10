@@ -117,7 +117,7 @@ async fn instant(
     endpoint: &Endpoint,
     query: &str,
 ) -> Result<Vec<((String, String, String), f64)>> {
-    let path = format!("/api/v1/query?query={}", crate::prometheus::encode(query));
+    let path = format!("/api/v1/query?query={}", crate::percent::encode(query));
     let answer = endpoint.get_json(client, &path, None).await?;
     crate::prometheus::check(&answer)?;
     Ok(parse_vector(&answer))
