@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { t } from '../i18n';
 	import { backend, type FleetCluster, type KindPulse } from '../api';
 	import { connectError, eachLimited, fleetState, serverHost, workloads } from '../fleet';
@@ -12,7 +13,7 @@
 	import PageHeader from './PageHeader.svelte';
 
 	/** Checked again while the page is open. */
-	const REFRESH_MS = 60_000;
+	const REFRESH_MS = 120_000;
 	/** Contexts checked at once; each gives up after ten seconds on its own. */
 	const AT_ONCE = 6;
 
@@ -27,6 +28,8 @@
 	let removing = $state<string | null>(null);
 
 	const contexts = $derived(app.contexts.map((c) => c.name));
+	/** The same contexts again, such as after the kubeconfig is read anew, start no new round. */
+	const contextList = $derived(contexts.join('\n'));
 	const states = $derived(Object.fromEntries(contexts.map((name) => [name, fleetState(found[name] ?? null)])));
 	const tally = $derived.by(() => {
 		const all = Object.values(states);
@@ -59,8 +62,10 @@
 	}
 
 	$effect(() => {
-		if (!contexts.length) return;
-		check();
+		if (!contextList) return;
+		// Untracked: check() reads and sets `checking`, which would start the next round as soon as
+		// one ends, asking every cluster again and again.
+		untrack(check);
 		const timer = setInterval(check, REFRESH_MS);
 		const clock = setInterval(() => (now = Date.now()), 10_000);
 		return () => {
