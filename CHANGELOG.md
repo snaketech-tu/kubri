@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.0 — 2026-11-10
+
+- **Kubri for Windows on Arm.** A native installer for Windows arm64 comes with each release, next to the one for x64.
+- **The Helm chart as a package.** Each release publishes the chart to `oci://ghcr.io/snaketech-tu/charts/kubri`, so installing kubri-server needs no clone of the repository. See [Install it with Helm](docs/TEAMS.md#install-it-with-helm).
+- **Settings that survive upgrades.** With `persistence.enabled=true`, the chart keeps Kubri's settings on a volume, so context colors and locks, integrations, saved searches and views stay when the pod restarts or the chart is upgraded.
+- **Builds you can check.** The installers and the Docker image come with GitHub attestations, and the image with a list of what it contains (SBOM). `gh attestation verify` shows that a file was built from this repository. See [Running it safely](docs/TEAMS.md#running-it-safely).
+- **Running a team Kubri safely.** A new section of the team guide covers the recommended setup, the audit log, the local terminal and upgrades.
+- Under the hood, the desktop app and the web server now make every call to the core in the same way, and the types the UI uses are written from the core's own. The web server's internal API changed; nothing outside Kubri used it.
+
 ## 1.10.1 — 2026-11-08
 
 - **Shells and terminals close cleanly.** Typing into a shell that has just ended or been closed no longer sends the input anywhere, and a shell that ends shows its message once, in the desktop app and in the browser.
