@@ -69,8 +69,9 @@ impl Limits {
 }
 
 /// Which metrics to fetch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum MetricsKind {
     Pods,
     Nodes,

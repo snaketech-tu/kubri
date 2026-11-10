@@ -15,15 +15,18 @@ use crate::{Error, Guard, Kubri, ObjectRef, ResourceRef, Result, Session, discov
 const MANAGER: &str = "kubri";
 
 /// Objects to create or change, in any order.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct ApplyRequest {
+    #[ts(type = "Array<unknown>")]
     pub objects: Vec<Value>,
     /// For namespaced objects that name none.
     #[serde(default)]
     pub namespace: Option<String>,
     /// Only a server-side dry run: nothing changes.
     #[serde(default)]
+    #[ts(as = "Option<bool>", optional)]
     pub dry_run: bool,
     /// Refuse to apply to another context than the one the YAML was written for.
     #[serde(default)]

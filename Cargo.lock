@@ -2587,6 +2587,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+ "ts-rs",
 ]
 
 [[package]]

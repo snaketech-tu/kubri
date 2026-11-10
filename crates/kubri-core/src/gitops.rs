@@ -9,8 +9,9 @@ use crate::{Error, Kubri, ObjectRef, Result};
 /// Where Argo CD keeps the auto-sync policy it turned off, to turn it on again as it was.
 const SAVED_AUTO_SYNC: &str = "kubri.dev/auto-sync";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum GitOpsAction {
     /// Flux: reconcile now, like `flux reconcile`.
     Reconcile,

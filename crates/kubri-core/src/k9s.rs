@@ -13,8 +13,9 @@ use serde_json::Value;
 use crate::{Error, Kubri, Result};
 
 /// Everything Kubri takes from the k9s configuration, for one context.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct K9sConfig {
     /// Where the files were looked for: the config directory, then the data directory.
     pub dirs: Vec<String>,
@@ -43,8 +44,9 @@ pub struct K9sConfig {
     pub jumps: Vec<Jump>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(default)]
+#[ts(export)]
 pub struct Thresholds {
     pub cpu: Threshold,
     pub memory: Threshold,
@@ -87,8 +89,9 @@ impl Threshold {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(default, rename_all = "camelCase")]
+#[ts(export, rename = "LoggerSettings")]
 pub struct Logger {
     /// Lines to start with.
     pub tail: i64,

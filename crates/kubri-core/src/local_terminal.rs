@@ -55,12 +55,15 @@ impl Default for TerminalSettings {
 }
 
 /// What the UI asks for when it opens a local terminal.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct LocalTerminalOptions {
     /// The namespace Kubri shows; `None` for all namespaces, which keeps the context's own.
     pub namespace: Option<String>,
+    #[ts(as = "Option<u16>", optional)]
     pub cols: u16,
+    #[ts(as = "Option<u16>", optional)]
     pub rows: u16,
 }
 

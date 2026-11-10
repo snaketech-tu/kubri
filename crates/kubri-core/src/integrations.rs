@@ -252,6 +252,7 @@ fn short(text: &str) -> String {
 #[ts(export)]
 pub struct Integration {
     /// `prometheus`, `grafana`, `loki`, `flux`, `argocd` or `certManager`.
+    #[ts(type = "'prometheus' | 'grafana' | 'loki' | 'flux' | 'argocd' | 'certManager'")]
     pub id: String,
     pub name: String,
     /// Where Kubri reaches it, for the tools it talks to.

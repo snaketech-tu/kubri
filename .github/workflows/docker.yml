@@ -27,6 +27,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # For the build attestation: a signed record of which workflow and commit built the image.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
       # Only the last stage runs under emulation for arm64; the server is cross-compiled.
@@ -48,7 +51,8 @@ jobs:
             type=semver,pattern={{version}},value=${{ inputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }}
             type=ref,event=pr
-      - uses: docker/build-push-action@v7
+      - id: build
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
@@ -57,3 +61,13 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # A list of what is in the image, stored with it in the registry.
+          sbom: ${{ github.event_name != 'pull_request' }}
+          provenance: ${{ github.event_name != 'pull_request' && 'mode=max' || 'false' }}
+      # Verify with: gh attestation verify oci://ghcr.io/snaketech-tu/kubri:<tag> --owner snaketech-tu
+      - uses: actions/attest-build-provenance@v4
+        if: github.event_name != 'pull_request'
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
