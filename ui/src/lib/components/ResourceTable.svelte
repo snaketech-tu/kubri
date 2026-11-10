@@ -6,6 +6,7 @@
 	import { t } from '../i18n';
 	import { limitShare, limitSuffix, limitsHint } from '../limits';
 	import { cellText, headerHint, isNameColumn, NOTHING, pressure, shownLabel, statusIcon, strains, tone, usageColumn, type CellSource, type DisplayColumn } from '../list-cells';
+	import { roving } from '../roving';
 	import { app } from '../state.svelte';
 	import type { SortState } from '../table';
 	import Icon from './Icon.svelte';
@@ -83,6 +84,12 @@
 		if (height) untrack(() => (rowHeight = height));
 	});
 
+	/** Where the cursor row's menu opens from the keys: below its ⋯ button. */
+	export function cursorMenuPoint(): { x: number; y: number } | null {
+		const rect = scroller?.querySelector('tr.cursor td.more button')?.getBoundingClientRect();
+		return rect ? { x: rect.right, y: rect.bottom + 4 } : null;
+	}
+
 	/** Scrolls the row under the cursor into view, so a command never acts on a row out of sight. */
 	export function revealCursor() {
 		if (windowed && scroller) {
@@ -96,8 +103,12 @@
 	}
 </script>
 
+<!-- One stop for Tab: the arrow keys move in the list, Space marks, Shift+F10 opens the row's menu. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
 	class="table-wrap"
+	tabindex="0"
+	aria-label={t('{kind} list', { kind: cells.resource.kind })}
 	bind:this={scroller}
 	bind:clientHeight={viewHeight}
 	bind:clientWidth={room}
@@ -105,7 +116,7 @@
 >
 	<table class:stale aria-rowcount={windowed ? rows.length + 1 : undefined} style:--check-width="{markWidth}px">
 		<thead>
-			<tr>
+			<tr {@attach roving({ items: 'button.sort', orientation: 'horizontal' })}>
 				<th class="check" bind:offsetWidth={checkWidth}></th>
 				{#each columns as column (column.label + column.index)}
 					<th
@@ -150,6 +161,7 @@
 					<td class="check">
 						<input
 							type="checkbox"
+							tabindex="-1"
 							aria-label={t('Mark {name}', { name: row.name })}
 							checked={selection.has(row.key)}
 							onclick={(e) => {
@@ -191,6 +203,7 @@
 								{@const byRule = !!rule && rule.by !== 'name'}
 								<button
 									class="production"
+									tabindex="-1"
 									class:on={!!rule}
 									class:ruled={byRule}
 									aria-pressed={!!rule}
@@ -216,6 +229,7 @@
 							{:else if column.kind === 'cell' && column.name}
 								<button
 									class="open"
+									tabindex="-1"
 									title={t('Describe {name}', { name: row.name })}
 									onclick={(e) => {
 										e.stopPropagation();
@@ -251,8 +265,9 @@
 					{/each}
 					<td class="more">
 						<button
+							tabindex="-1"
 							aria-label={t('Actions for {name}', { name: row.name })}
-							title={t('Actions (right click)')}
+							title={t('Actions (right click, Shift+F10)')}
 							onclick={(e) => {
 								e.stopPropagation();
 								const rect = e.currentTarget.getBoundingClientRect();
@@ -350,6 +365,13 @@
 		flex: 1;
 		min-height: 0;
 		overflow: auto;
+	}
+	.table-wrap:focus {
+		outline: none;
+	}
+	.table-wrap:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
 	}
 	table {
 		width: 100%;

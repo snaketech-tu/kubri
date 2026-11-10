@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '../i18n';
+	import { roving } from '../roving';
 	import { contextOf, dock, type DockSession } from '../dock.svelte';
 	import { app } from '../state.svelte';
 	import DockPane from './DockPane.svelte';
@@ -121,7 +122,7 @@
 		></div>
 	{/if}
 	<div class="bar">
-		<div class="tabs" role="tablist" aria-label={t('Logs, shells and terminals')}>
+		<div class="tabs" role="tablist" aria-label={t('Logs, shells and terminals')} {@attach roving({ items: '[role="tab"]', orientation: 'horizontal' })}>
 			{#each dock.sessions as s (s.id)}
 				{@const on = shown(s.id)}
 				{@const other = chipContext(s)}

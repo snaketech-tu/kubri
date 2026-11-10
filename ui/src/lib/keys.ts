@@ -10,6 +10,11 @@ if (typeof window !== 'undefined') {
 	});
 }
 
+/** Whether the element has the focus from Tab or the arrow keys, rather than from a click. */
+export function reachedByKeys(el: EventTarget | null): boolean {
+	return el !== null && el === tabbedTo;
+}
+
 /** Focuses a button as if reached with Tab, so Enter and Space press it. */
 export function focusForKeys(el: HTMLElement) {
 	el.focus();

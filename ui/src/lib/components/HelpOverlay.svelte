@@ -30,7 +30,9 @@
 				['-', t('Last view, and back again')],
 				['Shift+W', t('Warp to the namespace of the row')],
 				['Shift+J', t('Jump to the owner')],
-				['Esc', t('Close, clear selection or filter, go back')]
+				['Esc', t('Close, clear selection or filter, go back')],
+				['Tab', t('To the next area: sidebar, tabs, actions, list')],
+				['← → ↑ ↓', t('Within tabs, actions and the sidebar, once reached with Tab')]
 			]
 		],
 		[
@@ -57,6 +59,7 @@
 			t('Change'),
 			[
 				['Space', t('Mark the row')],
+				['Shift+F10', t("The row's menu, like a right click")],
 				['Ctrl+Space', t('Mark up to here')],
 				['Ctrl+A / Ctrl+\\', t('Mark all / none')],
 				['e', t('Edit YAML (Ctrl+S saves)')],

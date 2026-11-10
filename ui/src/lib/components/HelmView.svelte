@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { parts, plural, t } from '../i18n';
+	import { roving } from '../roving';
 	import { tick } from 'svelte';
 	import { stringify } from 'yaml';
 	import { backend, type ApplyItem, type HelmRelease, type HelmReleaseDetails } from '../api';
@@ -505,7 +506,7 @@
 		{/if}
 
 		<div class="card">
-			<div class="tabs" role="tablist" aria-label={t('Release')}>
+			<div class="tabs" role="tablist" aria-label={t('Release')} {@attach roving({ items: '[role="tab"]', orientation: 'horizontal', activate: true })}>
 				{#each TABS as [id, label, key] (id)}
 					<button role="tab" aria-selected={tab === id} onclick={() => (tab = id)}>{label} <kbd>{key}</kbd></button>
 				{/each}
