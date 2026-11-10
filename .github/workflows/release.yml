@@ -252,6 +252,34 @@ jobs:
       id-token: write
     uses: ./.github/workflows/pages.yml
 
+  # The Helm chart as an OCI package next to the image: oci://ghcr.io/<owner>/charts/kubri.
+  helm:
+    name: Helm chart
+    needs: [draft, publish]
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Package and push the chart
+        env:
+          VERSION: ${{ needs.draft.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chart=$(grep '^version:' deploy/helm/kubri/Chart.yaml | awk '{print $2}')
+          if [ "$chart" != "$VERSION" ]; then
+            echo "::error::deploy/helm/kubri/Chart.yaml has version $chart, not $VERSION"
+            exit 1
+          fi
+          helm lint deploy/helm/kubri
+          helm package deploy/helm/kubri --destination chart
+          printf '%s' "$TOKEN" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          helm push "chart/kubri-$VERSION.tgz" "oci://ghcr.io/${OWNER,,}/charts"
+          echo "Helm chart pushed: \`helm install kubri oci://ghcr.io/${OWNER,,}/charts/kubri --version $VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+
   # Fills the Homebrew cask, winget manifests, AUR package and Flatpak manifest with the
   # release's checksums and publishes each where its secret is set; see docs/RELEASING.md.
   packages:
@@ -333,6 +361,24 @@ jobs:
           git push origin "update-$VERSION"
           gh pr create --repo "flathub/$app" --head "update-$VERSION" --title "Update to $VERSION" \
             --body "Kubri $VERSION: https://github.com/snaketech-tu/kubri/releases/tag/v$VERSION"
+      # A channel without its secret is skipped; say so where it is seen, not only in the logs.
+      - name: Report the channels
+        if: always()
+        run: |
+          summary() { echo "$1" >> "$GITHUB_STEP_SUMMARY"; }
+          summary "### Package channels for $VERSION"
+          if [ "$PUBLISHED" != 'true' ]; then
+            summary "The release is still a draft, so nothing was published. Run this job again after publishing."
+          fi
+          for channel in "Homebrew:HOMEBREW_TAP_TOKEN" "AUR:AUR_SSH_KEY" "Flathub:FLATHUB_TOKEN"; do
+            name=${channel%%:*}; secret=${channel#*:}
+            if [ -z "${!secret}" ]; then
+              summary "- $name: skipped, the secret $secret is not set"
+              echo "::warning title=$name not published::The secret $secret is not set; see docs/RELEASING.md#package-managers"
+            elif [ "$PUBLISHED" = 'true' ]; then
+              summary "- $name: published"
+            fi
+          done
 
   # winget's own tool opens the pull request to microsoft/winget-pkgs once the package is in it.
   winget:
@@ -345,6 +391,12 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ needs.draft.outputs.version }}
     steps:
+      - name: Report a missing secret
+        if: env.WINGET_TOKEN == ''
+        shell: bash
+        run: |
+          echo "::warning title=winget not published::The secret WINGET_TOKEN is not set; see docs/RELEASING.md#package-managers"
+          echo "- winget: skipped, the secret WINGET_TOKEN is not set" >> "$GITHUB_STEP_SUMMARY"
       - name: Open the winget pull request
         if: env.WINGET_TOKEN != ''
         shell: pwsh
