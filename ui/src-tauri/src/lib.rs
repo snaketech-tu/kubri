@@ -12,15 +12,9 @@ use std::sync::{Arc, Mutex};
 
 use futures::{Stream, StreamExt};
 use kubri_core::{
-    AccessCheck, BenchInfo, BenchRequest, Change, ClusterInfo, ContainerImage, ContextList, ContextSettings,
-    DebugRequest, DebugSession, DeleteOptions, DiffSettings, DrainOptions, DrainReport, Drill, EventInfo,
-    Guard, HelmRelease, HelmReleaseDetails, Identity, K9sConfig, Kubri, LogEvent, LogOptions, MetricsKind,
-    ObjectRef, Permissions, PluginRun, PortForwardInfo, PortForwardRequest, Preview, Pulse, Rbac, Reference,
-    ResourceInfo, ResourceRef, SanitizerReport, Settings, TableEvent, TableScope, Terminal, TerminalInput,
-    TerminalOptions, TerminalOutput, Usage, XrayNode,
+    ClusterInfo, ContextList, Kubri, LogEvent, LogOptions, ObjectRef, PluginRun, ResourceRef, TableEvent,
+    TableScope, Terminal, TerminalInput, TerminalOptions, TerminalOutput,
 };
-use kubri_core::{ApplyItem, ApplyRequest, MemoryFix, NodeFit, ServiceCheck};
-use kubri_core::{HelmChange, HelmChartRef, HelmOutcome, HubChart};
 use serde_json::Value;
 use tauri::State;
 use tauri::async_runtime::JoinHandle;
@@ -80,20 +74,20 @@ impl Terminals {
 
 type CommandResult<T> = Result<T, String>;
 
+/// Every call in the core's call table, named by `call` in `request`.
 #[tauri::command]
-async fn contexts(kubri: State<'_, Arc<Kubri>>) -> CommandResult<ContextList> {
-    kubri.contexts().await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn reload_contexts(kubri: State<'_, Arc<Kubri>>) -> CommandResult<ContextList> {
-    kubri.reload().await.map_err(|e| e.to_string())
-}
-
-// Async, so reading the files does not hold up the window.
-#[tauri::command]
-async fn kubeconfig_files(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<kubri_core::KubeconfigFile>> {
-    Ok(kubri.kubeconfig_files())
+async fn call(
+    kubri: State<'_, Arc<Kubri>>,
+    agents: State<'_, Arc<agents::Agents>>,
+    request: kubri_core::Request,
+) -> CommandResult<Value> {
+    let agent_settings = matches!(request, kubri_core::Request::SetAgentSettings { .. });
+    let reply = kubri.call(request).await.map_err(|e| e.to_string())?;
+    // The agents' server starts, stops or moves with its settings.
+    if agent_settings {
+        agents.follow_settings().await;
+    }
+    Ok(reply)
 }
 
 #[tauri::command]
@@ -135,40 +129,6 @@ async fn choose_kubeconfig_files(app: tauri::AppHandle) -> Vec<String> {
         .collect()
 }
 
-#[tauri::command]
-async fn inspect_kubeconfig(
-    kubri: State<'_, Arc<Kubri>>,
-    text: String,
-) -> CommandResult<Vec<kubri_core::NewContext>> {
-    kubri.inspect_kubeconfig(&text).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn add_contexts(
-    kubri: State<'_, Arc<Kubri>>,
-    text: String,
-    names: Vec<String>,
-) -> CommandResult<ContextList> {
-    kubri.add_contexts(&text, &names).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn remove_context(kubri: State<'_, Arc<Kubri>>, name: String) -> CommandResult<ContextList> {
-    kubri.remove_context(&name).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn switch_context(kubri: State<'_, Arc<Kubri>>, name: String) -> CommandResult<ClusterInfo> {
-    kubri.switch_context(&name).await.map_err(|e| e.to_string())
-}
-
-/// Stops waiting for a switch under way; the current connection stays.
-#[tauri::command]
-async fn cancel_switch(kubri: State<'_, Arc<Kubri>>) -> CommandResult<()> {
-    kubri.cancel_switch().await;
-    Ok(())
-}
-
 /// Saves a namespace, or the whole cluster, as a snapshot file in the Downloads folder.
 /// Returns the path.
 #[tauri::command]
@@ -184,13 +144,6 @@ async fn take_snapshot(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) 
         .await
         .map_err(|e| e.to_string())?
         .map(|path| path.display().to_string())
-}
-
-/// Leaves the open snapshot for no context, when there is none to go back to.
-#[tauri::command]
-async fn close_snapshot(kubri: State<'_, Arc<Kubri>>) -> CommandResult<()> {
-    kubri.close_snapshot().await;
-    Ok(())
 }
 
 /// Opens a snapshot file sent as the raw request body, its name in the `x-name` header.
@@ -232,154 +185,6 @@ fn percent_decode(text: &str) -> String {
         }
     }
     String::from_utf8_lossy(&out).into_owned()
-}
-
-/// The settings, and why the file could not be read if it could not.
-#[derive(serde::Serialize)]
-struct SettingsReply {
-    settings: Settings,
-    error: Option<String>,
-}
-
-#[tauri::command]
-fn settings(kubri: State<'_, Arc<Kubri>>) -> SettingsReply {
-    SettingsReply {
-        settings: kubri.settings(),
-        error: kubri.settings_error(),
-    }
-}
-
-#[tauri::command]
-fn set_context_settings(
-    kubri: State<'_, Arc<Kubri>>,
-    name: String,
-    settings: ContextSettings,
-) -> CommandResult<Settings> {
-    kubri
-        .set_context_settings(&name, settings)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn set_connection_settings(
-    kubri: State<'_, Arc<Kubri>>,
-    settings: kubri_core::ConnectionSettings,
-) -> CommandResult<Settings> {
-    kubri
-        .set_connection_settings(settings)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn set_history_settings(
-    kubri: State<'_, Arc<Kubri>>,
-    settings: kubri_core::HistorySettings,
-) -> CommandResult<Settings> {
-    kubri
-        .set_history_settings(settings)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn history(
-    kubri: State<'_, Arc<Kubri>>,
-    query: kubri_core::HistoryQuery,
-) -> CommandResult<kubri_core::HistoryPage> {
-    kubri.history(&query).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn history_detail(kubri: State<'_, Arc<Kubri>>, id: i64) -> CommandResult<kubri_core::HistoryDetail> {
-    kubri.history_detail(id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_diff_settings(kubri: State<'_, Arc<Kubri>>, settings: DiffSettings) -> CommandResult<Settings> {
-    kubri.set_diff_settings(settings).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_saved_searches(
-    kubri: State<'_, Arc<Kubri>>,
-    searches: Vec<kubri_core::SavedSearch>,
-) -> CommandResult<Settings> {
-    kubri.set_saved_searches(searches).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_label_templates(
-    kubri: State<'_, Arc<Kubri>>,
-    templates: Vec<kubri_core::LabelTemplate>,
-) -> CommandResult<Settings> {
-    kubri.set_label_templates(templates).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn set_column_settings(
-    kubri: State<'_, Arc<Kubri>>,
-    kind: String,
-    columns: kubri_core::ColumnSettings,
-) -> CommandResult<Settings> {
-    kubri
-        .set_column_settings(&kind, columns)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn guard(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Guard> {
-    Ok(kubri.guard().await)
-}
-
-#[tauri::command]
-async fn unlock(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Guard> {
-    kubri.unlock().await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn lock(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Guard> {
-    kubri.lock().await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn preview(kubri: State<'_, Arc<Kubri>>, target: ObjectRef, change: Change) -> CommandResult<Preview> {
-    kubri.preview(&target, change).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn schema(kubri: State<'_, Arc<Kubri>>, resource: ResourceRef) -> CommandResult<Value> {
-    let found = kubri.schema(&resource).await.map_err(|e| e.to_string())?;
-    Ok(found.as_ref().clone().unwrap_or(Value::Null))
-}
-
-#[tauri::command]
-async fn access(
-    kubri: State<'_, Arc<Kubri>>,
-    checks: Vec<AccessCheck>,
-    fresh: bool,
-) -> CommandResult<Vec<Option<bool>>> {
-    kubri.access(&checks, fresh).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn who_am_i(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Option<Identity>> {
-    kubri.who_am_i().await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn readable_namespaces(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<String>> {
-    kubri.readable_namespaces().await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn resources(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<ResourceInfo>> {
-    kubri.resources().await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn refresh_resources(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Vec<ResourceInfo>> {
-    kubri.refresh_resources().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -438,12 +243,6 @@ async fn terminal_open(
     Ok(register(&terminals, terminal, on_event))
 }
 
-/// Whether a local terminal can be opened, and what it would run with.
-#[tauri::command]
-async fn local_terminal_info(kubri: State<'_, Arc<Kubri>>) -> CommandResult<kubri_core::LocalTerminalInfo> {
-    Ok(kubri.local_terminal_info().await)
-}
-
 /// Opens a shell on this computer; it is written to and closed like [`terminal_open`].
 #[tauri::command]
 async fn local_terminal_open(
@@ -457,11 +256,6 @@ async fn local_terminal_open(
         .await
         .map_err(|e| e.to_string())?;
     Ok(register(&terminals, terminal, on_event))
-}
-
-#[tauri::command]
-async fn local_clusters(kubri: State<'_, Arc<Kubri>>) -> CommandResult<kubri_core::LocalClusters> {
-    Ok(kubri.local_clusters().await)
 }
 
 /// Makes a cluster with kind or k3d in a terminal; it is written to and closed like
@@ -480,14 +274,6 @@ async fn local_cluster_create(
     Ok(register(&terminals, terminal, on_event))
 }
 
-#[tauri::command]
-async fn set_terminal_settings(
-    kubri: State<'_, Arc<Kubri>>,
-    settings: kubri_core::TerminalSettings,
-) -> CommandResult<Settings> {
-    kubri.set_terminal_settings(settings).map_err(|e| e.to_string())
-}
-
 /// Runs a k9s plugin in a terminal; it is written to and closed like [`terminal_open`].
 #[tauri::command]
 async fn plugin_open(
@@ -498,22 +284,6 @@ async fn plugin_open(
 ) -> CommandResult<u32> {
     let terminal = kubri.open_plugin(&run).await.map_err(|e| e.to_string())?;
     Ok(register(&terminals, terminal, on_event))
-}
-
-/// Starts a background k9s plugin without waiting for it.
-#[tauri::command]
-async fn plugin_run(kubri: State<'_, Arc<Kubri>>, run: PluginRun) -> CommandResult<()> {
-    kubri.run_plugin(&run).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn k9s_config(kubri: State<'_, Arc<Kubri>>) -> CommandResult<K9sConfig> {
-    Ok(kubri.k9s_config().await)
-}
-
-#[tauri::command]
-async fn k9s_skin(kubri: State<'_, Arc<Kubri>>, name: String) -> CommandResult<Value> {
-    kubri.k9s_skin(&name).await.map_err(|e| e.to_string())
 }
 
 /// Sends a terminal's output to the channel and keeps its input for `terminal_write`.
@@ -576,503 +346,6 @@ fn terminal_close(terminals: State<'_, Arc<Terminals>>, id: u32) {
     if let Some(session) = terminals.sessions.lock().unwrap().remove(&id) {
         session.task.abort();
     }
-}
-
-#[tauri::command]
-fn port_forwards(kubri: State<'_, Arc<Kubri>>) -> Vec<PortForwardInfo> {
-    kubri.port_forwards()
-}
-
-#[tauri::command]
-async fn start_port_forward(
-    kubri: State<'_, Arc<Kubri>>,
-    request: PortForwardRequest,
-) -> CommandResult<PortForwardInfo> {
-    kubri.start_port_forward(request).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn start_favorite_forwards(
-    kubri: State<'_, Arc<Kubri>>,
-) -> CommandResult<Vec<kubri_core::FavoriteStart>> {
-    kubri.start_favorite_forwards().await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn stop_port_forward(kubri: State<'_, Arc<Kubri>>, id: u32) -> CommandResult<()> {
-    kubri.stop_port_forward(id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn benchmarks(kubri: State<'_, Arc<Kubri>>) -> Vec<BenchInfo> {
-    kubri.benchmarks()
-}
-
-// Async, so the benchmark task starts on the async runtime.
-#[tauri::command]
-async fn start_benchmark(kubri: State<'_, Arc<Kubri>>, request: BenchRequest) -> CommandResult<BenchInfo> {
-    kubri.start_benchmark(&request).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn stop_benchmark(kubri: State<'_, Arc<Kubri>>, id: u32) -> CommandResult<()> {
-    kubri.stop_benchmark(id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn remove_benchmark(kubri: State<'_, Arc<Kubri>>, id: u32) -> CommandResult<()> {
-    kubri.remove_benchmark(id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn cordon(kubri: State<'_, Arc<Kubri>>, name: String, cordoned: bool) -> CommandResult<()> {
-    kubri.cordon(&name, cordoned).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn drain(
-    kubri: State<'_, Arc<Kubri>>,
-    name: String,
-    options: Option<DrainOptions>,
-) -> CommandResult<DrainReport> {
-    kubri
-        .drain(&name, options.unwrap_or_default())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn get_object(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Value> {
-    kubri.get(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn get_object_elsewhere(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Value> {
-    kubri.get_elsewhere(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn replace_object(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-    value: Value,
-) -> CommandResult<Value> {
-    kubri.replace(&target, value).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn patch_object(kubri: State<'_, Arc<Kubri>>, target: ObjectRef, patch: Value) -> CommandResult<Value> {
-    kubri.patch(&target, patch).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn delete_object(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-    options: Option<DeleteOptions>,
-) -> CommandResult<()> {
-    kubri
-        .delete(&target, &options.unwrap_or_default())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn scale(kubri: State<'_, Arc<Kubri>>, target: ObjectRef, replicas: u32) -> CommandResult<()> {
-    kubri.scale(&target, replicas).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn debug(kubri: State<'_, Arc<Kubri>>, request: DebugRequest) -> CommandResult<DebugSession> {
-    kubri.debug(request).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn memory_fix(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-    container: String,
-) -> CommandResult<MemoryFix> {
-    kubri
-        .memory_fix(&target, &container)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn set_memory_limit(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-    container: String,
-    memory: String,
-) -> CommandResult<()> {
-    kubri
-        .set_memory_limit(&target, &container, &memory)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn capacity(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<kubri_core::Capacity> {
-    kubri.capacity(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn scheduling(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Vec<NodeFit>> {
-    kubri.scheduling(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn apply(kubri: State<'_, Arc<Kubri>>, request: ApplyRequest) -> CommandResult<Vec<ApplyItem>> {
-    kubri.apply(request).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn fetch_manifest(url: String) -> CommandResult<String> {
-    kubri_core::fetch_manifest(&url).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn service_check(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<ServiceCheck> {
-    kubri.service_check(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn restart(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<()> {
-    kubri.restart(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn drill(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Option<Drill>> {
-    kubri.drill(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn used_by(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<Vec<Reference>> {
-    kubri.used_by(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn trigger_cronjob(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<String> {
-    kubri.trigger_cronjob(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn suspend_cronjob(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-    suspend: bool,
-) -> CommandResult<()> {
-    kubri
-        .suspend_cronjob(&target, suspend)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn set_images(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-    images: Vec<ContainerImage>,
-) -> CommandResult<()> {
-    kubri
-        .set_images(&target, &images)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn rollback(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<String> {
-    kubri.rollback(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn events(
-    kubri: State<'_, Arc<Kubri>>,
-    namespace: Option<String>,
-    uid: String,
-) -> CommandResult<Vec<EventInfo>> {
-    kubri
-        .events(namespace.as_deref(), &uid)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn metrics(
-    kubri: State<'_, Arc<Kubri>>,
-    kind: MetricsKind,
-    namespace: Option<String>,
-) -> CommandResult<Vec<Usage>> {
-    kubri
-        .metrics(kind, namespace.as_deref())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn pulse(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<Pulse> {
-    kubri.pulse(namespace.as_deref()).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn integrations(kubri: State<'_, Arc<Kubri>>, fresh: bool) -> CommandResult<kubri_core::Integrations> {
-    kubri.integrations(fresh).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn charts(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-    range: kubri_core::Range,
-) -> CommandResult<kubri_core::Charts> {
-    kubri.charts(&target, range).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn usage_history(
-    kubri: State<'_, Arc<Kubri>>,
-    namespace: Option<String>,
-    seconds: u64,
-) -> CommandResult<kubri_core::Charts> {
-    let range = kubri_core::Range { seconds, end: None };
-    let namespace = namespace.filter(|ns| !ns.is_empty());
-    kubri
-        .usage_history(namespace.as_deref(), range)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn dashboards(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-) -> CommandResult<kubri_core::Dashboards> {
-    kubri.dashboards(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn grafana_logs(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-) -> CommandResult<kubri_core::DashboardLink> {
-    kubri.grafana_logs(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn integration_url(kubri: State<'_, Arc<Kubri>>, id: String) -> CommandResult<String> {
-    kubri.integration_url(&id).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn gitops(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-    action: kubri_core::GitOpsAction,
-) -> CommandResult<()> {
-    kubri.gitops(&target, action).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn search(
-    kubri: State<'_, Arc<Kubri>>,
-    request: kubri_core::SearchRequest,
-) -> CommandResult<kubri_core::SearchResult> {
-    kubri.search(&request).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn fleet_cluster(
-    kubri: State<'_, Arc<Kubri>>,
-    context: String,
-) -> CommandResult<kubri_core::FleetCluster> {
-    kubri.fleet_cluster(&context).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn right_sizing(
-    kubri: State<'_, Arc<Kubri>>,
-    namespace: Option<String>,
-) -> CommandResult<kubri_core::RightSizing> {
-    let namespace = namespace.filter(|n| !n.is_empty());
-    kubri
-        .right_sizing(namespace.as_deref())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn set_resources(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-    containers: Vec<kubri_core::ContainerResources>,
-) -> CommandResult<()> {
-    kubri
-        .set_resources(&target, &containers)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn renew_certificate(kubri: State<'_, Arc<Kubri>>, target: ObjectRef) -> CommandResult<()> {
-    kubri.renew_certificate(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn views(kubri: State<'_, Arc<Kubri>>) -> CommandResult<kubri_core::ViewSet> {
-    Ok(kubri.views().await)
-}
-
-#[tauri::command]
-async fn render_view(
-    kubri: State<'_, Arc<Kubri>>,
-    resource: ResourceRef,
-    object: serde_json::Value,
-) -> CommandResult<Option<kubri_core::RenderedView>> {
-    kubri
-        .render_view(&resource, &object)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn managed_by(
-    kubri: State<'_, Arc<Kubri>>,
-    target: ObjectRef,
-) -> CommandResult<Option<kubri_core::Manager>> {
-    kubri.managed_by(&target).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn loki_logs(
-    kubri: State<'_, Arc<Kubri>>,
-    request: kubri_core::LokiRequest,
-) -> CommandResult<kubri_core::LokiLogs> {
-    kubri.loki_logs(&request).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn graph(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<kubri_core::Graph> {
-    kubri.graph(namespace.as_deref()).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn xray(
-    kubri: State<'_, Arc<Kubri>>,
-    resource: ResourceRef,
-    namespace: Option<String>,
-) -> CommandResult<Vec<XrayNode>> {
-    kubri
-        .xray(&resource, namespace.as_deref())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn sanitize(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<SanitizerReport> {
-    kubri
-        .sanitize(namespace.as_deref())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn rbac(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<Rbac> {
-    kubri.rbac(namespace.as_deref()).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn permissions(kubri: State<'_, Arc<Kubri>>, namespace: Option<String>) -> CommandResult<Permissions> {
-    kubri
-        .permissions(namespace.as_deref())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn helm_releases(
-    kubri: State<'_, Arc<Kubri>>,
-    namespace: Option<String>,
-) -> CommandResult<Vec<HelmRelease>> {
-    kubri
-        .helm_releases(namespace.as_deref())
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn helm_release(
-    kubri: State<'_, Arc<Kubri>>,
-    namespace: String,
-    name: String,
-    revision: Option<u32>,
-) -> CommandResult<HelmReleaseDetails> {
-    kubri
-        .helm_release(&namespace, &name, revision)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn helm_history(
-    kubri: State<'_, Arc<Kubri>>,
-    namespace: String,
-    name: String,
-) -> CommandResult<Vec<HelmRelease>> {
-    kubri
-        .helm_history(&namespace, &name)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn latest_release() -> CommandResult<kubri_core::LatestRelease> {
-    kubri_core::latest_release().await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn helm_version(kubri: State<'_, Arc<Kubri>>) -> CommandResult<Option<String>> {
-    Ok(kubri.helm_version().await)
-}
-
-#[tauri::command]
-async fn helm_rollback(
-    kubri: State<'_, Arc<Kubri>>,
-    namespace: String,
-    name: String,
-    revision: u32,
-) -> CommandResult<String> {
-    kubri
-        .helm_rollback(&namespace, &name, revision)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn helm_change(kubri: State<'_, Arc<Kubri>>, change: HelmChange) -> CommandResult<HelmOutcome> {
-    kubri.helm_change(&change).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn helm_chart_values(kubri: State<'_, Arc<Kubri>>, chart: HelmChartRef) -> CommandResult<String> {
-    kubri.helm_chart_values(&chart).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn helm_search(kubri: State<'_, Arc<Kubri>>, query: String) -> CommandResult<Vec<HubChart>> {
-    kubri.helm_search(&query).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn helm_uninstall(
-    kubri: State<'_, Arc<Kubri>>,
-    namespace: String,
-    name: String,
-) -> CommandResult<String> {
-    kubri
-        .helm_uninstall(&namespace, &name)
-        .await
-        .map_err(|e| e.to_string())
 }
 
 /// Opens a web address in the default browser, such as a port-forward's. Only http and
@@ -1229,136 +502,35 @@ pub fn run() {
         .manage(Arc::new(Terminals::default()))
         .manage(update::Pending::default())
         .invoke_handler(tauri::generate_handler![
-            contexts,
-            reload_contexts,
-            switch_context,
-            cancel_switch,
+            call,
             take_snapshot,
             open_snapshot,
-            close_snapshot,
-            resources,
-            refresh_resources,
-            preview,
-            schema,
-            access,
-            who_am_i,
-            readable_namespaces,
-            settings,
-            set_context_settings,
-            set_diff_settings,
-            set_history_settings,
-            set_connection_settings,
-            set_terminal_settings,
-            local_terminal_info,
             local_terminal_open,
-            local_clusters,
             local_cluster_create,
-            history,
-            history_detail,
-            set_column_settings,
-            agents::set_agent_settings,
             agents::agents_connection,
             agents::agents_new_token,
             agents::agents_pending,
             agents::agents_answer,
             agents::agents_calls,
-            explain::set_explain_settings,
             explain::explain_key,
             explain::set_explain_key,
             explain::explain_prompt,
             explain::explain,
-            guard,
-            unlock,
-            lock,
             watch_table,
             logs,
             unwatch,
             terminal_open,
             plugin_open,
-            plugin_run,
-            k9s_config,
-            k9s_skin,
             terminal_write,
             terminal_resize,
             terminal_close,
-            port_forwards,
-            start_port_forward,
-            stop_port_forward,
-            start_favorite_forwards,
-            benchmarks,
-            start_benchmark,
-            stop_benchmark,
-            remove_benchmark,
-            cordon,
-            drain,
-            get_object,
-            replace_object,
-            patch_object,
-            delete_object,
-            scale,
-            restart,
-            debug,
-            memory_fix,
-            set_memory_limit,
-            scheduling,
-            capacity,
-            service_check,
-            apply,
-            fetch_manifest,
-            events,
-            metrics,
-            pulse,
-            integrations,
-            charts,
-            usage_history,
-            dashboards,
-            grafana_logs,
-            integration_url,
-            loki_logs,
-            gitops,
-            managed_by,
-            views,
-            render_view,
-            renew_certificate,
-            right_sizing,
-            fleet_cluster,
-            set_saved_searches,
-            set_label_templates,
-            search,
-            kubeconfig_files,
             add_kubeconfig_files,
             remove_kubeconfig_file,
             choose_kubeconfig_files,
-            inspect_kubeconfig,
-            add_contexts,
-            remove_context,
-            get_object_elsewhere,
-            set_resources,
-            xray,
-            graph,
-            sanitize,
-            rbac,
-            permissions,
-            helm_releases,
-            helm_release,
-            helm_history,
-            helm_version,
-            latest_release,
             update::update_check,
             update::update_install,
-            helm_rollback,
-            helm_uninstall,
-            helm_change,
-            helm_chart_values,
-            helm_search,
             open_url,
             save_text,
-            drill,
-            used_by,
-            trigger_cronjob,
-            suspend_cronjob,
-            set_images,
-            rollback
         ])
         .run(tauri::generate_context!())
         .expect("failed to start Kubri");

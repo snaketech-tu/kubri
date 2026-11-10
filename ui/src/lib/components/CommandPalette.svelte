@@ -19,7 +19,7 @@
 	/** One word that might be part of an object's name rather than a command. */
 	const lookup = $derived(term.length >= 3 && !/\s/.test(term) && !term.includes(':') ? term : '');
 
-	const where = (namespace: string | null | undefined, context: string | undefined) =>
+	const where = (namespace: string | null | undefined, context: string | null | undefined) =>
 		[namespace, context && context !== app.cluster?.context ? context : ''].filter(Boolean).join(' · ');
 	const recentSuggestion = (o: RecentObject): Suggestion => ({
 		label: o.name,
@@ -32,7 +32,7 @@
 	});
 
 	const objects = $derived.by((): Suggestion[] => {
-		const recent = app.recent.filter((o) => o.name.toLowerCase().includes(lookup.toLowerCase())).slice(0, 4).map(recentSuggestion);
+		const recent = app.pins.recent.filter((o) => o.name.toLowerCase().includes(lookup.toLowerCase())).slice(0, 4).map(recentSuggestion);
 		const seen = new Set(recent.map((s) => `${s.detail}/${s.label}`));
 		const found = hits
 			.map((h): Suggestion => ({
@@ -77,20 +77,20 @@
 			{
 				label: t('Switch to dark or light mode'),
 				detail: t('Command · appearance'),
-				action: { type: 'call', run: () => app.toggleScheme() }
+				action: { type: 'call', run: () => app.appearance.toggleScheme() }
 			},
 			{
 				label: app.readOnly ? t('Turn read-only off') : t('Turn read-only on'),
 				detail: t('Command · this context'),
-				action: { type: 'call', run: () => app.toggleReadOnly() }
+				action: { type: 'call', run: () => app.rails.toggleReadOnly() }
 			},
 			{ label: t('Show the keyboard shortcuts'), detail: t('Command · help'), action: { type: 'help' } }
 		];
 		if (isTauri()) {
 			out.push(
-				{ label: t('Zoom in'), detail: t('Command · appearance'), action: { type: 'call', run: () => app.setZoom(stepZoom(app.zoom, 1)) } },
-				{ label: t('Zoom out'), detail: t('Command · appearance'), action: { type: 'call', run: () => app.setZoom(stepZoom(app.zoom, -1)) } },
-				{ label: t('Reset the zoom'), detail: t('Command · appearance'), action: { type: 'call', run: () => app.setZoom(1) } }
+				{ label: t('Zoom in'), detail: t('Command · appearance'), action: { type: 'call', run: () => app.appearance.setZoom(stepZoom(app.appearance.zoom, 1)) } },
+				{ label: t('Zoom out'), detail: t('Command · appearance'), action: { type: 'call', run: () => app.appearance.setZoom(stepZoom(app.appearance.zoom, -1)) } },
+				{ label: t('Reset the zoom'), detail: t('Command · appearance'), action: { type: 'call', run: () => app.appearance.setZoom(1) } }
 			);
 		}
 		return out;
@@ -121,7 +121,7 @@
 				]
 			: [
 					...forRow.slice(0, 6),
-					...app.recent.slice(0, 5).map(recentSuggestion),
+					...app.pins.recent.slice(0, 5).map(recentSuggestion),
 					...suggest('ctx', app.resources, app.contexts, app.namespaces).slice(0, 3),
 					...suggest('po', app.resources, app.contexts, app.namespaces).slice(0, 1),
 					...suggest('deploy', app.resources, app.contexts, app.namespaces).slice(0, 1),

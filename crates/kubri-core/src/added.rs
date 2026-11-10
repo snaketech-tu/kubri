@@ -15,8 +15,9 @@ use serde::Serialize;
 use crate::{Error, Result};
 
 /// One context of a kubeconfig about to be added.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct NewContext {
     pub name: String,
     pub server: Option<String>,

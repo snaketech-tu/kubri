@@ -3,6 +3,7 @@
 //! The API server renders these as `meta.k8s.io/v1` Tables, including the printer columns of
 //! CRDs. Servers that cannot (some aggregated APIs) get a plain Name / Age fallback.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -15,13 +16,15 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::jsonpath::JsonPath;
+use crate::{AccessCheck, Error, Kubri, ResourceRef, Result};
 
 const TABLE_ACCEPT: &str = "application/json;as=Table;v=v1;g=meta.k8s.io,\
                             application/json;as=Table;v=v1beta1;g=meta.k8s.io,application/json";
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Column {
     pub name: String,
     #[serde(rename = "type", default)]
@@ -35,14 +38,16 @@ pub struct Column {
     pub priority: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Row {
     /// Stable key: the object's UID, or namespace/name if the server sends none.
     pub key: String,
     pub name: String,
     pub namespace: Option<String>,
     pub created: Option<String>,
+    #[ts(type = "Record<string, string>")]
     pub labels: serde_json::Map<String, Value>,
     /// The objects this one belongs to, such as the ReplicaSet of a pod.
     pub owners: Vec<Owner>,
@@ -51,8 +56,9 @@ pub struct Row {
 }
 
 /// An owner reference of a row's object.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Owner {
     pub api_version: String,
     pub kind: String,
@@ -64,8 +70,9 @@ pub struct Owner {
 }
 
 /// Narrows a list on the server, like `kubectl get -l` and `--field-selector`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct TableScope {
     pub label_selector: Option<String>,
     pub field_selector: Option<String>,
@@ -125,8 +132,9 @@ impl TableScope {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export)]
 pub enum TableEvent {
     /// The complete current table. Replaces everything the client knows.
     Reset {
@@ -578,6 +586,70 @@ fn build_row(metadata: &Value, cells: Vec<Value>) -> Row {
             .and_then(|o| serde_json::from_value(o).ok())
             .unwrap_or_default(),
         cells,
+    }
+}
+
+impl Kubri {
+    /// Streams a resource list with the columns `kubectl get` shows. `namespace` is ignored
+    /// for cluster-scoped resources, and `None` lists all namespaces.
+    ///
+    /// The stream is bound to the context that was active when it was created.
+    pub async fn watch_table(
+        &self,
+        resource: &ResourceRef,
+        namespace: Option<&str>,
+        mut scope: TableScope,
+    ) -> Result<impl Stream<Item = TableEvent> + Send + 'static> {
+        let session = self.session().await?;
+        let api = session.api(resource, namespace)?;
+        let info = session.info_for(resource)?;
+        scope.view = self.view_of(info).await.map(Arc::new);
+        if namespace.is_none()
+            && info.namespaced
+            && let Some(allowed) = self.allowed_namespaces(&session).await?
+        {
+            if allowed.is_empty() {
+                return Err(Error::Unsupported(
+                    "no namespace matches the label selector in this context's settings".into(),
+                ));
+            }
+            let shown = match allowed.len() {
+                0..=4 => allowed.join(", "),
+                n => format!("{} and {} more", allowed[..3].join(", "), n - 3),
+            };
+            let notice = format!("Showing the namespaces this context's settings name: {shown}");
+            let urls = allowed
+                .iter()
+                .map(|ns| Ok(session.api(resource, Some(ns))?.resource_url().to_owned()))
+                .collect::<Result<Vec<_>>>()?;
+            return Ok(watch_tables(session.client.clone(), urls, scope, notice).boxed());
+        }
+        if namespace.is_none() && info.namespaced {
+            // Someone who may not list all namespaces at once sees the namespaces they may read.
+            let everywhere = AccessCheck::new("list", resource, None);
+            if session.access_of(&everywhere).await == Some(false) {
+                let mut readable = Vec::new();
+                for ns in self.readable_namespaces().await? {
+                    let here = AccessCheck::new("list", resource, Some(&ns));
+                    if session.access_of(&here).await != Some(false) {
+                        readable.push(ns);
+                    }
+                }
+                if !readable.is_empty() {
+                    let notice = format!(
+                        "You may not list {} in all namespaces; showing {}",
+                        info.reference.plural,
+                        readable.join(", ")
+                    );
+                    let urls = readable
+                        .iter()
+                        .map(|ns| Ok(session.api(resource, Some(ns))?.resource_url().to_owned()))
+                        .collect::<Result<Vec<_>>>()?;
+                    return Ok(watch_tables(session.client.clone(), urls, scope, notice).boxed());
+                }
+            }
+        }
+        Ok(watch_table(session.client.clone(), api.resource_url().to_owned(), scope).boxed())
     }
 }
 

@@ -26,8 +26,9 @@ use serde_json::{Value, json};
 pub use hub::{CallRecord, ConfirmRequest, Hub};
 
 /// How to connect an agent, for the settings page.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, rename = "AgentConnection")]
 pub struct Connection {
     /// The HTTP endpoint while it is on, such as `http://127.0.0.1:7879/mcp`.
     pub url: Option<String>,

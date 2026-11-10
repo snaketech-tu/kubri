@@ -15,15 +15,18 @@ use crate::{Error, Guard, Kubri, ObjectRef, ResourceRef, Result, Session, discov
 const MANAGER: &str = "kubri";
 
 /// Objects to create or change, in any order.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct ApplyRequest {
+    #[ts(type = "Array<unknown>")]
     pub objects: Vec<Value>,
     /// For namespaced objects that name none.
     #[serde(default)]
     pub namespace: Option<String>,
     /// Only a server-side dry run: nothing changes.
     #[serde(default)]
+    #[ts(as = "Option<bool>", optional)]
     pub dry_run: bool,
     /// Refuse to apply to another context than the one the YAML was written for.
     #[serde(default)]
@@ -34,8 +37,9 @@ pub struct ApplyRequest {
     pub into: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum ApplyOutcome {
     Created,
     Changed,
@@ -46,8 +50,9 @@ pub enum ApplyOutcome {
 }
 
 /// What happened, or would happen, to one object.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ApplyItem {
     /// Its place in the request.
     pub index: usize,

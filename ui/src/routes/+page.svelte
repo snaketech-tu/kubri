@@ -134,11 +134,11 @@
 		};
 	});
 
-	$effect(() => untrack(() => applyScheme(app.scheme)));
+	$effect(() => untrack(() => applyScheme(app.appearance.scheme)));
 	// The system's light or dark, followed when it changes, such as at sunset.
 	$effect(() => {
 		const media = matchMedia('(prefers-color-scheme: dark)');
-		const update = () => (app.systemDark = media.matches);
+		const update = () => (app.appearance.systemDark = media.matches);
 		update();
 		media.addEventListener('change', update);
 		return () => media.removeEventListener('change', update);
@@ -147,7 +147,7 @@
 	// The level kept from the last start; the window opens at 100%.
 	$effect(() =>
 		untrack(() => {
-			if (desktop && app.zoom !== 1) app.setZoom(app.zoom);
+			if (desktop && app.appearance.zoom !== 1) app.appearance.setZoom(app.appearance.zoom);
 		})
 	);
 
@@ -210,7 +210,7 @@
 		const zoom = desktop ? zoomKey(e) : null;
 		if (zoom !== null) {
 			e.preventDefault();
-			app.setZoom(stepZoom(app.zoom, zoom));
+			app.appearance.setZoom(stepZoom(app.appearance.zoom, zoom));
 			return;
 		}
 		if (app.overlayOpen) return;
@@ -253,7 +253,7 @@
 	const viewHints = $derived.by(() => {
 		// The view waits under the connecting card; only cancelling works.
 		if (app.connecting && app.cluster && app.contexts.some((c) => c.name === app.connecting)) return [['esc', t('cancel')]] as [string, string][];
-		const panel: [string, string][] = app.details ? [['f', app.maximized ? t('restore') : t('maximize')], ['esc', t('close')]] : [];
+		const panel: [string, string][] = app.details ? [['f', app.layout.maximized ? t('restore') : t('maximize')], ['esc', t('close')]] : [];
 		// The log keys, while the logs are on screen.
 		if (app.details?.tab === 'logs') {
 			return [
@@ -359,7 +359,7 @@
 		if (app.listRows === 0) {
 			const empty: [string, string][] = [[':', t('command')], ['/', t('filter')]];
 			if (app.scope) empty.push(['esc', t('back')]);
-			if (app.details) empty.push(['f', app.maximized ? t('restore') : t('maximize')]);
+			if (app.details) empty.push(['f', app.layout.maximized ? t('restore') : t('maximize')]);
 			empty.push(['?', t('help')]);
 			return empty;
 		}
@@ -380,7 +380,7 @@
 		if (canScale(r) && !isPods(r) && writable) h.push(['s', t('scale')]);
 		if (canRestart(r) && writable) h.push(['r', t('restart')]);
 		if (app.scope) h.push(['esc', t('back')]);
-		if (app.details) h.push(['f', app.maximized ? t('restore') : t('maximize')]);
+		if (app.details) h.push(['f', app.layout.maximized ? t('restore') : t('maximize')]);
 		h.push(['?', t('help')]);
 		return h;
 	});
@@ -434,23 +434,23 @@
 	// A clock for the unlock countdown.
 	let now = $state(Date.now());
 	$effect(() => {
-		if (app.unlockedUntil === null) return;
+		if (app.rails.unlockedUntil === null) return;
 		const timer = setInterval(() => (now = Date.now()), 1000);
 		return () => clearInterval(timer);
 	});
-	const unlockLeft = $derived(app.unlockedUntil === null ? null : Math.max(0, Math.ceil((app.unlockedUntil - now) / 1000)));
-	const lockFixed = $derived(readOnlyFixed(app.guard, app.k9s?.readOnly ?? false, app.contextSettings.readOnly));
+	const unlockLeft = $derived(app.rails.unlockedUntil === null ? null : Math.max(0, Math.ceil((app.rails.unlockedUntil - now) / 1000)));
+	const lockFixed = $derived(readOnlyFixed(app.rails.guard, app.k9s?.readOnly ?? false, app.contextSettings.readOnly));
 	const lockTitle = $derived(
 		lockFixed
-			? `${readOnlyReason(app.guard, app.contextSettings.readOnly, app.k9s?.readOnly ?? false)}.`
+			? `${readOnlyReason(app.rails.guard, app.contextSettings.readOnly, app.k9s?.readOnly ?? false)}.`
 			: app.contextSettings.readOnly
 				? t('Read-only in Kubri: no edits, deletes, scaling or shells. Click to allow changes.')
 				: unlockLeft !== null
 					? t('Unlocked for now; it locks again by itself. Click to lock it now.')
-					: app.guard.readOnly && app.guard.canUnlock
+					: app.rails.guard.readOnly && app.rails.guard.canUnlock
 						? t('Locked: click to unlock for 15 minutes.')
-						: app.guard.readOnly
-							? t('Read-only: {reason}', { reason: app.guard.reason ? coreText(app.guard.reason) : t('Kubri does not change this cluster') })
+						: app.rails.guard.readOnly
+							? t('Read-only: {reason}', { reason: app.rails.guard.reason ? coreText(app.rails.guard.reason) : t('Kubri does not change this cluster') })
 							: t('Changes are allowed; Kubernetes permissions still apply. Click to make Kubri read-only.')
 	);
 	const accent = $derived(app.contextSettings.color || null);
@@ -468,13 +468,13 @@
 
 <div
 	class="shell"
-	class:maximized={app.details && app.maximized}
+	class:maximized={app.details && app.layout.maximized}
 	class:inspecting={app.details}
 	class:tinted={accent}
 	class:production={!!app.cluster && (app.production || app.productionNamespace)}
 	class:nav-open={navOpen}
 	style:--context-color={accent}
-	style:--sidebar-width={app.sidebarWidth ? `${app.sidebarWidth}px` : null}
+	style:--sidebar-width={app.layout.sidebarWidth ? `${app.layout.sidebarWidth}px` : null}
 >
 	<Sidebar />
 	<div class="workspace">
@@ -561,28 +561,28 @@
 			{/if}
 			<button
 				class="square"
-				onclick={() => app.toggleScheme()}
-				title={app.skin
-					? app.dark
-						? t("The skin {skin} sets the colors; use Kubri's light colors instead", { skin: app.skin })
-						: t("The skin {skin} sets the colors; use Kubri's dark colors instead", { skin: app.skin })
-					: app.dark
+				onclick={() => app.appearance.toggleScheme()}
+				title={app.appearance.skin
+					? app.appearance.dark
+						? t("The skin {skin} sets the colors; use Kubri's light colors instead", { skin: app.appearance.skin })
+						: t("The skin {skin} sets the colors; use Kubri's dark colors instead", { skin: app.appearance.skin })
+					: app.appearance.dark
 						? t('Use light colors')
 						: t('Use dark colors')}
-				aria-label={app.dark ? t('Use light colors') : t('Use dark colors')}
+				aria-label={app.appearance.dark ? t('Use light colors') : t('Use dark colors')}
 			>
-				<Icon name={app.dark ? 'sun' : 'moon'} />
+				<Icon name={app.appearance.dark ? 'sun' : 'moon'} />
 			</button>
 			<button
 				class="mode"
 				data-tour="read-only"
 				class:locked={app.readOnly}
-				class:unlocked={app.unlockedUntil !== null}
+				class:unlocked={app.rails.unlockedUntil !== null}
 				role="switch"
 				aria-checked={app.readOnly}
 				aria-label={t('Read-only')}
 				disabled={!app.cluster || lockFixed}
-				onclick={() => app.toggleReadOnly()}
+				onclick={() => app.rails.toggleReadOnly()}
 				title={lockTitle}
 			>
 				<Icon name={app.readOnly ? 'lock' : 'unlock'} size={15} />
@@ -612,10 +612,10 @@
 				<button onclick={() => (app.contexts.length ? app.leaveSnapshot() : closeSnapshot())}>{t('Leave snapshot')}</button>
 			</div>
 		{/if}
-		{#if app.settingsError}
+		{#if app.prefs.error}
 			<div class="error" role="alert">
-				<span>{t("Kubri's settings file could not be read, so it uses the defaults: {error}", { error: app.settingsError })}</span>
-				<button onclick={() => (app.settingsError = null)} aria-label={t('Dismiss')}>×</button>
+				<span>{t("Kubri's settings file could not be read, so it uses the defaults: {error}", { error: app.prefs.error })}</span>
+				<button onclick={() => (app.prefs.error = null)} aria-label={t('Dismiss')}>×</button>
 			</div>
 		{/if}
 		{#if app.error}
@@ -635,7 +635,7 @@
 				class:waiting={app.cluster && app.connecting}
 				class:with-details={app.details}
 				class:wide={app.panelWide}
-				style:--panel-width={app.panelWidth ? `${app.panelWidth}px` : null}
+				style:--panel-width={app.layout.panelWidth ? `${app.layout.panelWidth}px` : null}
 			>
 				{#if app.page === 'fleet'}
 					<FleetView />
@@ -772,7 +772,7 @@
 				{/if}
 			</main>
 			{#if dock.sessions.length}<Dock />{/if}
-			{#if app.activityOpen}<ActivityPanel />{/if}
+			{#if app.activity.open}<ActivityPanel />{/if}
 		</div>
 
 		<footer>
@@ -783,11 +783,11 @@
 					: app.snapshot
 						? t('Snapshot · {name}', { name: app.snapshot.file ?? app.snapshot.context })
 						: app.cluster
-							? t('Live · {name}', { name: app.contextName(app.cluster.context) })
+							? t('Live · {name}', { name: app.prefs.contextName(app.cluster.context) })
 							: t('Not connected')}
 			</span>
-			{#if app.release}
-				{@const release = app.release}
+			{#if app.releases.latest}
+				{@const release = app.releases.latest}
 				<span class="release">
 					{#if release.installable}
 						<button onclick={() => (app.updateOpen = true)} title={t('Update Kubri to {version}', { version: release.version })}>
@@ -801,7 +801,7 @@
 							{t('Kubri {version} is out', { version: release.version })}
 						</button>
 					{/if}
-					<button class="close" onclick={() => app.dismissRelease()} aria-label={t('Hide until the next release')}>×</button>
+					<button class="close" onclick={() => app.releases.dismiss()} aria-label={t('Hide until the next release')}>×</button>
 				</span>
 			{/if}
 			<span class="hints" data-tour="keys">
@@ -838,7 +838,7 @@
 	<ActionDialog dialog={app.dialog} />
 {/if}
 {#if app.kubeconfigFilesOpen}<KubeconfigFilesDialog />{/if}
-{#if app.updateOpen && app.release}<UpdateDialog release={app.release} />{/if}
+{#if app.updateOpen && app.releases.latest}<UpdateDialog release={app.releases.latest} />{/if}
 {#if app.explaining}<ExplainPanel subject={app.explaining} />{/if}
 {#if app.pluginTerminal}
 	<PluginTerminal plugin={app.pluginTerminal.plugin} run={app.pluginTerminal.run} />

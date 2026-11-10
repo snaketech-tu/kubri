@@ -14,13 +14,15 @@ use std::sync::Arc;
 use bytes::Bytes;
 use futures::StreamExt;
 use http::{Method, Request, Response, StatusCode};
-use http_body_util::{BodyExt, Full, StreamBody, combinators::BoxBody};
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, Full, StreamBody};
 use kube::Client;
 use kube::client::Body;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use crate::{ClusterInfo, Error, ResourceInfo, ResourceRef, Result};
+use crate::session::Session;
+use crate::{ClusterInfo, Error, Kubri, ResourceInfo, ResourceRef, Result};
 
 const FORMAT: &str = "kubri-snapshot";
 const VERSION: u32 = 1;
@@ -57,8 +59,9 @@ const CLUSTER_KINDS: [(&str, &str); 10] = [
 ];
 
 /// What a snapshot holds, shown wherever Kubri shows the cluster.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SnapshotInfo {
     /// The context it was taken from.
     pub context: String,
@@ -1082,6 +1085,66 @@ fn quiet() -> Reply {
         "application/json",
         BodyExt::boxed(StreamBody::new(stream)),
     )
+}
+
+impl Kubri {
+    /// Saves `namespace`, or the whole cluster, to a snapshot file: its name and gzipped bytes.
+    pub async fn take_snapshot(&self, namespace: Option<&str>) -> Result<(String, Vec<u8>)> {
+        let session = self.session().await?;
+        if session.info.snapshot.is_some() {
+            return Err(Error::Unsupported("this is a snapshot already".into()));
+        }
+        let bytes = take(&session.client, &session.info, &session.resources, namespace).await?;
+        let name = file_name(
+            &session.info.context,
+            namespace,
+            k8s_openapi::jiff::Timestamp::now().as_millisecond(),
+        );
+        tracing::info!(
+            context = session.info.context,
+            namespace,
+            bytes = bytes.len(),
+            "took a snapshot"
+        );
+        Ok((name, bytes))
+    }
+
+    /// Opens a snapshot file in place of a cluster, read-only. Switching to a context leaves it.
+    pub async fn open_snapshot(&self, bytes: &[u8], file: Option<String>) -> Result<ClusterInfo> {
+        let mut snapshot = read(bytes)?;
+        snapshot.info.file = file;
+        let saved = snapshot.info.clone();
+        let namespace = saved.namespace.clone().unwrap_or_else(|| "default".to_owned());
+        let info = ClusterInfo {
+            context: format!("{} (snapshot)", saved.context),
+            server: saved.server.clone(),
+            version: saved.kubernetes.clone(),
+            default_namespace: namespace.clone(),
+            snapshot: Some(saved),
+            resumed: false,
+        };
+        let resources = snapshot.served_resources();
+        let client = client(snapshot, &namespace);
+        let session = Session::new(info.clone(), client, resources);
+        self.restart_recorder(&session).await;
+        let left = self.session.write().await.replace(Arc::new(session));
+        // The live connection stays warm, so switching back from the snapshot is quick.
+        if let Some(left) = left {
+            self.keep_warm(left).await;
+        }
+        tracing::info!(context = info.context, "opened a snapshot");
+        Ok(info)
+    }
+
+    /// Leaves the snapshot that is open for no context at all, as when there is no kubeconfig
+    /// to go back to. Without a snapshot open, it does nothing.
+    pub async fn close_snapshot(&self) {
+        let mut session = self.session.write().await;
+        if session.as_ref().is_some_and(|s| s.info.snapshot.is_some()) {
+            *session = None;
+            tracing::info!("closed the snapshot");
+        }
+    }
 }
 
 #[cfg(test)]

@@ -140,7 +140,7 @@ export function kubectlCommand(context: string | null | undefined, target: Objec
 		}
 		case 'delete': {
 			const targets = op.targets?.length ? op.targets : [target];
-			const o = op.options ?? {};
+			const o: DeleteOptions = op.options ?? {};
 			const flags = [
 				...(o.force ? ['--force'] : []),
 				...(o.gracePeriodSeconds != null ? [`--grace-period=${o.gracePeriodSeconds}`] : []),

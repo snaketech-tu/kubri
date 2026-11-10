@@ -22,8 +22,8 @@
 
 	/** The objects opened lately in this context, without the ones already pinned. */
 	const recents = $derived(
-		app.recent
-			.filter((r) => r.context === app.cluster?.context && r.name && !app.pinsHere.some((p) => samePin(p, r)))
+		app.pins.recent
+			.filter((r) => r.context === app.cluster?.context && r.name && !app.pins.here.some((p) => samePin(p, r)))
 			.slice(0, 3)
 	);
 
@@ -35,7 +35,7 @@
 	const otherTool = $derived(app.page === 'tools' || (tool !== null && !listedTools.some((entry) => entry.id === tool)));
 
 	/** A search of its own, unless it is one saved in the sidebar. */
-	const searching = $derived(app.page === 'search' && !app.settings.searches.some((s) => s.query === app.searchQuery));
+	const searching = $derived(app.page === 'search' && !app.prefs.settings.searches.some((s) => s.query === app.searchQuery));
 
 	/** Marks the entry of the page shown, for screen readers as for the eye. */
 	const here = (on: boolean) => (on ? ('page' as const) : undefined);
@@ -68,7 +68,7 @@
 	let width = $state(0);
 
 	function resize(width: number) {
-		app.sidebarWidth = clampWidth(width, MIN_WIDTH, MAX_WIDTH);
+		app.layout.sidebarWidth = clampWidth(width, MIN_WIDTH, MAX_WIDTH);
 	}
 
 	/** Drags the right edge of the sidebar. */
@@ -82,7 +82,7 @@
 		const step = e.shiftKey ? 80 : 20;
 		if (e.key === 'ArrowRight') resize(width + step);
 		else if (e.key === 'ArrowLeft') resize(width - step);
-		else if (e.key === 'Home') app.sidebarWidth = null;
+		else if (e.key === 'Home') app.layout.sidebarWidth = null;
 		else return;
 		e.preventDefault();
 		e.stopPropagation();
@@ -98,15 +98,15 @@
 	<div class="list">
 		<div class="scroll" bind:this={scroller} onscroll={measure}>
 			<div class="items" bind:this={items}>
-				{#if app.pinsHere.length}
+				{#if app.pins.here.length}
 					<h3 class="first">{t('Pinned')}</h3>
-					{#each app.pinsHere as pin (`${pin.group}/${pin.plural}/${pin.namespace ?? ''}/${pin.name}`)}
+					{#each app.pins.here as pin (`${pin.group}/${pin.plural}/${pin.namespace ?? ''}/${pin.name}`)}
 						<div class="pin">
-							<button onclick={() => app.openPin(pin)} title={pin.name ? `${pin.kind} ${pin.namespace ? `${pin.namespace}/` : ''}${pin.name}` : t('{kind} list', { kind: pin.kind })}>
+							<button onclick={() => app.pins.open(pin)} title={pin.name ? `${pin.kind} ${pin.namespace ? `${pin.namespace}/` : ''}${pin.name}` : t('{kind} list', { kind: pin.kind })}>
 								<Icon name="bookmark" size={16} />
 								<span class="label">{pin.name || pluralKind(pin.kind, pin.plural)}</span>
 							</button>
-							<button class="unpin" onclick={() => app.togglePin(pin)} title={t('Unpin')} aria-label={t('Unpin {name}', { name: pin.name || pin.kind })}>×</button>
+							<button class="unpin" onclick={() => app.pins.toggle(pin)} title={t('Unpin')} aria-label={t('Unpin {name}', { name: pin.name || pin.kind })}>×</button>
 						</div>
 					{/each}
 					<hr />
@@ -131,7 +131,7 @@
 					<span class="label">{t('Search')}</span>
 					<span class="hint">:search</span>
 				</button>
-				{#each app.settings.searches as saved (saved.name)}
+				{#each app.prefs.settings.searches as saved (saved.name)}
 					<button
 						class="saved"
 						class:active={app.page === 'search' && app.searchQuery === saved.query}
@@ -161,15 +161,15 @@
 						{/if}
 					</button>
 					{#if entry.id === 'portforwards'}
-						{#each app.favoritesHere as favorite (favoriteLabel(favorite))}
-							{@const on = !!app.runningFavorite(favorite)}
-							{@const busy = app.switchingFavorites.includes(favorite)}
+						{#each app.favorites.here as favorite (favoriteLabel(favorite))}
+							{@const on = !!app.favorites.running(favorite)}
+							{@const busy = app.favorites.switching.includes(favorite)}
 							<button
 								class="favorite"
 								class:on
 								aria-pressed={on}
 								aria-busy={busy}
-								onclick={() => app.switchFavorite(favorite)}
+								onclick={() => app.favorites.switch(favorite)}
 								title="{favoriteLabel(favorite)}{favorite.address ? ` · ${favorite.address}` : ''} · {on ? t('Click to stop') : t('Click to start')}"
 							>
 								<span class="dot" aria-hidden="true"></span>
@@ -204,7 +204,7 @@
 				{#if recents.length}
 					<h3>{t('Recent')}</h3>
 					{#each recents as recent (`${recent.group}/${recent.plural}/${recent.namespace ?? ''}/${recent.name}`)}
-						<button onclick={() => app.openPin(recent)} title="{recent.kind} {recent.namespace ? `${recent.namespace}/` : ''}{recent.name}">
+						<button onclick={() => app.pins.open(recent)} title="{recent.kind} {recent.namespace ? `${recent.namespace}/` : ''}{recent.name}">
 							<Icon name="history" size={16} />
 							<span class="label">{recent.name}</span>
 							<span class="hint">{recent.kind}</span>
@@ -228,10 +228,10 @@
 			<strong><Icon name="terminal" size={16} /> {t('Your keys. Still here.')}</strong>
 			<span>{t('Use')} <kbd>:</kbd> {t('or')} <kbd>Ctrl K</kbd> {t('to jump anywhere.')}</span>
 		</div>
-		<button onclick={() => (app.activityOpen = true)} title={t('Changes made in this session, with undo')}>
+		<button onclick={() => (app.activity.open = true)} title={t('Changes made in this session, with undo')}>
 			<Icon name="history" />
 			<span class="label">{t('Activity')}</span>
-			{#if app.activity.length}<span class="badge">{app.activity.length}</span>{/if}
+			{#if app.activity.entries.length}<span class="badge">{app.activity.entries.length}</span>{/if}
 		</button>
 		<button onclick={() => (app.helpOpen = true)} title="{t('Keys and commands')} (?)">
 			<Icon name="book" />
@@ -251,7 +251,7 @@
 		tabindex="0"
 		title={t('Drag to resize, double-click for the default width')}
 		{onpointerdown}
-		ondblclick={() => (app.sidebarWidth = null)}
+		ondblclick={() => (app.layout.sidebarWidth = null)}
 		onkeydown={onresizekey}
 	></div>
 </nav>

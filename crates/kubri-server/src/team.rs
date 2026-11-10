@@ -208,8 +208,12 @@ mod tests {
             .with_state(team)
     }
 
-    async fn get_as(app: &Router, path: &str, caller: Option<Caller>) -> (StatusCode, String) {
-        let mut request = Request::get(path).body(Body::empty()).unwrap();
+    /// Makes the call `call` without arguments as `caller`.
+    async fn call_as(app: &Router, call: &str, caller: Option<Caller>) -> (StatusCode, String) {
+        let mut request = Request::post("/call")
+            .header("content-type", "application/json")
+            .body(Body::from(format!(r#"{{"call":"{call}"}}"#)))
+            .unwrap();
         if let Some(caller) = caller {
             request.extensions_mut().insert(caller);
         }
@@ -223,16 +227,16 @@ mod tests {
     async fn every_session_gets_a_kubri_acting_for_its_person() {
         let team = team(Credentials::Impersonate);
         let app = app(team.clone());
-        assert_eq!(get_as(&app, "/contexts", None).await.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(call_as(&app, "contexts", None).await.0, StatusCode::UNAUTHORIZED);
         let alice = Caller {
             session: Some("s1".into()),
             person: Some(person("alice")),
             token: None,
         };
         // The person's own Kubri answers, with the server's kubeconfig.
-        let (status, body) = get_as(&app, "/contexts", Some(alice.clone())).await;
+        let (status, body) = call_as(&app, "contexts", Some(alice.clone())).await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        let (status, body) = get_as(&app, "/terminal/local", Some(alice)).await;
+        let (status, body) = call_as(&app, "localTerminalInfo", Some(alice)).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body.contains("shared by a team"), "{body}");
         let bob = Caller {
@@ -240,7 +244,7 @@ mod tests {
             person: Some(person("bob")),
             token: None,
         };
-        get_as(&app, "/contexts", Some(bob)).await;
+        call_as(&app, "contexts", Some(bob)).await;
         assert_eq!(team.members.lock().unwrap().len(), 2);
     }
 
@@ -253,7 +257,7 @@ mod tests {
             person: Some(person("alice")),
             token: Some(Arc::from("token-1")),
         };
-        get_as(&app, "/contexts", Some(alice.clone())).await;
+        call_as(&app, "contexts", Some(alice.clone())).await;
         let dir = team.members.lock().unwrap()["s1"].dir.clone().unwrap();
         assert_eq!(std::fs::read_to_string(dir.join("token")).unwrap(), "token-1");
         #[cfg(unix)]
@@ -265,7 +269,7 @@ mod tests {
             assert_eq!(mode(team.dir.as_ref().unwrap()), 0o700);
         }
         alice.token = Some(Arc::from("token-2"));
-        get_as(&app, "/contexts", Some(alice)).await;
+        call_as(&app, "contexts", Some(alice)).await;
         assert_eq!(std::fs::read_to_string(dir.join("token")).unwrap(), "token-2");
 
         // Ended sessions let go of their Kubri and token.

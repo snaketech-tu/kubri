@@ -20,10 +20,10 @@
 	}
 
 	async function keepRules() {
-		const settings = app.contextSettingsOf(context);
+		const settings = app.prefs.contextSettingsOf(context);
 		const patterns = suggestions.filter((s) => s.by === 'pattern').map((s) => s.rule);
 		const labels = suggestions.filter((s) => s.by === 'labels').map((s) => s.rule);
-		const ok = await app.setContextSettings(context, {
+		const ok = await app.prefs.setContextSettings(context, {
 			...settings,
 			productionNamespaces: withMarked(settings, patterns, true),
 			productionLabels: [...new Set([...(settings.productionLabels ?? []), ...labels])]

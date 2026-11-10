@@ -12,11 +12,12 @@ use kube::{Api, Client};
 use serde::Serialize;
 
 use crate::typed::{list, scoped};
-use crate::{Error, Result};
+use crate::{Error, Kubri, Result};
 
 /// One rule of a role, as Kubernetes stores it.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Rule {
     pub api_groups: Vec<String>,
     pub resources: Vec<String>,
@@ -37,8 +38,9 @@ impl From<&PolicyRule> for Rule {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum RoleState {
     Found,
     /// The binding points to a role that does not exist, so it grants nothing.
@@ -48,8 +50,9 @@ pub enum RoleState {
 }
 
 /// What one binding grants one subject.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Grant {
     /// `RoleBinding` or `ClusterRoleBinding`.
     pub binding_kind: String,
@@ -63,8 +66,9 @@ pub struct Grant {
     pub rules: Vec<Rule>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SubjectInfo {
     /// `User`, `Group` or `ServiceAccount`.
     pub kind: String,
@@ -74,8 +78,9 @@ pub struct SubjectInfo {
     pub grants: Vec<Grant>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Rbac {
     pub subjects: Vec<SubjectInfo>,
     /// Lists that failed, for example because of missing permissions.
@@ -83,8 +88,9 @@ pub struct Rbac {
 }
 
 /// What the current user may do, as `kubectl auth can-i --list` shows it.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Permissions {
     pub namespace: String,
     pub rules: Vec<Rule>,
@@ -273,6 +279,23 @@ pub(crate) fn build(
         }
     }
     subjects.into_values().collect()
+}
+
+impl Kubri {
+    /// Every subject of a role binding with the rules it is granted. `namespace` limits role
+    /// bindings to one namespace; cluster role bindings are always included.
+    pub async fn rbac(&self, namespace: Option<&str>) -> Result<Rbac> {
+        let session = self.session().await?;
+        Ok(gather(session.client.clone(), namespace).await)
+    }
+
+    /// What the current user may do in `namespace` (by default the context's), like
+    /// `kubectl auth can-i --list`.
+    pub async fn permissions(&self, namespace: Option<&str>) -> Result<Permissions> {
+        let session = self.session().await?;
+        let namespace = namespace.unwrap_or(&session.info.default_namespace);
+        permissions(session.client.clone(), namespace).await
+    }
 }
 
 #[cfg(test)]

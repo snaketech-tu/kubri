@@ -122,7 +122,7 @@
 		</p>
 		<div class="grid">
 			{#each contexts as name (name)}
-				{@const settings = app.contextSettingsOf(name)}
+				{@const settings = app.prefs.contextSettingsOf(name)}
 				{@const c = found[name]}
 				{@const state = states[name]}
 				{@const nodes = c?.kinds.find((k) => k.kind === 'Node')}
@@ -143,7 +143,7 @@
 								disabled={!!app.connecting}
 								title={app.cluster?.context === name ? t('Show its overview') : t('Connect to {name}', { name })}
 							>
-								{app.contextName(name)}
+								{app.prefs.contextName(name)}
 							</button>
 							{#if settings.displayName}<span class="context mono">{name}</span>{/if}
 						</span>

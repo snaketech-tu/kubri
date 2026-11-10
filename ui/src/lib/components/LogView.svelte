@@ -498,7 +498,7 @@
 			options={[
 				{ value: 'current', label: t('Current instance') },
 				{ value: 'previous', label: t('Previous · ended') },
-				...(app.has('loki') ? [{ value: 'loki', label: t('Loki history') }] : [])
+				...(app.integrations.has('loki') ? [{ value: 'loki', label: t('Loki history') }] : [])
 			]}
 			onchange={(value) => {
 				loki = value === 'loki';

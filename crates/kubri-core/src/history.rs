@@ -8,13 +8,15 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use crate::{Error, ResourceRef, Result};
+use crate::session::Session;
+use crate::{Error, Kubri, ResourceRef, Result, Settings, recorder};
 
 /// How long a recorder's claim on a context lasts without being renewed.
 pub(crate) const LEASE_MS: i64 = 90_000;
@@ -24,8 +26,9 @@ const DEFAULT_LIMIT: u32 = 200;
 const MAX_LIMIT: u32 = 2000;
 
 /// What the recorder keeps and for how long.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct HistorySettings {
     /// Record changes in the connected context while Kubri runs.
     pub record: bool,
@@ -46,8 +49,9 @@ impl Default for HistorySettings {
 }
 
 /// What kind of change an entry is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum ChangeKind {
     Created,
     Deleted,
@@ -106,8 +110,9 @@ impl ChangeKind {
 }
 
 /// One change, without the object's states before and after.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HistoryEntry {
     pub id: i64,
     pub context: String,
@@ -128,8 +133,9 @@ pub struct HistoryEntry {
 }
 
 /// An entry with the object as it was before and after, for its diff.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HistoryDetail {
     #[serde(flatten)]
     pub entry: HistoryEntry,
@@ -138,16 +144,18 @@ pub struct HistoryDetail {
 }
 
 /// A time Kubri was watching, in Unix milliseconds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Span {
     pub from: i64,
     pub to: i64,
 }
 
 /// Which changes to read.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct HistoryQuery {
     /// The context; the connected one when left out.
     pub context: Option<String>,
@@ -161,6 +169,7 @@ pub struct HistoryQuery {
     pub since: Option<i64>,
     pub until: Option<i64>,
     /// Only these kinds of change; all when empty.
+    #[ts(as = "Option<Vec<ChangeKind>>", optional)]
     pub changes: Vec<ChangeKind>,
     /// Part of the name, kind or summary.
     pub text: Option<String>,
@@ -170,8 +179,9 @@ pub struct HistoryQuery {
 }
 
 /// Changes, newest first, with the times Kubri was watching.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HistoryPage {
     pub context: String,
     pub entries: Vec<HistoryEntry>,
@@ -184,8 +194,9 @@ pub struct HistoryPage {
 }
 
 /// Whether changes in a context are being recorded, and what is left out.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RecorderStatus {
     pub recording: bool,
     /// Why not, when not.
@@ -1073,6 +1084,122 @@ fn listed_paths(paths: &[String]) -> String {
     }
     let items: Vec<&str> = paths.iter().map(String::as_str).collect();
     listed(&items)
+}
+
+impl Kubri {
+    /// Sets what the change history keeps; recording starts or stops at once.
+    pub async fn set_history_settings(&self, value: HistorySettings) -> Result<Settings> {
+        let settings = self.update_settings(|s| {
+            s.history = value;
+            Ok(())
+        })?;
+        if let Ok(session) = self.session().await {
+            self.restart_recorder(&session).await;
+        }
+        Ok(settings)
+    }
+
+    /// Records what changes in each context Kubri connects to from now on, as the desktop app
+    /// and the web server do. Tools that only read, like the MCP server on its own, do not.
+    pub fn record_changes(&self) {
+        self.recording.store(true, Ordering::Relaxed);
+    }
+
+    /// The change history, opened on first use: `history.db` in Kubri's config folder, or a
+    /// database in memory when there is no settings file, as in tests.
+    pub(crate) fn history_store(&self) -> Result<Arc<Store>> {
+        // What one person's Kubri recorded is not for others to see.
+        let path = match self.act_as {
+            Some(_) => None,
+            None => self.settings_file().path.clone(),
+        };
+        self.history
+            .get_or_init(|| {
+                let store = match path.as_ref().and_then(|p| p.parent()) {
+                    Some(dir) => Store::open(&dir.join("history.db")),
+                    None => Store::in_memory(),
+                };
+                store.map(Arc::new).map_err(|e| e.to_string())
+            })
+            .clone()
+            .map_err(Error::Unsupported)
+    }
+
+    /// Stops recording the previous context and starts recording `session`'s, if Kubri records.
+    pub(crate) async fn restart_recorder(&self, session: &Session) {
+        let settings = self.settings().history;
+        let mut start = None;
+        if self.recording.load(Ordering::Relaxed) && settings.record && session.info.snapshot.is_none() {
+            match self.history_store() {
+                Ok(store) => {
+                    let namespaces = self.allowed_namespaces(session).await.unwrap_or_default();
+                    start = Some((store, namespaces));
+                }
+                Err(err) => tracing::warn!("cannot record changes: {err}"),
+            }
+        }
+        let mut recorder = self.recorder.lock().unwrap_or_else(|e| e.into_inner());
+        // Stop first, so the new recorder can claim the context at once.
+        *recorder = None;
+        if let Some((store, namespaces)) = start {
+            *recorder = Some(recorder::Recorder::start(
+                store,
+                session.client.clone(),
+                &session.info.context,
+                &session.resources,
+                namespaces,
+                settings,
+            ));
+        }
+    }
+
+    /// What changed in a context, newest first, with the times Kubri was watching it.
+    pub async fn history(&self, query: &HistoryQuery) -> Result<HistoryPage> {
+        let context = match &query.context {
+            Some(context) => context.clone(),
+            None => self.session().await?.info.context.clone(),
+        };
+        let store = self.history_store()?;
+        let (entries, more) = store.query(&context, query)?;
+        let watched = store.watched(&context, query.since, query.until)?;
+        let snapshot = self
+            .cluster()
+            .await
+            .is_some_and(|c| c.snapshot.is_some() && c.context == context);
+        let recorder = self
+            .recorder
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .filter(|r| r.context() == context)
+            .map(|r| r.status())
+            .unwrap_or_else(|| RecorderStatus {
+                reason: Some(if snapshot {
+                    "A snapshot does not change, so there is nothing to record".into()
+                } else if !self.recording.load(Ordering::Relaxed) {
+                    "This Kubri does not record changes".into()
+                } else if !self.settings().history.record {
+                    "Recording is turned off in the settings".into()
+                } else {
+                    "Kubri records only the context it is connected to".into()
+                }),
+                ..Default::default()
+            });
+        Ok(HistoryPage {
+            context,
+            entries,
+            more,
+            watched,
+            recorder,
+        })
+    }
+
+    /// One change with the object before and after it.
+    pub fn history_detail(&self, id: i64) -> Result<HistoryDetail> {
+        self.history_store()?
+            .detail(id)?
+            .ok_or_else(|| Error::NotFound(format!("change {id}")))
+    }
 }
 
 #[cfg(test)]

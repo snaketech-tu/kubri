@@ -34,7 +34,7 @@
 	/** Every page's path starts in the context, as the header shows it. */
 	const trail = $derived.by((): Crumb[] => {
 		if (prefix === 'none' || !app.cluster) return crumbs;
-		const start: Crumb[] = [{ label: app.contextName(app.cluster.context), onclick: () => app.showPulses(), title: t('Overview') }];
+		const start: Crumb[] = [{ label: app.prefs.contextName(app.cluster.context), onclick: () => app.showPulses(), title: t('Overview') }];
 		if (prefix === 'namespace') start.push(app.namespace === ALL_NAMESPACES ? t('all namespaces') : app.namespace);
 		return [...start, ...crumbs];
 	});

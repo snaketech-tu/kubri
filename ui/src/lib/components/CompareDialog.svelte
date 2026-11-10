@@ -27,7 +27,7 @@
 
 	const changes = $derived(shown ? imageChanges(shown.left, shown.right) : []);
 	const label = (context: string, namespace: string | null, name: string) =>
-		`${app.contextName(context)}${namespace ? ` · ${namespace}` : ''} · ${name}`;
+		`${app.prefs.contextName(context)}${namespace ? ` · ${namespace}` : ''} · ${name}`;
 
 	$effect(() => {
 		const previous = document.activeElement as HTMLElement | null;
@@ -78,7 +78,7 @@
 			<span class="side">{t('With')}</span>
 			<label>
 				<span>{t('Context')}</span>
-				<Select bind:value={context} options={app.contexts.map((c) => ({ value: c.name, label: app.contextName(c.name) }))} mono style="width: 190px" />
+				<Select bind:value={context} options={app.contexts.map((c) => ({ value: c.name, label: app.prefs.contextName(c.name) }))} mono style="width: 190px" />
 			</label>
 			{#if d.target.namespace !== null}
 				<label>

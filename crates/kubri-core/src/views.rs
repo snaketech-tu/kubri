@@ -12,9 +12,9 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::Health;
 use crate::jsonpath::{JsonPath, text};
 use crate::k9s::{Plugin, PluginInput};
+use crate::{Health, Kubri, ResourceInfo, ResourceRef, Result};
 
 /// The views Kubri ships, by file name.
 const BUILT_IN: [(&str, &str); 3] = [
@@ -24,8 +24,9 @@ const BUILT_IN: [(&str, &str); 3] = [
 ];
 
 /// One kind's view.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[ts(export, rename = "KindView")]
 pub struct View {
     /// The API group; empty for the core group.
     #[serde(default)]
@@ -52,7 +53,7 @@ pub struct View {
 }
 
 /// A value read from each object.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ViewField {
     pub name: String,
@@ -62,7 +63,7 @@ pub struct ViewField {
 
 /// When an object is in a health state. Without a test, a rule matches when the path finds
 /// anything.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HealthRule {
     pub path: String,
@@ -84,7 +85,7 @@ pub struct HealthRule {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum HealthState {
     Ok,
@@ -102,7 +103,7 @@ impl From<HealthState> for Health {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DetailSection {
     pub title: String,
@@ -111,7 +112,7 @@ pub struct DetailSection {
 
 /// A command for the object's menu, run like a k9s plugin: `$NAME`, `$NAMESPACE`, `$CONTEXT`
 /// and the other k9s variables are replaced in `args`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ViewAction {
     pub name: String,
@@ -136,7 +137,7 @@ pub struct ViewAction {
 }
 
 /// Another object an object refers to, such as a Certificate's Secret.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Relation {
     /// The other object's kind, or a JSONPath to it, like `.spec.sourceRef.kind`.
@@ -149,8 +150,9 @@ pub struct Relation {
 }
 
 /// Every view in use, and what could not be read.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ViewSet {
     pub views: Vec<View>,
     /// Files or views that could not be read, and why.
@@ -160,21 +162,22 @@ pub struct ViewSet {
 }
 
 /// A view applied to one object, for its details.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RenderedView {
     pub health: Option<Judged>,
     pub sections: Vec<RenderedSection>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Judged {
     pub health: Health,
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderedSection {
     pub title: String,
@@ -416,6 +419,31 @@ fn read_text(text: &str, object: &Value) -> Option<String> {
     match JsonPath::parse(text).ok()?.cell(object) {
         Value::String(s) if !s.is_empty() => Some(s),
         _ => None,
+    }
+}
+
+impl Kubri {
+    /// The views in use: Kubri's own and those in the config folder, read again each time so
+    /// that edits apply at once.
+    pub async fn views(&self) -> ViewSet {
+        let dir = dir();
+        tokio::task::spawn_blocking(move || load(dir.as_deref()))
+            .await
+            .unwrap_or_default()
+    }
+
+    pub(crate) async fn view_of(&self, info: &ResourceInfo) -> Option<View> {
+        let views = self.views().await.views;
+        views
+            .into_iter()
+            .find(|v| v.is_for(&info.reference.group, &info.kind))
+    }
+
+    /// The health and detail sections the kind's view gives an object; `None` without a view.
+    pub async fn render_view(&self, resource: &ResourceRef, object: &Value) -> Result<Option<RenderedView>> {
+        let session = self.session().await?;
+        let info = session.info_for(resource)?;
+        Ok(self.view_of(info).await.map(|v| v.render(object)))
     }
 }
 

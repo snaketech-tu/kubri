@@ -17,7 +17,7 @@
 	const holders = $derived<ResourceInfo | undefined>(
 		findResource(app.resources, { group: 'apps', version: 'v1', plural: kind === 'Deployment' ? 'replicasets' : 'controllerrevisions' })
 	);
-	const rollbackAllowed = $derived(!app.guard.readOnly);
+	const rollbackAllowed = $derived(!app.rails.guard.readOnly);
 
 	$effect(() => {
 		const owner = target;

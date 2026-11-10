@@ -14,7 +14,7 @@ const resource = (group: string, plural: string, kind: string, shortNames: strin
 	subresources: []
 });
 const resources = [resource('', 'pods', 'Pod', ['po']), resource('apps', 'deployments', 'Deployment', ['deploy']), resource('', 'services', 'Service', ['svc'])];
-const contexts: ContextInfo[] = ['prod', 'staging'].map((name) => ({ name, cluster: null, user: null, namespace: null, isDefault: false, added: false }));
+const contexts: ContextInfo[] = ['prod', 'staging'].map((name) => ({ name, cluster: null, server: null, user: null, namespace: null, isDefault: false, added: false }));
 
 describe('parseSearch', () => {
 	it('reads names, kinds, namespaces, labels, fields and contexts', () => {

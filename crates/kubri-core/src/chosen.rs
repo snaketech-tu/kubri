@@ -14,8 +14,9 @@ use crate::{Error, Result};
 const LIST: &str = "kubeconfig-files.json";
 
 /// A kubeconfig file Kubri reads, with what it found in it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct KubeconfigFile {
     pub path: String,
     /// Chosen in Kubri, so it can be removed there; otherwise from `KUBECONFIG` or the default.

@@ -27,7 +27,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures::{SinkExt, StreamExt};
-
 use k8s_openapi::api::core::v1::{Pod, Service};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::{Api, Client, Resource};
@@ -46,10 +45,12 @@ pub(crate) const AFTER_CLIENT_DONE: Duration = Duration::from_secs(15);
 /// a server such as MariaDB gives up on it and resets it.
 const AFTER_SILENT_CLIENT: Duration = Duration::from_secs(1);
 
+use crate::Kubri;
 use crate::{Error, ObjectRef, Result};
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct PortForwardRequest {
     /// A pod, a Service, or a workload whose pods should receive the traffic.
     pub target: ObjectRef,
@@ -63,8 +64,9 @@ pub struct PortForwardRequest {
     pub address: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct PortForwardInfo {
     pub id: u32,
     /// The context the forward runs in.
@@ -88,14 +90,14 @@ pub struct PortForwardInfo {
 }
 
 /// How a connection through a forward ended.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionEnd {
     pub at: String,
     pub by: EndedBy,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum EndedBy {
     /// The pod, or the cluster on its way, closed the stream.
@@ -107,8 +109,9 @@ pub enum EndedBy {
 }
 
 /// A favorite forward, and why it could not start if it could not.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct FavoriteStart {
     pub favorite: crate::FavoriteForward,
     pub error: Option<String>,
@@ -501,6 +504,84 @@ pub(crate) fn validate_address(address: Option<&str>) -> Result<()> {
             .parse::<std::net::IpAddr>()
             .map(|_| ())
             .map_err(|_| Error::Unsupported(format!("invalid listen address {address}"))),
+    }
+}
+
+impl Kubri {
+    /// Running port-forwards, of every context.
+    pub fn port_forwards(&self) -> Vec<PortForwardInfo> {
+        self.forwards.lock().unwrap().list()
+    }
+
+    /// Forwards a local port to a pod. For a Service or workload a ready pod is picked, and a
+    /// Service port is mapped to the pod port it targets; when that pod goes away, the forward
+    /// picks another.
+    pub async fn start_port_forward(&self, request: PortForwardRequest) -> Result<PortForwardInfo> {
+        validate_address(request.address.as_deref())?;
+        let target = &request.target;
+        let session = self.object_session(target).await?;
+        let api = session.pod_api(target.namespace.as_deref())?;
+        let (pod, port) = session.forward_destination(target, request.remote_port).await?;
+        let repick: Option<Repick> = if session.is_core(&target.resource, "Pod")? {
+            None
+        } else {
+            let session = Arc::clone(&session);
+            let target = target.clone();
+            let remote_port = request.remote_port;
+            Some(Arc::new(move || {
+                let session = Arc::clone(&session);
+                let target = target.clone();
+                Box::pin(async move {
+                    let (pod, port) = session.forward_destination(&target, remote_port).await?;
+                    Ok((pod.metadata.name.unwrap_or_default(), port))
+                })
+            }))
+        };
+        let destination = Destination {
+            namespace: pod.metadata.namespace.clone().unwrap_or_default(),
+            pod: pod.metadata.name.clone().unwrap_or_default(),
+            port,
+            api,
+            repick,
+        };
+        start(&self.forwards, session.info.context.clone(), request, destination).await
+    }
+
+    /// Starts the connected context's favorite port-forwards that start on connect and are not
+    /// running yet, and says which could not start.
+    pub async fn start_favorite_forwards(&self) -> Result<Vec<FavoriteStart>> {
+        let context = self.session().await?.info.context.clone();
+        let running = self.port_forwards();
+        let mut out = Vec::new();
+        let favorites = self.settings().context(&context).forwards;
+        for favorite in favorites.into_iter().filter(|f| f.start_on_connect) {
+            let already = running
+                .iter()
+                .any(|f| f.context == context && favorite.matches(f));
+            if already {
+                continue;
+            }
+            let request = PortForwardRequest {
+                target: ObjectRef {
+                    context: Some(context.clone()),
+                    ..favorite.target.clone()
+                },
+                remote_port: favorite.remote_port,
+                local_port: Some(favorite.local_port),
+                address: Some(favorite.address.clone()).filter(|a| !a.is_empty()),
+            };
+            let error = self
+                .start_port_forward(request)
+                .await
+                .err()
+                .map(|e| e.to_string());
+            out.push(FavoriteStart { favorite, error });
+        }
+        Ok(out)
+    }
+
+    pub fn stop_port_forward(&self, id: u32) -> Result<()> {
+        self.forwards.lock().unwrap().stop(id)
     }
 }
 

@@ -22,7 +22,7 @@
 	let now = $state(Date.now());
 
 	const parsed = $derived(parseSearch(text, app.resources, app.contexts));
-	const saved = $derived(app.settings.searches.find((s) => s.query === searched.trim()));
+	const saved = $derived(app.prefs.settings.searches.find((s) => s.query === searched.trim()));
 	/** How many contexts the shown results come from a search of. */
 	let contexts = $state(1);
 	const elsewhere = $derived(contexts > 1 || !!found?.hits.some((h) => h.object.context !== app.cluster?.context));
@@ -77,15 +77,15 @@
 	async function save() {
 		const name = naming?.trim();
 		if (!name) return;
-		const rest = app.settings.searches.filter((s) => s.name !== name && s.query !== searched.trim());
-		if (await app.setSavedSearches([...rest, { name, query: searched.trim() }])) {
+		const rest = app.prefs.settings.searches.filter((s) => s.name !== name && s.query !== searched.trim());
+		if (await app.prefs.setSavedSearches([...rest, { name, query: searched.trim() }])) {
 			app.toast(t('Saved {name}', { name }));
 			naming = null;
 		}
 	}
 
 	async function forget(name: string) {
-		if (await app.setSavedSearches(app.settings.searches.filter((s) => s.name !== name))) app.toast(t('Removed {name}', { name }));
+		if (await app.prefs.setSavedSearches(app.prefs.settings.searches.filter((s) => s.name !== name))) app.toast(t('Removed {name}', { name }));
 	}
 
 	const key = (h: SearchHit) => `${h.object.context}/${h.object.resource.group}/${h.object.resource.plural}/${h.object.namespace}/${h.object.name}`;

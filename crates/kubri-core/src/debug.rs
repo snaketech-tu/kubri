@@ -21,8 +21,9 @@ const COPY_OF: &str = "kubri.dev/debug-copy-of";
 /// How long a debug container may take to start, pulling its image included.
 const START_TIMEOUT: Duration = Duration::from_secs(90);
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
 pub enum DebugRequest {
     /// An ephemeral container in the pod that sees the processes of `container`. Works for
     /// images without a shell.
@@ -50,19 +51,22 @@ pub enum DebugRequest {
 }
 
 /// Where to connect once the debug container runs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct DebugSession {
     pub pod: ObjectRef,
     pub container: String,
     pub mode: TerminalMode,
     /// What is left behind, such as a copy to delete when done.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct DebugSettings {
     /// The image last used for a debug container.
     pub image: String,

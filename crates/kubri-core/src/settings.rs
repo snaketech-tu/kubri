@@ -9,11 +9,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, Result};
+use crate::{Error, Kubri, Result, SettingsFile, TerminalSettings};
 
 /// What Kubri remembers about one context.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct ContextSettings {
     /// Shown instead of the context's name when set.
     pub display_name: String,
@@ -52,8 +53,9 @@ pub struct ContextSettings {
 
 /// A port-forward kept to start again on the same local port, with one click or whenever Kubri
 /// connects to its context.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct FavoriteForward {
     /// A pod, Service or workload; the context comes from where the favorite is kept.
     pub target: crate::ObjectRef,
@@ -247,8 +249,9 @@ pub fn labels_match(selector: &str, labels: &BTreeMap<String, String>) -> bool {
 }
 
 /// How a list shows one kind: which columns, in which order, and extra JSONPath columns.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct ColumnSettings {
     /// Columns not shown, by name.
     pub hidden: Vec<String>,
@@ -260,8 +263,9 @@ pub struct ColumnSettings {
     pub custom: Vec<CustomColumn>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct CustomColumn {
     pub name: String,
     /// A JSONPath such as `.spec.nodeName` or `.spec.containers[*].image`.
@@ -295,8 +299,9 @@ impl ColumnSettings {
 }
 
 /// Which actions show a server-side dry-run diff before they run. YAML edits always do.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct DiffSettings {
     pub scale: bool,
     pub restart: bool,
@@ -316,8 +321,9 @@ impl Default for DiffSettings {
 }
 
 /// What AI agents connected to Kubri's MCP server may do.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct AgentSettings {
     /// Serve MCP over HTTP on localhost, from the running app. Over stdio it is always there.
     pub http: bool,
@@ -337,8 +343,9 @@ impl Default for AgentSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct Settings {
     /// Per context, by the context's name.
     pub contexts: BTreeMap<String, ContextSettings>,
@@ -362,8 +369,9 @@ pub struct Settings {
 
 /// The label names a log collector uses for the namespace, pod and container, where they are
 /// not `namespace`, `pod` and `container`, such as `exported_namespace`. Empty keeps the usual.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct LabelTemplate {
     pub name: String,
     pub namespace: String,
@@ -397,8 +405,9 @@ impl LabelTemplate {
 pub const MAX_KEEP_RECENT: u32 = 5;
 
 /// How Kubri keeps connections to contexts.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct ConnectionSettings {
     /// How many recently used contexts stay connected in the background, so switching back to
     /// one is instant. 0 turns it off; at most [`MAX_KEEP_RECENT`].
@@ -412,8 +421,9 @@ impl Default for ConnectionSettings {
 }
 
 /// A search kept in the sidebar.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct SavedSearch {
     pub name: String,
     /// As typed in the search field, like `web kind:deploy,svc -l tier=front`.
@@ -487,6 +497,165 @@ pub(crate) fn write(path: &Path, settings: &Settings) -> Result<()> {
     std::fs::write(&temp, text + "\n")?;
     std::fs::rename(&temp, path)?;
     Ok(())
+}
+
+impl Kubri {
+    /// Reads the settings file again, as when another Kubri process changed it.
+    pub fn reload_settings(&self) {
+        let mut file = self.settings_file();
+        let Some(path) = file.path.clone() else {
+            return;
+        };
+        match read(&path) {
+            Ok(settings) => {
+                file.settings = settings;
+                file.error = None;
+            }
+            Err(err) => {
+                tracing::warn!("cannot read the settings: {err}");
+                file.error = Some(err);
+            }
+        }
+    }
+
+    pub(crate) fn settings_file(&self) -> std::sync::RwLockWriteGuard<'_, SettingsFile> {
+        self.settings.write().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Kubri's own settings.
+    pub fn settings(&self) -> Settings {
+        self.settings
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .settings
+            .clone()
+    }
+
+    /// Why the settings file could not be read, if it could not.
+    pub fn settings_error(&self) -> Option<String> {
+        self.settings
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .error
+            .clone()
+    }
+
+    /// Changes the settings and saves them.
+    pub(crate) fn update_settings(
+        &self,
+        change: impl FnOnce(&mut Settings) -> Result<()>,
+    ) -> Result<Settings> {
+        let mut file = self.settings_file();
+        if let Some(err) = &file.error {
+            return Err(Error::Unsupported(format!(
+                "the settings file is broken, so Kubri does not overwrite it: {err}"
+            )));
+        }
+        let mut settings = file.settings.clone();
+        change(&mut settings)?;
+        if let Some(path) = &file.path {
+            write(path, &settings)?;
+        }
+        file.settings = settings.clone();
+        Ok(settings)
+    }
+
+    /// Sets what Kubri remembers about a context. Turning locking on ends an unlock.
+    pub fn set_context_settings(&self, context: &str, value: ContextSettings) -> Result<Settings> {
+        let lock = value.locked && !self.settings().context(context).locked;
+        let settings = self.update_settings(|s| s.set_context(context, value))?;
+        if lock {
+            self.unlocks_map().remove(context);
+        }
+        Ok(settings)
+    }
+
+    /// Sets what AI agents may do.
+    pub fn set_agent_settings(&self, value: AgentSettings) -> Result<Settings> {
+        self.update_settings(|s| {
+            s.agents = value;
+            Ok(())
+        })
+    }
+
+    /// Sets how lists show a kind, by `group/Kind`.
+    pub fn set_column_settings(&self, kind: &str, value: ColumnSettings) -> Result<Settings> {
+        self.update_settings(|s| s.set_columns(kind, value))
+    }
+
+    /// Replaces the searches kept in the sidebar.
+    pub fn set_saved_searches(&self, value: Vec<SavedSearch>) -> Result<Settings> {
+        let value: Vec<SavedSearch> = value
+            .into_iter()
+            .filter(|s| !s.name.trim().is_empty() && !s.query.trim().is_empty())
+            .collect();
+        self.update_settings(|s| {
+            s.searches = value;
+            Ok(())
+        })
+    }
+
+    /// Replaces the label templates for logs. A context that picks a template no longer there
+    /// falls back to the usual names.
+    pub fn set_label_templates(&self, value: Vec<LabelTemplate>) -> Result<Settings> {
+        let value = value
+            .into_iter()
+            .map(LabelTemplate::normalized)
+            .collect::<Result<Vec<_>>>()?;
+        for (i, t) in value.iter().enumerate() {
+            if value[..i].iter().any(|o| o.name == t.name) {
+                return Err(Error::Unsupported(format!(
+                    "two label templates are named {}",
+                    t.name
+                )));
+            }
+        }
+        self.update_settings(|s| {
+            s.label_templates = value;
+            Ok(())
+        })
+    }
+
+    /// Sets which actions show a dry-run diff.
+    pub fn set_diff_settings(&self, value: DiffSettings) -> Result<Settings> {
+        self.update_settings(|s| {
+            s.diff = value;
+            Ok(())
+        })
+    }
+
+    /// Sets how many recent contexts stay connected; extra ones are dropped at once.
+    pub async fn set_connection_settings(&self, value: ConnectionSettings) -> Result<Settings> {
+        if value.keep_recent > MAX_KEEP_RECENT {
+            return Err(Error::Unsupported(format!(
+                "at most {} contexts can stay connected",
+                MAX_KEEP_RECENT
+            )));
+        }
+        let settings = self.update_settings(|s| {
+            s.connections = value;
+            Ok(())
+        })?;
+        self.prune_warm(&mut *self.warm.lock().await);
+        Ok(settings)
+    }
+
+    /// Sets the local terminal's shell, folder and font.
+    pub fn set_terminal_settings(&self, mut value: TerminalSettings) -> Result<Settings> {
+        if !(8..=32).contains(&value.font_size) {
+            return Err(Error::Unsupported("the font size must be from 8 to 32".into()));
+        }
+        value.font_family = value.font_family.trim().to_owned();
+        if value.font_family.len() > 200 || value.font_family.contains(['{', '}', ';', '<', '>', '\\']) {
+            return Err(Error::Unsupported(
+                "the font must be names separated by commas, like MesloLGS NF".into(),
+            ));
+        }
+        self.update_settings(|s| {
+            s.terminal = value;
+            Ok(())
+        })
+    }
 }
 
 #[cfg(test)]

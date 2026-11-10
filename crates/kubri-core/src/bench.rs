@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-use crate::{Error, ObjectRef, PortForwardInfo, Result};
+use crate::{Error, Kubri, ObjectRef, PortForwardInfo, Result};
 
 const MAX_CONCURRENCY: u32 = 200;
 const MAX_REQUESTS: u32 = 1_000_000;
@@ -31,17 +31,21 @@ const KEPT: usize = 20;
 const PERCENTILES: [u8; 7] = [10, 25, 50, 75, 90, 95, 99];
 const BUCKETS: usize = 12;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, optional_fields = nullable)]
 pub struct BenchRequest {
     /// The port-forward to send the requests through.
     pub forward_id: u32,
     #[serde(default = "default_method")]
+    #[ts(as = "Option<String>", optional)]
     pub method: String,
     #[serde(default = "default_path")]
+    #[ts(as = "Option<String>", optional)]
     pub path: String,
     /// Extra headers; `Host` overrides the default `localhost:<port>`.
     #[serde(default)]
+    #[ts(as = "Option<BTreeMap<String, String>>", optional)]
     pub headers: BTreeMap<String, String>,
     #[serde(default)]
     pub body: Option<String>,
@@ -64,8 +68,9 @@ fn default_path() -> String {
     "/".to_owned()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum BenchState {
     Running,
     Done,
@@ -73,8 +78,9 @@ pub enum BenchState {
     Stopped,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct BenchInfo {
     pub id: u32,
     pub forward_id: u32,
@@ -100,8 +106,9 @@ pub struct BenchInfo {
     pub results: Option<BenchResults>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct BenchResults {
     pub total: u32,
     /// Seconds.
@@ -119,7 +126,7 @@ pub struct BenchResults {
     pub bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Percentile {
     pub percent: u8,
@@ -127,7 +134,7 @@ pub struct Percentile {
 }
 
 /// Responses that took from `from` up to `to` seconds.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Bucket {
     pub from: f64,
@@ -135,14 +142,14 @@ pub struct Bucket {
     pub count: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusCount {
     pub code: u16,
     pub count: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ErrorCount {
     pub message: String,
@@ -583,6 +590,32 @@ fn histogram(sorted: &[f64]) -> Vec<Bucket> {
         buckets[i].count += 1;
     }
     buckets
+}
+
+impl Kubri {
+    /// HTTP benchmarks, newest first, with live progress while they run.
+    pub fn benchmarks(&self) -> Vec<BenchInfo> {
+        self.benchmarks.lock().unwrap().list()
+    }
+
+    /// Starts an HTTP benchmark through a running port-forward, like k9s does with `hey`.
+    pub fn start_benchmark(&self, request: &BenchRequest) -> Result<BenchInfo> {
+        let forward = self
+            .port_forwards()
+            .into_iter()
+            .find(|f| f.id == request.forward_id)
+            .ok_or_else(|| Error::NotFound(format!("port-forward {}", request.forward_id)))?;
+        start(&self.benchmarks, request, &forward)
+    }
+
+    /// Stops a running benchmark early; it keeps the results of what finished.
+    pub fn stop_benchmark(&self, id: u32) -> Result<()> {
+        self.benchmarks.lock().unwrap().stop(id)
+    }
+
+    pub fn remove_benchmark(&self, id: u32) -> Result<()> {
+        self.benchmarks.lock().unwrap().remove(id)
+    }
 }
 
 #[cfg(test)]

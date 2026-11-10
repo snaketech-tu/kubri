@@ -5,19 +5,21 @@
 //! UI then reads the kubeconfig again and connects to it.
 
 use std::ffi::OsString;
+use std::sync::atomic::Ordering;
 
 use serde::{Deserialize, Serialize};
 
 use crate::local_terminal::{find_program, path_var};
 use crate::plugin::{self, Prepared};
-use crate::{Error, Result, Terminal};
+use crate::{Error, Kubri, Result, Terminal};
 
 /// The name of the cluster Kubri makes.
 const NAME: &str = "kubri";
 
 /// A tool that makes a cluster in containers on this computer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum LocalClusterTool {
     Kind,
     K3d,
@@ -56,7 +58,7 @@ impl LocalClusterTool {
 }
 
 /// A tool that can make a local cluster, and whether it is installed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalClusterOption {
     pub tool: LocalClusterTool,
@@ -70,8 +72,9 @@ pub struct LocalClusterOption {
 }
 
 /// What Kubri can use to make a cluster on this computer.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LocalClusters {
     /// Whether Kubri may run the tools here: in the desktop app, and in the web server only
     /// when it allows local terminals, as the cluster would run on the server.
@@ -140,6 +143,49 @@ pub(crate) fn create(request: &LocalClusterRequest) -> Result<Terminal> {
         request.cols,
         request.rows,
     )
+}
+
+impl Kubri {
+    /// Why Kubri may not make a cluster on this computer, if it may not.
+    pub(crate) fn local_cluster_refusal(&self) -> Option<String> {
+        if !self.local_terminal.load(Ordering::Relaxed) {
+            return Some(
+                "Kubri makes local clusters only in the desktop app: here the cluster would run on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it."
+                    .into(),
+            );
+        }
+        if self.agent.load(Ordering::Relaxed) {
+            return Some("AI agents cannot make clusters.".into());
+        }
+        if self.read_only.load(Ordering::Relaxed) {
+            return Some("Kubri was started read-only.".into());
+        }
+        None
+    }
+
+    /// The tools Kubri can make a cluster on this computer with, kind and k3d, and whether
+    /// they are installed.
+    pub async fn local_clusters(&self) -> LocalClusters {
+        let reason = self.local_cluster_refusal();
+        let (tools, containers) = tokio::task::spawn_blocking(options).await.unwrap_or_default();
+        LocalClusters {
+            allowed: reason.is_none(),
+            reason,
+            tools,
+            containers,
+        }
+    }
+
+    /// Makes a cluster on this computer with kind or k3d, in a terminal that shows the tool's
+    /// progress. The tool adds the cluster's context to the kubeconfig; [`Kubri::reload`]
+    /// reads it.
+    pub async fn create_local_cluster(&self, request: &LocalClusterRequest) -> Result<Terminal> {
+        if let Some(reason) = self.local_cluster_refusal() {
+            return Err(Error::Unsupported(reason));
+        }
+        tracing::info!(tool = ?request.tool, "making a local cluster");
+        create(request)
+    }
 }
 
 #[cfg(test)]

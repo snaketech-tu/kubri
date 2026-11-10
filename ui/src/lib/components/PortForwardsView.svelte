@@ -95,7 +95,7 @@
 					if (current) app.dialog = { kind: 'benchmark', forward: current };
 					return true;
 				case 's':
-					if (current) app.toggleFavorite(current);
+					if (current) app.favorites.toggle(current);
 					return true;
 			}
 			return false;
@@ -131,7 +131,7 @@
 					</thead>
 					<tbody>
 						{#each forwards as f, i (f.id)}
-							{@const favorite = !!app.favoriteOf(f)}
+							{@const favorite = !!app.favorites.of(f)}
 							<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)}>
 								<td class="mono">
 									<a href={url(f)} target="_blank" rel="noreferrer" title={t('Open in the browser (o)')}>{f.address}:{f.localPort}</a>
@@ -152,7 +152,7 @@
 											class="btn small star"
 											class:on={favorite}
 											aria-pressed={favorite}
-											onclick={() => app.toggleFavorite(f)}
+											onclick={() => app.favorites.toggle(f)}
 											title={favorite ? t('A favorite: start it again with one click from the sidebar (s)') : t('Keep as a favorite to start with one click (s)')}
 										>
 											{favorite ? '★' : '☆'} {t('Favorite')}
@@ -172,14 +172,14 @@
 					<button class="btn" onclick={choose}>{t('Start a port-forward…')}</button>
 				</div>
 			{/if}
-			{#if app.favoritesHere.length}
+			{#if app.favorites.here.length}
 				<div class="favorites">
-					<h3>{t('Favorites in {context}', { context: app.cluster ? app.contextName(app.cluster.context) : '' })}</h3>
+					<h3>{t('Favorites in {context}', { context: app.cluster ? app.prefs.contextName(app.cluster.context) : '' })}</h3>
 					<ul>
-						{#each app.favoritesHere as f (favoriteLabel(f))}
-							{@const on = !!app.runningFavorite(f)}
-							{@const busy = app.switchingFavorites.includes(f)}
-							{@const running = app.runningFavorite(f)}
+						{#each app.favorites.here as f (favoriteLabel(f))}
+							{@const on = !!app.favorites.running(f)}
+							{@const busy = app.favorites.switching.includes(f)}
+							{@const running = app.favorites.running(f)}
 							<li class:on>
 								<span class="dot" title={on ? t('Running') : t('Stopped')}></span>
 								<div class="what">
@@ -198,16 +198,16 @@
 								</div>
 								<span class="buttons">
 									<label class="check" title={t('Start it whenever Kubri connects to this context')}>
-										<input type="checkbox" checked={f.startOnConnect} onchange={(e) => app.setStartOnConnect(f, e.currentTarget.checked)} />
+										<input type="checkbox" checked={f.startOnConnect} onchange={(e) => app.favorites.setStartOnConnect(f, e.currentTarget.checked)} />
 										{t('Start on connect')}
 									</label>
 									{#if running}
 										<button class="btn" onclick={() => open(running)}>{t('Open')}</button>
 									{/if}
-									<button class="btn" class:danger={on} onclick={() => app.switchFavorite(f)} disabled={busy}>
+									<button class="btn" class:danger={on} onclick={() => app.favorites.switch(f)} disabled={busy}>
 										{busy ? (on ? t('Stopping…') : t('Starting…')) : on ? t('Stop') : t('Start')}
 									</button>
-									<button class="btn" onclick={() => app.removeFavorite(f)} title={t('Forget this favorite')}>{t('Remove')}</button>
+									<button class="btn" onclick={() => app.favorites.remove(f)} title={t('Forget this favorite')}>{t('Remove')}</button>
 								</span>
 							</li>
 						{/each}

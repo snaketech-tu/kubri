@@ -229,15 +229,24 @@ pub async fn record(State(audit): State<Audit>, mut request: Request, next: Next
             .get::<ConnectInfo<SocketAddr>>()
             .map(|c| c.0.ip().to_string()),
     };
-    let Some(action) = action(request.method(), request.uri().path()) else {
+    // A call names what it does in its body.
+    let is_call = request.method() == Method::POST && request.uri().path() == "/call";
+    let route_action = action(request.method(), request.uri().path());
+    if route_action.is_none() && !is_call {
         request.extensions_mut().insert(recorder);
         return next.run(request).await;
-    };
+    }
     let (parts, body) = request.into_parts();
     let Ok(bytes) = to_bytes(body, MAX_BODY).await else {
         return (StatusCode::PAYLOAD_TOO_LARGE, "the request is too large").into_response();
     };
     let json: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    let call = json.get("call").and_then(Value::as_str);
+    let Some(action) = route_action.or_else(|| call.and_then(call_action)) else {
+        let mut request = Request::from_parts(parts, Body::from(bytes));
+        request.extensions_mut().insert(recorder);
+        return next.run(request).await;
+    };
     // A dry run changes nothing.
     if json.get("dryRun") == Some(&Value::Bool(true)) {
         return next.run(Request::from_parts(parts, Body::from(bytes))).await;
@@ -279,39 +288,126 @@ pub async fn record(State(audit): State<Audit>, mut request: Request, next: Next
 /// local terminal are written down by their handlers, which know the target and the outcome.
 fn action(method: &Method, path: &str) -> Option<&'static str> {
     Some(match (method.as_str(), path) {
-        ("PUT", "/object") => "edit",
-        ("PATCH", "/object") => "patch",
-        ("DELETE", "/object") => "delete",
-        ("POST", "/object/scale") => "scale",
-        ("POST", "/object/restart") => "restart",
-        ("POST", "/object/images") => "set image",
-        ("POST", "/object/resources") => "set resources",
-        ("POST", "/fix/memory/apply") => "set memory limit",
-        ("POST", "/debug") => "debug",
-        ("POST", "/apply") => "apply",
-        ("POST", "/cronjob/trigger") => "trigger",
-        ("POST", "/cronjob/suspend") => "suspend",
-        ("POST", "/gitops") => "gitops",
-        ("POST", "/certificate/renew") => "renew certificate",
-        ("POST", "/replicaset/rollback") => "rollback",
-        ("POST", "/helm/rollback") => "helm rollback",
-        ("POST", "/helm/uninstall") => "helm uninstall",
-        ("POST", "/helm/change") => "helm install or upgrade",
-        ("POST", "/plugins/run") => "plugin",
-        ("POST", "/portforwards") => "port-forward",
-        ("POST", "/portforwards/favorites") => "port-forward favorites",
-        ("DELETE", p) if p.starts_with("/portforwards/") => "stop port-forward",
-        ("POST", "/benchmarks") => "benchmark",
-        ("POST", "/node/cordon") => "cordon",
-        ("POST", "/node/drain") => "drain",
-        ("POST", "/guard/unlock") => "unlock context",
-        ("POST", "/guard/lock") => "lock context",
         ("PUT", "/explain/key") => "change settings",
-        ("PUT", p) if p.starts_with("/settings/") => "change settings",
-        ("POST" | "DELETE", "/contexts/added") => "change contexts",
         _ => return None,
     })
 }
+
+/// The changes a call of the core's call table makes, by its name. Every call is here or in
+/// [`UNRECORDED`], which a test checks, so a new call that changes something cannot miss the
+/// audit log.
+fn call_action(call: &str) -> Option<&'static str> {
+    Some(match call {
+        "replaceObject" => "edit",
+        "patchObject" => "patch",
+        "deleteObject" => "delete",
+        "scale" => "scale",
+        "restart" => "restart",
+        "setImages" => "set image",
+        "setResources" => "set resources",
+        "setMemoryLimit" => "set memory limit",
+        "debug" => "debug",
+        "apply" => "apply",
+        "triggerCronJob" => "trigger",
+        "suspendCronJob" => "suspend",
+        "gitops" => "gitops",
+        "renewCertificate" => "renew certificate",
+        "rollback" => "rollback",
+        "helmRollback" => "helm rollback",
+        "helmUninstall" => "helm uninstall",
+        "helmChange" => "helm install or upgrade",
+        "runPlugin" => "plugin",
+        "startPortForward" => "port-forward",
+        "startFavoriteForwards" => "port-forward favorites",
+        "stopPortForward" => "stop port-forward",
+        "startBenchmark" => "benchmark",
+        "cordon" => "cordon",
+        "drain" => "drain",
+        "unlock" => "unlock context",
+        "lock" => "lock context",
+        "addContexts" | "removeContext" => "change contexts",
+        "setContextSettings"
+        | "setDiffSettings"
+        | "setHistorySettings"
+        | "setConnectionSettings"
+        | "setTerminalSettings"
+        | "setLabelTemplates"
+        | "setColumnSettings"
+        | "setAgentSettings"
+        | "setExplainSettings"
+        | "setSavedSearches" => "change settings",
+        _ => return None,
+    })
+}
+
+/// The calls that change nothing worth writing down: they read, or change only what this
+/// browser sees, such as the connected context or a benchmark's results.
+#[cfg(test)]
+const UNRECORDED: &[&str] = &[
+    "contexts",
+    "reloadContexts",
+    "kubeconfigFiles",
+    "inspectKubeconfig",
+    "switchContext",
+    "cancelSwitch",
+    "closeSnapshot",
+    "resources",
+    "refreshResources",
+    "schema",
+    "access",
+    "whoAmI",
+    "readableNamespaces",
+    "guard",
+    "settings",
+    "history",
+    "historyDetail",
+    "getObject",
+    "getObjectElsewhere",
+    "preview",
+    "fetchManifest",
+    "drill",
+    "usedBy",
+    "managedBy",
+    "events",
+    "memoryFix",
+    "scheduling",
+    "serviceCheck",
+    "capacity",
+    "rightSizing",
+    "search",
+    "fleetCluster",
+    "views",
+    "renderView",
+    "metrics",
+    "pulse",
+    "xray",
+    "graph",
+    "sanitize",
+    "rbac",
+    "permissions",
+    "integrations",
+    "charts",
+    "usageHistory",
+    "dashboards",
+    "grafanaLogs",
+    "integrationUrl",
+    "lokiLogs",
+    "portForwards",
+    "benchmarks",
+    "stopBenchmark",
+    "removeBenchmark",
+    "helmReleases",
+    "helmRelease",
+    "helmHistory",
+    "helmVersion",
+    "helmChartValues",
+    "helmSearch",
+    "latestRelease",
+    "k9sConfig",
+    "k9sSkin",
+    "localTerminalInfo",
+    "localClusters",
+];
 
 /// The object a request names: an object reference as `target`, a whole object, or a
 /// node or Helm release by name.
@@ -407,20 +503,18 @@ mod tests {
         }
     }
 
+    /// Answers every call with success, except a drain, which the cluster refuses.
     fn app(log: Arc<AuditLog>) -> Router {
         let kubri = Arc::new(Kubri::from_kubeconfig(Default::default()));
+        let call = |Json(body): Json<Value>| async move {
+            if body["call"] == "drain" {
+                let error = serde_json::json!({ "error": "nodes \"n1\" is forbidden" });
+                return (StatusCode::FORBIDDEN, Json(error));
+            }
+            (StatusCode::OK, Json(Value::Null))
+        };
         Router::new()
-            .route("/object/scale", post(|| async { Json(()) }))
-            .route(
-                "/node/drain",
-                post(|| async {
-                    (
-                        StatusCode::FORBIDDEN,
-                        Json(serde_json::json!({ "error": "nodes \"n1\" is forbidden" })),
-                    )
-                }),
-            )
-            .route("/helm/change", post(|| async { Json(()) }))
+            .route("/call", post(call))
             .route("/explain/key", put(|| async { Json(()) }))
             .route("/pods", get(|| async { Json(()) }))
             .layer(axum::middleware::from_fn_with_state(Audit { log, kubri }, record))
@@ -435,6 +529,38 @@ mod tests {
             .unwrap();
         request.extensions_mut().insert(who.clone());
         app.clone().oneshot(request).await.unwrap().status()
+    }
+
+    #[tokio::test]
+    async fn calls_are_written_by_their_name() {
+        let log = Arc::new(AuditLog::open(None, vec![]).unwrap());
+        let app = app(log.clone());
+        let alice = caller("alice", &[]);
+        let add = serde_json::json!({ "call": "addContexts", "text": "", "names": ["one"] });
+        assert_eq!(send(&app, "POST", "/call", &alice, add).await, StatusCode::OK);
+        // A call that only reads is not written down.
+        let read = serde_json::json!({ "call": "contexts" });
+        assert_eq!(send(&app, "POST", "/call", &alice, read).await, StatusCode::OK);
+        let written = log.visible_to(&alice);
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].action, "change contexts");
+        assert!(written[0].ok);
+    }
+
+    #[test]
+    fn every_call_says_whether_it_is_written_down() {
+        for name in kubri_core::Request::names() {
+            let recorded = call_action(&name).is_some();
+            let unrecorded = UNRECORDED.contains(&name.as_str());
+            assert!(
+                recorded != unrecorded,
+                "{name} must be in call_action if it changes something, or in UNRECORDED"
+            );
+        }
+        let names = kubri_core::Request::names();
+        for name in UNRECORDED {
+            assert!(names.iter().any(|n| n == name), "{name} is not a call");
+        }
     }
 
     #[tokio::test]
@@ -454,13 +580,12 @@ mod tests {
             },
             "replicas": 3
         });
+        let mut scale = target;
+        scale["call"] = "scale".into();
+        assert_eq!(send(&app, "POST", "/call", &alice, scale).await, StatusCode::OK);
+        let drain = serde_json::json!({ "call": "drain", "name": "n1" });
         assert_eq!(
-            send(&app, "POST", "/object/scale", &alice, target).await,
-            StatusCode::OK
-        );
-        let drain = serde_json::json!({ "name": "n1" });
-        assert_eq!(
-            send(&app, "POST", "/node/drain", &bob, drain).await,
+            send(&app, "POST", "/call", &bob, drain).await,
             StatusCode::FORBIDDEN
         );
         // Reading, dry runs and the key itself are not written down.
@@ -468,8 +593,9 @@ mod tests {
             send(&app, "GET", "/pods", &alice, Value::Null).await,
             StatusCode::OK
         );
-        let dry = serde_json::json!({ "name": "x", "namespace": "shop", "dryRun": true });
-        send(&app, "POST", "/helm/change", &alice, dry).await;
+        let dry =
+            serde_json::json!({ "call": "helmChange", "name": "x", "namespace": "shop", "dryRun": true });
+        send(&app, "POST", "/call", &alice, dry).await;
         let key = serde_json::json!({ "key": "sk-secret" });
         send(&app, "PUT", "/explain/key", &alice, key).await;
 

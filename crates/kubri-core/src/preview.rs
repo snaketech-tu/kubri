@@ -7,15 +7,18 @@ use serde_json::Value;
 use crate::ContainerImage;
 
 /// A change to preview, as the actions make it.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export)]
 pub enum Change {
     /// The whole object, as a YAML edit saves it.
     Replace {
+        #[ts(type = "unknown")]
         value: Value,
     },
     /// A JSON merge patch, as labels and annotations are changed.
     Patch {
+        #[ts(type = "unknown")]
         patch: Value,
     },
     Scale {
@@ -38,8 +41,9 @@ pub enum Change {
 }
 
 /// An object now and after the change, without what changes on every write.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Preview {
     pub before: Value,
     pub after: Value,

@@ -201,7 +201,8 @@ async function main() {
 		await settle();
 	}
 
-	const resources = JSON.parse(recording.http.findLast((r) => r.url === '/api/resources' && r.status === 200)?.response ?? '[]');
+	const isResources = (r) => r.url === '/api/call' && r.status === 200 && JSON.parse(r.body ?? '{}').call === 'resources';
+	const resources = JSON.parse(recording.http.findLast(isResources)?.response ?? '[]');
 	const listable = resources.filter((r) => (r.verbs ?? ['list']).includes('list'));
 	const name = (r) => (r.group ? `${r.plural}.${r.group}` : r.plural);
 	console.log(`${listable.length} kinds`);

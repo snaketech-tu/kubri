@@ -94,6 +94,8 @@ jobs:
     if: ${{ !cancelled() && needs.draft.result != 'failure' }}
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -113,6 +115,11 @@ jobs:
           - name: Windows, x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
+          # Built on x64: Tauri's MSI tooling has no Arm build, so only the setup.exe.
+          - name: Windows, Arm
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            bundles: --bundles nsis
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -154,6 +161,37 @@ jobs:
           else
             echo "::notice::No updater signing key: the packages are not signed for the updater"
           fi
+      # With an Apple Developer ID certificate in the secrets (docs/RELEASING.md#code-signing), the
+      # macOS app is signed with it and, with the notarization secrets too, notarized. Without
+      # them it stays signed ad hoc, as tauri.conf.json says.
+      - name: Set up macOS signing
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::notice::No Apple certificate: the macOS app is signed ad hoc and not notarized"
+            exit 0
+          fi
+          {
+            echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+            echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+          } >> "$GITHUB_ENV"
+          if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            {
+              echo "APPLE_ID=$APPLE_ID"
+              echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::warning::Signed but not notarized: set APPLE_ID, APPLE_PASSWORD and APPLE_TEAM_ID"
+          fi
       # Without a release id (no tag), this only builds. latest.json comes from the Updater job,
       # since the parallel builds would overwrite each other's.
       - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
@@ -165,7 +203,20 @@ jobs:
           projectPath: ui
           releaseId: ${{ needs.draft.outputs.id }}
           uploadUpdaterJson: false
-          args: --target ${{ matrix.target }} ${{ steps.updater.outputs.args }}
+          args: --target ${{ matrix.target }} ${{ matrix.bundles }} ${{ steps.updater.outputs.args }}
+      # A signed record that this workflow built the installers from this commit; verify a
+      # download with: gh attestation verify <file> --owner snaketech-tu
+      - if: needs.draft.outputs.id != ''
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
+            target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+            target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+            target/${{ matrix.target }}/release/bundle/msi/*.msi
+            target/${{ matrix.target }}/release/bundle/nsis/*.exe
       - if: needs.draft.outputs.id == ''
         uses: actions/upload-artifact@v7
         with:
@@ -222,6 +273,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/docker.yml
     with:
       version: ${{ needs.draft.outputs.version }}
@@ -405,6 +458,7 @@ jobs:
           $draft = gh api "repos/$env:GITHUB_REPOSITORY/releases/${{ needs.draft.outputs.id }}" --jq .draft
           if ($draft -eq 'true') { Write-Output 'The release is a draft; run this job again once it is published.'; exit 0 }
           $version = $env:VERSION
-          $url = "https://github.com/snaketech-tu/kubri/releases/download/v$version/Kubri_${version}_x64-setup.exe"
+          $base = "https://github.com/snaketech-tu/kubri/releases/download/v$version"
+          $urls = "$base/Kubri_${version}_x64-setup.exe", "$base/Kubri_${version}_arm64-setup.exe"
           Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-          .\wingetcreate.exe update SnakeTech.Kubri --version $version --urls $url --submit --token $env:WINGET_TOKEN
+          .\wingetcreate.exe update SnakeTech.Kubri --version $version --urls $urls --submit --token $env:WINGET_TOKEN

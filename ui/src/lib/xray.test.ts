@@ -91,15 +91,15 @@ describe('pulses', () => {
 	});
 
 	it('fills meters with measured use, or with requests without metrics', () => {
-		expect(fill({ used: 2000, requested: 3000, capacity: 8000 })).toEqual({
+		expect(fill({ used: 2000, requested: 3000, waiting: null, capacity: 8000 })).toEqual({
 			value: 0.25,
 			measured: true
 		});
-		expect(fill({ used: null, requested: 4000, capacity: 8000 })).toEqual({
+		expect(fill({ used: null, requested: 4000, waiting: null, capacity: 8000 })).toEqual({
 			value: 0.5,
 			measured: false
 		});
-		expect(fill({ used: 1, requested: 1, capacity: null })).toBeNull();
+		expect(fill({ used: 1, requested: 1, waiting: null, capacity: null })).toBeNull();
 		expect([meterTone(0.5), meterTone(0.8), meterTone(0.95)]).toEqual(['accent', 'warn', 'bad']);
 	});
 

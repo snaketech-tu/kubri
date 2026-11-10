@@ -29,10 +29,11 @@ use crate::health::{self, Health};
 use crate::metrics::{Usage, parse_quantity};
 use crate::typed::{list, resource_ref, scoped};
 use crate::xray::{RefKind, is_ready, references, selects};
-use crate::{ResourceRef, Result};
+use crate::{Kubri, MetricsKind, ResourceRef, Result};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum Level {
     /// Worth knowing, does not lower the score.
     Info,
@@ -40,8 +41,9 @@ pub enum Level {
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Issue {
     pub level: Level,
     /// A stable name for the check, such as `image-tag`.
@@ -87,8 +89,9 @@ impl Issue {
 }
 
 /// An object with at least one issue.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Finding {
     pub namespace: Option<String>,
     pub name: String,
@@ -97,8 +100,9 @@ pub struct Finding {
     pub issues: Vec<Issue>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SanitizerSection {
     pub kind: String,
     pub resource: ResourceRef,
@@ -115,8 +119,9 @@ pub struct SanitizerSection {
     pub failed: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SanitizerReport {
     /// 0 to 100, the average of the sections that have a score.
     pub score: u8,
@@ -1325,6 +1330,16 @@ fn node(node: &Node, usage: Option<&Usage>) -> Vec<Issue> {
         }
     }
     issues
+}
+
+impl Kubri {
+    /// Checks the objects of `namespace`, or of the whole cluster with nodes, volumes and
+    /// cluster roles, for problems and risky settings, like Popeye.
+    pub async fn sanitize(&self, namespace: Option<&str>) -> Result<SanitizerReport> {
+        let session = self.session().await?;
+        let usage = session.metrics(MetricsKind::Nodes, None);
+        Ok(scan(session.client.clone(), namespace, usage, session.now()).await)
+    }
 }
 
 #[cfg(test)]

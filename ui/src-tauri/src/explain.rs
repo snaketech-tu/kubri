@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use kubri_core::{ExplainAnswer, ExplainPrompt, ExplainSettings, ExplainSubject, Kubri, Settings};
+use kubri_core::{ExplainAnswer, ExplainPrompt, ExplainSubject, Kubri};
 use serde::Serialize;
 use tauri::State;
 
@@ -56,14 +56,6 @@ mod key {
 pub struct ExplainKey {
     /// Never the key itself: only whether one is stored.
     has_key: bool,
-}
-
-#[tauri::command]
-pub fn set_explain_settings(
-    kubri: State<'_, Arc<Kubri>>,
-    settings: ExplainSettings,
-) -> CommandResult<Settings> {
-    kubri.set_explain_settings(settings).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

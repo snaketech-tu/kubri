@@ -18,22 +18,28 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tokio::sync::mpsc;
 
+use crate::{Error, Kubri, ObjectRef, Result};
+
 /// More streams than this would flood the UI; `kubectl logs -l` stops at 5 by default.
 pub(crate) const MAX_STREAMS: usize = 50;
 /// Lines sent in one event at most, so a burst does not become one huge message.
 const MAX_BATCH: usize = 500;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct LogOptions {
     /// Only this container. `None` streams every container, init containers included.
     pub container: Option<String>,
     /// Keep streaming new lines.
+    #[ts(as = "Option<bool>", optional)]
     pub follow: bool,
     /// Logs of the previous, crashed instance of the container.
+    #[ts(as = "Option<bool>", optional)]
     pub previous: bool,
     /// Prefix the text of every line with the time the kubelet received it. Lines always carry
     /// the time apart, in [`LogLine::time`]; this is for readers of the text alone.
+    #[ts(as = "Option<bool>", optional)]
     pub timestamps: bool,
     /// Start with the last n lines.
     pub tail_lines: Option<i64>,
@@ -57,8 +63,9 @@ impl LogOptions {
 }
 
 /// One container whose log is being streamed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LogSource {
     #[serde(skip)]
     pub namespace: String,
@@ -67,8 +74,9 @@ pub struct LogSource {
 }
 
 /// How severe a log line is, as far as its text tells.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export, rename = "LogLevel")]
 pub enum Level {
     Debug,
     Info,
@@ -76,24 +84,29 @@ pub enum Level {
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LogLine {
     /// Index into the list of [`LogEvent::Sources`].
     pub source: usize,
     /// The line without the kubelet's timestamp.
     pub text: String,
     /// When the kubelet received the line, as RFC 3339.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time: Option<String>,
     /// The level the line names. Lines that continue the one before, such as the frames of a
     /// stack trace, take its level.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<Level>,
     /// The fields of a JSON or logfmt line.
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fields: Option<Map<String, Value>>,
     /// The line continues the one before it from the same container, like a stack frame.
+    #[ts(as = "Option<bool>", optional)]
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub continued: bool,
 }
@@ -325,8 +338,9 @@ fn is_continuation(text: &str) -> bool {
         || trimmed.starts_with("goroutine ")
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export)]
 pub enum LogEvent {
     /// Sent first: the containers being streamed.
     Sources {
@@ -345,6 +359,7 @@ pub enum LogEvent {
     /// container whose log ended. Shown as a line across the log.
     Marker {
         text: String,
+        #[ts(optional)]
         #[serde(skip_serializing_if = "Option::is_none")]
         time: Option<String>,
     },
@@ -686,6 +701,50 @@ fn decode_line(mut buf: Vec<u8>) -> String {
         }
     }
     String::from_utf8(buf).unwrap_or_else(|err| String::from_utf8_lossy(err.as_bytes()).into_owned())
+}
+
+impl Kubri {
+    /// Streams container logs of a pod, or of every pod a workload or Service selects.
+    pub async fn logs(
+        &self,
+        target: &ObjectRef,
+        options: LogOptions,
+    ) -> Result<impl Stream<Item = LogEvent> + Send + 'static> {
+        // Reading only: a log tab kept open from another context reads from that context.
+        let session = self.read_session(target.context.as_deref()).await?;
+        let (pods, selector) = session.pods_and_selector(target).await?;
+        let mut sources = sources(&pods, options.container.as_deref());
+        if sources.is_empty() {
+            return Err(Error::Unsupported(format!("{} has no pods", target.name)));
+        }
+        let notice = (sources.len() > MAX_STREAMS).then(|| LogEvent::Error {
+            source: None,
+            message: format!(
+                "showing the first {} of {} containers",
+                MAX_STREAMS,
+                sources.len()
+            ),
+        });
+        sources.truncate(MAX_STREAMS);
+        let joiner = match (selector, target.namespace.as_deref()) {
+            (Some(selector), Some(namespace)) => Some(Joiner {
+                api: Api::namespaced(session.client.clone(), namespace),
+                selector,
+                started: pods
+                    .iter()
+                    .filter(|p| pod_started(p))
+                    .filter_map(|p| p.metadata.name.clone())
+                    .collect(),
+            }),
+            _ => None,
+        };
+        let events = stream_logs(session.client.clone(), sources, options, joiner);
+        // The notice goes after the sources, which always come first.
+        Ok(events.enumerate().flat_map(move |(i, event)| {
+            let notice = if i == 0 { notice.clone() } else { None };
+            futures::stream::iter(std::iter::once(event).chain(notice))
+        }))
+    }
 }
 
 #[cfg(test)]

@@ -9,8 +9,9 @@ use crate::{Error, Kubri, ObjectRef, Result};
 /// Where Argo CD keeps the auto-sync policy it turned off, to turn it on again as it was.
 const SAVED_AUTO_SYNC: &str = "kubri.dev/auto-sync";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum GitOpsAction {
     /// Flux: reconcile now, like `flux reconcile`.
     Reconcile,
@@ -28,7 +29,7 @@ pub enum GitOpsAction {
     AutoSyncOn,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 pub enum Tool {
     Flux,
     #[serde(rename = "Argo CD")]
@@ -188,8 +189,9 @@ fn argo(namespace: Option<String>, name: String, weak: bool) -> Hint {
 }
 
 /// The object that manages another, and whether it puts changes made by hand back.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Manager {
     pub tool: Tool,
     pub owner: ObjectRef,

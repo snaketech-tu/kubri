@@ -6,8 +6,9 @@ use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{ContainerStatus, Node, PersistentVolume, PersistentVolumeClaim, Pod};
 use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum Health {
     Ok,
     /// Not broken, but needs a look: starting, partly ready, at a limit.

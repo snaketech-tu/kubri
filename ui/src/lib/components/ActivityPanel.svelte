@@ -23,7 +23,7 @@
 	});
 
 	function close() {
-		app.activityOpen = false;
+		app.activity.open = false;
 	}
 
 	/** On a Kubri shared by a team, the changes in its audit log, besides this window's. */
@@ -66,7 +66,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <aside class="panel" aria-label={t('Activity in this session')} tabindex="-1" bind:this={box} {onkeydown}>
 	<header>
-		<h2>{t('Activity')} <span class="n">{tab === 'team' ? (team?.entries.length ?? 0) : app.activity.length}</span></h2>
+		<h2>{t('Activity')} <span class="n">{tab === 'team' ? (team?.entries.length ?? 0) : app.activity.entries.length}</span></h2>
 		<button onclick={close} aria-label={t('Close')}>×</button>
 	</header>
 	{#if session.person}
@@ -101,9 +101,9 @@
 		{/if}
 	{:else}
 		<p class="muted">{t('Every change made from Kubri since it started. Undo is offered where Kubernetes allows it.')}</p>
-		{#if app.activity.length}
+		{#if app.activity.entries.length}
 			<ul>
-				{#each app.activity as entry (entry.id)}
+				{#each app.activity.entries as entry (entry.id)}
 					<li class:failed={!entry.ok} class:undone={entry.undone}>
 						<span class="when">{age(new Date(entry.at).toISOString(), now) || '0s'}</span>
 						<span class="what">
@@ -113,7 +113,7 @@
 						{#if entry.undone}
 							<span class="muted">{t('Undone')}</span>
 						{:else if entry.undo}
-							<button class="undo" onclick={() => app.undoActivity(entry.id)}>{t('Undo')}</button>
+							<button class="undo" onclick={() => app.activity.undo(entry.id)}>{t('Undo')}</button>
 						{/if}
 					</li>
 				{/each}

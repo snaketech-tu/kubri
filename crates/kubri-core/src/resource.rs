@@ -3,8 +3,9 @@ use kube::discovery::ApiResource;
 use serde::{Deserialize, Serialize};
 
 /// Identifies a resource type independently of its kind, the way the API server addresses it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ResourceRef {
     /// Empty for the core group.
     #[serde(default)]
@@ -24,8 +25,9 @@ impl std::fmt::Display for ResourceRef {
 }
 
 /// A resource type served by the connected cluster, including CRDs.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ResourceInfo {
     #[serde(flatten)]
     pub reference: ResourceRef,
