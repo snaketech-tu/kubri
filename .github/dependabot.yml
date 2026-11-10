@@ -21,6 +21,10 @@ updates:
     groups:
       ui:
         update-types: [minor, patch]
+    # Stays at the Node.js version that CI and the image use; move them together by hand.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
@@ -36,3 +40,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    # Node.js moves to a new major version by hand, with CI and @types/node.
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]

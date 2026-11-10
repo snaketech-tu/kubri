@@ -315,7 +315,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
 | Desktop app | [`ui/src-tauri`](ui/src-tauri) | [Tauri 2](https://tauri.app) shell that calls the core directly |
 | UI | [`ui`](ui) | SvelteKit and TypeScript, used by both |
 
-You need Rust (stable), Node.js 22 and pnpm. On Linux the desktop app also needs the [Tauri system dependencies](https://tauri.app/start/prerequisites/).
+You need Rust (stable), Node.js 26 and pnpm. On Linux the desktop app also needs the [Tauri system dependencies](https://tauri.app/start/prerequisites/).
 
 ```sh
 cd ui && pnpm install

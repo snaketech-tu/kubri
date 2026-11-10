@@ -28,7 +28,7 @@ Backend calls go through one call table, `crates/kubri-core/src/call.rs`: a new 
 
 ## Commands
 
-Prerequisites: stable Rust, Node.js 22, pnpm 10 (`packageManager` in `ui/package.json`).
+Prerequisites: stable Rust, Node.js 26, pnpm 10 (`packageManager` in `ui/package.json`).
 
 ```sh
 cd ui && pnpm install --frozen-lockfile

@@ -32,7 +32,7 @@ One Rust core talks to the cluster. A Tauri desktop app and an axum web server b
 
 ## Setting up
 
-You need stable Rust, Node.js 22 and pnpm 10. On Linux the desktop app also needs the [Tauri system dependencies](https://tauri.app/start/prerequisites/).
+You need stable Rust, Node.js 26 and pnpm 10. On Linux the desktop app also needs the [Tauri system dependencies](https://tauri.app/start/prerequisites/).
 
 ```sh
 cd ui && pnpm install --frozen-lockfile
