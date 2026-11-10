@@ -11,7 +11,6 @@ What is coming in Kubri, roughly in order. Plans change with what people report,
 - **Windows on Arm.** A native build for Windows arm64.
 - **Checked dependencies.** Every change is checked for known vulnerabilities and licenses, dependencies are updated every week, and the Docker image is signed.
 - **One way to talk to the core.** The desktop app and the web server use the same calls, generated from one description, so they cannot drift apart. This changes the web server's internal API.
-- **Clearer drain.** Draining a node first checks that you may evict its pods.
 - **Docs for operators.** How to run kubri-server safely for a team.
 
 ## Next
