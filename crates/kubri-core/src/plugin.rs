@@ -6,9 +6,9 @@ use std::io::{Read, Write};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use futures::StreamExt;
 use futures::channel::mpsc as futures_mpsc;
-use futures::stream;
+use futures::{StreamExt, stream};
+use k8s_openapi::api::core::v1::Pod;
 use kube::api::TerminalSize;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::Deserialize;
@@ -16,8 +16,8 @@ use tokio::io::AsyncWrite;
 use tokio::sync::mpsc;
 
 use crate::k9s::{MAX_INPUTS, Plugin};
-use crate::terminal::{Terminal, TerminalInput, TerminalOutput};
-use crate::{Error, ObjectRef, ResourceInfo, ResourceRef, Result};
+use crate::terminal::{self, Terminal, TerminalInput, TerminalOutput};
+use crate::{Error, Kubri, ObjectRef, ResourceInfo, ResourceRef, Result, helm, kubeconfig, team};
 
 /// What the UI asks to run: a plugin by name, for the selected object.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, ts_rs::TS)]
@@ -447,6 +447,111 @@ pub(crate) fn variables(
         },
     );
     Variables(vars.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
+}
+
+impl Kubri {
+    /// Runs a k9s plugin in a terminal, for interactive commands.
+    pub async fn open_plugin(&self, run: &PluginRun) -> Result<Terminal> {
+        let (plugin, prepared) = self.prepare_plugin(run).await?;
+        if plugin.background {
+            return Err(Error::Unsupported(format!(
+                "plugin {} runs in the background",
+                plugin.name
+            )));
+        }
+        let title = if plugin.description.is_empty() {
+            plugin.name.clone()
+        } else {
+            plugin.description.clone()
+        };
+        tracing::info!(plugin = plugin.name, program = prepared.program, "running plugin");
+        open(&prepared, title, run.cols, run.rows)
+    }
+
+    /// Starts a background k9s plugin without waiting for it.
+    pub async fn run_plugin(&self, run: &PluginRun) -> Result<()> {
+        let (plugin, prepared) = self.prepare_plugin(run).await?;
+        if !plugin.background {
+            return Err(Error::Unsupported(format!(
+                "plugin {} needs a terminal",
+                plugin.name
+            )));
+        }
+        tracing::info!(
+            plugin = plugin.name,
+            program = prepared.program,
+            "starting background plugin"
+        );
+        spawn_background(&prepared)
+    }
+
+    /// Finds the plugin in the configuration on disk, never trusting a command from the
+    /// caller, and checks that the target exists and is in the plugin's scope.
+    pub(crate) async fn prepare_plugin(&self, run: &PluginRun) -> Result<(Plugin, Prepared)> {
+        self.ensure_not_team(team::NO_PLUGINS)?;
+        let session = self.session().await?;
+        let context = self.context_info().await.ok_or(Error::NotConnected)?;
+        let config = self.k9s_config().await;
+        let plugin = config
+            .plugins
+            .into_iter()
+            .find(|p| p.name == run.plugin)
+            .ok_or_else(|| Error::NotFound(format!("plugin {}", run.plugin)))?;
+        // Read-only, k9s offers no dangerous plugins.
+        if plugin.dangerous {
+            self.ensure_writable().await?;
+        }
+        let inputs = input_values(&plugin, &run.inputs)?;
+        // The selected object's resource, or the view's when nothing is selected.
+        let reference = run.target.as_ref().map(|t| &t.resource).or(run.resource.as_ref());
+        let resource = match reference {
+            Some(reference) => {
+                let info = session.info_for(reference)?;
+                if !applies(&plugin, info) {
+                    return Err(Error::Unsupported(format!(
+                        "plugin {} is not for {}",
+                        plugin.name, info.kind
+                    )));
+                }
+                Some(info)
+            }
+            None if run.release.is_some() => {
+                if !applies_to_helm(&plugin) {
+                    return Err(Error::Unsupported(format!(
+                        "plugin {} is not for Helm releases",
+                        plugin.name
+                    )));
+                }
+                None
+            }
+            None => None,
+        };
+        let mut container = None;
+        if let (Some(target), Some(info)) = (&run.target, resource) {
+            // Fetching it also makes sure `$NAME` and `$NAMESPACE` name a real object.
+            let object = session
+                .api(&target.resource, target.namespace.as_deref())?
+                .get(&target.name)
+                .await?;
+            if is_pods(info) {
+                let pod: Pod = serde_json::from_value(serde_json::to_value(object)?)?;
+                container = match &run.container {
+                    Some(name) if terminal::containers(&pod).contains(name) => Some(name.clone()),
+                    Some(name) => return Err(Error::NotFound(format!("container {name}"))),
+                    None => terminal::default_container(&pod),
+                };
+            }
+        }
+        if let Some(release) = &run.release {
+            helm::validate_name(&release.namespace)?;
+            helm::validate_name(&release.name)?;
+        }
+        let kubeconfig = kubeconfig::env_value().to_string_lossy().into_owned();
+        let mut variables = variables(&context, kubeconfig, run, resource, container);
+        variables.0.extend(inputs);
+        let prepared = prepare(&plugin, &variables, &run.columns)?;
+        Ok((plugin, prepared))
+    }
 }
 
 #[cfg(test)]

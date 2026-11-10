@@ -1,10 +1,12 @@
 //! Node maintenance: cordon, uncordon and drain, with the safety checks of `kubectl drain`.
 
 use futures::{StreamExt, stream};
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{Node, Pod};
 use kube::Api;
-use kube::api::{DeleteParams, EvictParams};
+use kube::api::{DeleteParams, EvictParams, ListParams, Patch, PatchParams};
 use serde::{Deserialize, Serialize};
+
+use crate::{AccessCheck, Kubri, Result};
 
 const MIRROR_POD_ANNOTATION: &str = "kubernetes.io/config.mirror";
 const PARALLEL_EVICTIONS: usize = 8;
@@ -163,6 +165,77 @@ pub(crate) async fn evict_all(
         }
     }
     report.evicted.sort();
+}
+
+impl Kubri {
+    /// Marks a node (un)schedulable, like `kubectl cordon` and `kubectl uncordon`.
+    pub async fn cordon(&self, node: &str, cordoned: bool) -> Result<()> {
+        self.ensure_writable().await?;
+        let session = self.session().await?;
+        if let Some(resource) = session.resolve("v1", "Node") {
+            session
+                .ensure_allowed(AccessCheck::new("patch", &resource, None).named(node))
+                .await?;
+        }
+        let nodes: Api<Node> = Api::all(session.client.clone());
+        let patch = serde_json::json!({ "spec": { "unschedulable": cordoned } });
+        nodes
+            .patch(node, &PatchParams::default(), &Patch::Merge(patch))
+            .await?;
+        Ok(())
+    }
+
+    /// Cordons a node and evicts its pods, like `kubectl drain`. Pods the options do not
+    /// allow to evict stop the drain before anything is evicted; see [`DrainReport::failed`].
+    pub async fn drain(&self, node: &str, options: DrainOptions) -> Result<DrainReport> {
+        self.ensure_writable().await?;
+        let session = self.session().await?;
+        let pods: Api<Pod> = Api::all(session.client.clone());
+        let on_node = ListParams::default().fields(&format!("spec.nodeName={node}"));
+        // Evicting needs `create pods/eviction` in each namespace with pods to evict. Checked
+        // before cordoning, so a drain that cannot finish does not start.
+        if let Some(pods_resource) = session.resolve("v1", "Pod") {
+            let namespaces: std::collections::BTreeSet<String> = pods
+                .list(&on_node)
+                .await?
+                .items
+                .iter()
+                .filter(|pod| matches!(plan(pod, &options), Plan::Evict))
+                .filter_map(|pod| pod.metadata.namespace.clone())
+                .collect();
+            for namespace in namespaces {
+                let check =
+                    AccessCheck::new("create", &pods_resource, Some(&namespace)).on_subresource("eviction");
+                session.ensure_allowed(check).await?;
+            }
+        }
+        self.cordon(node, true).await?;
+        let mut report = DrainReport::default();
+        let mut evict = Vec::new();
+        for pod in pods.list(&on_node).await?.items {
+            match plan(&pod, &options) {
+                Plan::Evict => evict.push(pod),
+                Plan::Skip(reason) => report.skipped.push(PodIssue {
+                    pod: pod_name(&pod),
+                    reason,
+                }),
+                Plan::Block(reason) => report.failed.push(PodIssue {
+                    pod: pod_name(&pod),
+                    reason,
+                }),
+            }
+        }
+        if report.failed.is_empty() {
+            evict_all(session.client.clone(), evict, &options, &mut report).await;
+        }
+        tracing::info!(
+            node,
+            evicted = report.evicted.len(),
+            failed = report.failed.len(),
+            "drained"
+        );
+        Ok(report)
+    }
 }
 
 #[cfg(test)]

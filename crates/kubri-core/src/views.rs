@@ -12,9 +12,9 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::Health;
 use crate::jsonpath::{JsonPath, text};
 use crate::k9s::{Plugin, PluginInput};
+use crate::{Health, Kubri, ResourceInfo, ResourceRef, Result};
 
 /// The views Kubri ships, by file name.
 const BUILT_IN: [(&str, &str); 3] = [
@@ -419,6 +419,31 @@ fn read_text(text: &str, object: &Value) -> Option<String> {
     match JsonPath::parse(text).ok()?.cell(object) {
         Value::String(s) if !s.is_empty() => Some(s),
         _ => None,
+    }
+}
+
+impl Kubri {
+    /// The views in use: Kubri's own and those in the config folder, read again each time so
+    /// that edits apply at once.
+    pub async fn views(&self) -> ViewSet {
+        let dir = dir();
+        tokio::task::spawn_blocking(move || load(dir.as_deref()))
+            .await
+            .unwrap_or_default()
+    }
+
+    pub(crate) async fn view_of(&self, info: &ResourceInfo) -> Option<View> {
+        let views = self.views().await.views;
+        views
+            .into_iter()
+            .find(|v| v.is_for(&info.reference.group, &info.kind))
+    }
+
+    /// The health and detail sections the kind's view gives an object; `None` without a view.
+    pub async fn render_view(&self, resource: &ResourceRef, object: &Value) -> Result<Option<RenderedView>> {
+        let session = self.session().await?;
+        let info = session.info_for(resource)?;
+        Ok(self.view_of(info).await.map(|v| v.render(object)))
     }
 }
 

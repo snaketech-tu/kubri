@@ -16,7 +16,7 @@ use serde::de::DeserializeOwned;
 
 use crate::health::{self, Health, Status};
 use crate::typed::{resource_ref, scoped};
-use crate::{EventInfo, ObjectRef, ResourceRef, Result, Usage, parse_quantity};
+use crate::{EventInfo, Kubri, MetricsKind, ObjectRef, ResourceRef, Result, Usage, parse_quantity};
 
 /// Warning events older than this are left out of the overview.
 const RECENT: SignedDuration = SignedDuration::from_hours(1);
@@ -564,6 +564,21 @@ fn tally_events(
         .take(RECENT_WARNINGS)
         .collect();
     pulse
+}
+
+impl Kubri {
+    /// The cluster overview: health counts per kind, recent warnings and CPU and memory use.
+    /// `None` covers all namespaces; nodes and persistent volumes are always cluster-wide.
+    pub async fn pulse(&self, namespace: Option<&str>) -> Result<Pulse> {
+        let session = self.session().await?;
+        // Usage of the whole cluster comes from the nodes, of one namespace from its pods.
+        let metrics = match namespace {
+            Some(_) => session.metrics(MetricsKind::Pods, namespace),
+            None => session.metrics(MetricsKind::Nodes, None),
+        };
+        let resolve = |api_version: &str, kind: &str| session.resolve(api_version, kind);
+        Ok(gather(session.client.clone(), namespace, metrics, resolve, session.now()).await)
+    }
 }
 
 #[cfg(test)]

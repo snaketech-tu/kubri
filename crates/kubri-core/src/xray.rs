@@ -14,7 +14,7 @@ use serde::Serialize;
 
 use crate::health::{self, Health, Status};
 use crate::typed::{list, names, resource_ref, scoped};
-use crate::{ResourceRef, Result};
+use crate::{Error, Kubri, ResourceRef, Result};
 
 #[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
@@ -679,6 +679,22 @@ pub(crate) fn is_ready(pod: &Pod) -> bool {
         .into_iter()
         .flatten()
         .any(|c| c.type_ == "Ready" && c.status == "True")
+}
+
+impl Kubri {
+    /// The XRay tree of every object of `resource` in `namespace`, or in all namespaces.
+    pub async fn xray(&self, resource: &ResourceRef, namespace: Option<&str>) -> Result<Vec<XrayNode>> {
+        let session = self.session().await?;
+        let info = session.info_for(resource)?;
+        let root = Root::of(&resource.group, &info.kind).ok_or_else(|| {
+            Error::Unsupported(format!(
+                "XRay cannot show {}; it supports {}",
+                info.kind,
+                Root::SUPPORTED
+            ))
+        })?;
+        gather(session.client.clone(), root, namespace).await
+    }
 }
 
 #[cfg(test)]
