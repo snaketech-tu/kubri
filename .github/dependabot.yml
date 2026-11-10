@@ -1,0 +1,38 @@
+# Weekly dependency updates: one pull request per ecosystem for minor and patch versions,
+# so CI checks them together; a major version gets its own pull request.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      rust:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      ui:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
