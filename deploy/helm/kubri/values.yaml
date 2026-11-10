@@ -61,6 +61,18 @@ auditLog: "-"
 # Never change anything in the cluster.
 readOnly: false
 
+# Keeps Kubri's settings (context colors and locks, integrations, saved searches, views) on a
+# volume, so they survive restarts and upgrades. Without it they live in the pod and start
+# from the defaults whenever the pod is replaced.
+persistence:
+  enabled: false
+  # The size of the volume; settings take a few kilobytes, recorded changes more.
+  size: 1Gi
+  # The cluster's default storage class when empty.
+  storageClass: ""
+  # A PersistentVolumeClaim you made yourself, instead of the one the chart makes.
+  existingClaim: ""
+
 rbac:
   create: true
   # With `auth: password`, the ClusterRole bound to Kubri's service account: `view` reads
