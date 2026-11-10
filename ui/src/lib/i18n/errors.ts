@@ -32,7 +32,7 @@ export const ERROR_FORMATS = [
  */
 export const CHECK_FORMATS = ['`{0}` on `{1}` in `{2}`', '`{0}` on `{1}`'];
 
-/** What the core says above a list it shows only in part, in `crates/kubri-core/src/lib.rs`. */
+/** What the core says above a list it shows only in part, in `crates/kubri-core/src/table.rs`. */
 export const NOTICE_FORMATS = [
 	"Showing the namespaces this context's settings name: {0}",
 	'You may not list {0} in all namespaces; showing {1}',
@@ -63,13 +63,14 @@ export const CORE_TEXTS = [
 export const SOURCE_TEXTS: Record<string, string[]> = {
 	'prometheus.rs': ['CPU', 'Memory', 'Network', 'Container restarts', 'Requests', 'Received', 'Sent', 'Request', 'Limit'],
 	'integrations.rs': ['{0} restarted ({1})', 'Rollout', 'Revision {0}'],
-	'lib.rs': [
+	'local_terminal.rs': [
 		'The local terminal is off here: it would be a shell on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it.',
 		'AI agents cannot open a local terminal.',
 		'Kubri is not connected to a context.',
 		'A snapshot has no cluster for kubectl to talk to.',
 		'changes are off for this context',
-		'{0}. A local terminal would get around that, so it stays closed.'
+		'{0}. A local terminal would get around that, so it stays closed.',
+		"kubectl {0} is more than one minor version away from the cluster's {1}; some commands may not work"
 	],
 	'rightsizing.rs': ['Prometheus at {0}, last 7 days', 'metrics-server, now'],
 	// Why a pod does not fit on a node. The selector's "no label" first, as the other would match it too.
@@ -85,7 +86,6 @@ export const SOURCE_TEXTS: Record<string, string[]> = {
 		'not enough memory: the pod requests {0}, {1} is free',
 		'the node runs as many pods as it may'
 	],
-	'local_terminal.rs': ["kubectl {0} is more than one minor version away from the cluster's {1}; some commands may not work"],
 	// What the checks find. Health texts such as "0/1 ready" stay as the lists show them.
 	'sanitizer.rs': [
 		'Scaled to 0',
