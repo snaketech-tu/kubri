@@ -40,7 +40,7 @@ removed before sending on purpose; do not ask for them. If the data is not enoug
 to look at next.";
 
 /// Where Explain sends its questions.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum Provider {
     /// Explain is off: nothing is sent anywhere.
@@ -54,8 +54,9 @@ pub enum Provider {
 }
 
 /// The model Explain asks and how to reach it. The key is kept apart, never in the settings file.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct ExplainSettings {
     pub provider: Provider,
     /// Empty for the provider's own address.
@@ -107,8 +108,9 @@ impl ExplainSettings {
 }
 
 /// What to explain.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
 pub enum ExplainSubject {
     /// A pod, an event or any other object, with what Kubri knows about it.
     #[serde(rename_all = "camelCase")]
@@ -135,8 +137,9 @@ pub enum ExplainSubject {
 }
 
 /// Exactly what Explain would send, for the user to look at first.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ExplainPrompt {
     /// A short name for what is explained, such as `Pod shop/web-1`.
     pub title: String,
@@ -151,8 +154,9 @@ pub struct ExplainPrompt {
 }
 
 /// The model's explanation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ExplainAnswer {
     /// Markdown.
     pub text: String,

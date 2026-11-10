@@ -24,8 +24,9 @@ const DEFAULT_LIMIT: u32 = 200;
 const MAX_LIMIT: u32 = 2000;
 
 /// What the recorder keeps and for how long.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct HistorySettings {
     /// Record changes in the connected context while Kubri runs.
     pub record: bool,
@@ -46,8 +47,9 @@ impl Default for HistorySettings {
 }
 
 /// What kind of change an entry is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum ChangeKind {
     Created,
     Deleted,
@@ -106,8 +108,9 @@ impl ChangeKind {
 }
 
 /// One change, without the object's states before and after.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HistoryEntry {
     pub id: i64,
     pub context: String,
@@ -128,8 +131,9 @@ pub struct HistoryEntry {
 }
 
 /// An entry with the object as it was before and after, for its diff.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HistoryDetail {
     #[serde(flatten)]
     pub entry: HistoryEntry,
@@ -138,8 +142,9 @@ pub struct HistoryDetail {
 }
 
 /// A time Kubri was watching, in Unix milliseconds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Span {
     pub from: i64,
     pub to: i64,
@@ -170,8 +175,9 @@ pub struct HistoryQuery {
 }
 
 /// Changes, newest first, with the times Kubri was watching.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HistoryPage {
     pub context: String,
     pub entries: Vec<HistoryEntry>,
@@ -184,8 +190,9 @@ pub struct HistoryPage {
 }
 
 /// Whether changes in a context are being recorded, and what is left out.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RecorderStatus {
     pub recording: bool,
     /// Why not, when not.

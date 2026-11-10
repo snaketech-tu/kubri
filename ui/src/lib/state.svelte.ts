@@ -516,7 +516,7 @@ class AppState {
 	/** Why the settings file could not be read. */
 	settingsError = $state<string | null>(null);
 	/** Whether the core lets Kubri change the connected cluster, which it enforces. */
-	guard = $state<Guard>({ readOnly: false, reason: null, canUnlock: false, unlockedFor: null });
+	guard = $state<Guard>({ readOnly: false, reason: null, canUnlock: false, unlockedFor: null, fixed: false });
 	/** When an unlocked context locks again, in milliseconds since the epoch. */
 	unlockedUntil = $state<number | null>(null);
 	#guardTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1686,7 +1686,7 @@ class AppState {
 		this.k9s = null;
 		access.reset(cluster.context);
 		this.#guardRequest++;
-		this.applyGuard({ readOnly: true, reason: t('Kubri is still checking whether it may change this cluster'), canUnlock: false, unlockedFor: null });
+		this.applyGuard({ readOnly: true, reason: t('Kubri is still checking whether it may change this cluster'), canUnlock: false, unlockedFor: null, fixed: false });
 		this.refreshGuard();
 		this.askLocalTerminal();
 		this.resources = resources;

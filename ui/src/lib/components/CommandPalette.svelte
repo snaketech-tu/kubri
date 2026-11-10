@@ -19,7 +19,7 @@
 	/** One word that might be part of an object's name rather than a command. */
 	const lookup = $derived(term.length >= 3 && !/\s/.test(term) && !term.includes(':') ? term : '');
 
-	const where = (namespace: string | null | undefined, context: string | undefined) =>
+	const where = (namespace: string | null | undefined, context: string | null | undefined) =>
 		[namespace, context && context !== app.cluster?.context ? context : ''].filter(Boolean).join(' · ');
 	const recentSuggestion = (o: RecentObject): Suggestion => ({
 		label: o.name,

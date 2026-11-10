@@ -26,8 +26,9 @@ const PARALLEL: usize = 16;
 pub const MAX_CHECKS: usize = 200;
 
 /// One action, as RBAC sees it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct AccessCheck {
     pub verb: String,
     /// The API group; empty for the core group.
@@ -162,8 +163,9 @@ async fn review(client: &Client, check: &AccessCheck) -> Option<bool> {
 }
 
 /// Who the API server takes the current user for.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Identity {
     pub username: String,
     pub groups: Vec<String>,

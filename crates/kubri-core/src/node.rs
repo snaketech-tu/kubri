@@ -32,16 +32,18 @@ impl Default for DrainOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct PodIssue {
     /// `namespace/name`.
     pub pod: String,
     pub reason: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct DrainReport {
     /// `namespace/name` of every evicted pod.
     pub evicted: Vec<String>,

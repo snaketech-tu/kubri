@@ -38,8 +38,9 @@ pub enum Change {
 }
 
 /// An object now and after the change, without what changes on every write.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Preview {
     pub before: Value,
     pub after: Value,

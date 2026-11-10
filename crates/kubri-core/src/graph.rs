@@ -24,8 +24,9 @@ use crate::{ResourceInfo, ResourceRef, Result};
 /// Pods shown per owner, those with problems first; the owner says how many more there are.
 const PODS_PER_OWNER: usize = 8;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct GraphNode {
     /// `Kind/namespace/name`.
     pub id: String,
@@ -43,7 +44,7 @@ pub struct GraphNode {
     pub node: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub enum EdgeKind {
     /// An Ingress sends traffic to a Service.
@@ -58,8 +59,9 @@ pub enum EdgeKind {
     RunsOn,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct GraphEdge {
     pub from: String,
     pub to: String,
@@ -67,8 +69,9 @@ pub struct GraphEdge {
 }
 
 /// One step of a request path.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct PathStep {
     /// The graph node, if the step is one.
     pub id: Option<String>,
@@ -79,8 +82,9 @@ pub struct PathStep {
 }
 
 /// How a request for one host and path of an Ingress reaches pods.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RequestPath {
     pub ingress: String,
     pub namespace: Option<String>,
@@ -94,8 +98,9 @@ pub struct RequestPath {
     pub broken: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Graph {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,

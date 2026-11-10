@@ -64,8 +64,9 @@ fn default_path() -> String {
     "/".to_owned()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum BenchState {
     Running,
     Done,
@@ -73,8 +74,9 @@ pub enum BenchState {
     Stopped,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct BenchInfo {
     pub id: u32,
     pub forward_id: u32,
@@ -100,8 +102,9 @@ pub struct BenchInfo {
     pub results: Option<BenchResults>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct BenchResults {
     pub total: u32,
     /// Seconds.
@@ -119,7 +122,7 @@ pub struct BenchResults {
     pub bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Percentile {
     pub percent: u8,
@@ -127,7 +130,7 @@ pub struct Percentile {
 }
 
 /// Responses that took from `from` up to `to` seconds.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct Bucket {
     pub from: f64,
@@ -135,14 +138,14 @@ pub struct Bucket {
     pub count: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusCount {
     pub code: u16,
     pub count: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ErrorCount {
     pub message: String,

@@ -16,8 +16,9 @@ use crate::health::{self, Health, Status};
 use crate::typed::{list, names, resource_ref, scoped};
 use crate::{ResourceRef, Result};
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct XrayNode {
     /// Unique in the tree: the path from the root.
     pub id: String,

@@ -28,8 +28,9 @@ pub struct LokiRequest {
     pub limit: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LokiLogs {
     /// The query that ran.
     pub query: String,

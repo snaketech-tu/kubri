@@ -30,7 +30,7 @@ type NewSession = Omit<ObjectSession, 'id'> | Omit<LocalSession, 'id'>;
 
 /** The context a tab belongs to. */
 export function contextOf(s: DockSession): string | undefined {
-	return s.kind === 'local' ? s.context : s.target.context;
+	return s.kind === 'local' ? s.context : (s.target.context ?? undefined);
 }
 
 export type DockSide = 'bottom' | 'right';

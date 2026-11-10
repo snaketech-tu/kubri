@@ -23,8 +23,9 @@ const HELM_TIMEOUT: Duration = Duration::from_secs(5 * 60 + 30);
 const FETCH_CONCURRENCY: usize = 8;
 
 /// A release revision, as `helm list` and `helm history` show it.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HelmRelease {
     pub name: String,
     pub namespace: String,
@@ -38,8 +39,9 @@ pub struct HelmRelease {
     pub description: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HelmReleaseDetails {
     #[serde(flatten)]
     pub release: HelmRelease,
@@ -495,8 +497,9 @@ pub struct HelmChange {
 }
 
 /// What an install or upgrade made, or would make.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HelmOutcome {
     #[serde(flatten)]
     pub release: HelmRelease,
@@ -702,8 +705,9 @@ pub(crate) async fn show_values(access: &HelmAccess, context: &str, chart: &Helm
 }
 
 /// A chart found on Artifact Hub.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct HubChart {
     pub name: String,
     pub version: String,

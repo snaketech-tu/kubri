@@ -126,8 +126,8 @@ describe('room', () => {
 	});
 
 	it('falls back to use without requests, and to nothing without capacity', () => {
-		expect(room({ used: 2000, requested: null, capacity: 4000 })).toMatchObject({ reserved: null, value: 0.5 });
-		expect(room({ used: 2000, requested: 1000, capacity: null })).toBeNull();
-		expect(room({ used: null, requested: null, capacity: 4000 })).toBeNull();
+		expect(room({ used: 2000, requested: null, waiting: null, capacity: 4000 })).toMatchObject({ reserved: null, value: 0.5 });
+		expect(room({ used: 2000, requested: 1000, waiting: null, capacity: null })).toBeNull();
+		expect(room({ used: null, requested: null, waiting: null, capacity: 4000 })).toBeNull();
 	});
 });

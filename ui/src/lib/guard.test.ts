@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readOnlyFixed, readOnlyReason } from './guard';
 
-const open = { readOnly: false, reason: null, canUnlock: false, unlockedFor: null };
+const open = { readOnly: false, reason: null, canUnlock: false, unlockedFor: null, fixed: false };
 
 describe('readOnlyReason', () => {
 	it('names --read-only, not k9s, when the server was started read-only', () => {

@@ -16,8 +16,9 @@ use crate::{Error, Result, Terminal};
 const NAME: &str = "kubri";
 
 /// A tool that makes a cluster in containers on this computer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum LocalClusterTool {
     Kind,
     K3d,
@@ -56,7 +57,7 @@ impl LocalClusterTool {
 }
 
 /// A tool that can make a local cluster, and whether it is installed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalClusterOption {
     pub tool: LocalClusterTool,
@@ -70,8 +71,9 @@ pub struct LocalClusterOption {
 }
 
 /// What Kubri can use to make a cluster on this computer.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct LocalClusters {
     /// Whether Kubri may run the tools here: in the desktop app, and in the web server only
     /// when it allows local terminals, as the cluster would run on the server.

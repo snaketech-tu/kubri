@@ -24,8 +24,9 @@ const LIMIT_HEADROOM: f64 = 1.5;
 /// Use at or above this share of the limit is close to it.
 const NEAR_LIMIT: f64 = 0.9;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum SizeReason {
     /// Close to the limit: throttled CPU, or about to run out of memory.
     NearLimit,
@@ -38,8 +39,9 @@ pub enum SizeReason {
 }
 
 /// The requests and limits to set on one container of a workload; `None` removes one.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ContainerResources {
     pub container: String,
     #[serde(default)]
@@ -49,13 +51,15 @@ pub struct ContainerResources {
 }
 
 /// One container's CPU or memory, and what to set instead.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SizeAdvice {
     pub workload: ObjectRef,
     pub kind: String,
     pub container: String,
     /// `cpu` or `memory`.
+    #[ts(type = "'cpu' | 'memory'")]
     pub resource: String,
     pub request: Option<String>,
     pub limit: Option<String>,
@@ -70,8 +74,9 @@ pub struct SizeAdvice {
     pub freed: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct RightSizing {
     /// Where the use comes from, like `Prometheus at monitoring/prometheus:9090, last 7 days`.
     pub source: String,

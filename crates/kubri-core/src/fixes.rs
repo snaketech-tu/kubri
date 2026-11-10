@@ -18,8 +18,9 @@ const MI: f64 = 1024.0 * 1024.0;
 
 /// A higher memory limit for a container that ran out of memory, set on the workload that
 /// owns the pod, since a running pod's limits do not change.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct MemoryFix {
     /// The Deployment, StatefulSet or DaemonSet to change; `None` for a pod nothing owns.
     pub workload: Option<ObjectRef>,
@@ -31,16 +32,18 @@ pub struct MemoryFix {
 }
 
 /// Whether the pending pod fits on one node, and if not, why.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct NodeFit {
     pub node: String,
     pub reasons: Vec<String>,
 }
 
 /// Why a Service sends traffic to no pod, part by part.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ServiceCheck {
     pub selector: BTreeMap<String, String>,
     /// Pods the selector picks.
@@ -49,7 +52,7 @@ pub struct ServiceCheck {
     pub near: Vec<NearMiss>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PodMatch {
     pub name: String,
@@ -58,7 +61,7 @@ pub struct PodMatch {
     pub missing_ports: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct NearMiss {
     pub name: String,

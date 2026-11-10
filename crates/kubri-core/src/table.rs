@@ -20,8 +20,9 @@ const TABLE_ACCEPT: &str = "application/json;as=Table;v=v1;g=meta.k8s.io,\
                             application/json;as=Table;v=v1beta1;g=meta.k8s.io,application/json";
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Column {
     pub name: String,
     #[serde(rename = "type", default)]
@@ -35,14 +36,16 @@ pub struct Column {
     pub priority: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Row {
     /// Stable key: the object's UID, or namespace/name if the server sends none.
     pub key: String,
     pub name: String,
     pub namespace: Option<String>,
     pub created: Option<String>,
+    #[ts(type = "Record<string, string>")]
     pub labels: serde_json::Map<String, Value>,
     /// The objects this one belongs to, such as the ReplicaSet of a pod.
     pub owners: Vec<Owner>,
@@ -51,8 +54,9 @@ pub struct Row {
 }
 
 /// An owner reference of a row's object.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Owner {
     pub api_version: String,
     pub kind: String,
@@ -64,8 +68,9 @@ pub struct Owner {
 }
 
 /// Narrows a list on the server, like `kubectl get -l` and `--field-selector`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export, optional_fields = nullable)]
 pub struct TableScope {
     pub label_selector: Option<String>,
     pub field_selector: Option<String>,
@@ -125,8 +130,9 @@ impl TableScope {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export)]
 pub enum TableEvent {
     /// The complete current table. Replaces everything the client knows.
     Reset {

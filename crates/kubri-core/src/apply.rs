@@ -34,8 +34,9 @@ pub struct ApplyRequest {
     pub into: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub enum ApplyOutcome {
     Created,
     Changed,
@@ -46,8 +47,9 @@ pub enum ApplyOutcome {
 }
 
 /// What happened, or would happen, to one object.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct ApplyItem {
     /// Its place in the request.
     pub index: usize,
