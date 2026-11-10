@@ -46,9 +46,10 @@ after(async () => {
 
 describe('inspector', () => {
 	check('Tab goes into the inspector, arrows change its tabs, Esc goes back', async () => {
-		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods', filter: '/^db-/' });
+		// A ConfigMap: what the inspector shows joins the recent objects, which the pod tests do not expect.
+		await h.openList(page, server.url, { resource: 'configmaps.v1', heading: 'ConfigMaps', filter: 'settings' });
 		await page.keyboard.press('d');
-		const inspector = page.getByRole('complementary', { name: 'Pod inspector' });
+		const inspector = page.getByRole('complementary', { name: 'ConfigMap inspector' });
 		await inspector.waitFor();
 		await page.keyboard.press('Tab');
 		await h.until(() => inspector.getByRole('tab', { name: /Overview/, selected: true }).evaluate((el) => el === document.activeElement));
