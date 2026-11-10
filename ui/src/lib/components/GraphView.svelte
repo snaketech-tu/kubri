@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '../i18n';
+	import { every } from '../poll';
 	import { backend, type Graph, type GraphNode, type PathStep, type RequestPath } from '../api';
 	import { errorMessage } from '../format';
 	import { BOX, fit, layoutGraph, matches, neighborhood, type GroupBy } from '../graph';
@@ -10,7 +11,7 @@
 	import SearchField from './SearchField.svelte';
 	import Select from './Select.svelte';
 
-	const REFRESH_MS = 15_000;
+	const REFRESH_MS = 30_000;
 
 	let graph = $state.raw<Graph | null>(null);
 	let error = $state<string | null>(null);
@@ -43,10 +44,10 @@
 			}
 		};
 		load();
-		const timer = setInterval(() => document.hidden || load(), REFRESH_MS);
+		const stop = every(REFRESH_MS, load);
 		return () => {
 			cancelled = true;
-			clearInterval(timer);
+			stop();
 		};
 	});
 

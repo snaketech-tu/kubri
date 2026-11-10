@@ -75,7 +75,7 @@ describe('kubectlCommand', () => {
 		expect(kubectlCommand('c', pod, { op: 'shell', container: 'app' })).toBe("kubectl --context c -n shop exec -it pods/web-1 -c app -- sh -c 'bash || sh'");
 		expect(kubectlCommand('c', pod, { op: 'portForward', local: 8080, remote: 80 })).toBe('kubectl --context c -n shop port-forward pods/web-1 8080:80');
 		expect(kubectlCommand('c', pod, { op: 'portForward', remote: 80, address: '0.0.0.0' })).toBe(
-			'kubectl --context c -n shop port-forward pods/web-1 80 --address 0.0.0.0'
+			'kubectl --context c -n shop port-forward pods/web-1 :80 --address 0.0.0.0'
 		);
 		expect(kubectlCommand('c', deploy, { op: 'logs', workload: true })).toBe('kubectl --context c -n shop logs deployments.apps/web --all-pods --prefix -f');
 	});

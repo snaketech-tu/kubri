@@ -100,9 +100,10 @@ export function kubectlCommand(context: string | null | undefined, target: Objec
 		case 'nodeShell':
 			return command(context, null, ['debug', `node/${target.name}`, '-it', '--profile=sysadmin', `--image=${op.image || 'busybox'}`, '--', 'chroot', '/host', 'sh']);
 		case 'portForward': {
+			// Without a local port both pick any free one: kubectl takes `:80` for that, and `80` for 80:80.
 			const ports = `${op.local || ''}:${op.remote ?? 'PORT'}`;
 			const address = op.address && op.address !== '127.0.0.1' && op.address !== 'localhost' ? ['--address', op.address] : [];
-			return run('port-forward', ref, ports.startsWith(':') ? ports.slice(1) : ports, ...address);
+			return run('port-forward', ref, ports, ...address);
 		}
 		case 'cordon':
 		case 'uncordon':
