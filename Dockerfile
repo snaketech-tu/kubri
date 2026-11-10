@@ -11,12 +11,12 @@
 ARG KUBECTL_VERSION=v1.37.2
 ARG HELM_VERSION=v4.3.1
 
-FROM --platform=$BUILDPLATFORM node:22-trixie-slim AS ui
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable
+FROM --platform=$BUILDPLATFORM node:26-trixie-slim AS ui
 WORKDIR /src/ui
 COPY ui/package.json ui/pnpm-lock.yaml ui/pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+# Node.js no longer comes with corepack, so install the pnpm version that package.json names.
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')" \
+    && pnpm install --frozen-lockfile
 COPY ui/ ./
 RUN pnpm build
 
