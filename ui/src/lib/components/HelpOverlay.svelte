@@ -115,6 +115,25 @@
 			]
 		],
 		[
+			t('YAML editor'),
+			[
+				['Ctrl+S  or  Ctrl+Enter', t('Review the change and save')],
+				['Esc', t('Close the search, keep one cursor, then stop editing')],
+				['Ctrl+F / Ctrl+H', t('Find / replace')],
+				['F3 / Shift+F3', t('Next / previous match')],
+				['Ctrl+G', t('Go to line')],
+				['Ctrl+D', t('Delete the line')],
+				['Ctrl+Shift+D', t('Duplicate the line')],
+				['Alt+↑ / ↓', t('Move the line up or down')],
+				['Ctrl+/', t('Comment or uncomment the line')],
+				['Alt+J', t('Also select the next occurrence')],
+				['Ctrl+Shift+L', t('Select every occurrence')],
+				['Ctrl+Alt+↑ / ↓', t('Another cursor above or below')],
+				[t('Ctrl+click  or  Alt+drag'), t('Another cursor, or a block of them')],
+				['Ctrl+Space', t('Suggest fields')]
+			]
+		],
+		[
 			t('Logs'),
 			[
 				['/', t('Search: text, /regex/ or fields like level>=warn status>=500; Esc clears')],

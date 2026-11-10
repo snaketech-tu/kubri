@@ -1,16 +1,30 @@
 <script lang="ts">
 	import { t } from '../i18n';
-	import { autocompletion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
-	import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+	import { autocompletion, closeBrackets, closeBracketsKeymap, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
+	import { copyLineDown, defaultKeymap, deleteLine, history, historyKeymap, indentWithTab, simplifySelection } from '@codemirror/commands';
 	import { yaml } from '@codemirror/lang-yaml';
-	import { HighlightStyle, foldGutter, foldKeymap, syntaxHighlighting } from '@codemirror/language';
+	import { HighlightStyle, bracketMatching, foldGutter, foldKeymap, syntaxHighlighting } from '@codemirror/language';
+	import {
+		closeSearchPanel,
+		gotoLine,
+		highlightSelectionMatches,
+		openSearchPanel,
+		search,
+		searchKeymap,
+		searchPanelOpen,
+		selectNextOccurrence,
+		selectSelectionMatches
+	} from '@codemirror/search';
 	import { Compartment, EditorState } from '@codemirror/state';
 	import {
+		crosshairCursor,
+		drawSelection,
 		EditorView,
 		highlightActiveLine,
 		highlightActiveLineGutter,
 		keymap,
-		lineNumbers
+		lineNumbers,
+		rectangularSelection
 	} from '@codemirror/view';
 	import { linter, lintGutter } from '@codemirror/lint';
 	import { tags } from '@lezer/highlight';
@@ -75,8 +89,76 @@
 		'.cm-lintRange-warning': { textDecorationColor: 'var(--warn)' },
 		'&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
 			backgroundColor: 'color-mix(in srgb, var(--accent) 30%, transparent) !important'
-		}
+		},
+		'.cm-selectionMatch': { backgroundColor: 'color-mix(in srgb, var(--accent) 14%, transparent)' },
+		'.cm-searchMatch': { backgroundColor: 'color-mix(in srgb, var(--warn) 30%, transparent)' },
+		'.cm-searchMatch-selected': { backgroundColor: 'color-mix(in srgb, var(--warn) 55%, transparent)' },
+		'&.cm-focused .cm-matchingBracket': { backgroundColor: 'color-mix(in srgb, var(--accent) 22%, transparent)' },
+		'.cm-panels': { backgroundColor: 'var(--surface-2)', color: 'var(--text)' },
+		'.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--border)' },
+		'.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--border)' },
+		'.cm-panel.cm-search, .cm-panel.cm-gotoLine': { padding: '6px 28px 6px 8px', fontSize: '12px' },
+		'.cm-panel input[type=checkbox]': { marginRight: '4px' },
+		'.cm-textfield': {
+			padding: '3px 6px',
+			border: '1px solid var(--border)',
+			borderRadius: '6px',
+			backgroundColor: 'var(--surface-1)',
+			color: 'var(--text)',
+			fontFamily: 'var(--mono)',
+			fontSize: '12px'
+		},
+		'.cm-button': {
+			padding: '3px 8px',
+			border: '1px solid var(--border)',
+			borderRadius: '6px',
+			backgroundImage: 'none',
+			backgroundColor: 'var(--surface-1)',
+			color: 'var(--text)',
+			fontSize: '12px'
+		},
+		'.cm-panel button[name=close]': { color: 'var(--text-muted)', fontSize: '16px' }
 	});
+
+	/** The search and go-to-line panels in the UI's language. */
+	const phrases = EditorState.phrases.of({
+		Find: t('Find'),
+		Replace: t('Replace'),
+		next: t('next'),
+		previous: t('previous'),
+		all: t('all'),
+		'match case': t('match case'),
+		regexp: t('regexp'),
+		'by word': t('by word'),
+		replace: t('replace'),
+		'replace all': t('replace all'),
+		close: t('close'),
+		'Go to line': t('Go to line'),
+		go: t('go'),
+		'current match': t('current match'),
+		'on line': t('on line'),
+		'replaced match on line $': t('replaced match on line $'),
+		'replaced $ matches': t('replaced $ matches')
+	});
+
+	/**
+	 * Keys as in the editors people know: Ctrl+D deletes the line, Alt+J takes the next occurrence
+	 * as well, Ctrl+Shift+L all of them; Ctrl+F finds, Ctrl+H replaces, Ctrl+G goes to a line.
+	 * They come before CodeMirror's own, which give some of these keys other meanings.
+	 */
+	const editorKeys = [
+		{ key: 'Mod-s', run: save, preventDefault: true },
+		{ key: 'Mod-Enter', run: save, preventDefault: true },
+		{ key: 'Escape', run: escape },
+		{ key: 'Escape', run: closeSearchPanel, scope: 'search-panel' },
+		{ key: 'Mod-d', run: deleteLine, preventDefault: true },
+		{ key: 'Mod-Shift-d', run: copyLineDown, preventDefault: true },
+		{ key: 'Alt-j', run: selectNextOccurrence, preventDefault: true },
+		{ key: 'Mod-Shift-l', run: selectSelectionMatches, preventDefault: true },
+		{ key: 'Mod-h', run: openSearchPanel, scope: 'editor search-panel', preventDefault: true },
+		{ key: 'Mod-g', run: gotoLine, preventDefault: true }
+	];
+	const taken = new Set(editorKeys.map((k) => k.key));
 
 	/** Keys the schema allows where the cursor is, as the user types one. */
 	function complete(kind: KindSchema, context: CompletionContext): CompletionResult | null {
@@ -134,8 +216,13 @@
 		return true;
 	}
 
-	/** Reading, Esc hands the keys back to the list; editing, it cancels. */
+	/**
+	 * Closes the search and leaves one cursor of several first; then, reading, Esc hands the keys
+	 * back to the list; editing, it cancels.
+	 */
 	function escape(v: EditorView) {
+		if (searchPanelOpen(v.state)) return closeSearchPanel(v);
+		if (v.state.selection.ranges.length > 1) return simplifySelection(v);
 		if (v.state.readOnly) v.contentDOM.blur();
 		else oncancel?.(v.state.doc.toString() !== original);
 		return true;
@@ -161,17 +248,28 @@
 					schemaHelp.of(schemaExtensions(untrack(() => schema))),
 					foldGutter(),
 					history(),
+					drawSelection(),
+					// Several cursors: Ctrl+click, Ctrl+Alt+↑/↓, Alt+J, and a block with Alt+drag.
+					EditorState.allowMultipleSelections.of(true),
+					rectangularSelection(),
+					crosshairCursor(),
 					highlightActiveLine(),
 					highlightActiveLineGutter(),
+					highlightSelectionMatches(),
+					bracketMatching(),
+					closeBrackets(),
+					search({ top: true }),
+					phrases,
 					yaml(),
 					syntaxHighlighting(highlight),
 					theme,
 					editable.of([EditorState.readOnly.of(ro), EditorView.editable.of(!ro)]),
 					keymap.of([
-						{ key: 'Mod-s', run: save, preventDefault: true },
-						{ key: 'Escape', run: escape },
+						...editorKeys,
 						indentWithTab,
+						...closeBracketsKeymap,
 						...defaultKeymap,
+						...searchKeymap.filter((k) => !taken.has(k.key ?? '')),
 						...historyKeymap,
 						...foldKeymap
 					])
