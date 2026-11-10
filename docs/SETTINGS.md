@@ -110,4 +110,4 @@ The editor loads the kind's schema from the API server (`/openapi/v3`), so it kn
 - Typing a key offers the fields allowed there, required ones first. <kbd>Ctrl</kbd>+<kbd>Space</kbd> opens the list.
 - Field names the schema does not know are underlined. Free-form parts, such as labels or the open parts of a custom resource, are left alone.
 
-While you edit, Kubri checks the object on the server every 5 seconds. When someone else changes it, **Compare** shows their changes and yours. **Apply mine to theirs** then puts your changes on top of the latest version. Where you both changed the same field, yours win and the field is named. Nothing is saved until you review the result and save.
+While you edit, Kubri checks the object on the server every 15 seconds. When someone else changes it, **Compare** shows their changes and yours. **Apply mine to theirs** then puts your changes on top of the latest version. Where you both changed the same field, yours win and the field is named. Nothing is saved until you review the result and save.

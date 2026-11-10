@@ -94,10 +94,16 @@
 		}
 		return tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
 	}
+
+	/** Gives the list the keys, without scrolling. */
+	export function focus() {
+		scroller?.focus({ preventScroll: true });
+	}
 </script>
 
 <div
 	class="table-wrap"
+	tabindex="-1"
 	bind:this={scroller}
 	bind:clientHeight={viewHeight}
 	bind:clientWidth={room}
@@ -350,6 +356,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow: auto;
+		outline: none;
 	}
 	table {
 		width: 100%;

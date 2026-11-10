@@ -6,6 +6,7 @@
 
 <script lang="ts">
 	import { midSentence, t } from '../i18n';
+	import { every } from '../poll';
 	import { store, stored } from '../storage';
 	import { tick, untrack } from 'svelte';
 	import { parse, stringify } from 'yaml';
@@ -45,7 +46,7 @@
 
 	let { details }: { details: Details } = $props();
 
-	const REFRESH = 5000;
+	const REFRESH = 15_000;
 
 	let object = $state<KubeObject | null>(null);
 	let events = $state<EventInfo[]>([]);
@@ -76,11 +77,10 @@
 		object = null;
 		events = [];
 		load();
-		const timer = setInterval(() => {
+		return every(REFRESH, () => {
 			if (details.editing) watchServer();
 			else if (['describe', 'events', 'yaml'].includes(details.tab)) load();
-		}, REFRESH);
-		return () => clearInterval(timer);
+		});
 	});
 
 	/** What uses the object, as k9s `u` finds it, looked up when Describe shows; or why not. */

@@ -13,6 +13,7 @@
 	import logo from '#lib/assets/logo.svg';
 	import { listenForBindings } from '#lib/bindings.js';
 	import ActionDialog from '#lib/components/ActionDialog.svelte';
+	import NewForwardDialog from '#lib/components/NewForwardDialog.svelte';
 	import ActionMenu from '#lib/components/ActionMenu.svelte';
 	import ExplainPanel from '#lib/components/ExplainPanel.svelte';
 	import BenchmarksView from '#lib/components/BenchmarksView.svelte';
@@ -532,6 +533,8 @@
 	<GrafanaDialog dialog={app.dialog} />
 {:else if app.dialog?.kind === 'snapshot'}
 	<SnapshotDialog dialog={app.dialog} />
+{:else if app.dialog?.kind === 'newForward'}
+	<NewForwardDialog />
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}

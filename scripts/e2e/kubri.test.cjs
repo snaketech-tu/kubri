@@ -97,6 +97,32 @@ describe('lists', () => {
 	});
 });
 
+describe('keyboard', () => {
+	check('a list opens with its first row chosen, and Enter opens that row', async () => {
+		await h.openList(page, server.url, { resource: 'deployments.v1.apps', heading: 'Deployments' });
+		// The action bar offers what to do with the first row before any key is pressed.
+		await page.getByRole('toolbar').getByRole('button', { name: /^Scale/ }).waitFor();
+		// Reach Pods in the sidebar with Tab and open it with Enter, as a keyboard user does.
+		await page.evaluate(() => document.activeElement?.blur());
+		const onPods = () => page.evaluate(() => document.activeElement?.textContent?.trim() === 'Pods');
+		for (let i = 0; i < 60; i++) {
+			await page.keyboard.press('Tab');
+			// The sidebar may be one Tab stop, at the current page.
+			const inSidebar = () => !!document.activeElement?.closest('nav .items') && !!document.querySelector('nav .items [tabindex="-1"]');
+			if ((await onPods()) || (await page.evaluate(inSidebar))) break;
+		}
+		// There the arrow keys move on to Pods.
+		for (let i = 0; i < 10 && !(await onPods()); i++) await page.keyboard.press('ArrowUp');
+		assert.ok(await onPods(), 'the focus on Pods in the sidebar');
+		await page.keyboard.press('Enter');
+		await page.getByRole('heading', { name: 'Pods', level: 1, exact: true }).waitFor();
+		// The list has the keys now: once its first row is there, Enter opens the pod, not the Pods list again.
+		await page.locator('tr.cursor').waitFor();
+		await page.keyboard.press('Enter');
+		await page.getByRole('complementary', { name: 'Pod inspector' }).waitFor();
+	});
+});
+
 describe('contexts and addresses', () => {
 	check('switches the context and keeps it in the address', async () => {
 		await h.openList(page, server.url, { resource: 'deployments.v1.apps', heading: 'Deployments' });
@@ -451,5 +477,28 @@ describe('MCP', () => {
 		} finally {
 			child.kill('SIGTERM');
 		}
+	});
+});
+
+describe('gentle on the cluster', () => {
+	check('the Clusters page checks each context once, not again and again', async () => {
+		const asked = new Map();
+		const seen = (request) => {
+			if (request.method() !== 'POST' || !request.url().endsWith('/api/call')) return;
+			const body = request.postDataJSON();
+			if (body?.call === 'fleetCluster') asked.set(body.context, (asked.get(body.context) ?? 0) + 1);
+		};
+		page.on('request', seen);
+		try {
+			await page.goto('about:blank');
+			await page.goto(`${server.url}/#/e2e-one/fleet`);
+			await page.getByRole('heading', { name: 'Clusters', level: 1, exact: true }).waitFor();
+			await new Promise((resolve) => setTimeout(resolve, 8000));
+		} finally {
+			page.off('request', seen);
+		}
+		// One round; the next is due in minutes.
+		assert.ok(asked.get('e2e-one') >= 1, 'checks e2e-one');
+		for (const [context, times] of asked) assert.equal(times, 1, `checked ${context} ${times} times in 8 seconds`);
 	});
 });
