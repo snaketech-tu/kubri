@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '../i18n';
+	import { roving } from '../roving';
 	import { age, errorMessage } from '../format';
 	import { session } from '../session.svelte';
 	import { app } from '../state.svelte';
@@ -70,7 +71,7 @@
 		<button onclick={close} aria-label={t('Close')}>×</button>
 	</header>
 	{#if session.person}
-		<div class="tabs" role="tablist" aria-label={t('Whose changes')}>
+		<div class="tabs" role="tablist" aria-label={t('Whose changes')} {@attach roving({ items: '[role="tab"]', orientation: 'horizontal', activate: true })}>
 			<button role="tab" aria-selected={tab === 'window'} onclick={() => (tab = 'window')}>{t('This window')}</button>
 			<button role="tab" aria-selected={tab === 'team'} onclick={() => (tab = 'team')}>{t('Team')}</button>
 		</div>

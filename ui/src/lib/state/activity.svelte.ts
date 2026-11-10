@@ -1,5 +1,6 @@
 import { errorMessage } from '../format';
 import { t } from '../i18n';
+import { changedSomething } from '../poll';
 import type { AppState } from '../state.svelte';
 import type { Activity } from './model';
 
@@ -20,6 +21,8 @@ export class Activities {
 	record(entry: Omit<Activity, 'id' | 'at' | 'context' | 'undone'>): number {
 		const id = ++activityId;
 		this.entries = [{ ...entry, id, at: Date.now(), context: this.#app.cluster?.context ?? '', undone: false }, ...this.entries].slice(0, 200);
+		// Pages that ask on a timer ask again now, so the change shows without waiting for it.
+		changedSomething();
 		return id;
 	}
 
@@ -30,6 +33,7 @@ export class Activities {
 		try {
 			await entry.undo();
 			this.entries = this.entries.map((a) => (a.id === id ? { ...a, undone: true } : a));
+			changedSomething();
 			this.#app.toast(t('Undone: {what}', { what: entry.text }));
 		} catch (err) {
 			this.#app.toast(errorMessage(err), 'bad');

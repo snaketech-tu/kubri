@@ -127,4 +127,4 @@ The keys work as in common code editors:
 
 On macOS, <kbd>Cmd</kbd> takes the place of <kbd>Ctrl</kbd>. Brackets and quotes close as you type them, and the other places of the selected word are marked. In a list, <kbd>Ctrl</kbd>+<kbd>D</kbd> still deletes the object, as in k9s.
 
-While you edit, Kubri checks the object on the server every 5 seconds. When someone else changes it, **Compare** shows their changes and yours. **Apply mine to theirs** then puts your changes on top of the latest version. Where you both changed the same field, yours win and the field is named. Nothing is saved until you review the result and save.
+While you edit, Kubri checks the object on the server every 15 seconds. When someone else changes it, **Compare** shows their changes and yours. **Apply mine to theirs** then puts your changes on top of the latest version. Where you both changed the same field, yours win and the field is named. Nothing is saved until you review the result and save.

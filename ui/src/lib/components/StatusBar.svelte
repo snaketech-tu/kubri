@@ -3,6 +3,7 @@
 	import { footerHints } from '../hints';
 	import { t } from '../i18n';
 	import { keyFromLabel } from '../menu';
+	import { roving } from '../roving';
 	import { app } from '../state.svelte';
 
 	const hints = $derived(footerHints(app));
@@ -46,7 +47,7 @@
 			<button class="close" onclick={() => app.releases.dismiss()} aria-label={t('Hide until the next release')}>×</button>
 		</span>
 	{/if}
-	<span class="hints" data-tour="keys">
+	<span class="hints" data-tour="keys" role="toolbar" aria-label={t('Keyboard shortcuts')} {@attach roving({ items: ':scope > button', orientation: 'horizontal' })}>
 		{#each hints as [key, label], i (key + i)}
 			{#if keyFromLabel(key)}
 				<button onclick={() => press(key)} onmousedown={keepFocus} title="{label} ({key})"><kbd>{key}</kbd>{label}</button>

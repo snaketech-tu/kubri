@@ -5,6 +5,7 @@
 
 <script lang="ts">
 	import { midSentence, t } from '../i18n';
+	import { every } from '../poll';
 	import { coreText } from '../i18n/errors';
 	import { backend, type Charts, type ObjectRef } from '../api';
 	import { RANGES } from '../charts';
@@ -48,8 +49,7 @@
 		lastRange = seconds;
 		if (!prometheus) return;
 		load();
-		const timer = setInterval(load, REFRESH);
-		return () => clearInterval(timer);
+		return every(REFRESH, load);
 	});
 
 	function copy(query: string) {

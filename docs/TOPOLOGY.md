@@ -11,7 +11,7 @@
 
 Each object has a stripe in its health color, and a red box with the reason when it is failing. Something an object names that is not there, like a Secret a Deployment reads or the Service an Ingress routes to, is drawn with a dashed red outline and **Missing**.
 
-**Group by** puts the objects in bands by namespace, by application (the `app.kubernetes.io/name`, `app` or `k8s-app` label, or that of what an object connects to) or by node. Pointing at an object lights up what it connects to. **Find** and **Problems** dim the rest. Scroll or pinch to zoom, drag to move, and **Fit** shows it all. Clicking an object opens it. **Trees** switches to a tree for each object (`:xray`). The graph refreshes every 15 seconds.
+**Group by** puts the objects in bands by namespace, by application (the `app.kubernetes.io/name`, `app` or `k8s-app` label, or that of what an object connects to) or by node. Pointing at an object lights up what it connects to. **Find** and **Problems** dim the rest. Scroll or pinch to zoom, drag to move, and **Fit** shows it all. Clicking an object opens it. **Trees** switches to a tree for each object (`:xray`). The graph refreshes every 30 seconds.
 
 ## Request paths
 

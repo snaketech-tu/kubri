@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { t } from '../i18n';
+	import { every } from '../poll';
 	import { backend, type ObjectRef, type Usage } from '../api';
 	import { reading, type Measure } from '../limits';
 
 	/** What a pod uses right now, against its requests and limits, from metrics-server. */
 	let { target }: { target: ObjectRef } = $props();
 
-	const REFRESH_MS = 15_000;
+	const REFRESH_MS = 30_000;
 	let usage = $state<Usage | null>(null);
 
 	$effect(() => {
@@ -23,10 +24,10 @@
 			}
 		};
 		load();
-		const timer = setInterval(() => document.hidden || load(), REFRESH_MS);
+		const stop = every(REFRESH_MS, load);
 		return () => {
 			stopped = true;
-			clearInterval(timer);
+			stop();
 		};
 	});
 

@@ -35,11 +35,12 @@
 		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
 	});
 
-	/** A forward starts from an object: take the person to the pods. */
+	/** A snapshot has no cluster to forward to. */
+	const canStart = $derived(!!app.cluster && !app.cluster.snapshot);
+
+	/** Asks for the namespace, the object and the port. */
 	function choose() {
-		const pods = app.resources.find((r) => r.group === '' && r.plural === 'pods');
-		if (pods) app.open(pods);
-		app.toast(t('Select a pod and press Shift+F, or use its Port-forward action'));
+		if (canStart) app.dialog = { kind: 'newForward' };
 	}
 
 	function url(f: PortForwardInfo) {
@@ -97,6 +98,9 @@
 				case 's':
 					if (current) app.favorites.toggle(current);
 					return true;
+				case 'F':
+					choose();
+					return true;
 			}
 			return false;
 		})();
@@ -112,7 +116,11 @@
 		title={t('Port-forwards')}
 		count={forwards.length}
 		subtitle={t('Local ports tunneled to pods. They keep running while you work elsewhere in Kubri, and move to another pod when theirs goes away.')}
-	/>
+	>
+		{#snippet tools()}
+			{#if canStart && forwards.length}<button class="btn" onclick={choose} title={t('Choose a namespace, a target and a port (Shift+F)')}>{t('Start a port-forward…')}</button>{/if}
+		{/snippet}
+	</PageHeader>
 
 	<div class="card">
 		<div class="table-wrap" bind:this={scroller}>
@@ -169,7 +177,7 @@
 				<div class="empty" role="status">
 					<p>{t('No port-forwards running.')}</p>
 					<p class="muted"><Phrase text={t('Select a pod, deployment or service and press {key} to start one.')} kbd={{ key: 'Shift+F' }} /></p>
-					<button class="btn" onclick={choose}>{t('Start a port-forward…')}</button>
+					{#if canStart}<button class="btn" onclick={choose} title={t('Choose a namespace, a target and a port (Shift+F)')}>{t('Start a port-forward…')}</button>{/if}
 				</div>
 			{/if}
 			{#if app.favorites.here.length}
