@@ -56,9 +56,24 @@ From then on, each release's builds put the public key into the app and attach a
 
 ## Code signing
 
-The builds are not code-signed yet. macOS asks before opening Kubri the first time (the app is signed ad hoc, so it is not reported as damaged), and Windows SmartScreen warns about an unknown app; the release text says how to get past both.
+### macOS
 
-To sign them, add the certificates as repository secrets and pass them to the `tauri-apps/tauri-action` step in [`release.yml`](../.github/workflows/release.yml) as environment variables, as described in Tauri's guides for [macOS](https://v2.tauri.app/distribute/sign/macos/) (`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, and `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID` for notarizing) and [Windows](https://v2.tauri.app/distribute/sign/windows/).
+Without a certificate, the app is signed ad hoc: macOS asks before opening it the first time, and the release text says how to get past that. To sign and notarize it, so it opens like any other app:
+
+1. Join the [Apple Developer Program](https://developer.apple.com/programs/) (99 USD a year).
+2. In Xcode or on the developer site, create a **Developer ID Application** certificate. Export it from Keychain Access as a `.p12` file with a password.
+3. Create an [app-specific password](https://support.apple.com/102654) for your Apple ID, for notarizing.
+4. Under **Settings → Secrets and variables → Actions**, add these secrets:
+   - `APPLE_CERTIFICATE`: the `.p12` file in base64 (`base64 -i certificate.p12 | pbcopy`),
+   - `APPLE_CERTIFICATE_PASSWORD`: its password,
+   - `APPLE_SIGNING_IDENTITY`: the certificate's name, like `Developer ID Application: Your Name (TEAMID)`,
+   - `APPLE_ID`, `APPLE_PASSWORD` (the app-specific password) and `APPLE_TEAM_ID`, for notarizing.
+
+The **Set up macOS signing** step in [`release.yml`](../.github/workflows/release.yml) passes them to the build when they are set. With a certificate but without the notarization secrets, the app is signed but not notarized, and the run warns. Once a signed release is out, remove the quarantine step from the Homebrew cask in `packaging/homebrew/kubri.rb` and the macOS hint from `.github/release-notes.md`.
+
+### Windows
+
+Without a certificate, Windows SmartScreen warns about an unknown app, and the release text says how to get past that. Open-source projects can have their builds signed for free through [SignPath Foundation](https://signpath.org/apply). Once the project is accepted, its signing step goes into the Windows builds, as [Tauri's guide](https://v2.tauri.app/distribute/sign/windows/) describes.
 
 ## Tools in the image
 
