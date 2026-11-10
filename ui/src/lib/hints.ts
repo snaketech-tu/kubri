@@ -43,6 +43,7 @@ export function viewHints(app: HintState): Hint[] {
 	if (app.page === 'portforwards') {
 		return [
 			[':', t('command')],
+			['⇧f', t('new forward')],
 			['c', t('copy url')],
 			['o', t('open')],
 			['s', t('favorite')],

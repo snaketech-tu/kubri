@@ -23,11 +23,9 @@
 	import { errorMessage } from '../format';
 	import { inputError } from '../k9s';
 	import {
-		PORT_FORWARDS_KEY,
-		annotatedForwards,
 		containerImages,
 		forwardablePorts,
-		suggestedLocalPort,
+		startingPort,
 		type ForwardablePort
 	} from '../pods';
 	import { autoscalerFor, type Autoscaler } from '../autoscale';
@@ -163,11 +161,6 @@
 	let gracePeriod = $state<number | null>(null);
 	let report = $state<DrainReport | null>(null);
 
-	function pickPort(port: number, local = suggestedLocalPort(port)) {
-		remotePort = port;
-		localPort = local;
-	}
-
 	$effect(() => {
 		if (dialog.kind === 'resources') {
 			const { target, fill } = dialog;
@@ -230,10 +223,8 @@
 						});
 					} else if (dialog.kind === 'portforward') {
 						ports = forwardablePorts(obj);
-						// The port the `k9scli.io/port-forwards` annotation names comes first, as in k9s.
-						const [wanted] = annotatedForwards(obj, PORT_FORWARDS_KEY);
-						if (wanted) pickPort(wanted.remote, wanted.local ?? suggestedLocalPort(wanted.remote));
-						else if (ports.length) pickPort(ports[0].port);
+						const start = startingPort(obj);
+						if (start) ({ remote: remotePort, local: localPort } = start);
 					} else if (dialog.kind === 'image') {
 						images = containerImages(obj);
 						newImages = Object.fromEntries(images.map((c) => [c.name, c.image]));

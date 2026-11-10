@@ -13,7 +13,8 @@
 		localPort = $bindable(),
 		address = $bindable(),
 		keep = $bindable(),
-		firstField = $bindable()
+		firstField = $bindable(),
+		intro = true
 	}: {
 		resource: ResourceInfo;
 		target: ObjectRef;
@@ -25,6 +26,8 @@
 		/** Keep the forward as a favorite. */
 		keep: boolean;
 		firstField?: HTMLInputElement | HTMLTextAreaElement;
+		/** Says what the forward goes to; off where the dialog chose it above. */
+		intro?: boolean;
 	} = $props();
 
 	function pick(port: number) {
@@ -33,7 +36,7 @@
 	}
 </script>
 
-<p><Phrase text={t('Forward a local port to {name}.')} strong={{ name: targetName(target) }} /></p>
+{#if intro}<p><Phrase text={t('Forward a local port to {name}.')} strong={{ name: targetName(target) }} /></p>{/if}
 {#if ports === null}
 	<p class="muted">{t('Loading ports…')}</p>
 {:else if ports.length}

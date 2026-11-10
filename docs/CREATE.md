@@ -78,6 +78,7 @@ An empty list of a kind you may create offers **Create** right there, and an emp
 
 ## Port-forwards that stay
 
+- **Start a port-forward…** on the port-forwards page (<kbd>Shift</kbd>+<kbd>F</kbd> there) asks for the namespace, then a deployment, StatefulSet, DaemonSet, service or pod in it, and the port. The list of a kind does the same with <kbd>Shift</kbd>+<kbd>F</kbd> on the selected row.
 - A forward to a Service or workload moves to another ready pod when its pod goes away, as after a restart or rollout. A forward straight to a pod keeps using that pod's name.
 - **Favorite** (<kbd>s</kbd> on the port-forwards page, or **Keep as a favorite** when you start one) keeps a forward in its context's settings, on the same local port.
 - The favorites of the connected context are listed under **Port-forwards** in the sidebar. Click one to start it, and click it again to stop it. A filled dot means it is running.
