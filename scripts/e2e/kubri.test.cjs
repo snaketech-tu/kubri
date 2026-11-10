@@ -135,7 +135,7 @@ describe('arrow keys', () => {
 
 	check('makes the list one Tab stop and opens the row menu with Shift+F10', async () => {
 		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods' });
-		await page.getByRole('button', { name: 'db-0', exact: true }).waitFor();
+		await page.locator('.table-wrap').getByRole('button', { name: 'db-0', exact: true }).waitFor();
 		await page.evaluate(() => document.activeElement?.blur());
 		await tabTo(() => document.activeElement?.classList.contains('table-wrap'), 'the list');
 		await page.keyboard.press('Tab');
