@@ -27,6 +27,7 @@
 				['Ctrl+F / B  or  PgDn / PgUp', t('A page down / up')],
 				['/', t('Filter: regex, !inverse, -f fuzzy, -l app=web')],
 				['[ / ]  or  Alt+← / →', t('Back / forward')],
+				['Backspace', t('Back; first closes the inspector')],
 				['-', t('Last view, and back again')],
 				['Shift+W', t('Warp to the namespace of the row')],
 				['Shift+J', t('Jump to the owner')],

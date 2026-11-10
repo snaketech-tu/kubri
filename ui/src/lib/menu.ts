@@ -76,7 +76,7 @@ export function grouped(actions: MenuAction[]): [string, MenuAction[]][] {
 
 /** The key press a hint stands for, to play it on a click; null for hints like `j/k` or `←→`. */
 export function keyFromLabel(label: string): KeyboardEventInit | null {
-	const named: Record<string, string> = { enter: 'Enter', esc: 'Escape', space: ' ', del: 'Delete', tab: 'Tab' };
+	const named: Record<string, string> = { enter: 'Enter', esc: 'Escape', space: ' ', del: 'Delete', tab: 'Tab', '⌫': 'Backspace' };
 	if (named[label]) return { key: named[label] };
 	if (label.startsWith('^')) {
 		const rest = keyFromLabel(label.slice(1));

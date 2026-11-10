@@ -222,6 +222,13 @@
 			e.preventDefault();
 			if (e.key === '-') app.toggleLast();
 			else app.go(e.key === '[' ? -1 : 1);
+		} else if (!typing && e.key === 'Backspace' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+			// Back, as in a browser; an open inspector closes first, as with Esc.
+			e.preventDefault();
+			if (app.details) {
+				app.details = null;
+				app.layout.maximized = false;
+			} else app.go(-1);
 		} else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
 			e.preventDefault();
 			app.go(e.key === 'ArrowLeft' ? -1 : 1);

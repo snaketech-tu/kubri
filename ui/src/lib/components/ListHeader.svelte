@@ -3,7 +3,9 @@
 	import { defaultColumns } from '../columns';
 	import { t } from '../i18n';
 	import type { DisplayColumn } from '../list-cells';
-	import { ALL_NAMESPACES, app, type ListScope } from '../state.svelte';
+	import { navPlace } from '../nav';
+	import { app, findResource, type ListScope } from '../state.svelte';
+	import Crumbs, { type Crumb } from './Crumbs.svelte';
 	import ColumnChooser from './ColumnChooser.svelte';
 	import Icon from './Icon.svelte';
 
@@ -38,22 +40,30 @@
 	} = $props();
 
 	let chooserOpen = $state(false);
+
+	/** The object a drill-down came from, as a step back to its list and to the object. */
+	const owner = $derived.by(() => {
+		const from = scope?.from;
+		const resource = from?.object?.resource && findResource(app.resources, from.object.resource);
+		return from && resource ? { from, resource, list: navPlace(resource).label } : null;
+	});
+
+	const trail = $derived.by((): Crumb[] => {
+		if (!scope) return [label];
+		if (owner) {
+			const { from, resource, list } = owner;
+			return [
+				{ label: list, onclick: () => app.backToOwner(from), title: t('Back to the {kind} list', { kind: resource.kind }) },
+				{ label: from.object.name, onclick: () => app.backToOwner(from, true), title: t('Describe {name}', { name: from.object.name }) },
+				label
+			];
+		}
+		return [{ label, onclick: () => (app.scope = null), title: t('Show all {kind} objects', { kind: resource.kind }) }, scope.title];
+	});
 </script>
 
 <header>
-	<nav class="crumbs" aria-label={t('Breadcrumb')}>
-		<button onclick={() => app.showPulses()} title={t('Overview')}>{app.prefs.contextName(app.cluster?.context ?? '')}</button>
-		<Icon name="next" size={12} />
-		<span>{!resource.namespaced ? t('cluster-wide') : app.namespace === ALL_NAMESPACES ? t('all namespaces') : app.namespace}</span>
-		<Icon name="next" size={12} />
-		{#if scope}
-			<button onclick={() => (app.scope = null)} title={t('Show all {kind} objects', { kind: resource.kind })}>{label}</button>
-			<Icon name="next" size={12} />
-			<span aria-current="page">{scope.title}</span>
-		{:else}
-			<span aria-current="page">{label}</span>
-		{/if}
-	</nav>
+	<Crumbs crumbs={trail} prefix={resource.namespaced ? 'namespace' : 'cluster'} />
 	<div class="heading">
 		<div class="title">
 			<h1 title="{resource.kind} · {resource.group ? `${resource.group}/` : ''}{resource.version}">{label}</h1>
@@ -122,25 +132,6 @@
 <style>
 	header {
 		padding: 20px 0 16px;
-	}
-	.crumbs {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin-bottom: 6px;
-		font-size: 12px;
-		color: var(--text-muted);
-	}
-	.crumbs button {
-		padding: 0;
-		border: none;
-		background: none;
-		color: inherit;
-		font-size: inherit;
-	}
-	.crumbs button:hover {
-		color: var(--accent-strong);
-		text-decoration: underline;
 	}
 	.heading {
 		display: flex;

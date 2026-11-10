@@ -621,6 +621,8 @@ const de: Record<string, string> = {
 	'Describe {name}': '{name} beschreiben',
 	'{column} of {name}': '{column} von {name}',
 	'Actions for {name}': 'Aktionen für {name}',
+	'Back to the {kind} list': 'Zurück zur {kind}-Liste',
+	'Back; first closes the inspector': 'Zurück; schließt zuerst den Inspektor',
 	'Actions (right click)': 'Aktionen (Rechtsklick)',
 	'Loading…': 'Lädt…',
 	'Nothing matches the filter.': 'Nichts passt zum Filter.',

@@ -44,6 +44,8 @@ export interface ListScope {
 	scope: TableScope;
 	/** Keeps only what this UID owns. */
 	ownerUid: string | null;
+	/** The object the list belongs to, and the namespace shown before, for the breadcrumb back to it. */
+	from?: { object: ObjectRef; namespace: string };
 }
 
 /** A place in Kubri, for going back and forth like k9s `[`, `]` and `-`. */

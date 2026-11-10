@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { ALL_NAMESPACES, app } from '../state.svelte';
 	import { t } from '../i18n';
 	import Select from './Select.svelte';
@@ -11,6 +12,16 @@
 			.filter(Boolean)
 			.sort()
 	);
+
+	let select = $state<ReturnType<typeof Select>>();
+	// A click on the namespace in a breadcrumb opens the list.
+	let asked = app.namespacePickRequest;
+	$effect(() => {
+		const request = app.namespacePickRequest;
+		if (request === asked) return;
+		asked = request;
+		untrack(() => select?.show());
+	});
 
 	/** The shield beside each namespace, in a context that is not production as a whole. */
 	function productionToggle(ns: string): OptionToggle | undefined {
@@ -31,6 +42,7 @@
 <label class="picker" title={t('Namespace (:ns, 0 for all)')}>
 	<span class="label">{t('Namespace')}</span>
 	<Select
+		bind:this={select}
 		bind:value={app.namespace}
 		options={[
 			{ value: ALL_NAMESPACES, label: t('All namespaces') },

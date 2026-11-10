@@ -12,12 +12,13 @@ export type Hint = [string, string];
 export type HintState = Pick<
 	AppState,
 	'connecting' | 'cluster' | 'contexts' | 'details' | 'page' | 'selected' | 'listRows' | 'scope' | 'readOnly' | 'k9s' | 'pluginView'
-> & { layout: { maximized: boolean } };
+> & { layout: { maximized: boolean }; canGoBack?: boolean };
 
 /** The keys of the view, most used first. */
 export function viewHints(app: HintState): Hint[] {
 	// The view waits under the connecting card; only cancelling works.
 	if (app.connecting && app.cluster && app.contexts.some((c) => c.name === app.connecting)) return [['esc', t('cancel')]];
+	const back: Hint = ['⌫', t('back')];
 	const panel: Hint[] = app.details ? [['f', app.layout.maximized ? t('restore') : t('maximize')], ['esc', t('close')]] : [];
 	// The log keys, while the logs are on screen.
 	if (app.details?.tab === 'logs') {
@@ -52,7 +53,7 @@ export function viewHints(app: HintState): Hint[] {
 		];
 	}
 	if (app.page === 'pulses') {
-		return [[':', t('command')], ['←→', t('move')], ['enter', t('open list')], ...panel, ['?', t('help')]];
+		return [[':', t('command')], ['←→', t('move')], ['enter', t('open list')], ...(app.canGoBack && !app.details ? [back] : []), ...panel, ['?', t('help')]];
 	}
 	if (app.page === 'xray') {
 		return [
@@ -110,7 +111,7 @@ export function viewHints(app: HintState): Hint[] {
 		];
 	}
 	// Pages without list keys of their own; the list's keys would do nothing there.
-	if (app.page !== 'resources') return [[':', t('command')], ...panel, ['?', t('help')]];
+	if (app.page !== 'resources') return [[':', t('command')], ...(app.canGoBack && !app.details ? [back] : []), ...panel, ['?', t('help')]];
 	const r = app.selected;
 	const h: Hint[] = [
 		[':', t('command')],
