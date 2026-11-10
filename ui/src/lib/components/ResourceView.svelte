@@ -1,32 +1,29 @@
 <script lang="ts">
-	import RowSpark from './RowSpark.svelte';
 	import { completedPods } from '../cleanup';
 	import { forControl } from '../keys';
-	import { tick, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { canDelete, canRestart, canScale, copyLines, saveFile } from '../actions';
-	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row, type Usage } from '../api';
-	import { age, cpu, cpuText, memory, memoryText, relative } from '../format';
-	import { units } from '../units.svelte';
-	import { limitShare, limitSuffix, limitsHint, type Measure } from '../limits';
+	import { canDelete, saveFile } from '../actions';
+	import { type MetricsKind, type ObjectRef, type ResourceInfo, type Row } from '../api';
+	import { age } from '../format';
+	import { cellOf, cellText, fitColumns, metricColumns, PRODUCTION, strains, type CellSource, type DisplayColumn } from '../list-cells';
+	import { markedActions as actionsForMarked, withCellActions } from '../list-actions';
 	import { actionFor, keyOf, type MenuAction } from '../menu';
 	import { drill, objectActions, refusedAction, type ActionOptions, type Subject } from '../objects';
 	import { isNamespaces, isNodes, isPods, isServices } from '../pods';
 	import { suggestions } from '../production';
 	import ProductionSuggestions from './ProductionSuggestions.svelte';
-	import { ALL_NAMESPACES, app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
-	import { cellTone, type Tone } from '../status';
+	import { app, refOf, type DetailsExtra, type DetailsTab, type ListScope } from '../state.svelte';
 	import { filterRows, hasHealth, isAgeColumn, isFaulty, sortRows, toCsv, type SortState } from '../table';
 	import { LiveMetrics, LiveTable } from '../watch.svelte';
 	import { navPlace } from '../nav';
-	import { columnRank, columnsFor, columnWidth, defaultColumns, isShown, kindKey, ordered, overflowing, pathsOf } from '../columns';
+	import { columnsFor, isShown, kindKey, ordered, pathsOf } from '../columns';
 	import ActionBar from './ActionBar.svelte';
-	import ColumnChooser from './ColumnChooser.svelte';
-	import Icon, { type IconName } from './Icon.svelte';
-	import { describeCron } from '../cron';
-	import { restarts } from '../format';
+	import Icon from './Icon.svelte';
+	import ListHeader from './ListHeader.svelte';
+	import ListNotices from './ListNotices.svelte';
+	import ResourceTable from './ResourceTable.svelte';
 	import { midSentence, t } from '../i18n';
-	import { coreText } from '../i18n/errors';
 
 	let {
 		resource,
@@ -65,7 +62,7 @@
 	let anchorKey = $state<string | null>(null);
 	let now = $state(Date.now());
 	let filterInput = $state<HTMLInputElement>();
-	let scroller = $state<HTMLDivElement>();
+	let list = $state<ReturnType<typeof ResourceTable>>();
 
 	const ns = $derived(resource.namespaced && namespace ? namespace : null);
 	const metricsKind = $derived<MetricsKind | null>(
@@ -77,7 +74,6 @@
 	const columnKey = $derived(kindKey(resource));
 	const columnSettings = $derived(columnsFor(columnKey, app.prefs.settings.columns, app.views.of(resource)));
 	const paths = $derived(pathsOf(columnSettings));
-	let chooserOpen = $state(false);
 
 	$effect(() =>
 		table.start(
@@ -109,71 +105,32 @@
 		return () => clearInterval(timer);
 	});
 
-	/** A column from metrics-server, with a negative index to sort by. */
-	interface MetricColumn {
-		label: string;
-		index: number;
-		wide: boolean;
-		value: (u: Usage) => number | null | undefined;
-		format: 'cpu' | 'memory' | 'percent' | 'pods';
-		/** Which k9s threshold colors a percentage. */
-		threshold?: 'cpu' | 'memory';
-	}
+	/** What the cells read: getters, so a cell redraws only when what it shows changes. */
+	const cells: CellSource = {
+		get resource() {
+			return resource;
+		},
+		get columns() {
+			return table.columns;
+		},
+		get metricsKind() {
+			return metricsKind;
+		},
+		usage: (namespace, name) => metrics.get(namespace, name),
+		trail: (namespace, name) => metrics.trail(namespace, name),
+		get now() {
+			return now;
+		},
+		get taken() {
+			return app.snapshot?.taken ?? null;
+		},
+		productionRuleOf: (name, labels) => app.productionRuleOf(name, labels),
+		get thresholds() {
+			return app.k9s?.thresholds ?? null;
+		}
+	};
+	const cell = (row: Row, name: string) => cellOf(table.columns, row, name);
 
-	const percent = (used: number, of: number | null | undefined) => (of ? Math.round((used / of) * 100) : null);
-	const free = (of: number | undefined, requested: number | undefined) =>
-		of === undefined || requested === undefined ? null : Math.max(0, of - requested);
-	const CPU: MetricColumn = { label: 'CPU', index: -2, wide: false, value: (u) => u.cpu, format: 'cpu' };
-	const MEM: MetricColumn = { label: 'Mem', index: -3, wide: false, value: (u) => u.memory, format: 'memory' };
-	// As in k9s: usage against what the containers request and may use at most, and for nodes
-	// against what they can give to pods.
-	const POD_METRICS: MetricColumn[] = [
-		CPU,
-		MEM,
-		{ label: 'CPU / request', index: -4, wide: true, value: (u) => percent(u.cpu, u.requests?.cpu), format: 'percent', threshold: 'cpu' },
-		{ label: 'CPU / limit', index: -5, wide: true, value: (u) => percent(u.cpu, u.limits?.cpu), format: 'percent', threshold: 'cpu' },
-		{ label: 'Memory / request', index: -6, wide: true, value: (u) => percent(u.memory, u.requests?.memory), format: 'percent', threshold: 'memory' },
-		{ label: 'Memory / limit', index: -7, wide: true, value: (u) => percent(u.memory, u.limits?.memory), format: 'percent', threshold: 'memory' },
-		// What the pod spec sets, summed over the containers; a limit only when every container has one.
-		{ label: 'CPU request', index: -10, wide: true, value: (u) => u.requests?.cpu, format: 'cpu' },
-		{ label: 'CPU limit', index: -11, wide: true, value: (u) => u.limits?.cpu, format: 'cpu' },
-		{ label: 'Memory request', index: -12, wide: true, value: (u) => u.requests?.memory, format: 'memory' },
-		{ label: 'Memory limit', index: -13, wide: true, value: (u) => u.limits?.memory, format: 'memory' }
-	];
-	const NODE_METRICS: MetricColumn[] = [
-		CPU,
-		{ label: '%CPU', index: -8, wide: true, value: (u) => percent(u.cpu, u.allocatable?.cpu), format: 'percent', threshold: 'cpu' },
-		MEM,
-		{ label: '%Mem', index: -9, wide: true, value: (u) => percent(u.memory, u.allocatable?.memory), format: 'percent', threshold: 'memory' },
-		// The room left for new pods: what the node gives to pods minus what its pods request. Not
-		// "free": that would read as not used, and these count requests, used or not.
-		{ label: 'CPU left', index: -14, wide: false, value: (u) => free(u.allocatable?.cpu, u.requests?.cpu), format: 'cpu' },
-		{ label: 'Mem left', index: -15, wide: false, value: (u) => free(u.allocatable?.memory, u.requests?.memory), format: 'memory' }
-	];
-
-	// What the pods of a namespace use and request, and how many of them are healthy.
-	const NAMESPACE_METRICS: MetricColumn[] = [
-		{ label: 'Pods', index: -16, wide: false, value: (u) => u.pods?.total, format: 'pods' },
-		CPU,
-		MEM,
-		{ label: 'CPU request', index: -10, wide: false, value: (u) => u.requests?.cpu, format: 'cpu' },
-		{ label: 'Memory request', index: -12, wide: false, value: (u) => u.requests?.memory, format: 'memory' }
-	];
-
-	/** Empty cells, `<none>` and `None` all read as a dash. */
-	const NOTHING = /^(|<none>|None)$/;
-
-	const TIMESTAMP = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/;
-
-	type DisplayColumn = (
-		| { kind: 'namespace'; label: string; index: -1 }
-		| { kind: 'cell'; label: string; index: number; age: boolean; name: boolean; custom: boolean }
-		| ({ kind: 'metric' } & MetricColumn)
-		| { kind: 'production'; label: string; index: typeof PRODUCTION }
-	) & { wideOnly: boolean };
-
-	/** The index the Production column of namespaces sorts by. */
-	const PRODUCTION = -20;
 	/** Namespaces show which ones get production's care, in a context that is not production as a whole. */
 	const marksProduction = $derived(isNamespaces(resource) && !!app.cluster && !app.cluster.snapshot && !app.production);
 
@@ -208,8 +165,7 @@
 		for (const [index, c] of table.columns.entries()) {
 			const isAge = isAgeColumn(c);
 			if (isAge && metricsKind) {
-				const metricColumns = metricsKind === 'nodes' ? NODE_METRICS : metricsKind === 'namespaces' ? NAMESPACE_METRICS : POD_METRICS;
-				out.push(...metricColumns.map((m) => ({ kind: 'metric' as const, ...m, wideOnly: m.wide })));
+				out.push(...metricColumns(metricsKind).map((m) => ({ kind: 'metric' as const, ...m, wideOnly: m.wide })));
 			}
 			// A custom column comes back named by its path.
 			const custom = c.format === 'jsonpath' ? columnSettings.custom.find((x) => x.path === c.name) : undefined;
@@ -239,7 +195,7 @@
 	/** A namespace with failing pods needs a look, though it is Active. */
 	const troubled = (r: Row) => isNamespaces(resource) && !!metrics.get(r.namespace, r.name)?.pods?.failed;
 	// Pods at their CPU or memory limit need a look too, though they run.
-	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r) || strains(r).length > 0 || troubled(r)));
+	const faulty = $derived(owned.filter((r) => isFaulty(table.columns, r) || strains(cells, r).length > 0 || troubled(r)));
 	/** Kinds with a state, readiness or health; Secrets or Ingresses have nothing to need attention. */
 	const healthy = $derived(hasHealth(table.columns, resource.plural));
 	const running = $derived(isPods(resource) ? owned.filter(isRunning) : []);
@@ -330,38 +286,6 @@
 		if (key && key !== untrack(() => cursorKey)) cursorKey = key;
 	});
 
-	// Long lists render only the rows in view and a few around them, so 10,000 pods stay quick.
-	const WINDOWED_FROM = 300;
-	const OVERSCAN = 20;
-	let scrollTop = $state(0);
-	let viewHeight = $state(800);
-	let rowHeight = $state(41);
-	const windowed = $derived(rows.length > WINDOWED_FROM);
-	const first = $derived(windowed ? Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN) : 0);
-	const last = $derived(
-		windowed ? Math.min(rows.length, Math.ceil((scrollTop + viewHeight) / rowHeight) + OVERSCAN) : rows.length
-	);
-	const shown = $derived(holding ? [] : windowed ? rows.slice(first, last) : rows);
-
-	// Rows are as high as the zoom and font make them.
-	$effect(() => {
-		if (!shown.length) return;
-		const height = scroller?.querySelector('tbody tr.row')?.getBoundingClientRect().height;
-		if (height) untrack(() => (rowHeight = height));
-	});
-
-	/** Scrolls the row under the cursor into view, so a command never acts on a row out of sight. */
-	function revealCursor() {
-		if (windowed && scroller) {
-			const head = scroller.querySelector('thead')?.getBoundingClientRect().height ?? 0;
-			const top = cursor * rowHeight;
-			if (top < scroller.scrollTop) scroller.scrollTop = top;
-			else if (top + rowHeight > scroller.scrollTop + scroller.clientHeight - head)
-				scroller.scrollTop = top + rowHeight - scroller.clientHeight + head;
-		}
-		return tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
-	}
-
 	// The cursor stays in view when it moves, and when a filter or sort moves the rows around it.
 	// Rows arriving from the cluster do not count: they must not pull the list away from where the user scrolled.
 	$effect(() => {
@@ -370,7 +294,7 @@
 		void filter;
 		void sort.column;
 		void sort.descending;
-		untrack(() => void revealCursor());
+		untrack(() => void list?.revealCursor());
 	});
 
 	// Plugins and hotkeys run on the row under the cursor, with its cells as shown.
@@ -379,7 +303,7 @@
 			resource: refOf(resource),
 			target: current ? target(current) : null,
 			release: null,
-			columns: current ? columns.map((c) => ({ name: c.label, value: cellText(current, c, true) })) : [],
+			columns: current ? columns.map((c) => ({ name: c.label, value: cellText(cells, current, c, true) })) : [],
 			filter
 		});
 		app.focus = focus;
@@ -466,149 +390,6 @@
 
 	const named = (wanted: string) => (name: string) => name.toLowerCase() === wanted;
 
-	function cell(row: Row, name: string): string | null {
-		const index = table.columns.findIndex((c) => c.name === name);
-		const value = index === -1 ? null : row.cells[index];
-		return value === null || value === undefined ? null : String(value);
-	}
-
-	/** CPU or memory, for the columns of what pods and nodes use, which also show their limit or allocatable. */
-	function usageColumn(column: DisplayColumn): Measure | null {
-		if (column.kind !== 'metric' || (metricsKind !== 'pods' && metricsKind !== 'nodes')) return null;
-		return column.label === 'CPU' ? 'cpu' : column.label === 'Mem' ? 'memory' : null;
-	}
-
-	/** A namespace's pods: how many are healthy of all, as the overview counts them. */
-	function podsText(row: Row): string {
-		const pods = metrics.get(row.namespace, row.name)?.pods;
-		return pods ? `${pods.ok}/${pods.total}` : '—';
-	}
-
-	function metricValue(row: Row, column: MetricColumn) {
-		const u = metrics.get(row.namespace, row.name);
-		return u ? column.value(u) : null;
-	}
-
-	/** A cell as the list shows it; `raw` keeps amounts as kubectl writes them, for the CSV. */
-	function cellText(row: Row, column: DisplayColumn, raw = false): string {
-		switch (column.kind) {
-			case 'namespace':
-				return row.namespace ?? '';
-			case 'production': {
-				const rule = app.productionRuleOf(row.name, row.labels);
-				return !rule ? '' : rule.by === 'name' ? t('Yes') : rule.rule;
-			}
-			case 'metric': {
-				if (column.format === 'pods') return podsText(row);
-				const value = metricValue(row, column);
-				if (value === null || value === undefined) return '—';
-				if (column.format === 'cpu') return raw ? cpu(value) : cpuText(value);
-				return column.format === 'memory' ? (raw ? memory(value) : memoryText(value)) : `${value}%`;
-			}
-			case 'cell': {
-				if (column.age) return age(row.created, app.snapshot?.taken ?? now);
-				const value = row.cells[column.index];
-				if (value === null || value === undefined) return '';
-				if (column.label === 'Cluster-IP' && value === 'None') return 'Headless';
-				if (column.label === 'Restarts' && typeof value === 'string' && !raw) return restarts(value);
-				// A finished pod is not "0 of 1 ready": readiness no longer applies to it.
-				if (!raw && /^ready$/i.test(column.label) && isPods(resource) && /^(Completed|Succeeded)$/.test(cell(row, 'Status') ?? '')) return '—';
-				if (column.label === 'Schedule' && resource.kind === 'CronJob') return describeCron(String(value));
-				// Yes and No read better than True and False for switches such as Suspend. Condition
-				// columns (Ready True) keep the word Kubernetes uses, and their color.
-				if (typeof value === 'boolean' || (column.label === 'Suspend' && /^(true|false)$/i.test(String(value)))) {
-					return String(value).toLowerCase() === 'true' ? t('Yes') : t('No');
-				}
-				// Times in custom columns, like a certificate's expiry, read as ages.
-				if (column.custom && typeof value === 'string' && TIMESTAMP.test(value)) return relative(value, now);
-				return String(value);
-			}
-		}
-	}
-
-	/** How close a pod is to its limit and request: red at 90 % of the limit, amber above the request. */
-	function pressure(row: Row, what: 'cpu' | 'memory'): { tone: Tone; hint: string } | null {
-		if (!isPods(resource)) return null;
-		const u = metrics.get(row.namespace, row.name);
-		if (!u) return null;
-		const used = u[what];
-		const limit = u.limits?.[what];
-		const request = u.requests?.[what];
-		if (limit && used >= limit * 0.9) {
-			const n = Math.round((used / limit) * 100);
-			return {
-				tone: 'bad',
-				hint:
-					what === 'cpu'
-						? t('At {n} % of its CPU limit: it is being throttled', { n })
-						: t('At {n} % of its memory limit: it may be killed', { n })
-			};
-		}
-		if (request && used > request) {
-			const n = Math.round((used / request) * 100);
-			return {
-				tone: 'warn',
-				hint: what === 'cpu' ? t('Using more CPU than it requests ({n} %)', { n }) : t('Using more memory than it requests ({n} %)', { n })
-			};
-		}
-		return null;
-	}
-
-	/**
-	 * What a pod's status leaves out: that it runs at its CPU limit and is throttled, or close to
-	 * its memory limit and may be stopped. Shown as a word after the status.
-	 */
-	function strains(row: Row): { label: string; hint: string }[] {
-		if (!isPods(resource)) return [];
-		const out: { label: string; hint: string }[] = [];
-		const cpuStrain = pressure(row, 'cpu');
-		if (cpuStrain?.tone === 'bad') out.push({ label: t('throttled'), hint: cpuStrain.hint });
-		const memoryStrain = pressure(row, 'memory');
-		if (memoryStrain?.tone === 'bad') out.push({ label: t('near memory limit'), hint: memoryStrain.hint });
-		return out;
-	}
-
-	/** What a column's title means, where its name alone does not say. */
-	function headerHint(column: DisplayColumn): string | undefined {
-		if (column.kind !== 'metric') return undefined;
-		if (column.label === 'CPU left' || column.label === 'Mem left') {
-			return t('What the node can still give to new pods: what it has for pods, minus what its pods request, used or not');
-		}
-		if (column.format === 'cpu' && !units.kubectl) return t('In cores');
-		return undefined;
-	}
-
-	/** Colors status cells, and percentages by the k9s thresholds. */
-	function tone(row: Row, column: DisplayColumn, text: string): Tone {
-		// A pod that finished is not "0 of 1 ready"; that is how it ends.
-		if (column.kind === 'cell' && /^ready$/i.test(column.label) && /^(Completed|Succeeded)$/.test(cell(row, 'Status') ?? '')) {
-			return '';
-		}
-		// A pod's readiness takes the color of its status, so a crashing pod is red in both.
-		if (column.kind === 'cell' && /^ready$/i.test(column.label) && isPods(resource)) {
-			const ready = cellTone(column.label, text);
-			if (ready === 'ok' || ready === '') return ready;
-			return cellTone('Status', cell(row, 'Status') ?? '') === 'bad' ? 'bad' : 'warn';
-		}
-		if (column.kind === 'cell') return cellTone(column.label, text);
-		if (column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')) {
-			return pressure(row, column.label === 'CPU' ? 'cpu' : 'memory')?.tone ?? '';
-		}
-		if (column.kind === 'metric' && column.format === 'pods') {
-			const pods = metrics.get(row.namespace, row.name)?.pods;
-			return !pods || !pods.total ? '' : pods.failed ? 'bad' : pods.warning ? 'warn' : 'ok';
-		}
-		if (column.kind !== 'metric' || !column.threshold) return '';
-		if (column.label.endsWith('/ request')) {
-			const v = metricValue(row, column);
-			return v !== null && v !== undefined && v > 100 ? 'warn' : '';
-		}
-		const value = metricValue(row, column);
-		if (value === null || value === undefined) return '';
-		const limits = app.k9s?.thresholds[column.threshold] ?? { warn: 70, critical: 90 };
-		return value >= limits.critical ? 'bad' : value >= limits.warn ? 'warn' : '';
-	}
-
 	function open(row: Row | undefined, tab: DetailsTab = 'describe', extra: DetailsExtra = {}) {
 		if (!row) return false;
 		pick(row.key);
@@ -640,15 +421,9 @@
 		app.dialog = { kind: 'delete', resource, targets: done.map(target), statuses };
 	}
 
-	/** An icon next to status words, so that the state does not hang on color alone. */
-	function statusIcon(column: DisplayColumn, tone: Tone): IconName | null {
-		if (column.kind !== 'cell' || !/^(status|phase|state)$/i.test(column.label)) return null;
-		return tone === 'ok' ? 'ok' : tone === 'warn' ? 'pending' : tone === 'bad' ? 'critical' : null;
-	}
-
 	function exportCsv() {
 		const header = columns.map((c) => c.label);
-		const lines = rows.map((r) => columns.map((c) => cellText(r, c, true)));
+		const lines = rows.map((r) => columns.map((c) => cellText(cells, r, c, true)));
 		const stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15);
 		saveFile(`${resource.plural}${ns ? `-${ns}` : ''}-${stamp}.csv`, toCsv(header, lines));
 	}
@@ -693,63 +468,16 @@
 	/** What there is to do on the marked rows together. */
 	function markedActions(chosen: Row[]): MenuAction[] {
 		if (table.stale) return [];
-		const out: MenuAction[] = [
-			{ group: 'Marked', label: t('Copy names'), keys: ['c'], primary: 0, run: () => copyLines(chosen.map((r) => r.name), (n) => t('Copied {n} names', { n })) }
-		];
-		if (resource.namespaced) {
-			out.push({
-				group: 'Marked',
-				label: t('Copy namespaces'),
-				keys: ['n'],
-				primary: 0,
-				run: () => copyLines([...new Set(chosen.map((r) => r.namespace ?? ''))], (n) => t('Copied {n} namespaces', { n }))
-			});
-		}
-		out.push(
-			{ group: 'Marked', label: t('Mark all'), keys: ['ctrl+a'], primary: 0, run: () => rows.forEach((r) => selection.add(r.key)) },
-			{ group: 'Marked', label: t('Unmark all'), keys: ['ctrl+\\'], primary: 0, run: () => selection.clear() }
-		);
-		if (marksProduction) {
-			// A setting in Kubri, so also when changes are off. Names a rule marks stay as they are.
-			const rules = chosen.map((r) => app.productionRuleOf(r.name, r.labels));
-			const unmarked = chosen.filter((_, i) => !rules[i]).map((r) => r.name);
-			const named = chosen.filter((_, i) => rules[i]?.by === 'name').map((r) => r.name);
-			if (unmarked.length) {
-				out.push({ group: 'Change', label: t('Mark {n} as production', { n: unmarked.length }), keys: [], primary: 0, run: () => void app.setProductionNamespace(unmarked, true) });
-			}
-			if (named.length) {
-				out.push({ group: 'Change', label: t('Unmark {n} as production', { n: named.length }), keys: [], primary: 0, run: () => void app.setProductionNamespace(named, false) });
-			}
-		}
-		if (writable && canScale(resource) && !isPods(resource)) {
-			out.push({
-				group: 'Change',
-				label: t('Scale {n}…', { n: chosen.length }),
-				keys: ['s'],
-				primary: 0,
-				run: () => (app.dialog = { kind: 'scaleMany', resource, targets: chosen.map(target) })
-			});
-		}
-		if (writable && canRestart(resource)) {
-			out.push({
-				group: 'Change',
-				label: t('Restart {n}…', { n: chosen.length }),
-				keys: ['r'],
-				primary: 0,
-				run: () => (app.dialog = { kind: 'restartMany', resource, targets: chosen.map(target) })
-			});
-		}
-		if (writable && canDelete(resource)) {
-			out.push({
-				group: 'Delete',
-				label: t('Delete {n}…', { n: chosen.length }),
-				keys: ['ctrl+d', 'Delete'],
-				danger: true,
-				primary: 0,
-				run: () => remove(chosen)
-			});
-		}
-		return out;
+		return actionsForMarked({
+			resource,
+			chosen,
+			marksProduction,
+			writable,
+			target,
+			markAll: () => rows.forEach((r) => selection.add(r.key)),
+			unmarkAll: () => selection.clear(),
+			remove
+		});
 	}
 
 	/** The row menu, from a right click or the row's ⋯ button. Marked rows go together. */
@@ -757,33 +485,10 @@
 		pick(row.key);
 		const marked = chosenRows();
 		const actions = selection.has(row.key) && marked.length > 1 ? markedActions(marked) : actionsFor(row, [row]);
-		// The cell's copy actions join the Copy group, after what people do most: view, connect, change.
-		const at = actions.findIndex((a) => a.group === 'Copy');
 		const withCell = column
-			? at === -1
-				? [...actions, ...copyActions(row, column)]
-				: [...actions.slice(0, at), ...copyActions(row, column), ...actions.slice(at)]
+			? withCellActions(actions, column.label, cellText(cells, row, column), () => rows.map((r) => cellText(cells, r, column)))
 			: actions;
 		app.menu = { actions: withCell, x, y, align };
-	}
-
-	/** Copying the cell right-clicked, or its whole column as the list shows it. */
-	function copyActions(row: Row, column: DisplayColumn): MenuAction[] {
-		const text = cellText(row, column);
-		return [
-			{
-				group: 'Copy',
-				label: text ? t('Copy “{text}”', { text: text.length > 32 ? `${text.slice(0, 31)}…` : text }) : t('Copy cell'),
-				keys: [],
-				run: () => copyLines([text])
-			},
-			{
-				group: 'Copy',
-				label: t('Copy the {column} column', { column: column.label }),
-				keys: [],
-				run: () => copyLines(rows.map((r) => cellText(r, column)), (n) => t('Copied {n} values', { n }))
-			}
-		];
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -935,7 +640,7 @@
 	function remove(chosen: Row[]) {
 		if (!chosen.length) return;
 		// Without marks the dialog is for the row under the cursor: bring it into view first.
-		if (!selection.size) void revealCursor();
+		if (!selection.size) void list?.revealCursor();
 		app.dialog = { kind: 'delete', resource, targets: chosen.map(target) };
 	}
 
@@ -946,133 +651,39 @@
 	const markWidth = $derived(checkWidth && checkWidth < 80 ? checkWidth : 34);
 	const hiddenColumns = $derived(table.columns.filter((c) => c.priority > 0).length);
 
-	const shownLabel = (c: DisplayColumn) => c.label.replace(/^Memory/, 'Mem');
-	const isNameColumn = (c: DisplayColumn) => c.kind === 'cell' && c.name;
 	/**
 	 * The columns drawn: those that fit the width, the least important left out first. All columns
-	 * (w) draws every one and scrolls sideways, with the names kept in view.
+	 * (w) draws every one and scrolls sideways, with the names kept in view. The mark and menu
+	 * columns at both ends take 42 pixels besides the mark's width.
 	 */
-	const fitted = $derived.by(() => {
-		if (wide || !room) return { drawn: columns, left: [] as string[], nameMax: null };
-		// The mark and menu columns at both ends.
-		const space = room - markWidth - 42;
-		// A long name is cut short before other columns go; its whole name is in the tooltip.
-		const nameMax = Math.max(200, Math.round(space * 0.4));
-		const sample = rows.slice(0, 200);
-		const fit = columns.map((c) => {
-			const rank = columnRank(c.label, c.kind, isNameColumn(c));
-			const texts = sample.map((r) => {
-				const suffix = usageColumn(c) ? limitSuffix(metrics.get(r.namespace, r.name), usageColumn(c)!) : null;
-				return suffix ? `${cellText(r, c)} ${suffix}` : cellText(r, c);
-			});
-			const width = columnWidth(shownLabel(c), texts, { mono: isNameColumn(c), icon: rank === Infinity && !isNameColumn(c), max: isNameColumn(c) ? nameMax : undefined });
-			return { label: c.label, rank, width };
-		});
-		const left = overflowing(fit, space);
-		return { drawn: columns.filter((c) => !left.includes(c.label)), left, nameMax };
-	});
+	const fitted = $derived(wide || !room ? { drawn: columns, left: [] as string[], nameMax: null } : fitColumns(cells, columns, rows, room - markWidth - 42));
 	const drawn = $derived(fitted.drawn);
 </script>
 
 <svelte:window {onkeydown} />
 
 <section>
-	<header>
-		<nav class="crumbs" aria-label={t('Breadcrumb')}>
-			<button onclick={() => app.showPulses()} title={t('Overview')}>{app.prefs.contextName(app.cluster?.context ?? '')}</button>
-			<Icon name="next" size={12} />
-			<span>{!resource.namespaced ? t('cluster-wide') : app.namespace === ALL_NAMESPACES ? t('all namespaces') : app.namespace}</span>
-			<Icon name="next" size={12} />
-			{#if scope}
-				<button onclick={() => (app.scope = null)} title={t('Show all {kind} objects', { kind: resource.kind })}>{place.label}</button>
-				<Icon name="next" size={12} />
-				<span aria-current="page">{scope.title}</span>
-			{:else}
-				<span aria-current="page">{place.label}</span>
-			{/if}
-		</nav>
-		<div class="heading">
-			<div class="title">
-				<h1 title="{resource.kind} · {resource.group ? `${resource.group}/` : ''}{resource.version}">{place.label}</h1>
-				<span class="count">{owned.length}</span>
-				{#if app.cluster}
-					{@const pin = app.pins.of(resource)}
-					<button
-						class="pin"
-						class:on={app.pins.has(pin)}
-						aria-pressed={app.pins.has(pin)}
-						onclick={() => app.pins.toggle(pin)}
-						title={app.pins.has(pin) ? t('Unpin from the sidebar') : t('Pin this list to the sidebar')}
-						aria-label={app.pins.has(pin) ? t('Unpin from the sidebar') : t('Pin to the sidebar')}
-					>
-						<Icon name="bookmark" size={16} />
-					</button>
-				{/if}
-				{#if scope}
-					<span class="chip">
-						{scope.title}
-						<button onclick={() => (app.scope = null)} title={t('Show all {kind} objects', { kind: resource.kind })} aria-label={t('Show all')}>×</button>
-					</span>
-				{/if}
-			</div>
-			<div class="tools">
-				{#if hiddenColumns || fitted.left.length || wide}
-					<button
-						class="toggle"
-						class:on={wide}
-						aria-pressed={wide}
-						onclick={() => (wide = !wide)}
-						title={wide ? t('Back to the columns that fit (w)') : t('Every column, scrolling sideways when they do not fit (w)')}
-					>
-						{t('All columns')}
-					</button>
-				{/if}
-				<div class="chooser">
-					<button
-						class="toggle"
-						class:on={chooserOpen}
-						aria-expanded={chooserOpen}
-						onclick={() => (chooserOpen = !chooserOpen)}
-						title={t('Choose, order and add columns for {kind} lists', { kind: resource.kind })}
-					>
-						{t('Columns')}
-					</button>
-					{#if chooserOpen}
-						<ColumnChooser
-							kind={resource.kind}
-							columns={allColumns}
-							settings={columnSettings}
-							defaults={defaultColumns(app.views.of(resource))}
-							{wide}
-							onchange={(next) => app.prefs.setColumnSettings(columnKey, next)}
-							onclose={() => (chooserOpen = false)}
-						/>
-					{/if}
-				</div>
-				<button class="toggle" onclick={exportCsv} title={t('Save the list as CSV (Ctrl+S)')}>
-					<Icon name="download" size={15} /> CSV
-				</button>
-			</div>
-		</div>
-	</header>
+	<ListHeader
+		{resource}
+		{scope}
+		label={place.label}
+		count={owned.length}
+		bind:wide
+		widens={!!(hiddenColumns || fitted.left.length || wide)}
+		columns={allColumns}
+		settings={columnSettings}
+		settingsKey={columnKey}
+		onexport={exportCsv}
+	/>
 
-	{#if problem}
-		<div class="banner" role="alert">
-			<Icon name="critical" />
-			<span><strong>{problem}</strong> {table.error}</span>
-			<button onclick={() => retry++}>{t('Retry')}</button>
-		</div>
-	{/if}
-	{#if table.notice}
-		<div class="metrics-note" role="status">{coreText(table.notice)}.</div>
-	{/if}
-	{#if metricsKind && metrics.error}
-		<div class="metrics-note" role="status">
-			{metrics.available ? t('Metrics are stale') : t('Metrics are unavailable')}{metrics.updated
-				? t(', last measured {age} ago', { age: age(new Date(metrics.updated).toISOString(), now) })
-				: ''}: {coreText(metrics.error)}
-		</div>
-	{/if}
+	<ListNotices
+		{problem}
+		error={table.error}
+		notice={table.notice}
+		metrics={metricsKind ? metrics : null}
+		{now}
+		onretry={() => retry++}
+	/>
 
 	{#if productionHints.length && app.cluster}
 		{@const context = app.cluster.context}
@@ -1133,203 +744,52 @@
 			{/if}
 		</div>
 
-		<div
-			class="table-wrap"
-			bind:this={scroller}
-			bind:clientHeight={viewHeight}
-			bind:clientWidth={room}
-			onscroll={() => (scrollTop = scroller?.scrollTop ?? 0)}
+		<ResourceTable
+			bind:this={list}
+			bind:checkWidth
+			bind:room
+			{rows}
+			columns={drawn}
+			{cells}
+			{cursor}
+			{selection}
+			{sort}
+			nameMax={fitted.nameMax}
+			{markWidth}
+			stale={table.stale}
+			{holding}
+			onpick={(row) => pick(row.key)}
+			onenter={(row) => void enter(row)}
+			onopen={(row) => open(row)}
+			onmark={toggleMark}
+			onmenu={openMenu}
+			onsort={(index) => sortBy(index)}
 		>
-			<table class:stale={table.stale} aria-rowcount={windowed ? rows.length + 1 : undefined} style:--check-width="{markWidth}px">
-				<thead>
-					<tr>
-						<th class="check" bind:offsetWidth={checkWidth}></th>
-						{#each drawn as column (column.label + column.index)}
-							<th
-								class:numeric={column.kind === 'metric'}
-								class:name={isNameColumn(column)}
-								class:sorted={sort.column === column.index}
-								aria-sort={sort.column === column.index ? (sort.descending ? 'descending' : 'ascending') : 'none'}
-							>
-								<button class="sort" onclick={() => sortBy(column.index)} title={headerHint(column)}>
-									{shownLabel(column)}
-									<span class="arrow" aria-hidden="true">
-										{sort.column === column.index ? (sort.descending ? '↓' : '↑') : '↕'}
-									</span>
-								</button>
-							</th>
-						{/each}
-						<th class="more" aria-label={t('Actions')}></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#if first > 0}
-						<tr class="spacer" aria-hidden="true" style:height="{first * rowHeight}px"><td colspan={drawn.length + 2}></td></tr>
-					{/if}
-					{#each shown as row, j (row.key)}
-						{@const i = first + j}
-						<tr
-							class="row"
-							aria-rowindex={windowed ? i + 2 : undefined}
-							class:cursor={i === cursor}
-							class:checked={selection.has(row.key)}
-							onclick={() => pick(row.key)}
-							ondblclick={() => enter(row)}
-							oncontextmenu={(e) => {
-								e.preventDefault();
-								openMenu(row, e.clientX, e.clientY);
-							}}
-							onmousedown={(e) => {
-								// A double click opens the row; it should not also select a word. Dragging still selects.
-								if (e.detail > 1) e.preventDefault();
-							}}
-						>
-							<td class="check">
-								<input
-									type="checkbox"
-									aria-label={t('Mark {name}', { name: row.name })}
-									checked={selection.has(row.key)}
-									onclick={(e) => {
-										e.stopPropagation();
-										toggleMark(row);
-									}}
-								/>
-							</td>
-							{#each drawn as column (column.label + column.index)}
-								{@const raw = cellText(row, column)}
-								{@const text = column.kind === 'cell' && !column.name && NOTHING.test(raw) ? '—' : raw}
-								{@const color = tone(row, column, raw)}
-								{@const measure = usageColumn(column)}
-								{@const usage = measure ? metrics.get(row.namespace, row.name) : undefined}
-								{@const hint = column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')
-									? [pressure(row, column.label === 'CPU' ? 'cpu' : 'memory')?.hint, measure && limitsHint(usage, measure)].filter(Boolean).join('\n') || undefined
-									: undefined}
-								{@const icon = statusIcon(column, color)}
-								<td
-									oncontextmenu={(e) => {
-										e.preventDefault();
-										e.stopPropagation();
-										openMenu(row, e.clientX, e.clientY, 'left', column);
-									}}
-									class={color}
-									class:wrap={column.kind === 'cell' && column.label === 'Message'}
-									title={hint ??
-										(column.kind === 'cell' && column.label === 'Schedule' && resource.kind === 'CronJob'
-											? String(row.cells[column.index] ?? '')
-											: undefined)}
-									class:name={column.kind === 'cell' && column.name}
-									style:max-width={isNameColumn(column) && fitted.nameMax ? `${fitted.nameMax}px` : null}
-									class:muted={column.kind === 'namespace' || (column.kind === 'cell' && column.age)}
-									class:numeric={column.kind === 'metric'}
-									class:limited={measure && limitSuffix(usage, measure)}
-								>
-									{#if column.kind === 'production'}
-										{@const rule = app.productionRuleOf(row.name, row.labels)}
-										{@const byRule = !!rule && rule.by !== 'name'}
-										<button
-											class="production"
-											class:on={!!rule}
-											class:ruled={byRule}
-											aria-pressed={!!rule}
-											title={byRule
-												? t('Production by the rule {rule}. Change it in the context settings.', { rule: rule!.rule })
-												: rule
-													? t('Production: a red marker, typed names before deleting, and no changes by AI agents. Click to unmark.')
-													: t('Mark {name} as production', { name: row.name })}
-											onclick={(e) => {
-												e.stopPropagation();
-												if (byRule) {
-													app.toast(t('Production by the rule {rule}. Change it in the context settings.', { rule: rule!.rule }));
-													return;
-												}
-												const names = selection.has(row.key) && selection.size > 1 ? chosenRows().map((r) => r.name) : [row.name];
-												void app.setProductionNamespace(names, !rule);
-											}}
-											ondblclick={(e) => e.stopPropagation()}
-										>
-											<Icon name="shield" size={13} />
-											{#if rule}<span>{rule.by === 'name' ? t('Production') : rule.rule}</span>{:else}<span class="mark">{t('Mark')}</span>{/if}
-										</button>
-									{:else if column.kind === 'cell' && column.name}
-										<button
-											class="open"
-											title={t('Describe {name}', { name: row.name })}
-											onclick={(e) => {
-												e.stopPropagation();
-												open(row);
-											}}>{text}</button
-										>
-									{:else if icon}
-										<span class="status"
-											><Icon name={icon} size={15} />{text}{#each strains(row) as strain (strain.label)}<span class="strain" title={strain.hint}
-													>{strain.label}</span
-												>{/each}</span
-										>
-									{:else if column.kind === 'cell' && column.label === 'Message'}
-										<span class="clamp" title={text}>{text}</span>
-									{:else if column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')}
-										{@const trail = metrics.trail(row.namespace, row.name)}
-										{#if trail}<RowSpark
-												values={column.label === 'CPU' ? trail.cpu : trail.memory}
-												label={t('{column} of {name}', { column: column.label, name: row.name })}
-											/>{/if}<span class="reading">{text}</span>{#if measure && limitSuffix(usage, measure)}
-											{@const share = limitShare(usage, measure) ?? 0}
-											<span class="limit">{limitSuffix(usage, measure)}</span><span
-												class="fill"
-												class:full={share >= 0.9}
-												style:--share="{Math.round(share * 100)}%"
-												aria-hidden="true"
-											></span>
-										{/if}
-									{:else}
-										{text}
-									{/if}
-								</td>
-							{/each}
-							<td class="more">
-								<button
-									aria-label={t('Actions for {name}', { name: row.name })}
-									title={t('Actions (right click)')}
-									onclick={(e) => {
-										e.stopPropagation();
-										const rect = e.currentTarget.getBoundingClientRect();
-										openMenu(row, rect.right, rect.bottom + 4, 'right');
-									}}
-									ondblclick={(e) => e.stopPropagation()}>⋯</button
-								>
-							</td>
-						</tr>
-					{/each}
-					{#if last < rows.length}
-						<tr class="spacer" aria-hidden="true" style:height="{(rows.length - last) * rowHeight}px"
-							><td colspan={drawn.length + 2}></td></tr
-						>
-					{/if}
-				</tbody>
-			</table>
-			{#if table.loading || (holding && rows.length)}
-				<p class="empty">{t('Loading…')}</p>
-			{:else if rows.length === 0 && !problem}
-				<p class="empty">
-					{filter
-						? t('Nothing matches the filter.')
-						: faults
-							? t('Nothing needs a look.')
-							: runningOnly
-								? t('No pods are running.')
-								: scope
-									? t('No {what}.', { what: scope.title })
-									: ns
-										? t('No {kind} objects in {namespace}.', { kind: resource.kind, namespace: ns })
-										: t('No {kind} objects.', { kind: resource.kind })}
-				</p>
-				{#if !filter && !faults && !runningOnly && !scope && resource.verbs.includes('create') && !app.readOnly && !app.cluster?.snapshot}
-					<p class="empty-action">
-						<button onclick={() => app.showCreate(resource)}>{t('Create {kind}…', { kind: resource.kind })}</button>
+			{#snippet after()}
+				{#if table.loading || (holding && rows.length)}
+					<p class="empty">{t('Loading…')}</p>
+				{:else if rows.length === 0 && !problem}
+					<p class="empty">
+						{filter
+							? t('Nothing matches the filter.')
+							: faults
+								? t('Nothing needs a look.')
+								: runningOnly
+									? t('No pods are running.')
+									: scope
+										? t('No {what}.', { what: scope.title })
+										: ns
+											? t('No {kind} objects in {namespace}.', { kind: resource.kind, namespace: ns })
+											: t('No {kind} objects.', { kind: resource.kind })}
 					</p>
+					{#if !filter && !faults && !runningOnly && !scope && resource.verbs.includes('create') && !app.readOnly && !app.cluster?.snapshot}
+						<p class="empty-action">
+							<button onclick={() => app.showCreate(resource)}>{t('Create {kind}…', { kind: resource.kind })}</button>
+						</p>
+					{/if}
 				{/if}
-			{/if}
-		</div>
+			{/snippet}
+		</ResourceTable>
 		<div class="foot">
 			<span>{t('{n} of {total} {kinds}', { n: rows.length, total: owned.length, kinds: midSentence(place.label) })}</span>
 			{#if table.stale}<span class="updating">{t('— updating…')}</span>{/if}
@@ -1347,48 +807,6 @@
 </section>
 
 <style>
-	button.production {
-		display: inline-flex;
-		align-items: center;
-		gap: 5px;
-		max-width: 100%;
-		padding: 2px 9px 2px 7px;
-		border: 1px solid transparent;
-		border-radius: 999px;
-		background: none;
-		color: var(--text-muted);
-		font-size: 12px;
-		font-weight: 500;
-		white-space: nowrap;
-	}
-	button.production span {
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	/* Unmarked rows show only the shield until the row is pointed at, so the column stays calm. */
-	button.production .mark {
-		opacity: 0;
-	}
-	tr:hover button.production .mark,
-	tr.cursor button.production .mark,
-	button.production:focus-visible .mark {
-		opacity: 1;
-	}
-	button.production:not(.on):hover {
-		border-color: var(--border);
-		color: var(--text);
-	}
-	button.production.on {
-		background: color-mix(in srgb, var(--bad) 12%, var(--surface-1));
-		color: var(--bad);
-	}
-	button.production.ruled {
-		background: none;
-		border-color: color-mix(in srgb, var(--bad) 30%, var(--border));
-	}
-	button.production.on:not(.ruled):hover {
-		border-color: color-mix(in srgb, var(--bad) 40%, transparent);
-	}
 	.choose {
 		font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 		font-size: 13px;
@@ -1400,9 +818,6 @@
 		font-family: var(--mono);
 		font-size: 11px;
 	}
-	table.stale tbody {
-		opacity: 0.55;
-	}
 	.updating {
 		color: var(--text-muted);
 	}
@@ -1412,173 +827,6 @@
 		min-height: 0;
 		min-width: 0;
 		padding: 0 24px 20px;
-	}
-	header {
-		padding: 20px 0 16px;
-	}
-	.crumbs {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin-bottom: 6px;
-		font-size: 12px;
-		color: var(--text-muted);
-	}
-	.crumbs button {
-		padding: 0;
-		border: none;
-		background: none;
-		color: inherit;
-		font-size: inherit;
-	}
-	.crumbs button:hover {
-		color: var(--accent-strong);
-		text-decoration: underline;
-	}
-	.heading {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px 16px;
-	}
-	.title {
-		display: flex;
-		align-items: baseline;
-		gap: 10px;
-		min-width: 0;
-	}
-	h1 {
-		margin: 0;
-		font-size: 26px;
-		letter-spacing: -0.03em;
-	}
-	.count {
-		font-size: 18px;
-		font-weight: 600;
-		color: var(--text-muted);
-	}
-	.chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		padding: 1px 4px 1px 9px;
-		border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--accent) 10%, transparent);
-		color: var(--accent-strong);
-		font-size: 12px;
-		font-weight: 600;
-		white-space: nowrap;
-	}
-	.chip button {
-		padding: 0 4px;
-		border: none;
-		border-radius: 999px;
-		background: none;
-		color: inherit;
-		font-size: 14px;
-		line-height: 1;
-	}
-	.pin {
-		display: inline-flex;
-		padding: 4px;
-		border: none;
-		border-radius: 6px;
-		background: none;
-		color: var(--text-muted);
-	}
-	.pin:hover {
-		background: var(--surface-2);
-	}
-	.pin.on {
-		color: var(--accent);
-	}
-	.pin.on :global(path) {
-		fill: currentColor;
-	}
-	.chip button:hover {
-		background: color-mix(in srgb, currentColor 15%, transparent);
-	}
-	.tools {
-		display: flex;
-		gap: 8px;
-	}
-	.toggle {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 6px 12px;
-		border: 1px solid var(--border);
-		border-radius: 7px;
-		background: var(--surface-1);
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.toggle:hover {
-		border-color: var(--text-muted);
-	}
-	.toggle.on {
-		border-color: var(--accent);
-		color: var(--accent-strong);
-	}
-	.banner {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 10px;
-		margin-bottom: 12px;
-		padding: 10px 14px;
-		border: 1px solid color-mix(in srgb, var(--bad) 30%, var(--border));
-		border-radius: 8px;
-		background: color-mix(in srgb, var(--bad) 8%, var(--surface-1));
-		color: var(--bad);
-		font-size: 13px;
-	}
-	.banner span {
-		flex: 1;
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.banner button {
-		padding: 5px 12px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		color: var(--text);
-		font-weight: 600;
-	}
-	.reading {
-		display: inline-block;
-		min-width: 4.5ch;
-		text-align: right;
-	}
-	/* What the pod may use at most, after its use, and how full that is as a thin bar. */
-	.limit {
-		margin-left: 0.4ch;
-		color: var(--text-muted);
-		font-size: 0.92em;
-	}
-	td.limited {
-		position: relative;
-	}
-	.fill {
-		position: absolute;
-		left: 8px;
-		right: 8px;
-		bottom: 5px;
-		height: 2px;
-		border-radius: 1px;
-		background: linear-gradient(to right, var(--fill-color) var(--share), var(--border-subtle) var(--share));
-		--fill-color: color-mix(in srgb, var(--text-muted) 70%, transparent);
-	}
-	.fill.full {
-		--fill-color: var(--bad);
-	}
-	.metrics-note {
-		margin-bottom: 12px;
-		font-size: 12px;
-		color: var(--text-muted);
 	}
 	.card {
 		display: flex;
@@ -1643,9 +891,6 @@
 	.tabs button:hover {
 		color: var(--text);
 	}
-	.chooser {
-		position: relative;
-	}
 	.tabs button[aria-selected='true'] {
 		border-bottom-color: var(--accent);
 		color: var(--accent-strong);
@@ -1669,218 +914,6 @@
 		border-bottom: 1px solid var(--border-subtle);
 		border-radius: 0;
 		padding: 6px 12px;
-	}
-	.table-wrap {
-		flex: 1;
-		min-height: 0;
-		overflow: auto;
-	}
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 13px;
-	}
-	th {
-		position: sticky;
-		top: 0;
-		z-index: 1;
-		padding: 0 8px;
-		background: var(--surface-1);
-		border-bottom: 1px solid var(--border);
-		text-align: left;
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--text-muted);
-		white-space: nowrap;
-	}
-	.sort {
-		display: inline-flex;
-		align-items: center;
-		gap: 3px;
-		padding: 9px 0;
-		border: none;
-		background: none;
-		color: inherit;
-		font: inherit;
-	}
-	th:hover,
-	th.sorted {
-		color: var(--text);
-	}
-	.arrow {
-		font-size: 10px;
-		opacity: 0.45;
-	}
-	th.sorted .arrow {
-		opacity: 1;
-	}
-	th.numeric .sort {
-		flex-direction: row-reverse;
-	}
-	.spacer td {
-		height: auto;
-		padding: 0;
-		border: none;
-	}
-	td {
-		height: 40px;
-		padding: 4px 8px;
-		border-bottom: 1px solid var(--border-subtle);
-		white-space: nowrap;
-		max-width: 420px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.check {
-		width: 34px;
-		padding: 0 0 0 14px;
-	}
-	/* The marks stay in sight, quieter until the row is pointed at, chosen or marked. */
-	.check input {
-		opacity: 0.45;
-		margin: 0;
-	}
-	.check input:focus-visible {
-		opacity: 1;
-	}
-	.more {
-		width: 40px;
-		padding: 2px 10px 2px 6px;
-		text-align: right;
-	}
-	.more button {
-		width: 26px;
-		height: 24px;
-		padding: 0;
-		border: 1px solid transparent;
-		border-radius: 6px;
-		background: none;
-		color: var(--text-muted);
-		font-size: 15px;
-		line-height: 1;
-		opacity: 0;
-	}
-	tr:hover .more button,
-	tr.cursor .more button,
-	.more button:focus-visible {
-		opacity: 1;
-	}
-	.more button:hover {
-		border-color: var(--border);
-		background: var(--surface-2);
-		color: var(--text);
-	}
-	tr:hover .check input,
-	tr.cursor .check input,
-	tr.checked .check input {
-		opacity: 1;
-	}
-	tbody tr {
-		cursor: default;
-	}
-	tbody tr.row:hover {
-		background: color-mix(in srgb, var(--surface-2) 55%, transparent);
-	}
-	tbody tr.checked {
-		background: color-mix(in srgb, var(--accent) 7%, transparent);
-	}
-	tbody tr.cursor {
-		background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
-	}
-	/* The mark and the name stay in view when the list scrolls sideways, so each row keeps its name. */
-	.check,
-	th.name,
-	td.name {
-		position: sticky;
-		z-index: 1;
-		background: var(--surface-1);
-	}
-	.check {
-		left: 0;
-	}
-	th.name,
-	td.name {
-		left: var(--check-width, 34px);
-	}
-	th.check,
-	th.name {
-		z-index: 2;
-	}
-	tbody tr.row:hover :is(td.check, td.name) {
-		background: color-mix(in srgb, var(--surface-2) 55%, var(--surface-1));
-	}
-	tbody tr.checked :is(td.check, td.name) {
-		background: color-mix(in srgb, var(--accent) 7%, var(--surface-1));
-	}
-	tbody tr.cursor :is(td.check, td.name) {
-		background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
-	}
-	tbody tr.cursor td.check {
-		box-shadow: inset 3px 0 0 var(--accent);
-	}
-	.open {
-		max-width: 100%;
-		padding: 0;
-		border: none;
-		background: none;
-		color: var(--text);
-		font: inherit;
-		font-weight: 600;
-		text-align: left;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.open:hover {
-		color: var(--accent-strong);
-		text-decoration: underline;
-	}
-	td.name {
-		font-family: var(--mono);
-		font-size: 12.5px;
-	}
-	/* Event messages take two lines instead of one long line; the title has all of it. */
-	td.wrap {
-		min-width: 260px;
-		max-width: 520px;
-	}
-	td.wrap .clamp {
-		white-space: normal;
-		overflow: hidden;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-		line-height: 1.3;
-	}
-	.status {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-	}
-	.strain {
-		padding: 0 6px;
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--bad) 14%, transparent);
-		color: var(--bad);
-		font-size: 11.5px;
-		font-weight: 600;
-		white-space: nowrap;
-	}
-	.muted {
-		color: var(--text-muted);
-	}
-	.numeric {
-		text-align: right;
-		font-variant-numeric: tabular-nums;
-	}
-	.ok {
-		color: var(--ok);
-	}
-	.warn {
-		color: var(--warn);
-	}
-	.bad {
-		color: var(--bad);
 	}
 	.end {
 		display: inline-flex;
