@@ -11,7 +11,7 @@
 ARG KUBECTL_VERSION=v1.37.2
 ARG HELM_VERSION=v4.3.1
 
-FROM --platform=$BUILDPLATFORM node:22-trixie-slim AS ui
+FROM --platform=$BUILDPLATFORM node:26-trixie-slim AS ui
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 WORKDIR /src/ui
