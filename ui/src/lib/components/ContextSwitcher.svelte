@@ -13,7 +13,7 @@
 	const filtered = $derived(
 		switcherOrder(
 			app.contexts.filter((c) =>
-				[c.name, app.contextName(c.name), app.contextSettingsOf(c.name).label].some((text) =>
+				[c.name, app.prefs.contextName(c.name), app.prefs.contextSettingsOf(c.name).label].some((text) =>
 					text.toLowerCase().includes(query.toLowerCase())
 				)
 			),
@@ -76,7 +76,7 @@
 		<span class="label">
 			<span class="meta">{app.connecting ? (app.contexts.some((c) => c.name === app.connecting) ? t('Connecting…') : t('Opening…')) : app.snapshot ? t('Snapshot') : t('Context')}</span>
 			<span class="name">
-				{app.connecting ? app.contextName(app.connecting) : app.cluster ? app.contextName(app.cluster.context) : t('No context')}
+				{app.connecting ? app.prefs.contextName(app.connecting) : app.cluster ? app.prefs.contextName(app.cluster.context) : t('No context')}
 			</span>
 		</span>
 		{#if app.cluster && app.production && !app.connecting}<ProductionBadge what="context" />{/if}
@@ -92,7 +92,7 @@
 			</div>
 			<ul>
 				{#each filtered as ctx (ctx.name)}
-					{@const settings = app.contextSettingsOf(ctx.name)}
+					{@const settings = app.prefs.contextSettingsOf(ctx.name)}
 					{@const known = reach.of[ctx.name]}
 					<li>
 						<button
@@ -103,7 +103,7 @@
 						>
 							<span class="name">
 								{#if settings.color}<span class="swatch" style:background={settings.color}></span>{/if}
-								{app.contextName(ctx.name)}
+								{app.prefs.contextName(ctx.name)}
 								{#if settings.production}<span class="badge production">{t('production')}</span>
 								{:else if settings.label}<span class="badge">{settings.label}</span>{/if}
 								{#if ctx.name === app.previousContext && ctx.name !== app.cluster?.context}<span class="badge">{t('previous')}</span>{/if}

@@ -26,10 +26,10 @@
 		creating.into = into === app.cluster?.context ? null : into;
 	});
 	const elsewhere = $derived(!!into && into !== app.cluster?.context);
-	const production = $derived(into ? app.contextSettingsOf(into).production : app.production);
+	const production = $derived(into ? app.prefs.contextSettingsOf(into).production : app.production);
 	/** The namespace to apply in is marked as production, in a context that is not. */
 	const productionNamespace = $derived(
-		!production && !!productionRule(app.contextSettingsOf(into || app.cluster?.context), namespace, into ? undefined : app.namespaceLabels[namespace])
+		!production && !!productionRule(app.prefs.contextSettingsOf(into || app.cluster?.context), namespace, into ? undefined : app.namespaceLabels[namespace])
 	);
 	let busy = $state(false);
 	let error = $state<string | null>(null);
@@ -281,7 +281,7 @@
 					<span>{elsewhere ? t('Context (not the current one)') : t('Context')}</span>
 					<Select
 						bind:value={into}
-						options={app.contexts.map((c) => ({ value: c.name, label: app.contextName(c.name) }))}
+						options={app.contexts.map((c) => ({ value: c.name, label: app.prefs.contextName(c.name) }))}
 						title={t('The cluster to create the objects in')}
 						aria-label={t('Create in context')}
 						compact
@@ -339,13 +339,13 @@
 				<strong>{applied ? t('Applied') : t('Dry run')}</strong>
 				<span class="muted">
 					{#if applied}
-						{t('in {context}', { context: app.contextName(into) })}
+						{t('in {context}', { context: app.prefs.contextName(into) })}
 					{:else}
 						{plural(
 							results.length,
 							'{n} object checked by the API server in {context}; nothing has changed yet',
 							'{n} objects checked by the API server in {context}; nothing has changed yet',
-							{ context: app.contextName(into) }
+							{ context: app.prefs.contextName(into) }
 						)}
 					{/if}
 				</span>
@@ -374,7 +374,7 @@
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		<div class="buttons">
 			{#if !results}
-				{#if production}<span class="note"><Icon name="warning" size={14} /> {t('{context} is a production context', { context: app.contextName(into) })}</span>
+				{#if production}<span class="note"><Icon name="warning" size={14} /> {t('{context} is a production context', { context: app.prefs.contextName(into) })}</span>
 				{:else if productionNamespace}<span class="note"><Icon name="warning" size={14} /> {t('{namespace} is a production namespace', { namespace })}</span>{/if}
 				<button class="secondary" onclick={startOver} disabled={busy || !creating.text}>{t('Clear')}</button>
 				<button class="primary" onclick={() => review()} disabled={busy || !creating.text.trim()}>{busy ? t('Checking…') : t('Review')} <kbd>Ctrl+S</kbd></button>

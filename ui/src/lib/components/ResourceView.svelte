@@ -75,7 +75,7 @@
 
 	/** How this kind's list shows its columns, from the settings. */
 	const columnKey = $derived(kindKey(resource));
-	const columnSettings = $derived(columnsFor(columnKey, app.settings.columns, app.viewOf(resource)));
+	const columnSettings = $derived(columnsFor(columnKey, app.prefs.settings.columns, app.views.of(resource)));
 	const paths = $derived(pathsOf(columnSettings));
 	let chooserOpen = $state(false);
 
@@ -858,7 +858,7 @@
 						return true;
 					case 'f':
 						if (!app.details) return false;
-						app.maximized = !app.maximized;
+						app.layout.maximized = !app.layout.maximized;
 						return true;
 					case ' ':
 						if (current) {
@@ -904,7 +904,7 @@
 					case 'Escape':
 						if (app.details) {
 							app.details = null;
-							app.maximized = false;
+							app.layout.maximized = false;
 						} else if (selection.size) selection.clear();
 						else if (filter) filter = '';
 						else if (faults || runningOnly) showTab('all');
@@ -926,7 +926,7 @@
 			}
 			// Read-only leaves the change keys out; say so instead of doing nothing.
 			const refused = current && !table.stale ? refusedAction(subject(current), actionOptions(current, chosen), key) : undefined;
-			if (refused) app.explainReadOnly(refused.label);
+			if (refused) app.rails.explainReadOnly(refused.label);
 			return !!refused;
 		})();
 		if (handled) e.preventDefault();
@@ -979,7 +979,7 @@
 <section>
 	<header>
 		<nav class="crumbs" aria-label={t('Breadcrumb')}>
-			<button onclick={() => app.showPulses()} title={t('Overview')}>{app.contextName(app.cluster?.context ?? '')}</button>
+			<button onclick={() => app.showPulses()} title={t('Overview')}>{app.prefs.contextName(app.cluster?.context ?? '')}</button>
 			<Icon name="next" size={12} />
 			<span>{!resource.namespaced ? t('cluster-wide') : app.namespace === ALL_NAMESPACES ? t('all namespaces') : app.namespace}</span>
 			<Icon name="next" size={12} />
@@ -996,14 +996,14 @@
 				<h1 title="{resource.kind} · {resource.group ? `${resource.group}/` : ''}{resource.version}">{place.label}</h1>
 				<span class="count">{owned.length}</span>
 				{#if app.cluster}
-					{@const pin = app.pinFor(resource)}
+					{@const pin = app.pins.of(resource)}
 					<button
 						class="pin"
-						class:on={app.isPinned(pin)}
-						aria-pressed={app.isPinned(pin)}
-						onclick={() => app.togglePin(pin)}
-						title={app.isPinned(pin) ? t('Unpin from the sidebar') : t('Pin this list to the sidebar')}
-						aria-label={app.isPinned(pin) ? t('Unpin from the sidebar') : t('Pin to the sidebar')}
+						class:on={app.pins.has(pin)}
+						aria-pressed={app.pins.has(pin)}
+						onclick={() => app.pins.toggle(pin)}
+						title={app.pins.has(pin) ? t('Unpin from the sidebar') : t('Pin this list to the sidebar')}
+						aria-label={app.pins.has(pin) ? t('Unpin from the sidebar') : t('Pin to the sidebar')}
 					>
 						<Icon name="bookmark" size={16} />
 					</button>
@@ -1042,9 +1042,9 @@
 							kind={resource.kind}
 							columns={allColumns}
 							settings={columnSettings}
-							defaults={defaultColumns(app.viewOf(resource))}
+							defaults={defaultColumns(app.views.of(resource))}
 							{wide}
-							onchange={(next) => app.setColumnSettings(columnKey, next)}
+							onchange={(next) => app.prefs.setColumnSettings(columnKey, next)}
 							onclose={() => (chooserOpen = false)}
 						/>
 					{/if}

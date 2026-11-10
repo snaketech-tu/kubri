@@ -93,7 +93,7 @@
 			<button class="secondary" onclick={() => backend.openUrl(release.url)}>{t('Open the download page')}</button>
 			<button class="primary" onclick={install}>{t('Try again')}</button>
 		{:else}
-			<button class="secondary" onclick={() => app.dismissRelease()} disabled={busy}>{t('Skip this version')}</button>
+			<button class="secondary" onclick={() => app.releases.dismiss()} disabled={busy}>{t('Skip this version')}</button>
 			<button class="secondary" onclick={later} disabled={busy}>{t('Later')}</button>
 			<button class="primary" onclick={install} disabled={busy} bind:this={primary}>{busy ? t('Updating…') : t('Update and restart')}</button>
 		{/if}

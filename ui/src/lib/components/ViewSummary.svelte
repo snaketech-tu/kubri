@@ -8,7 +8,7 @@
 
 	let { object, resource, now }: { object: KubeObject; resource: ResourceInfo; now: number } = $props();
 
-	const view = $derived(app.viewOf(resource));
+	const view = $derived(app.views.of(resource));
 	let rendered = $state<RenderedView | null>(null);
 
 	// Rendered again when the object changes, since health and fields follow its status.

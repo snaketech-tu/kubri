@@ -19,7 +19,7 @@
 	/** The pod's containers; debug containers aim at one of them. */
 	let containers = $state<string[]>([]);
 	let container = $state(d.container ?? '');
-	let image = $state(untrack(() => app.settings.debug.image) || 'busybox');
+	let image = $state(untrack(() => app.prefs.settings.debug.image) || 'busybox');
 	let namespace = $state('default');
 	let busy = $state(false);
 	let error = $state<string | null>(null);
@@ -62,7 +62,7 @@
 		error = null;
 		try {
 			const session = await backend.debug(request());
-			if (d.on === 'node' || way === 'ephemeral') app.settings.debug.image = image.trim();
+			if (d.on === 'node' || way === 'ephemeral') app.prefs.settings.debug.image = image.trim();
 			const pods = findResource(app.resources, { group: '', version: 'v1', plural: 'pods' });
 			app.dialog = null;
 			if (pods) app.showDetails(pods, session.pod, 'shell', { mode: session.mode, container: session.container });

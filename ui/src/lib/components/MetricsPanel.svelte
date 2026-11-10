@@ -40,7 +40,7 @@
 		}
 	}
 
-	const prometheus = $derived(app.has('prometheus'));
+	const prometheus = $derived(app.integrations.has('prometheus'));
 
 	$effect(() => {
 		void target;
@@ -64,7 +64,7 @@
 </script>
 
 <div class="metrics">
-	{#if app.has('grafana')}
+	{#if app.integrations.has('grafana')}
 		<DashboardList {target} />
 	{/if}
 	{#if prometheus}

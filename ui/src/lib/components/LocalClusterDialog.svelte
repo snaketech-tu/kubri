@@ -41,7 +41,7 @@
 	$effect(() => {
 		if (!run || !element || !tool) return;
 		const request = untrack(() => ({ tool: tool!, command: chosen?.command ?? tool! }));
-		const { fontSize, fontFamily } = untrack(() => app.settings.terminal ?? { fontSize: 13, fontFamily: '' });
+		const { fontSize, fontFamily } = untrack(() => app.prefs.settings.terminal ?? { fontSize: 13, fontFamily: '' });
 		return mountTerminal(
 			element,
 			(term) => {

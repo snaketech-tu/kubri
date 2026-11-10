@@ -78,7 +78,7 @@
 			}
 		};
 		const loadHistory = async () => {
-			if (!app.has('prometheus')) return;
+			if (!app.integrations.has('prometheus')) return;
 			try {
 				const history = await backend.usageHistory(ns, HOUR / 1000);
 				if (cancelled) return;
@@ -230,11 +230,11 @@
 				case 'Escape':
 					if (!app.details) return false;
 					app.details = null;
-					app.maximized = false;
+					app.layout.maximized = false;
 					return true;
 				case 'f':
 					if (!app.details) return false;
-					app.maximized = !app.maximized;
+					app.layout.maximized = !app.layout.maximized;
 					return true;
 			}
 			return false;

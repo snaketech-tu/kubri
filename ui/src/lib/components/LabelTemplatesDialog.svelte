@@ -13,7 +13,7 @@
 		['container', 'container', 'k8s_container_name']
 	] as const;
 
-	let templates = $state<LabelTemplate[]>(app.settings.labelTemplates.map((x) => ({ ...x })));
+	let templates = $state<LabelTemplate[]>(app.prefs.settings.labelTemplates.map((x) => ({ ...x })));
 	/** The names the templates had when the dialog opened, to follow a rename. */
 	const originals = new Map<LabelTemplate, string>();
 	let saving = $state(false);
@@ -36,15 +36,15 @@
 		saving = true;
 		// Rows left without a name or a label are dropped, not refused.
 		const kept = templates.filter((x) => x.name.trim() || x.namespace.trim() || x.pod.trim() || x.container.trim());
-		const ok = await app.setLabelTemplates(kept);
+		const ok = await app.prefs.setLabelTemplates(kept);
 		// Contexts that picked a renamed template keep it under its new name.
 		for (const x of ok ? kept : []) {
 			const before = originals.get(x);
 			const after = x.name.trim();
 			if (!before || before === after) continue;
-			for (const [context, settings] of Object.entries(app.settings.contexts)) {
+			for (const [context, settings] of Object.entries(app.prefs.settings.contexts)) {
 				if (settings.integrations?.labels === before) {
-					await app.setContextSettings(context, { ...settings, integrations: { ...settings.integrations, labels: after } });
+					await app.prefs.setContextSettings(context, { ...settings, integrations: { ...settings.integrations, labels: after } });
 				}
 			}
 		}

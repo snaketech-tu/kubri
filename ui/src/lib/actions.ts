@@ -45,11 +45,11 @@ async function runAction(success: string, action: () => Promise<unknown>, undo?:
 	try {
 		await action();
 		app.toast(success);
-		app.record({ text: success, ok: true, undo });
+		app.activity.record({ text: success, ok: true, undo });
 		return true;
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');
-		app.record({ text: t('Failed: {what}', { what: success }), ok: false });
+		app.activity.record({ text: t('Failed: {what}', { what: success }), ok: false });
 		return false;
 	}
 }
@@ -61,7 +61,7 @@ export async function deleteObjects(resource: ResourceInfo, targets: ObjectRef[]
 	const failures = t('{failed} of {n} deletes failed', { failed: failed.length, n: targets.length });
 	if (failed.length) app.toast(t('{failures}: {error}', { failures, error: errorMessage(failed[0].reason) }), 'bad');
 	else app.toast(t('Deleted {what}', { what }));
-	app.record({ text: failed.length ? failures : t('Deleted {what}', { what }), ok: failed.length === 0 });
+	app.activity.record({ text: failed.length ? failures : t('Deleted {what}', { what }), ok: failed.length === 0 });
 	return failed.length === 0;
 }
 
@@ -195,7 +195,7 @@ export async function startPortForward(request: PortForwardRequest, keep = false
 		const f = await backend.startPortForward(request);
 		app.toast(t('Forwarding {local} to {pod}', { local: `${f.address}:${f.localPort}`, pod: `${f.pod}:${f.podPort}` }));
 		await app.refreshForwards();
-		if (keep && !app.favoriteOf(f)) await app.toggleFavorite(f);
+		if (keep && !app.favorites.of(f)) await app.favorites.toggle(f);
 		return true;
 	} catch (err) {
 		app.toast(errorMessage(err), 'bad');

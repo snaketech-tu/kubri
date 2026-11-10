@@ -21,11 +21,11 @@
 		['#6b7280', t('Gray')]
 	];
 
-	const current = $derived(app.contextSettingsOf(context));
+	const current = $derived(app.prefs.contextSettingsOf(context));
 	let custom = $state('');
 
 	function save(change: Partial<ContextSettings>) {
-		app.setContextSettings(context, { ...current, ...change });
+		app.prefs.setContextSettings(context, { ...current, ...change });
 	}
 
 	function text(field: 'displayName' | 'label' | 'namespace') {
