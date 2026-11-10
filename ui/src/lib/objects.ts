@@ -93,7 +93,7 @@ export async function drill(resource: ResourceInfo, target: ObjectRef): Promise<
 		try {
 			const found = await backend.drill(target);
 			if (found) {
-				app.drill(found);
+				app.drill(found, target);
 				return true;
 			}
 		} catch (err) {

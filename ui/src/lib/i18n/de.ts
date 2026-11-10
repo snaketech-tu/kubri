@@ -620,6 +620,8 @@ const de: Record<string, string> = {
 	'Describe {name}': '{name} beschreiben',
 	'{column} of {name}': '{column} von {name}',
 	'Actions for {name}': 'Aktionen für {name}',
+	'Back to the {kind} list': 'Zurück zur {kind}-Liste',
+	'Back; first closes the inspector': 'Zurück; schließt zuerst den Inspektor',
 	'Actions (right click, Shift+F10)': 'Aktionen (Rechtsklick, Shift+F10)',
 	'To the next area: sidebar, tabs, actions, list': 'Zum nächsten Bereich: Seitenleiste, Reiter, Aktionen, Liste',
 	'Within tabs, actions and the sidebar, once reached with Tab': 'Innerhalb von Reitern, Aktionen und Seitenleiste, sobald mit Tab erreicht',

@@ -252,6 +252,36 @@ describe('logs and shell', () => {
 	});
 });
 
+describe('back and breadcrumbs', () => {
+	const crumbs = () => page.getByRole('navigation', { name: 'Breadcrumb' });
+
+	check('leads back from a drill-down through its breadcrumbs and Backspace', async () => {
+		await h.openList(page, server.url, { resource: 'deployments.v1.apps', heading: 'Deployments', filter: 'web' });
+		await page.keyboard.press('Enter');
+		await page.getByRole('heading', { name: 'Pods', level: 1, exact: true }).waitFor();
+		// context › namespace › Deployments › web › Pods
+		await crumbs().getByRole('button', { name: 'Deployments', exact: true }).waitFor();
+		await crumbs().getByRole('button', { name: 'web', exact: true }).click();
+		await page.getByRole('heading', { name: 'Deployments', level: 1, exact: true }).waitFor();
+		await page.getByRole('heading', { name: 'web', level: 2, exact: true }).waitFor();
+
+		// Backspace closes the inspector first, then goes back.
+		await page.evaluate(() => document.activeElement?.blur());
+		await page.keyboard.press('Backspace');
+		await page.getByRole('heading', { name: 'web', level: 2, exact: true }).waitFor({ state: 'detached' });
+		await page.keyboard.press('Backspace');
+		await page.getByRole('heading', { name: 'Pods', level: 1, exact: true }).waitFor();
+	});
+
+	check('opens the namespace list from the namespace in the breadcrumb', async () => {
+		await h.openList(page, server.url, { resource: 'pods.v1', heading: 'Pods' });
+		await crumbs().getByRole('button', { name: 'e2e', exact: true }).click();
+		await page.getByRole('option', { name: 'All namespaces' }).waitFor();
+		await page.keyboard.press('Escape');
+		await page.getByRole('option', { name: 'All namespaces' }).waitFor({ state: 'detached' });
+	});
+});
+
 describe('port-forward', () => {
 	check('forwards a local port to a pod and stops again', async () => {
 		const port = await h.freePort();

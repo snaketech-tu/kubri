@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { app } from '../state.svelte';
 	import { t } from '../i18n';
 	import Icon from './Icon.svelte';
@@ -25,16 +26,21 @@
 
 	function toggle() {
 		app.contextMenuOpen = !app.contextMenuOpen;
-		query = '';
-		if (app.contextMenuOpen) {
+	}
+
+	// However it opens: this button, Ctrl+Shift+C, or the context in the Overview's breadcrumb.
+	$effect(() => {
+		if (!app.contextMenuOpen) return;
+		untrack(() => {
+			query = '';
 			queueMicrotask(() => input?.focus());
 			// Picks up contexts added to the kubeconfig since Kubri started.
 			app.reloadContexts(true);
 			// So that a context that is down says so before anyone waits for it.
 			const others = app.contexts.map((c) => c.name).filter((name) => name !== app.cluster?.context);
 			if (others.length <= CHECK_AT_MOST) void reach.refresh(others, STALE_MS);
-		}
-	}
+		});
+	});
 
 	function choose(name: string) {
 		app.contextMenuOpen = false;

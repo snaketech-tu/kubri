@@ -518,14 +518,19 @@ export class AppState {
 	}
 
 	/** Follows Enter from an object to the list of what belongs to it. */
-	drill(drill: Drill) {
+	drill(drill: Drill, from?: ObjectRef) {
 		const resource = findResource(this.resources, drill.resource);
 		if (!resource) {
 			this.toast(t('The cluster does not serve {kind}', { kind: drill.resource.plural }), 'bad');
 			return;
 		}
-		const scope = { title: drill.title, scope: drill.scope, ownerUid: drill.ownerUid };
 		const before = this.namespace;
+		const scope: ListScope = {
+			title: drill.title,
+			scope: drill.scope,
+			ownerUid: drill.ownerUid,
+			...(from && { from: { object: { resource: refOf(from.resource), namespace: from.namespace, name: from.name }, namespace: before } })
+		};
 		this.open(resource, drill.namespace ?? 'all', '', scope);
 		// What belongs to an object lives in its namespace, so the list needs it. Say so, and how to undo it.
 		if (drill.namespace && before !== drill.namespace) {
@@ -536,6 +541,21 @@ export class AppState {
 			);
 		}
 	}
+
+	/**
+	 * Back from a list of what belongs to an object to the list the object is in, with the cursor
+	 * on it, and its inspector open when `describe`.
+	 */
+	backToOwner(from: NonNullable<ListScope['from']>, describe = false) {
+		const resource = findResource(this.resources, from.object.resource);
+		if (!resource) return;
+		this.open(resource, from.namespace, '');
+		this.cursorRequest = { namespace: from.object.namespace, name: from.object.name };
+		if (describe) this.showDetails(resource, from.object);
+	}
+
+	/** Asks the namespace picker in the header to open, as a click on it does. */
+	namespacePickRequest = $state(0);
 
 	/** Shows the list of `resource` with the cursor on one object, as k9s does for owners. */
 	openAt(resource: ResourceInfo, namespace: string | null, name: string) {

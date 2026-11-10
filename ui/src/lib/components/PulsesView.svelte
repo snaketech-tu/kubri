@@ -16,6 +16,7 @@
 	import { lastLogLine } from '../lastlog';
 	import { app, findResource } from '../state.svelte';
 	import { plural, t } from '../i18n';
+	import Crumbs from './Crumbs.svelte';
 	import { nearestVertically } from '../roving';
 	import { every } from '../poll';
 	import HealthIcon from './HealthIcon.svelte';
@@ -264,11 +265,7 @@
 
 <section>
 	<header>
-		<nav class="crumbs" aria-label={t('Breadcrumb')}>
-			<span>{app.cluster?.context}</span>
-			<Icon name="next" size={12} />
-			<span>{t('Overview')}</span>
-		</nav>
+		<Crumbs crumbs={[t('Overview')]} />
 		<div class="heading">
 			<div>
 				<h1>{t('Overview')}</h1>
@@ -620,14 +617,6 @@
 	}
 	header {
 		padding: 20px 24px 16px;
-	}
-	.crumbs {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin-bottom: 6px;
-		font-size: 12px;
-		color: var(--text-muted);
 	}
 	.heading {
 		display: flex;

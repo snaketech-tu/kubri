@@ -553,7 +553,22 @@
 		<div class="title">
 			<span class="kind">{t('{kind} inspector', { kind: details.resource.kind })}</span>
 			<h2 title={details.target.name}>{details.target.name}</h2>
-			<p class="context-path">{app.cluster ? app.prefs.contextName(app.cluster.context) : ''} / {details.target.namespace ?? 'cluster-scoped'}</p>
+			<p class="context-path">
+				{#if app.cluster}
+					{@const label = app.prefs.contextName(app.cluster.context)}
+					{#if app.page === 'pulses'}
+						<button onclick={() => (app.contextMenuOpen = true)} title="{t('Switch context')} (Ctrl+Shift+C)">{label}</button>
+					{:else}
+						<button onclick={() => app.showPulses()} title={t('Overview')}>{label}</button>
+					{/if}
+					/
+				{/if}
+				{#if details.target.namespace}
+					<button onclick={() => app.namespacePickRequest++} title={t('Namespace (:ns, 0 for all)')}>{details.target.namespace}</button>
+				{:else}
+					{t('cluster-wide')}
+				{/if}
+			</p>
 			{#if status}
 				<p class="status {status.tone}">
 					<Icon name={status.tone === 'ok' ? 'ok' : status.tone === 'bad' ? 'critical' : 'pending'} size={15} />
@@ -872,6 +887,17 @@
 		font-size: 12px;
 		color: var(--text-muted);
 		overflow-wrap: anywhere;
+	}
+	.context-path button {
+		padding: 0;
+		border: none;
+		background: none;
+		color: inherit;
+		font: inherit;
+	}
+	.context-path button:hover {
+		color: var(--accent-strong);
+		text-decoration: underline;
 	}
 	.status {
 		display: flex;

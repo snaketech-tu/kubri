@@ -68,7 +68,8 @@
 		return `${id}-option-${i}`;
 	}
 
-	async function show(text = '') {
+	/** Opens the list, as a click on the box does. */
+	export async function show(text = '') {
 		if (disabled || open) return;
 		query = text;
 		active = selected >= 0 && !options[selected].disabled ? selected : edge(options, shown, false);
