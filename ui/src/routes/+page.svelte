@@ -11,7 +11,6 @@
 	import { untrack } from 'svelte';
 	import { forControl } from '#lib/keys.js';
 	import logo from '#lib/assets/logo.svg';
-	import { canDelete, canEdit, canRestart, canScale } from '#lib/actions.js';
 	import { listenForBindings } from '#lib/bindings.js';
 	import ActionDialog from '#lib/components/ActionDialog.svelte';
 	import ActionMenu from '#lib/components/ActionMenu.svelte';
@@ -22,6 +21,9 @@
 	import ContextSettingsForm from '#lib/components/ContextSettingsForm.svelte';
 	import ContextSwitcher from '#lib/components/ContextSwitcher.svelte';
 	import ConnectCard from '#lib/components/ConnectCard.svelte';
+	import ConnectPage from '#lib/components/ConnectPage.svelte';
+	import PageNotices from '#lib/components/PageNotices.svelte';
+	import StatusBar from '#lib/components/StatusBar.svelte';
 	import CreateView from '#lib/components/CreateView.svelte';
 	import DetailsPanel from '#lib/components/DetailsPanel.svelte';
 	import Dock from '#lib/components/Dock.svelte';
@@ -40,8 +42,6 @@
 	import Tour from '#lib/components/Tour.svelte';
 	import NamespacePicker from '#lib/components/NamespacePicker.svelte';
 	import PluginTerminal from '#lib/components/PluginTerminal.svelte';
-	import LocalClusterDialog from '#lib/components/LocalClusterDialog.svelte';
-	import { closeSnapshot, openDemo, retryKubeconfig } from '#lib/start.js';
 	import PortForwardsView from '#lib/components/PortForwardsView.svelte';
 	import PulsesView from '#lib/components/PulsesView.svelte';
 	import RbacView from '#lib/components/RbacView.svelte';
@@ -59,30 +59,16 @@
 	import { readOnlyFixed, readOnlyReason } from '#lib/guard.js';
 	import Toasts from '#lib/components/Toasts.svelte';
 	import XrayView from '#lib/components/XrayView.svelte';
-	import { parseShortcut, pluginApplies, shortcutLabel } from '#lib/k9s.js';
-	import { keyFromLabel } from '#lib/menu.js';
-	import {
-		canPortForward,
-		hasImages,
-		hasLogs,
-		hasUsers,
-		isCronJobs,
-		isNamespaces,
-		isNodes,
-		isPods,
-		isReplicaSets,
-		isSecrets
-	} from '#lib/pods.js';
 	import { backend } from '#lib/api/index.js';
-	import { age } from '#lib/format.js';
 	import { dock } from '#lib/dock.svelte.js';
 	import { session } from '#lib/session.svelte.js';
 	import { app } from '#lib/state.svelte.js';
 	import { LiveTable } from '#lib/watch.svelte.js';
 
 	const namespaces = new LiveTable();
-	/** The dialog that makes a cluster on this computer, from the page shown without a kubeconfig. */
-	let localClusterOpen = $state(false);
+
+	/** Keeps the focus where it is, so that the keys work on the list after a click. */
+	const keepFocus = (e: MouseEvent) => e.preventDefault();
 
 	$effect(() => {
 		// Also after signing in again, when a message from before may still be up.
@@ -250,175 +236,6 @@
 		app.go(e.button === 3 ? -1 : 1);
 	}
 
-	const viewHints = $derived.by(() => {
-		// The view waits under the connecting card; only cancelling works.
-		if (app.connecting && app.cluster && app.contexts.some((c) => c.name === app.connecting)) return [['esc', t('cancel')]] as [string, string][];
-		const panel: [string, string][] = app.details ? [['f', app.layout.maximized ? t('restore') : t('maximize')], ['esc', t('close')]] : [];
-		// The log keys, while the logs are on screen.
-		if (app.details?.tab === 'logs') {
-			return [
-				['/', t('search')],
-				['n/N', t('match')],
-				['0–6', t('range')],
-				['t', t('timestamps')],
-				['w', t('wrap')],
-				['s', t('autoscroll')],
-				['m', t('mark')],
-				['x', t('explain')],
-				['c', t('copy')],
-				['^s', t('save')],
-				...panel,
-				['?', t('help')]
-			] as [string, string][];
-		}
-		// Typing goes to the shell. The panel's keys work there as buttons, and after Esc twice.
-		if (app.details?.tab === 'shell') {
-			return [['esc esc', t('leave terminal')], ['ctrl+d', t('exit shell')], ...panel, ['?', t('help')]] as [string, string][];
-		}
-		if (app.page === 'portforwards') {
-			return [
-				[':', t('command')],
-				['c', t('copy url')],
-				['o', t('open')],
-				['s', t('favorite')],
-				['b', t('benchmark')],
-				['^d', t('stop')],
-				['?', t('help')]
-			] as [string, string][];
-		}
-		if (app.page === 'pulses') {
-			return [[':', t('command')], ['←→', t('move')], ['enter', t('open list')], ...panel, ['?', t('help')]] as [string, string][];
-		}
-		if (app.page === 'xray') {
-			return [
-				[':', t('command')],
-				['/', t('filter')],
-				['h/l', t('collapse/expand')],
-				['space', t('toggle')],
-				['enter', t('describe')],
-				...panel,
-				['?', t('help')]
-			] as [string, string][];
-		}
-		if (app.page === 'kinds') {
-			return [[':', t('command')], ['/', t('find')], ['j/k', t('move')], ['enter', t('open')], ['?', t('help')]] as [string, string][];
-		}
-		if (app.page === 'rbac') {
-			return [[':', t('command')], ['/', t('filter')], ['j/k', t('move')], ...panel, ['?', t('help')]] as [string, string][];
-		}
-		if (app.page === 'sanitizer') {
-			return [
-				[':', t('command')],
-				['/', t('filter')],
-				['h/l', t('collapse/expand')],
-				['enter', t('describe')],
-				['⇧e', t('explain')],
-				['⇧r', t('scan again')],
-				...panel,
-				['?', t('help')]
-			] as [string, string][];
-		}
-		if (app.page === 'create') {
-			return [[':', t('command')], ['^s', t('review')], ['esc', t('back to editing')], ['?', t('help')]] as [string, string][];
-		}
-		if (app.page === 'config') {
-			return [[':', t('command')], ['⇧r', t('reload')], ['?', t('help')]] as [string, string][];
-		}
-		if (app.page === 'benchmarks') {
-			return [[':', t('command')], ['j/k', t('move')], ['b', t('run again')], ['^d', t('stop/remove')], ['?', t('help')]] as [string, string][];
-		}
-		if (app.page === 'helm') {
-			return [
-				[':', t('command')],
-				['/', t('filter')],
-				['enter', t('open')],
-				['v', t('values')],
-				['h', t('history')],
-				['c', t('compare')],
-				['x', t('drift')],
-				['u', t('upgrade')],
-				['i', t('install')],
-				['r', t('roll back')],
-				['^d', t('uninstall')],
-				...panel,
-				['?', t('help')]
-			] as [string, string][];
-		}
-		// Pages without list keys of their own; the list's keys would do nothing there.
-		if (app.page !== 'resources') return [[':', t('command')], ...panel, ['?', t('help')]] as [string, string][];
-		const r = app.selected;
-		const h: [string, string][] = [
-			[':', t('command')],
-			['/', t('filter')],
-			['enter', t('open')],
-			['d', t('describe')],
-			['y', t('yaml')]
-		];
-		if (!r) return h;
-		// An empty list has no row for the keys to act on.
-		if (app.listRows === 0) {
-			const empty: [string, string][] = [[':', t('command')], ['/', t('filter')]];
-			if (app.scope) empty.push(['esc', t('back')]);
-			if (app.details) empty.push(['f', app.layout.maximized ? t('restore') : t('maximize')]);
-			empty.push(['?', t('help')]);
-			return empty;
-		}
-		const writable = !app.readOnly;
-		if (hasLogs(r)) h.push(['l', t('logs')]);
-		if (isPods(r) && writable) h.push(['s', t('shell')], ['a', t('attach')]);
-		if (isPods(r)) h.push(['o', t('node')]);
-		if (isSecrets(r)) h.push(['x', t('decode')]);
-		if (isNamespaces(r)) h.push(['u', t('use')]);
-		if (hasUsers(r)) h.push(['u', t('used by')]);
-		if (canPortForward(r)) h.push(['⇧f', t('port-forward')]);
-		if (isNodes(r) && writable) h.push(['c', t('cordon')], ['u', t('uncordon')], ['r', t('drain')]);
-		if (isCronJobs(r) && writable) h.push(['t', t('trigger')], ['s', t('suspend')]);
-		if (hasImages(r) && writable) h.push(['i', t('image')]);
-		if (isReplicaSets(r) && writable) h.push(['^l', t('roll back')]);
-		if (canEdit(r) && writable) h.push(['e', t('edit')]);
-		if (canDelete(r) && writable) h.push(['^d', t('delete')]);
-		if (canScale(r) && !isPods(r) && writable) h.push(['s', t('scale')]);
-		if (canRestart(r) && writable) h.push(['r', t('restart')]);
-		if (app.scope) h.push(['esc', t('back')]);
-		if (app.details) h.push(['f', app.layout.maximized ? t('restore') : t('maximize')]);
-		h.push(['?', t('help')]);
-		return h;
-	});
-
-	// The view's plugins, as k9s lists them in its menu; a key the view uses stays the view's.
-	const pluginHints = $derived.by(() => {
-		const taken = new Set(viewHints.map(([key]) => key));
-		return (app.k9s?.plugins ?? [])
-			.filter((p) => pluginApplies(p, app.pluginView))
-			.flatMap((p): [string, string][] => {
-				const shortcut = parseShortcut(p.shortCut);
-				if (!shortcut) return [];
-				const key = shortcutLabel(shortcut);
-				return p.override || !taken.has(key) ? [[key, p.name]] : [];
-			})
-			.slice(0, 4);
-	});
-
-	/** Plays a hint's key, so that the hints work as buttons too. */
-	function press(key: string) {
-		const init = keyFromLabel(key);
-		if (init) window.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true }));
-	}
-
-	/** Keeps the focus where it is, so that the keys work on the list after a click. */
-	const keepFocus = (e: MouseEvent) => e.preventDefault();
-
-	// The footer shows the keys that matter most; `?` lists them all. Esc and help always stay.
-	const MAX_HINTS = 8;
-	const shownHints = $derived.by(() => {
-		if (viewHints.length <= MAX_HINTS) return viewHints;
-		const keep = (hint: [string, string]) => hint[0] === 'esc' || hint[0] === '?';
-		let room = MAX_HINTS - viewHints.filter(keep).length;
-		return viewHints.filter((hint) => keep(hint) || room-- > 0);
-	});
-
-	// Help stays last.
-	const hints = $derived([...shownHints.slice(0, -1), ...pluginHints, ...shownHints.slice(-1)]);
 
 	function signOut() {
 		if (!drafts.block(() => session.signOut())) session.signOut();
@@ -597,33 +414,7 @@
 			{/if}
 		</header>
 
-		{#if app.snapshot}
-			{@const snapshot = app.snapshot}
-			<div class="snapshot-banner" role="note">
-				<Icon name="camera" size={15} />
-				<span>
-					<strong>{t('Snapshot')}</strong> {t('of')} {snapshot.context} · {snapshot.namespace ? t('namespace {name}', { name: snapshot.namespace }) : t('the whole cluster')}
-					· {t('taken {when} ({age} ago)', { when: new Date(snapshot.taken).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }), age: age(new Date(snapshot.taken).toISOString(), Date.now()) || '0s' })}
-					· {t('read-only, nothing here is live')}
-					{#if snapshot.leftOut.length}
-						· <span class="left-out" title={snapshot.leftOut.join('\n')}>{t('{n} left out', { n: snapshot.leftOut.length })}</span>
-					{/if}
-				</span>
-				<button onclick={() => (app.contexts.length ? app.leaveSnapshot() : closeSnapshot())}>{t('Leave snapshot')}</button>
-			</div>
-		{/if}
-		{#if app.prefs.error}
-			<div class="error" role="alert">
-				<span>{t("Kubri's settings file could not be read, so it uses the defaults: {error}", { error: app.prefs.error })}</span>
-				<button onclick={() => (app.prefs.error = null)} aria-label={t('Dismiss')}>×</button>
-			</div>
-		{/if}
-		{#if app.error}
-			<div class="error" role="alert">
-				<span>{app.error}</span>
-				<button onclick={() => (app.error = null)} aria-label={t('Dismiss')}>×</button>
-			</div>
-		{/if}
+		<PageNotices />
 
 		<div class="area" class:right={dock.sessions.length && dock.side === 'right' && !dock.minimized}>
 			{#if app.cluster && (app.connecting || app.connectFailure)}
@@ -702,70 +493,7 @@
 						<div class="placeholder"><Phrase text={t('Choose a resource or press {key}.')} kbd={{ key: ':' }} /></div>
 					{/if}
 				{:else}
-					{#if app.kubeconfigProblem !== null && !app.contexts.length && !app.connecting}
-						<section class="connect">
-							<img src={logo} alt="" width="56" height="56" />
-							<span class="eyebrow">{t('Getting started')}</span>
-							<h1>{t('No clusters yet.')}</h1>
-							<p>
-								{isTauri()
-									? t('Kubri reads your clusters from a kubeconfig, as kubectl does, and found none it can use. Load the kubeconfig file you got for your cluster, or start a cluster on this computer.')
-									: t('kubri-server found no kubeconfig it can use. Add contexts from a kubeconfig file, or start the server with one.')}
-								{t('To look around first, open the demo: a snapshot of a small shop, read-only.')}
-							</p>
-							<p class="problem">{app.kubeconfigProblem}</p>
-							<div class="connect-actions">
-								<button class="primary" onclick={() => (app.kubeconfigFilesOpen = isTauri() ? true : 'copy')}>
-									{isTauri() ? t('Load kubeconfig file…') : t('Add contexts from a file…')}
-									<Icon name="arrow" size={16} />
-								</button>
-								{#await backend.localClusters().catch(() => null) then clusters}
-									{#if clusters?.allowed}<button onclick={() => (localClusterOpen = true)}>{t('Start a cluster…')}</button>{/if}
-								{/await}
-								<button onclick={openDemo}>{t('Open the demo')}</button>
-								<button onclick={retryKubeconfig}>{t('Try again')}</button>
-							</div>
-							{#if localClusterOpen}<LocalClusterDialog onclose={() => (localClusterOpen = false)} />{/if}
-							<p class="small">
-								{t('Kubri looks in the files listed in')} <code>KUBECONFIG</code>{t(', or in')} <code>~/.kube/config</code>.
-							</p>
-						</section>
-					{:else if app.connecting || app.connectFailure}
-						<section class="connect">
-							<img src={logo} alt="" width="56" height="56" />
-							<ConnectCard inline />
-							{#if !app.connecting}
-								<div class="connect-actions">
-									<button onclick={() => (app.kubeconfigFilesOpen = true)}>{t('Kubeconfig files…')}</button>
-								</div>
-							{/if}
-						</section>
-					{:else if app.loaded}
-						<section class="connect">
-							<img src={logo} alt="" width="56" height="56" />
-							<h1>{t('Connect to a cluster.')}</h1>
-							<p>
-								{isTauri()
-									? t('Choose a context from your kubeconfig. Reload it after you update your credentials.')
-									: t('Choose a context configured on kubri-server. The server holds the credentials.')}
-							</p>
-							<div class="connect-actions">
-								<button
-									class="primary"
-									onclick={() => {
-										app.contextMenuOpen = true;
-										app.reloadContexts(true);
-									}}
-								>
-									{t('Choose context')} <Icon name="arrow" size={16} />
-								</button>
-								<button onclick={() => app.load()}>{t('Try again')}</button>
-								<button onclick={() => (app.kubeconfigFilesOpen = true)}>{t('Kubeconfig files…')}</button>
-								{#if app.contexts.length > 1}<button onclick={() => app.showFleet()}>{t('See all clusters')}</button>{/if}
-							</div>
-							<p class="small">{t('Your k9s aliases, hotkeys, plugins and skins keep working.')}</p>
-						</section>
-					{/if}
+					<ConnectPage />
 				{/if}
 				{#if app.details}
 					<DetailsPanel details={app.details} />
@@ -775,45 +503,7 @@
 			{#if app.activity.open}<ActivityPanel />{/if}
 		</div>
 
-		<footer>
-			<span class="status" class:live={app.cluster && !app.connecting && !app.snapshot} role="status">
-				<span class="dot"></span>
-				{app.connectingText
-					? app.connectingText
-					: app.snapshot
-						? t('Snapshot · {name}', { name: app.snapshot.file ?? app.snapshot.context })
-						: app.cluster
-							? t('Live · {name}', { name: app.prefs.contextName(app.cluster.context) })
-							: t('Not connected')}
-			</span>
-			{#if app.releases.latest}
-				{@const release = app.releases.latest}
-				<span class="release">
-					{#if release.installable}
-						<button onclick={() => (app.updateOpen = true)} title={t('Update Kubri to {version}', { version: release.version })}>
-							{t('Kubri {version} is out', { version: release.version })} · {t('Update')}
-						</button>
-					{:else}
-						<button
-							onclick={() => backend.openUrl(release.url)}
-							title={release.manual ? `${release.manual} ${t('Opens the release notes and downloads.')}` : t('Open the release notes and downloads')}
-						>
-							{t('Kubri {version} is out', { version: release.version })}
-						</button>
-					{/if}
-					<button class="close" onclick={() => app.releases.dismiss()} aria-label={t('Hide until the next release')}>×</button>
-				</span>
-			{/if}
-			<span class="hints" data-tour="keys">
-				{#each hints as [key, label], i (key + i)}
-					{#if keyFromLabel(key)}
-						<button onclick={() => press(key)} onmousedown={keepFocus} title="{label} ({key})"><kbd>{key}</kbd>{label}</button>
-					{:else}
-						<span><kbd>{key}</kbd>{label}</span>
-					{/if}
-				{/each}
-			</span>
-		</footer>
+		<StatusBar />
 	</div>
 </div>
 
@@ -995,31 +685,6 @@
 	.shell.production header {
 		box-shadow: inset 0 3px 0 var(--bad);
 	}
-	.snapshot-banner {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 5px 12px 5px 20px;
-		background: color-mix(in srgb, var(--accent) 12%, var(--surface-1));
-		color: var(--text);
-		font-size: 12.5px;
-	}
-	.snapshot-banner span {
-		flex: 1;
-		min-width: 0;
-	}
-	.snapshot-banner .left-out {
-		text-decoration: underline dotted;
-		cursor: help;
-	}
-	.snapshot-banner button {
-		flex: none;
-		padding: 3px 10px;
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		background: var(--surface-1);
-		font-size: 12px;
-	}
 	.mode.unlocked {
 		border-color: transparent;
 		background: color-mix(in srgb, var(--warn) 16%, var(--surface-1));
@@ -1117,21 +782,6 @@
 		border-color: var(--accent);
 		color: var(--text);
 	}
-	.error {
-		display: flex;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 8px 20px;
-		background: color-mix(in srgb, var(--bad) 14%, var(--surface-1));
-		color: var(--bad);
-	}
-	.error button {
-		border: none;
-		background: none;
-		font-size: 18px;
-		line-height: 1;
-	}
-	/* The page, and the workspace below or beside it. */
 	.area {
 		position: relative;
 		display: flex;
@@ -1170,144 +820,6 @@
 		display: grid;
 		place-items: center;
 		color: var(--text-muted);
-	}
-	.connect {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 10px;
-		padding: 32px 20px;
-		text-align: center;
-		overflow: auto;
-	}
-	.eyebrow {
-		margin-top: 10px;
-		font-size: 11px;
-		font-weight: 650;
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-	}
-	.connect h1 {
-		margin: 0;
-		font-size: 32px;
-		letter-spacing: -0.03em;
-	}
-	.connect p {
-		max-width: 460px;
-		margin: 0;
-		color: var(--text-muted);
-		line-height: 1.6;
-	}
-	.connect .problem {
-		max-width: 560px;
-		padding: 8px 12px;
-		border-radius: 8px;
-		background: color-mix(in srgb, var(--bad) 8%, transparent);
-		color: var(--bad);
-		font-size: 13px;
-		overflow-wrap: anywhere;
-	}
-	.connect .small {
-		margin-top: 18px;
-		font-size: 12px;
-	}
-	.connect-actions {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 8px;
-		margin-top: 14px;
-	}
-	.connect-actions button {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		padding: 9px 16px;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--surface-1);
-		font-weight: 600;
-	}
-	.connect-actions .primary {
-		border-color: var(--accent);
-		background: var(--accent);
-		color: var(--on-accent);
-	}
-	footer {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		padding: 4px 16px;
-		border-top: 1px solid var(--border);
-		background: var(--surface-1);
-		font-size: 12px;
-		color: var(--text-muted);
-	}
-	.status {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		flex: none;
-		white-space: nowrap;
-	}
-	.release {
-		display: inline-flex;
-		align-items: center;
-		flex: none;
-		border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--accent) 8%, var(--surface-1));
-	}
-	.release button {
-		padding: 1px 4px 1px 10px;
-		border: none;
-		background: none;
-		color: var(--accent);
-		font: inherit;
-		font-weight: 600;
-		cursor: pointer;
-	}
-	.release .close {
-		padding: 1px 9px 1px 4px;
-		color: var(--text-muted);
-		font-weight: 400;
-	}
-	.status .dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-		background: var(--text-muted);
-	}
-	.status.live {
-		color: var(--ok);
-	}
-	.status.live .dot {
-		background: var(--ok);
-	}
-	.hints {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: flex-end;
-		gap: 2px 4px;
-		margin-left: auto;
-		min-width: 0;
-	}
-	.hints > * {
-		display: inline-flex;
-		align-items: center;
-		padding: 2px 6px;
-		border: 1px solid transparent;
-		border-radius: 6px;
-		background: none;
-		color: inherit;
-		font-size: 12px;
-	}
-	.hints > button:hover {
-		border-color: var(--border);
-		background: var(--surface-2);
-		color: var(--text);
 	}
 	kbd,
 	.placeholder :global(kbd) {
@@ -1374,10 +886,6 @@
 		.divider {
 			display: none;
 		}
-		/* Keys beyond the first few stay in the help. */
-		.hints > :nth-child(n + 6):not(:last-child) {
-			display: none;
-		}
 	}
 	/* In a short window, as at 200% zoom, the page scrolls: the header moves away and the page
 	   below it gets the whole height, so lists keep room for their rows. */
@@ -1410,14 +918,8 @@
 		.menu-button {
 			display: grid;
 		}
-		.error {
-			order: 2;
-		}
 		.area {
 			order: 3;
-		}
-		footer {
-			order: 4;
 		}
 		header {
 			flex-wrap: wrap;
@@ -1438,12 +940,6 @@
 		}
 		.brand span {
 			display: none;
-		}
-		.hints {
-			display: none;
-		}
-		.connect h1 {
-			font-size: 26px;
 		}
 	}
 </style>
