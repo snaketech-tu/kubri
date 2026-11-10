@@ -57,8 +57,9 @@ const CLUSTER_KINDS: [(&str, &str); 10] = [
 ];
 
 /// What a snapshot holds, shown wherever Kubri shows the cluster.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct SnapshotInfo {
     /// The context it was taken from.
     pub context: String,
