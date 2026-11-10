@@ -37,6 +37,8 @@ pnpm build            # writes ui/build
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo deny check      # vulnerabilities, licenses, sources (deny.toml); `cargo install cargo-deny`
+cd ui && pnpm audit --prod
 ```
 
 These are exactly what CI (`.github/workflows/ci.yml`) runs. Notes:
@@ -46,6 +48,7 @@ These are exactly what CI (`.github/workflows/ci.yml`) runs. Notes:
 - CI uses the newest stable Rust, whose clippy can have lints an older local toolchain lacks. Run `rustup update stable` before clippy, or a change that passes locally can fail CI.
 - The UI has no formatter config. Do not run Prettier or similar on `ui/`; it would rewrite every file. Match the surrounding style (tabs, single quotes).
 - Rust formatting: `rustfmt.toml` sets `max_width = 110`.
+- A newly published advisory can fail the Dependencies job on any PR. Update the crate or package; only if no fix exists, add the advisory to `ignore` in `deny.toml` with a comment saying why Kubri is not affected. A new dependency needs a license from the `allow` list there.
 
 Running it:
 
