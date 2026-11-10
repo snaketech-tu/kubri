@@ -54,6 +54,16 @@
 			]
 		],
 		[
+			t('Inspector'),
+			[
+				['Tab', t('From the list or the overview into the inspector')],
+				['← / →', t('Overview, Events, YAML, Metrics, Logs, Shell')],
+				['↑ / ↓  or  PgUp / PgDn', t('Scroll; j / k and g / G too')],
+				['Tab / Shift+Tab', t('Links and buttons in the inspector')],
+				['Esc', t('Back to the list; Esc again closes the inspector')]
+			]
+		],
+		[
 			t('Change'),
 			[
 				['Space', t('Mark the row')],
