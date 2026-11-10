@@ -10,6 +10,7 @@ One kubri-server that everyone on a team opens in their browser. People sign in 
 - [Without Helm](#without-helm)
 - [Settings](#settings)
 - [What is different on a shared Kubri](#what-is-different-on-a-shared-kubri)
+- [Running it safely](#running-it-safely)
 
 ## How it works
 
@@ -161,3 +162,39 @@ Whoever holds those credentials can act as anyone, so keep them, the server and 
 - **Not available**: k9s plugins, the local terminal and AI agents (MCP), since they would run on the server or act with its credentials rather than as the person.
 - **Port-forwards** open their port on the server, as on every web Kubri. Each person sees and stops only their own.
 - `KUBRI_READ_ONLY=true` still applies to everyone, whatever their rights.
+
+## Running it safely
+
+This part is for whoever runs kubri-server for a team. Kubri changes clusters, so treat it like any other tool that holds cluster access.
+
+### A setup we recommend
+
+- **Sign-in with OpenID Connect** (`auth=oidc`), so everyone works with their own rights and the audit log names them. A password suits one person, not a team: everyone who knows it acts as Kubri's service account.
+- **HTTPS only.** Put Kubri behind an ingress or proxy with a certificate, as in [Behind a reverse proxy](WEB.md#behind-a-reverse-proxy). Without it, sessions and tokens cross the network in the clear.
+- **`impersonate` with the least rights.** Kubri's service account needs the right to impersonate users and groups, and nothing else. With `token`, it needs no rights at all. Give people their rights with RoleBindings, as in [Give people their rights](#give-people-their-rights).
+- **Viewers get `view`, not a separate Kubri.** Bind the `view` ClusterRole to people who should only look, and Kubri offers them no changes. Use `KUBRI_READ_ONLY=true` (`readOnly: true` in the chart) only when nobody at all should change anything through this Kubri, since it applies to everyone.
+- **Only some groups.** Set `oidc.allowedGroups` so that only people who need Kubri can sign in.
+- **Its own namespace.** Install Kubri in a namespace of its own, and let only the platform team read its secrets and exec into its pod: whoever controls the pod can act as anyone Kubri may impersonate.
+- **Keep the audit log.** Ship the pod's log, or the file in `KUBRI_AUDIT_LOG`, to wherever you keep logs, and keep it as long as your cluster's own audit log.
+
+The chart already runs the container as a non-root user with a read-only root file system and no added capabilities.
+
+### What the audit log records
+
+Every change made through Kubri, with who made it, from where, in which context and on what, and whether it worked. Reading is not recorded. See [The audit log](#the-audit-log) for the format. Kubernetes' own audit log records the same requests: as the person with `token`, and as Kubri impersonating the person with `impersonate`.
+
+### The local terminal
+
+`KUBRI_LOCAL_TERMINAL=true` gives everyone who can sign in a shell on the server, with the server's files and credentials, and lets them add contexts that run commands there. That is why Kubri refuses it with OpenID Connect, and why k9s plugins, AI agents and adding contexts are off on a shared Kubri. Turn it on only on a Kubri with a password that you alone use.
+
+### Checking the image
+
+Each image carries a signed record of the workflow and commit that built it, and a list of what is inside. Check it before you install or upgrade:
+
+```sh
+gh attestation verify oci://ghcr.io/snaketech-tu/kubri:2.0.0 --owner snaketech-tu
+```
+
+### Upgrading
+
+Read the release notes first; they name anything that changes for operators. Then run `helm upgrade` with the same values and the new `--version`. The pod restarts, which signs everyone out and ends their port-forwards and shells, so pick a quiet moment. The chart keeps Kubri's settings in the pod, so a new pod starts with the default settings: set context colors and locks again afterwards. The audit log in the pod's log stays wherever your log system keeps it. To go back, run `helm rollback`.
