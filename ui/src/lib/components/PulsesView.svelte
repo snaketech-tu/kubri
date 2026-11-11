@@ -6,7 +6,7 @@
 </script>
 
 <script lang="ts">
-	import { forControl } from '../keys';
+	import { forControl, reachedByKeys } from '../keys';
 	import { tick } from 'svelte';
 	import { backend, type CertificateAlert, type KindPulse, type Pulse, type RecentEvent, type ResourceRef, type Utilization, type WaitingPod } from '../api';
 	import { age, cpuText, errorMessage, memoryText as memory, relative } from '../format';
@@ -39,6 +39,10 @@
 	let cursor = $state(0);
 	/** The cursor shows once the keys move it, not on a mouse user's first look. */
 	let keyboard = $state(false);
+	/** Whether the focus is on something other than a tile, such as a link reached with Tab. */
+	let away = $state(false);
+	/** The one tile marked for the keys: the arrows and Tab move the same mark. */
+	const marked = (index: number) => keyboard && !away && cursor === index;
 	let body = $state<HTMLDivElement>();
 
 	const namespace = $derived(app.namespace || null);
@@ -217,8 +221,23 @@
 			return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : { left: 0, top: 0, width: 0, height: 0 };
 		});
 		// The first key shows where the cursor is; at an edge it stays.
-		const next = keyboard ? nearestVertically(boxes, cursor, down) : null;
+		const next = marked(cursor) ? nearestVertically(boxes, cursor, down) : null;
 		move(next === null ? 0 : next - cursor);
+	}
+
+	/** Tab moves the cursor too: to the tile it reaches, or off the tiles while it is elsewhere. */
+	function onfocusin(e: FocusEvent) {
+		const tile = (e.target as HTMLElement).closest?.<HTMLElement>('[data-tile]');
+		if (tile && body?.contains(tile)) {
+			cursor = Number(tile.dataset.tile);
+			if (reachedByKeys(tile)) keyboard = true;
+			away = false;
+		} else away = e.target !== document.body;
+	}
+
+	function onfocusout(e: FocusEvent) {
+		// Nothing has the focus now, so the arrows start from the cursor again.
+		if (!e.relatedTarget) away = false;
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -261,7 +280,7 @@
 	}
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} {onfocusin} {onfocusout} />
 
 <section>
 	<header>
@@ -478,7 +497,7 @@
 </section>
 
 {#snippet countCard(index: number, label: string, icon: IconName, kind: KindPulse | undefined, scope: string)}
-	<button class="kpi" class:cursor={keyboard && cursor === index} data-tile={index} onclick={() => activate(index)}>
+	<button class="kpi" class:cursor={marked(index)} data-tile={index} onclick={() => activate(index)}>
 		<span class="kpi-label">{label}<Icon name={icon} /></span>
 		{#if !kind}
 			<span class="denied">{t('Not shown')}</span>
@@ -511,7 +530,7 @@
 	{@const waiting = (pulse?.waiting ?? []).filter((w) => w[resource] > 0)}
 	<button
 		class="kpi"
-		class:cursor={keyboard && cursor === index}
+		class:cursor={marked(index)}
 		data-tile={index}
 		onclick={() => activate(index)}
 		title={r?.reserved != null
@@ -568,7 +587,7 @@
 
 {#snippet kindRow(kind: KindPulse, index: number)}
 	<li>
-		<button class:cursor={keyboard && cursor === index} data-tile={index} onclick={() => activate(index)}>
+		<button class:cursor={marked(index)} data-tile={index} onclick={() => activate(index)}>
 			<span class="kind-name"><Icon name={KIND_ICONS[kind.kind] ?? 'resource'} />{kindLabel(kind)}</span>
 			{#if kind.error}
 				<span class="muted" title={kind.error}>{t('No access')}</span>

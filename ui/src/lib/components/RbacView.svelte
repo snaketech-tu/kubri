@@ -5,6 +5,7 @@
 	import { backend, type Grant, type Permissions, type Rbac, type SubjectInfo } from '../api';
 	import { errorMessage } from '../format';
 	import { forControl } from '../keys';
+	import { follow, roving } from '../roving';
 	import { filterSubjects, isAdmin, rbacResource, subjectLabel } from '../rbac';
 	import { app } from '../state.svelte';
 	import PageHeader from './PageHeader.svelte';
@@ -61,7 +62,7 @@
 
 	$effect(() => {
 		void selectedKey;
-		tick().then(() => list?.querySelector('.item.active')?.scrollIntoView({ block: 'nearest' }));
+		tick().then(() => follow(list?.querySelector<HTMLElement>('.item.active'), list));
 	});
 
 	function move(delta: number) {
@@ -160,7 +161,7 @@
 					placeholder={t('Filter subjects, or: can delete pods')}
 				/>
 			</div>
-			<div class="list" bind:this={list} role="listbox" aria-label={t('Subjects')}>
+			<div class="list" bind:this={list} role="listbox" {@attach roving({ items: '[role="option"]', orientation: 'vertical', activate: true })} aria-label={t('Subjects')}>
 				<button class="item me" class:active={selectedKey === ME} onclick={() => (selectedKey = ME)} role="option" aria-selected={selectedKey === ME}>
 					<span class="name">{t('You')}</span>
 					<span class="muted">{me ? t('rules in {namespace}', { namespace: me.namespace }) : meError ? t('unknown') : '…'}</span>

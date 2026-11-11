@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { parts, plural, t } from '../i18n';
-	import { roving } from '../roving';
+	import { follow, roving } from '../roving';
 	import { every } from '../poll';
 	import { tick } from 'svelte';
 	import { stringify } from 'yaml';
@@ -208,7 +208,10 @@
 	$effect(() => {
 		void cursorKey;
 		void historyCursor;
-		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
+		tick().then(() => {
+			const row = scroller?.querySelector<HTMLElement>('tr.cursor');
+			follow(row, row?.parentElement);
+		});
 	});
 
 	function move(delta: number) {
@@ -263,7 +266,10 @@
 		history = [];
 		app.details = null;
 		app.layout.maximized = false;
-		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
+		tick().then(() => {
+			const row = scroller?.querySelector<HTMLElement>('tr.cursor');
+			follow(row, row?.parentElement);
+		});
 	}
 
 	function revisionOptions(releases: HelmRelease[]) {
@@ -685,6 +691,7 @@
 									class:cursor={i === historyCursor}
 									class:viewing={h.revision === shown.revision}
 									onclick={() => (historyCursor = i)}
+									onfocusin={() => (historyCursor = i)}
 									ondblclick={() => viewRevision(h.revision)}
 								>
 									<td class="numeric">{h.revision}</td>
@@ -764,6 +771,7 @@
 								<tr
 									class:cursor={i === cursor}
 									onclick={() => (cursorKey = releaseKey(r))}
+									onfocusin={() => (cursorKey = releaseKey(r))}
 									ondblclick={() => open(r)}
 									oncontextmenu={(e) => openMenu(e, r)}
 								>
