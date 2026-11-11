@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { t } from '../i18n';
 	import { forControl } from '../keys';
+	import { follow } from '../roving';
 	import { tick } from 'svelte';
 	import { stopPortForward } from '../actions';
 	import { backend, type PortForwardInfo } from '../api';
@@ -32,7 +33,10 @@
 
 	$effect(() => {
 		void cursorId;
-		tick().then(() => scroller?.querySelector('tr.cursor')?.scrollIntoView({ block: 'nearest' }));
+		tick().then(() => {
+			const row = scroller?.querySelector<HTMLElement>('tr.cursor');
+			follow(row, row?.parentElement);
+		});
 	});
 
 	/** A snapshot has no cluster to forward to. */
@@ -140,7 +144,7 @@
 					<tbody>
 						{#each forwards as f, i (f.id)}
 							{@const favorite = !!app.favorites.of(f)}
-							<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)}>
+							<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)} onfocusin={() => (cursorId = f.id)}>
 								<td class="mono">
 									<a href={url(f)} target="_blank" rel="noreferrer" title={t('Open in the browser (o)')}>{f.address}:{f.localPort}</a>
 									<button class="link" onclick={() => copy(f)} title={t('Copy URL (c)')}>{t('copy')}</button>

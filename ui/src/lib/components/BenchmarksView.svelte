@@ -5,6 +5,7 @@
 	import { bytes, duration, failureShare, pathOf, progress, rate, responses, statusTone } from '../bench';
 	import { age, errorMessage } from '../format';
 	import { forControl } from '../keys';
+	import { follow, roving } from '../roving';
 	import { app } from '../state.svelte';
 	import Histogram from './Histogram.svelte';
 	import PageHeader from './PageHeader.svelte';
@@ -33,7 +34,7 @@
 
 	$effect(() => {
 		void app.benchmarkId;
-		tick().then(() => list?.querySelector('.run.active')?.scrollIntoView({ block: 'nearest' }));
+		tick().then(() => follow(list?.querySelector<HTMLElement>('.run.active'), list));
 	});
 
 	function move(delta: number) {
@@ -127,7 +128,7 @@
 
 	{#if runs.length}
 		<div class="split">
-			<div class="list" bind:this={list} role="listbox" aria-label={t('Benchmarks')}>
+			<div class="list" bind:this={list} role="listbox" {@attach roving({ items: '[role="option"]', orientation: 'vertical', activate: true })} aria-label={t('Benchmarks')}>
 				{#each runs as run (run.id)}
 					<button
 						class="run"

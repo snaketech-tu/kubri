@@ -75,6 +75,30 @@ export function roving({
 	};
 }
 
+const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** What Tab can reach in an item: the item itself, or else what it holds. */
+const stops = (item: Element) => (item.matches(FOCUSABLE) ? [item] : [...item.querySelectorAll(FOCUSABLE)]) as HTMLElement[];
+
+/**
+ * Scrolls the item the keys just picked, such as a row, into view. When the focus is on another
+ * item of the same group, it moves along, to the same control in the new item, so Tab and the
+ * arrows never mark two items at once.
+ */
+export function follow(item: HTMLElement | null | undefined, group: HTMLElement | null | undefined) {
+	if (!item) return;
+	item.scrollIntoView({ block: 'nearest' });
+	const focused = document.activeElement;
+	if (!group || !(focused instanceof HTMLElement) || !group.contains(focused) || item.contains(focused)) return;
+	const before = focused.closest(item.tagName);
+	const at = before && group.contains(before) ? stops(before).indexOf(focused) : -1;
+	if (at === -1) return;
+	const all = stops(item);
+	const next = all[at] ?? all[0];
+	if (!next) return;
+	if (reachedByKeys(focused)) focusForKeys(next);
+	else next.focus({ preventScroll: true });
+}
+
 /** Where a tile sits on the page. */
 export interface Box {
 	left: number;
