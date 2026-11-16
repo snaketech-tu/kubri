@@ -1,15 +1,9 @@
 ## What's new
 
-Kubri 1.12 is for people who work with the keyboard, and it asks your clusters less often.
+Kubri 1.12.1 fixes two things.
 
-- **Arrow keys like tabs.** Tab moves between the sidebar, the tabs, the toolbars and the list; the arrow keys move inside them. Shift+F10 opens the menu of a row.
-- **A list opens with its first row chosen**, so Enter opens it right away.
-- **The inspector without the mouse.** Tab goes into it, the arrow keys change its tab, Esc goes back to the list.
-- **Backspace goes back**, and the breadcrumbs above each page can be clicked.
-- **The command palette completes** namespaces and contexts: `:po sh` opens the pods of `shop`, Enter takes the first suggestion.
-- **The YAML editor** has find and replace, go to line, Ctrl+D to delete a line and several cursors.
-- **Gentler on your clusters.** Pages ask less often, not at all while Kubri is in the background, and the Clusters page no longer asks every cluster again and again.
-- **Start a port-forward from the Port-forwards page**, choosing the namespace and the target in one dialog.
+- **Helm actions no longer say `helm` is missing** when it is installed but not on the app's `PATH`, as can happen when Kubri starts from a launcher or the Dock. Kubri also looks where Helm's installers put it, and **Reload** on the Helm page looks again.
+- **One focus mark.** On the Overview, Tab and the arrow keys mark the same tile.
 
 The full list is in the [changelog](https://github.com/snaketech-tu/kubri/blob/main/CHANGELOG.md).
 

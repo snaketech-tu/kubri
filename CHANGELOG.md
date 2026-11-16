@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.1 — 2026-11-16
+
+- **Helm finds `helm` again when the app starts from a launcher.** When `helm` is not on the app's `PATH`, Kubri also looks where Helm's installers put it: Homebrew, `~/.local/bin`, `/usr/local/bin`, Snap, Nix, asdf and mise, and winget, Chocolatey and Scoop on Windows. A `helm` that starts but does not say its version counts as installed, so its own error shows. **Reload** on the Helm page looks for `helm` again.
+- **One focus mark.** On the Overview, Tab and the arrow keys mark the same tile, and in the Helm and port-forward tables a button reached with Tab puts the cursor on its row.
+
 ## 1.12.0 — 2026-11-11
 
 - **Arrow keys like tabs.** <kbd>Tab</kbd> moves between the parts of the window: the sidebar, a row of tabs, a toolbar and the list are one stop each, and inside them the arrow keys move, with <kbd>Home</kbd> and <kbd>End</kbd> for the first and last. On the Overview the arrow keys move between the tiles, and <kbd>Shift</kbd>+<kbd>F10</kbd> or the menu key opens the menu of the row under the cursor. See [From k9s](docs/FROM-K9S.md).
