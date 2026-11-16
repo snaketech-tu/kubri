@@ -267,7 +267,7 @@ Kubri reads your kubeconfig the way kubectl does: a context that works with kube
 - **Where it looks:** the files in `KUBECONFIG`, or `~/.kube/config`. Kubri starts with your `current-context`.
 - **More files:** in the desktop app, load them under **Kubeconfig files…** in the context switcher. Kubri remembers them. If your files are spread over `~/.kube`, [this example](docs/CLUSTERS.md#example-many-kubeconfig-files-spread-over-kube) puts them all in `KUBECONFIG`.
 - **Switching:** pick a context in the top bar, or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>.
-- **Tools and plugins:** started from a desktop launcher, the app takes the environment of your login shell. So `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin`, and k9s plugins are found as in a terminal.
+- **Tools and plugins:** started from a desktop launcher, the app takes the environment of your login shell. So `helm`, credential plugins such as `aws` or `gke-gcloud-auth-plugin`, and k9s plugins are found as in a terminal. If `helm` is still not on that `PATH`, Kubri also looks where Helm's installers put it: Homebrew, `~/.local/bin`, `/usr/local/bin`, Snap and Nix on Linux and macOS, and winget, Chocolatey and Scoop on Windows.
 
 <a id="documentation"></a>
 

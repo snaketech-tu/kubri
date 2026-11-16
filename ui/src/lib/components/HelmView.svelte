@@ -73,11 +73,17 @@
 
 	const namespace = $derived(app.namespace || null);
 
+	// Asked again on Reload, so a helm installed in the meantime is found.
 	$effect(() => {
+		void reloads;
+		let cancelled = false;
 		backend.helmVersion().then(
-			(v) => (helm = v),
-			() => (helm = null)
+			(v) => !cancelled && (helm = v),
+			() => !cancelled && (helm = null)
 		);
+		return () => {
+			cancelled = true;
+		};
 	});
 
 	$effect(() => {

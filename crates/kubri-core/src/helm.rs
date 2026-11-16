@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::io::Read;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use base64::Engine;
@@ -13,6 +14,7 @@ use kube::{Api, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::local_terminal::{find_program, path_var};
 use crate::team::HelmAccess;
 use crate::typed::scoped;
 use crate::{Error, Kubri, Result};
@@ -20,6 +22,8 @@ use crate::{Error, Kubri, Result};
 /// How long `helm rollback` and `helm uninstall` may take, hooks included: a little longer
 /// than the `--timeout 5m` they get, so helm can say itself what it was waiting for.
 const HELM_TIMEOUT: Duration = Duration::from_secs(5 * 60 + 30);
+/// How long `helm version` may take before Kubri stops waiting for its answer.
+const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 const FETCH_CONCURRENCY: usize = 8;
 
 /// A release revision, as `helm list` and `helm history` show it.
@@ -360,17 +364,108 @@ pub(crate) fn validate_name(name: &str) -> Result<()> {
     }
 }
 
-/// The installed Helm version, if the `helm` command is available.
+/// Folders where Helm's installers and package managers put `helm`. An app started from a
+/// desktop launcher, the Dock or a service often gets a shorter `PATH` than a terminal, so
+/// these are searched when `helm` is not on it.
+fn install_dirs() -> Vec<PathBuf> {
+    let var = |name: &str| {
+        std::env::var_os(name)
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    };
+    let mut dirs = Vec::new();
+    if cfg!(windows) {
+        if let Some(local) = var("LOCALAPPDATA") {
+            dirs.push(local.join("Microsoft").join("WinGet").join("Links"));
+        }
+        if let Some(data) = var("ProgramData") {
+            dirs.push(data.join("chocolatey").join("bin"));
+        }
+        if let Some(home) = var("USERPROFILE") {
+            dirs.push(home.join("scoop").join("shims"));
+        }
+    } else {
+        if let Some(home) = var("HOME") {
+            for dir in [
+                ".local/bin",
+                "bin",
+                ".nix-profile/bin",
+                ".asdf/shims",
+                ".local/share/mise/shims",
+            ] {
+                dirs.push(home.join(dir));
+            }
+        }
+        dirs.extend(
+            [
+                "/opt/homebrew/bin",
+                "/usr/local/bin",
+                "/home/linuxbrew/.linuxbrew/bin",
+                "/snap/bin",
+                "/nix/var/nix/profiles/default/bin",
+                "/run/current-system/sw/bin",
+            ]
+            .map(PathBuf::from),
+        );
+    }
+    dirs
+}
+
+/// The `helm` to run: the first on the `PATH`, as a shell finds it, or else one in a folder
+/// Helm's installers use. Plain `helm` when there is none, which then fails as not installed.
+fn program() -> PathBuf {
+    locate(&path_var(), &install_dirs())
+}
+
+/// `helm` on `path`, or else in one of `dirs`.
+fn locate(path: &std::ffi::OsStr, dirs: &[PathBuf]) -> PathBuf {
+    find_program("helm", path)
+        .or_else(|| find_program("helm", &std::env::join_paths(dirs).unwrap_or_default()))
+        .unwrap_or_else(|| PathBuf::from("helm"))
+}
+
+/// The installed Helm version, if the `helm` command is available. A helm that starts but
+/// does not say its version still counts, so its own error shows when it is used.
 pub(crate) async fn cli_version() -> Option<String> {
-    let output = tokio::process::Command::new("helm")
+    let program = program();
+    let child = tokio::process::Command::new(&program)
         .args(["version", "--short"])
-        .output()
-        .await
-        .ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn();
+    let child = match child {
+        Ok(child) => child,
+        Err(err) => {
+            tracing::info!("helm is not available ({}): {err}", program.display());
+            return None;
+        }
+    };
+    let unknown = || Some("unknown version".to_owned());
+    match tokio::time::timeout(VERSION_TIMEOUT, child.wait_with_output()).await {
+        Ok(Ok(output)) if output.status.success() => {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            if version.is_empty() {
+                unknown()
+            } else {
+                Some(version)
+            }
+        }
+        Ok(Ok(output)) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::warn!("`{} version` failed: {}", program.display(), stderr.trim());
+            unknown()
+        }
+        Ok(Err(err)) => {
+            tracing::warn!("`{} version` failed: {err}", program.display());
+            unknown()
+        }
+        Err(_) => {
+            tracing::warn!("`{} version` did not answer in time", program.display());
+            unknown()
+        }
+    }
 }
 
 /// Runs `helm` against the connected context and returns what it printed.
@@ -381,7 +476,7 @@ async fn run(access: &HelmAccess, args: &[&str], context: &str) -> Result<String
 /// Like [`run`], writing `stdin` to helm, which reads values given as `--values=-` from it.
 async fn run_with(access: &HelmAccess, args: &[&str], context: &str, stdin: Option<&str>) -> Result<String> {
     use tokio::io::AsyncWriteExt;
-    let mut command = tokio::process::Command::new("helm");
+    let mut command = tokio::process::Command::new(program());
     command
         .args(args)
         // One argument, so a context name starting with a dash cannot pass for a flag.
@@ -905,6 +1000,45 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::io::Write;
+
+    #[test]
+    fn finds_helm_outside_the_path() {
+        let root = std::env::temp_dir().join(format!("kubri-find-helm-{}", std::process::id()));
+        let (on_path, installed, empty) = (root.join("path"), root.join("installed"), root.join("empty"));
+        for dir in [&on_path, &installed, &empty] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        let name = if cfg!(windows) { "helm.exe" } else { "helm" };
+        std::fs::write(installed.join(name), "").unwrap();
+        let dirs = [empty.clone(), installed.clone()];
+
+        // Not on the PATH: the one in an install folder.
+        let path = std::env::join_paths([&on_path]).unwrap();
+        assert_eq!(locate(&path, &dirs), installed.join(name));
+        // The PATH comes first, as in a shell.
+        std::fs::write(on_path.join(name), "").unwrap();
+        assert_eq!(locate(&path, &dirs), on_path.join(name));
+        // Nowhere: plain `helm`, which then fails as not installed.
+        assert_eq!(
+            locate(std::ffi::OsStr::new(""), std::slice::from_ref(&empty)),
+            PathBuf::from("helm")
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn searches_the_folders_installers_use() {
+        let dirs = install_dirs();
+        if cfg!(windows) {
+            assert!(
+                dirs.iter()
+                    .any(|d| d.ends_with("WinGet/Links") || d.ends_with(r"WinGet\Links"))
+            );
+        } else {
+            assert!(dirs.contains(&PathBuf::from("/opt/homebrew/bin")));
+            assert!(dirs.contains(&PathBuf::from("/usr/local/bin")));
+        }
+    }
 
     fn encode(record: &Value) -> String {
         let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
