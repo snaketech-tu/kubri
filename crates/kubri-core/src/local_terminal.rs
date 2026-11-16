@@ -270,14 +270,11 @@ pub(crate) fn path_var() -> OsString {
     std::env::var_os("PATH").unwrap_or_default()
 }
 
-/// The first `program` on `path`, as the shell would find it.
-pub(crate) fn find_program(program: &str, path: &OsString) -> Option<PathBuf> {
+/// The first `program` on `path`, as the shell would find it. On Windows only a `.exe` or
+/// `.cmd` counts: a file without an extension, such as a script for Git Bash, does not start.
+pub(crate) fn find_program(program: &str, path: &std::ffi::OsStr) -> Option<PathBuf> {
     let names: Vec<String> = if cfg!(windows) {
-        vec![
-            format!("{program}.exe"),
-            format!("{program}.cmd"),
-            program.to_owned(),
-        ]
+        vec![format!("{program}.exe"), format!("{program}.cmd")]
     } else {
         vec![program.to_owned()]
     };
