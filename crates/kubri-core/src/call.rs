@@ -145,6 +145,8 @@ calls! {
     SetAgentSettings { settings: AgentSettings } -> Settings => |kubri| kubri.set_agent_settings(settings)?;
     SetExplainSettings { settings: ExplainSettings } -> Settings =>
         |kubri| kubri.set_explain_settings(settings)?;
+    /// Whether Explain can use Claude Code and Codex here, and where they are.
+    ExplainClis {} -> ExplainClis => |kubri| kubri.explain_clis().await;
     SetSavedSearches { searches: Vec<SavedSearch> } -> Settings =>
         |kubri| kubri.set_saved_searches(searches)?;
 

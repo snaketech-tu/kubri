@@ -1,5 +1,6 @@
 //! Explain: sends what Kubri knows about a pod, an event, log lines, a finding or a failed action
-//! to a model the user chose, with the user's own key, and returns the model's explanation.
+//! to a model the user chose, with the user's own key or through Claude Code or Codex (see
+//! [`crate::explain_cli`]), and returns the model's explanation.
 //!
 //! Nothing is sent until the user has picked a provider and looked at the prompt: the UI first
 //! asks for [`ExplainPrompt`], shows it, and only then sends its text. Secrets, tokens and
@@ -52,6 +53,17 @@ pub enum Provider {
     /// Any endpoint that speaks OpenAI's chat completions, such as Ollama or LM Studio.
     #[serde(rename = "openai")]
     OpenAi,
+    /// Claude Code, run as `claude -p` with the account it is signed in to.
+    Claude,
+    /// Codex, run as `codex exec` with the account it is signed in to.
+    Codex,
+}
+
+impl Provider {
+    /// Whether it runs a command on this computer instead of calling an address.
+    pub fn runs_command(self) -> bool {
+        matches!(self, Provider::Claude | Provider::Codex)
+    }
 }
 
 /// The model Explain asks and how to reach it. The key is kept apart, never in the settings file.
@@ -83,6 +95,7 @@ impl ExplainSettings {
     }
 
     /// The model asked, or `None` when the settings name none and the provider has no default.
+    /// Claude Code and Codex use their own default then.
     pub fn model(&self) -> Option<String> {
         match (self.provider, self.model.as_str()) {
             (_, model) if !model.is_empty() => Some(model.to_owned()),
@@ -101,7 +114,7 @@ impl ExplainSettings {
             }
         };
         match self.provider {
-            Provider::None => None,
+            Provider::None | Provider::Claude | Provider::Codex => None,
             Provider::Anthropic => Some(format!("{}/v1/messages", base(ANTHROPIC_URL))),
             Provider::OpenAi => Some(format!("{}/chat/completions", base(OPENAI_URL))),
         }
@@ -149,7 +162,11 @@ pub struct ExplainPrompt {
     pub provider: Provider,
     /// `None` while Explain is off or no model is named.
     pub model: Option<String>,
+    /// The address, or for Claude Code and Codex the program that runs.
     pub endpoint: Option<String>,
+    /// Why it cannot be sent, when Kubri already knows: Claude Code or Codex cannot run here
+    /// or is not installed.
+    pub blocked: Option<String>,
     /// Whether a key is stored. Local models often need none.
     pub has_key: bool,
 }
@@ -240,7 +257,13 @@ fn kind_of(value: &Value) -> String {
 
 impl Kubri {
     pub fn set_explain_settings(&self, value: ExplainSettings) -> Result<crate::Settings> {
-        let value = value.normalized()?;
+        let mut value = value.normalized()?;
+        if value.provider.runs_command() {
+            if let Some(reason) = self.explain_cli_refusal() {
+                return Err(Error::Unsupported(reason.into()));
+            }
+            value.base_url.clear();
+        }
         self.update_settings(|s| {
             s.explain = value;
             Ok(())
@@ -410,20 +433,41 @@ impl Kubri {
             }
         };
         let settings = self.settings().explain;
+        let (endpoint, blocked) = if settings.provider.runs_command() {
+            match self.explain_cli(settings.provider).await {
+                Ok(program) => (Some(program.display().to_string()), None),
+                Err(err) => (None, Some(err.to_string())),
+            }
+        } else {
+            (settings.endpoint(), None)
+        };
         Ok(ExplainPrompt {
             title,
             system: SYSTEM_PROMPT.to_owned(),
             text: compose(&sections, question),
             provider: settings.provider,
             model: settings.model(),
-            endpoint: settings.endpoint(),
+            endpoint,
+            blocked,
             has_key: false,
         })
     }
 
-    /// Sends `text`, as the user saw it, to the model in the settings, with `key` if any.
+    /// Sends `text`, as the user saw it, to the model in the settings, with `key` if any, or
+    /// runs Claude Code or Codex with it.
     pub async fn explain(&self, text: &str, key: Option<&str>) -> Result<ExplainAnswer> {
-        ask(&self.settings().explain, key, text).await
+        let settings = self.settings().explain;
+        if settings.provider.runs_command() {
+            let program = self.explain_cli(settings.provider).await?;
+            return crate::explain_cli::ask(
+                settings.provider,
+                &program,
+                &settings.model,
+                &redact::text(text),
+            )
+            .await;
+        }
+        ask(&settings, key, text).await
     }
 }
 
@@ -502,7 +546,9 @@ pub async fn ask(settings: &ExplainSettings, key: Option<&str>, text: &str) -> R
                 None => request,
             }
         }
-        Provider::None => unreachable!("no endpoint while Explain is off"),
+        Provider::None | Provider::Claude | Provider::Codex => {
+            unreachable!("no endpoint while Explain is off or runs a command")
+        }
     };
     let response = request.send().await.map_err(|e| {
         let mut message = e.to_string();

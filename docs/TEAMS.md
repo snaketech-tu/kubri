@@ -160,7 +160,7 @@ Whoever holds those credentials can act as anyone, so keep them, the server and 
 
 - **Contexts** come from the server's kubeconfig or its service account. Nobody can add contexts or kubeconfig files in the browser.
 - **Settings**, such as context colors and locks, integrations and saved searches, are shared by everyone. A change to them changes them for everyone, and it is in the audit log.
-- **Not available**: k9s plugins, the local terminal and AI agents (MCP), since they would run on the server or act with its credentials rather than as the person.
+- **Not available**: k9s plugins, the local terminal, AI agents (MCP) and Explain through Claude Code or Codex, since they would run on the server or act with its credentials rather than as the person.
 - **Port-forwards** open their port on the server, as on every web Kubri. Each person sees and stops only their own.
 - `KUBRI_READ_ONLY=true` still applies to everyone, whatever their rights.
 

@@ -90,6 +90,7 @@ export function callBackend(send: Transport): CallBackend {
 		setColumnSettings: (kind, columns) => call('setColumnSettings', { kind, columns }),
 		setAgentSettings: (settings) => call('setAgentSettings', { settings }),
 		setExplainSettings: (settings) => call('setExplainSettings', { settings }),
+		explainClis: () => call('explainClis'),
 		setSavedSearches: (searches) => call('setSavedSearches', { searches }),
 
 		history: (query) => call('history', query),

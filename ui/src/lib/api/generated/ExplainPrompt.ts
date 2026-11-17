@@ -12,7 +12,16 @@ title: string, system: string, text: string, provider: ExplainProvider,
 /**
  * `None` while Explain is off or no model is named.
  */
-model: string | null, endpoint: string | null, 
+model: string | null, 
+/**
+ * The address, or for Claude Code and Codex the program that runs.
+ */
+endpoint: string | null, 
+/**
+ * Why it cannot be sent, when Kubri already knows: Claude Code or Codex cannot run here
+ * or is not installed.
+ */
+blocked: string | null, 
 /**
  * Whether a key is stored. Local models often need none.
  */

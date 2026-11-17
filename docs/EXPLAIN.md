@@ -1,6 +1,6 @@
 # Explain
 
-**Explain** asks a model of your choice what a pod, an event, some log lines, a finding of Checks or a failed action means, and shows the answer beside it. It uses your own API key. Until you pick a provider in **Settings → Explain** (or `:explain`), Kubri sends nothing anywhere.
+**Explain** asks a model of your choice what a pod, an event, some log lines, a finding of Checks or a failed action means, and shows the answer beside it. It uses your own API key, or Claude Code or Codex if you already use one of them. Until you pick a provider in **Settings → Explain** (or `:explain`), Kubri sends nothing anywhere.
 
 ## Setting it up
 
@@ -8,8 +8,14 @@
 | --- | --- |
 | Anthropic | Your Anthropic API key. The model defaults to `claude-opus-5-5`; `claude-sonnet-5-5` and `claude-haiku-5-5` answer faster and cost less. |
 | OpenAI-compatible | The address and model of any endpoint with OpenAI's chat completions (`…/chat/completions`): OpenAI, a gateway, or a local model. For [Ollama](https://ollama.com), use `http://localhost:11434/v1` and a model you pulled, such as `llama3.2`; it needs no key. |
+| Claude Code | Nothing, if [Claude Code](https://code.claude.com/docs/en/setup) is installed and you signed in by running `claude` once. Kubri runs `claude -p` with your account. The model is optional: a name like `sonnet` or `claude-haiku-5-5`, or empty for Claude Code's own choice. |
+| Codex | Nothing, if [Codex](https://developers.openai.com/codex/cli) is installed and you signed in with `codex login`. Kubri runs `codex exec` with your account. The model is optional. |
 
 The address can also point Anthropic requests at a proxy or gateway.
+
+Kubri looks for `claude` and `codex` on your `PATH`, and also where their installers and npm put them, as an app started from a launcher often has a short `PATH`. The settings show the program Kubri found and its version; **Check again** looks once more after you installed one. Kubri runs it in an empty folder, with the prompt you saw on its input. Claude Code gets no tools and no MCP servers, so it only answers. Codex runs in its read-only sandbox: it may read files to answer, but cannot change anything. Neither keeps the session.
+
+In the [web app](WEB.md), Claude Code and Codex would run on the server, with the account signed in there. So they are offered only when the server is started with `KUBRI_LOCAL_TERMINAL=true`, and never on a Kubri shared by a team.
 
 The key never goes into the settings file and is never shown again. The desktop app keeps it in the system keychain on macOS and Windows. On Linux, and for the web server, it is kept in `explain-key` in Kubri's config folder, readable only by you. **Remove** deletes it.
 
