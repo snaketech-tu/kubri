@@ -8,6 +8,7 @@
 | --- | --- |
 | Anthropic | Your Anthropic API key. The model defaults to `claude-opus-5-5`; `claude-sonnet-5-5` and `claude-haiku-5-5` answer faster and cost less. |
 | OpenAI-compatible | The address and model of any endpoint with OpenAI's chat completions (`…/chat/completions`): OpenAI, a gateway, or a local model. For [Ollama](https://ollama.com), use `http://localhost:11434/v1` and a model you pulled, such as `llama3.2`; it needs no key. |
+| OpenRouter | Your [OpenRouter](https://openrouter.ai) key. One key reaches the models of many providers; name one as [openrouter.ai/models](https://openrouter.ai/models) lists it, or leave the model empty and OpenRouter's router, `openrouter/auto`, picks one for each question. The answer says which model wrote it. |
 | Claude Code | Nothing, if [Claude Code](https://code.claude.com/docs/en/setup) is installed and you signed in by running `claude` once. Kubri runs `claude -p` with your account. The model is optional: a name like `sonnet` or `claude-haiku-5-5`, or empty for Claude Code's own choice. |
 | Codex | Nothing, if [Codex](https://developers.openai.com/codex/cli) is installed and you signed in with `codex login`. Kubri runs `codex exec` with your account. The model is optional. |
 
@@ -17,7 +18,7 @@ Kubri looks for `claude` and `codex` on your `PATH`, and also where their instal
 
 In the [web app](WEB.md), Claude Code and Codex would run on the server, with the account signed in there. So they are offered only when the server is started with `KUBRI_LOCAL_TERMINAL=true`, and never on a Kubri shared by a team.
 
-The key never goes into the settings file and is never shown again. The desktop app keeps it in the system keychain on macOS and Windows. On Linux, and for the web server, it is kept in `explain-key` in Kubri's config folder, readable only by you. **Remove** deletes it.
+Each provider has its own key, so a key only ever goes to the provider you saved it for. A key never goes into the settings file and is never shown again. The desktop app keeps it in the system keychain on macOS and Windows. On Linux, and for the web server, it is kept in `explain-key-anthropic`, `explain-key-openai` or `explain-key-openrouter` in Kubri's config folder, readable only by you. **Remove** deletes it. A key saved by an older version, which kept one key for all providers, is given to the provider in the settings.
 
 ## Using it
 

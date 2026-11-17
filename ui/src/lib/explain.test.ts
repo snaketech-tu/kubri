@@ -10,6 +10,9 @@ describe('explainBlocker', () => {
 		// Local models often need no key, but always a model name.
 		expect(explainBlocker({ ...none, provider: 'openai' })).toMatch(/model/);
 		expect(explainBlocker({ ...none, provider: 'openai', model: 'llama3.2' })).toBeNull();
+		// OpenRouter has a default model, but takes nothing without a key.
+		expect(explainBlocker({ ...none, provider: 'openrouter', model: 'openrouter/auto' })).toMatch(/OpenRouter API key/);
+		expect(explainBlocker({ ...none, provider: 'openrouter', model: 'openrouter/auto', hasKey: true })).toBeNull();
 	});
 
 	it('sends with Claude Code and Codex without a key or model, unless the core says why not', () => {

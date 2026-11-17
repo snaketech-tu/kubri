@@ -1959,7 +1959,9 @@ const de: Record<string, string> = {
 	'A key is stored in the system keychain.': 'Ein Key ist im Schlüsselbund des Systems gespeichert.',
 	'A key is stored in a file in Kubri’s config folder that only you can read.': 'Ein Key ist in einer Datei im Konfigurationsordner von Kubri gespeichert, die nur du lesen kannst.',
 	'No key is stored.': 'Kein Key gespeichert.',
-	'Kubri never shows it again and never writes it into the settings file.': 'Kubri zeigt ihn nie wieder und schreibt ihn nie in die Einstellungsdatei.',
+	'Each provider has its own key. Kubri never shows it again and never writes it into the settings file.': 'Jeder Anbieter hat seinen eigenen Key. Kubri zeigt ihn nie wieder und schreibt ihn nie in die Einstellungsdatei.',
+	'One key reaches the models of many providers. Name one as {models} lists it; without a name, OpenRouter picks one for each question. Make a key at {keys}.': 'Ein Key erreicht die Modelle vieler Anbieter. Nenne eins so, wie {models} es aufführt; ohne Namen wählt OpenRouter für jede Frage eins aus. Einen Key bekommst du unter {keys}.',
+	'Add your OpenRouter API key in the settings to send this.': 'Trage deinen OpenRouter-API-Schlüssel in den Einstellungen ein, um das zu senden.',
 
 	// Integrations
 	'Release in {namespace}': 'Release in {namespace}',

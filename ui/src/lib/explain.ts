@@ -4,6 +4,8 @@ import { coreText } from './i18n/errors';
 
 /** The models Explain suggests for Anthropic, best first. The first is the default. */
 export const ANTHROPIC_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
+/** OpenRouter's router, which picks a model for each question, as the core's default. */
+export const OPENROUTER_AUTO = 'openrouter/auto';
 /** What Claude Code takes for `--model` besides full names; empty leaves its own choice. */
 export const CLAUDE_CODE_MODELS = ['opus', 'sonnet', 'haiku'];
 
@@ -18,6 +20,8 @@ export function providerName(provider: ExplainProvider): string {
 			return 'Anthropic';
 		case 'openai':
 			return t('an OpenAI-compatible endpoint');
+		case 'openrouter':
+			return 'OpenRouter';
 		case 'claude':
 			return 'Claude Code';
 		case 'codex':
@@ -37,6 +41,8 @@ export function explainBlocker(prompt: Pick<ExplainPrompt, 'provider' | 'model' 
 	if (runsCommand(prompt.provider)) return null;
 	if (prompt.provider === 'anthropic' && !prompt.hasKey)
 		return t('Add your Anthropic API key in the settings to send this.');
+	if (prompt.provider === 'openrouter' && !prompt.hasKey)
+		return t('Add your OpenRouter API key in the settings to send this.');
 	if (!prompt.model) return t('Name the model to ask in the settings to send this.');
 	return null;
 }

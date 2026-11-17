@@ -19,6 +19,11 @@ use crate::{Error, Kubri, ObjectRef, ResourceRef, Result, redact};
 pub const DEFAULT_ANTHROPIC_MODEL: &str = "claude-opus-5-5";
 const ANTHROPIC_URL: &str = "https://api.anthropic.com";
 const OPENAI_URL: &str = "https://api.openai.com/v1";
+const OPENROUTER_URL: &str = "https://openrouter.ai/api/v1";
+/// OpenRouter's router, which picks a model for each prompt, when the settings name none.
+pub const DEFAULT_OPENROUTER_MODEL: &str = "openrouter/auto";
+/// How OpenRouter names the app that asks, on its own pages.
+const APP_URL: &str = "https://github.com/snaketech-tu/kubri";
 
 /// Room for the model's thinking and its answer.
 const MAX_TOKENS: u32 = 16_000;
@@ -53,6 +58,9 @@ pub enum Provider {
     /// Any endpoint that speaks OpenAI's chat completions, such as Ollama or LM Studio.
     #[serde(rename = "openai")]
     OpenAi,
+    /// OpenRouter, which reaches many providers' models with one key.
+    #[serde(rename = "openrouter")]
+    OpenRouter,
     /// Claude Code, run as `claude -p` with the account it is signed in to.
     Claude,
     /// Codex, run as `codex exec` with the account it is signed in to.
@@ -63,6 +71,17 @@ impl Provider {
     /// Whether it runs a command on this computer instead of calling an address.
     pub fn runs_command(self) -> bool {
         matches!(self, Provider::Claude | Provider::Codex)
+    }
+
+    /// The name of its key in the keychain and the config folder, for providers that take one.
+    /// Each has its own, so a key is only ever sent to the provider it was saved for.
+    pub fn key_name(self) -> Option<&'static str> {
+        match self {
+            Provider::Anthropic => Some("anthropic"),
+            Provider::OpenAi => Some("openai"),
+            Provider::OpenRouter => Some("openrouter"),
+            Provider::None | Provider::Claude | Provider::Codex => None,
+        }
     }
 }
 
@@ -100,6 +119,7 @@ impl ExplainSettings {
         match (self.provider, self.model.as_str()) {
             (_, model) if !model.is_empty() => Some(model.to_owned()),
             (Provider::Anthropic, _) => Some(DEFAULT_ANTHROPIC_MODEL.to_owned()),
+            (Provider::OpenRouter, _) => Some(DEFAULT_OPENROUTER_MODEL.to_owned()),
             _ => None,
         }
     }
@@ -117,6 +137,7 @@ impl ExplainSettings {
             Provider::None | Provider::Claude | Provider::Codex => None,
             Provider::Anthropic => Some(format!("{}/v1/messages", base(ANTHROPIC_URL))),
             Provider::OpenAi => Some(format!("{}/chat/completions", base(OPENAI_URL))),
+            Provider::OpenRouter => Some(format!("{}/chat/completions", base(OPENROUTER_URL))),
         }
     }
 }
@@ -500,6 +521,7 @@ fn error_message(status: u16, body: &str) -> String {
         .unwrap_or_else(|| body.chars().take(300).collect());
     match status {
         401 | 403 => format!("the provider refused the API key ({status}): {message}"),
+        402 => format!("no credit left ({status}): {message}"),
         404 => format!("not found ({status}), check the address and model: {message}"),
         429 => format!("too many requests or no credit left ({status}): {message}"),
         _ => format!("the provider answered {status}: {message}"),
@@ -533,18 +555,27 @@ pub async fn ask(settings: &ExplainSettings, key: Option<&str>, text: &str) -> R
                     "messages": [{ "role": "user", "content": text }],
                 }))
         }
-        Provider::OpenAi => {
-            let request = client.post(&endpoint).json(&json!({
+        Provider::OpenAi | Provider::OpenRouter => {
+            let mut request = client.post(&endpoint).json(&json!({
                 "model": model,
                 "messages": [
                     { "role": "system", "content": SYSTEM_PROMPT },
                     { "role": "user", "content": text },
                 ],
             }));
-            match key {
-                Some(key) => request.bearer_auth(key),
-                None => request,
+            if settings.provider == Provider::OpenRouter {
+                // OpenRouter takes no request without a key, and names the app with these.
+                let key = key.ok_or_else(|| {
+                    Error::Unsupported("Explain needs an OpenRouter API key in the settings".into())
+                })?;
+                request = request
+                    .bearer_auth(key)
+                    .header("HTTP-Referer", APP_URL)
+                    .header("X-Title", "Kubri");
+            } else if let Some(key) = key {
+                request = request.bearer_auth(key);
             }
+            request
         }
         Provider::None | Provider::Claude | Provider::Codex => {
             unreachable!("no endpoint while Explain is off or runs a command")
@@ -606,7 +637,23 @@ fn anthropic_answer(value: &Value, asked: &str) -> Result<ExplainAnswer> {
 }
 
 fn openai_answer(value: &Value, asked: &str) -> Result<ExplainAnswer> {
+    // OpenRouter can answer 200 with the error of the provider it asked, at the top or in the
+    // choice.
     let choice = value.pointer("/choices/0");
+    if let Some(error) = value
+        .get("error")
+        .or_else(|| choice.and_then(|c| c.get("error")))
+        .filter(|e| !e.is_null())
+    {
+        let message = error
+            .get("message")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .unwrap_or_else(|| error.to_string());
+        return Err(model_error(format!(
+            "the provider answered with an error: {message}"
+        )));
+    }
     let text = choice
         .and_then(|c| c.pointer("/message/content"))
         .and_then(Value::as_str)
@@ -637,25 +684,38 @@ fn openai_answer(value: &Value, asked: &str) -> Result<ExplainAnswer> {
     })
 }
 
-/// Where the API key is kept when no keychain holds it: `explain-key` in Kubri's config folder,
-/// readable only by its owner.
-pub fn key_path() -> Option<PathBuf> {
-    Some(crate::settings::dir()?.join("explain-key"))
+/// Where the API key of `provider` is kept when no keychain holds it: `explain-key-<provider>`
+/// in Kubri's config folder, readable only by its owner.
+pub fn key_path(provider: Provider) -> Option<PathBuf> {
+    key_path_in(&crate::settings::dir()?, provider)
 }
 
-/// The stored key, if any.
-pub fn read_key_file() -> Option<String> {
-    let key = std::fs::read_to_string(key_path()?).ok()?;
+fn key_path_in(dir: &std::path::Path, provider: Provider) -> Option<PathBuf> {
+    Some(dir.join(format!("explain-key-{}", provider.key_name()?)))
+}
+
+/// The stored key of `provider`, if any.
+pub fn read_key_file(provider: Provider) -> Option<String> {
+    read_key(&key_path(provider)?)
+}
+
+fn read_key(path: &std::path::Path) -> Option<String> {
+    let key = std::fs::read_to_string(path).ok()?;
     let key = key.trim();
     (!key.is_empty()).then(|| key.to_owned())
 }
 
-/// Stores the key, or removes it when `None`.
-pub fn write_key_file(key: Option<&str>) -> Result<()> {
-    let path = key_path()
-        .ok_or_else(|| Error::Unsupported("there is no config folder to keep the key in".into()))?;
+/// Stores the key of `provider`, or removes it when `None`.
+pub fn write_key_file(provider: Provider, key: Option<&str>) -> Result<()> {
+    let path = key_path(provider).ok_or_else(|| {
+        Error::Unsupported("there is no config folder to keep the key in, or the provider takes none".into())
+    })?;
+    write_key(&path, key)
+}
+
+fn write_key(path: &std::path::Path, key: Option<&str>) -> Result<()> {
     let Some(key) = key.map(str::trim).filter(|k| !k.is_empty()) else {
-        return match std::fs::remove_file(&path) {
+        return match std::fs::remove_file(path) {
             Err(err) if err.kind() != std::io::ErrorKind::NotFound => Err(err.into()),
             _ => Ok(()),
         };
@@ -671,7 +731,7 @@ pub fn write_key_file(key: Option<&str>) -> Result<()> {
         options.mode(0o600);
     }
     use std::io::Write;
-    let mut file = options.open(&path)?;
+    let mut file = options.open(path)?;
     #[cfg(unix)]
     {
         // An older file keeps its mode on open.
@@ -680,6 +740,29 @@ pub fn write_key_file(key: Option<&str>) -> Result<()> {
     }
     file.write_all(key.as_bytes())?;
     Ok(())
+}
+
+/// Gives the one key older versions kept for every provider (`explain-key`) to `owner`, the
+/// provider in the settings, which is the one it was saved for. While the settings name no
+/// provider that takes a key, it stays where it is, unused.
+pub fn adopt_old_key_file(owner: Provider) {
+    if let Some(dir) = crate::settings::dir() {
+        adopt_old_key(&dir, owner);
+    }
+}
+
+fn adopt_old_key(dir: &std::path::Path, owner: Provider) {
+    let old = dir.join("explain-key");
+    let Some(new) = key_path_in(dir, owner) else {
+        return;
+    };
+    let Some(key) = read_key(&old) else {
+        return;
+    };
+    if read_key(&new).is_none() && write_key(&new, Some(&key)).is_err() {
+        return;
+    }
+    let _ = std::fs::remove_file(old);
 }
 
 #[cfg(test)]
@@ -722,6 +805,16 @@ mod tests {
         };
         assert!(bad.normalized().is_err());
         assert_eq!(serde_json::to_value(Provider::OpenAi).unwrap(), "openai");
+        let openrouter = ExplainSettings {
+            provider: Provider::OpenRouter,
+            ..Default::default()
+        };
+        assert_eq!(
+            openrouter.endpoint().unwrap(),
+            "https://openrouter.ai/api/v1/chat/completions"
+        );
+        assert_eq!(openrouter.model().unwrap(), DEFAULT_OPENROUTER_MODEL);
+        assert_eq!(serde_json::to_value(Provider::OpenRouter).unwrap(), "openrouter");
     }
 
     #[test]
@@ -851,6 +944,79 @@ mod tests {
         let request = server.await.unwrap();
         assert!(request.starts_with("POST /v1/chat/completions "));
         assert!(!request.to_ascii_lowercase().contains("authorization"));
+    }
+
+    #[tokio::test]
+    async fn asks_openrouter_with_its_key_and_kubris_name() {
+        let (url, server) = serve_once(
+            r#"{"model":"anthropic/claude-opus-5-5","choices":[{"message":{"content":"Raise the limit."},"finish_reason":"stop"}]}"#,
+        )
+        .await;
+        let settings = ExplainSettings {
+            provider: Provider::OpenRouter,
+            base_url: format!("{url}/api/v1"),
+            model: String::new(),
+        };
+        let answer = ask(&settings, Some("sk-or-v1-abc"), "Why?").await.unwrap();
+        assert_eq!(answer.text, "Raise the limit.");
+        assert_eq!(answer.model, "anthropic/claude-opus-5-5");
+        let request = server.await.unwrap();
+        assert!(request.starts_with("POST /api/v1/chat/completions "), "{request}");
+        let lower = request.to_ascii_lowercase();
+        assert!(lower.contains("authorization: bearer sk-or-v1-abc"), "{request}");
+        assert!(lower.contains("x-title: kubri"), "{request}");
+        assert!(request.contains(r#""model":"openrouter/auto""#), "{request}");
+        let err = ask(&settings, None, "Why?").await.unwrap_err();
+        assert!(err.to_string().contains("OpenRouter API key"), "{err}");
+    }
+
+    #[test]
+    fn reads_errors_in_answers() {
+        let err = openai_answer(
+            &json!({"error": {"code": 502, "message": "Provider returned error"}}),
+            "x",
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Explain: the provider answered with an error: Provider returned error"
+        );
+        let err = openai_answer(
+            &json!({"choices": [{"error": {"message": "overloaded"}, "finish_reason": "error"}]}),
+            "x",
+        )
+        .unwrap_err();
+        assert!(err.to_string().ends_with("overloaded"));
+        assert!(
+            error_message(402, r#"{"error":{"message":"Insufficient credits"}}"#).starts_with("no credit")
+        );
+    }
+
+    #[test]
+    fn keeps_a_key_for_each_provider() {
+        let dir = std::env::temp_dir().join(format!("kubri-keys-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = |p| key_path_in(&dir, p).unwrap();
+        write_key(&path(Provider::OpenRouter), Some(" sk-or \n")).unwrap();
+        assert_eq!(read_key(&path(Provider::OpenRouter)).unwrap(), "sk-or");
+        assert_eq!(read_key(&path(Provider::Anthropic)), None);
+        assert_eq!(key_path_in(&dir, Provider::Claude), None);
+
+        // The one key of older versions goes to the provider in the settings.
+        std::fs::write(dir.join("explain-key"), "sk-ant").unwrap();
+        adopt_old_key(&dir, Provider::None);
+        assert!(
+            dir.join("explain-key").exists(),
+            "kept while no provider takes it"
+        );
+        adopt_old_key(&dir, Provider::Anthropic);
+        assert_eq!(read_key(&path(Provider::Anthropic)).unwrap(), "sk-ant");
+        assert!(!dir.join("explain-key").exists());
+        assert_eq!(read_key(&path(Provider::OpenAi)), None);
+
+        write_key(&path(Provider::OpenRouter), None).unwrap();
+        assert_eq!(read_key(&path(Provider::OpenRouter)), None);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[tokio::test]

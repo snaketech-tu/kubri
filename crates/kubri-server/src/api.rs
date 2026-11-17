@@ -11,7 +11,7 @@ use axum::{Extension, Json, Router};
 use futures::{SinkExt, Stream, StreamExt};
 use kubri_core::{
     ClusterInfo, ExplainAnswer, ExplainPrompt, ExplainSubject, Kubri, LogEvent, LogOptions, ObjectRef,
-    PluginRun, ResourceRef, TableScope, Terminal, TerminalOptions, TerminalOutput,
+    PluginRun, Provider, ResourceRef, TableScope, Terminal, TerminalOptions, TerminalOutput,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -129,21 +129,42 @@ struct ExplainKey {
 }
 
 #[derive(Deserialize)]
+struct KeyQuery {
+    provider: Provider,
+}
+
+#[derive(Deserialize)]
 struct SetExplainKey {
+    provider: Provider,
     /// `None` or empty removes the key.
     key: Option<String>,
 }
 
-/// The web server keeps the key in a file only its user can read; see [`kubri_core::explain`].
-async fn explain_key() -> ApiResult<ExplainKey> {
+/// The key of `provider`. The server keeps each provider's key in its own file that only its
+/// user can read; see [`kubri_core::explain`].
+fn read_key(kubri: &Kubri, provider: Provider) -> Option<String> {
+    kubri_core::explain::adopt_old_key_file(kubri.settings().explain.provider);
+    kubri_core::explain::read_key_file(provider)
+}
+
+async fn explain_key(
+    State(kubri): State<Arc<Kubri>>,
+    Query(query): Query<KeyQuery>,
+) -> ApiResult<ExplainKey> {
     Ok(Json(ExplainKey {
-        has_key: kubri_core::explain::read_key_file().is_some(),
+        has_key: read_key(&kubri, query.provider).is_some(),
     }))
 }
 
-async fn set_explain_key(Json(req): Json<SetExplainKey>) -> ApiResult<ExplainKey> {
-    kubri_core::explain::write_key_file(req.key.as_deref())?;
-    explain_key().await
+async fn set_explain_key(
+    State(kubri): State<Arc<Kubri>>,
+    Json(req): Json<SetExplainKey>,
+) -> ApiResult<ExplainKey> {
+    kubri_core::explain::adopt_old_key_file(kubri.settings().explain.provider);
+    kubri_core::explain::write_key_file(req.provider, req.key.as_deref())?;
+    Ok(Json(ExplainKey {
+        has_key: read_key(&kubri, req.provider).is_some(),
+    }))
 }
 
 async fn explain_prompt(
@@ -151,7 +172,7 @@ async fn explain_prompt(
     Json(subject): Json<ExplainSubject>,
 ) -> ApiResult<ExplainPrompt> {
     let mut prompt = kubri.explain_prompt(&subject).await?;
-    prompt.has_key = kubri_core::explain::read_key_file().is_some();
+    prompt.has_key = read_key(&kubri, prompt.provider).is_some();
     Ok(Json(prompt))
 }
 
@@ -162,7 +183,7 @@ struct Explain {
 }
 
 async fn explain(State(kubri): State<Arc<Kubri>>, Json(req): Json<Explain>) -> ApiResult<ExplainAnswer> {
-    let key = kubri_core::explain::read_key_file();
+    let key = read_key(&kubri, kubri.settings().explain.provider);
     Ok(Json(kubri.explain(&req.text, key.as_deref()).await?))
 }
 

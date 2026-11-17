@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { t } from '../i18n';
 	import { backend, type ExplainClis, type ExplainProvider, type ExplainSettings } from '../api';
-	import { ANTHROPIC_MODELS, CLAUDE_CODE_MODELS, providerName, runsCommand } from '../explain';
+	import { ANTHROPIC_MODELS, CLAUDE_CODE_MODELS, OPENROUTER_AUTO, providerName, runsCommand } from '../explain';
 	import { errorMessage } from '../format';
 	import { coreText } from '../i18n/errors';
 	import { app } from '../state.svelte';
@@ -26,7 +27,8 @@
 		const list: [ExplainProvider, string][] = [
 			['none', t('Off')],
 			['anthropic', 'Anthropic'],
-			['openai', t('OpenAI-compatible')]
+			['openai', t('OpenAI-compatible')],
+			['openrouter', 'OpenRouter']
 		];
 		// Only where they can run, or while one is picked, so that the reason shows.
 		for (const provider of ['claude', 'codex'] as const) {
@@ -37,12 +39,36 @@
 
 	const cli = $derived(clis?.clis.find((c) => c.provider === explain.provider) ?? null);
 
+	/** The placeholders of the model and address fields, by provider. */
+	const MODEL: Record<string, string> = {
+		anthropic: ANTHROPIC_MODELS[0],
+		openrouter: OPENROUTER_AUTO
+	};
+	const ADDRESS: Record<string, string> = {
+		anthropic: 'https://api.anthropic.com',
+		openai: 'https://api.openai.com/v1',
+		openrouter: 'https://openrouter.ai/api/v1'
+	};
+
+	/** Its own signal, so that saving the model or address keeps a key being typed. */
+	const chosen = $derived(explain.provider);
+
+	// Each provider keeps its own key, so whether one is stored changes with the provider.
 	$effect(() => {
-		backend.explainKey().then(
-			(k) => (hasKey = k.hasKey),
-			() => (hasKey = null)
+		const provider = chosen;
+		hasKey = null;
+		key = '';
+		if (provider === 'none' || runsCommand(provider)) return;
+		backend.explainKey(provider).then(
+			(k) => {
+				if (explain.provider === provider) hasKey = k.hasKey;
+			},
+			() => {}
 		);
-		check();
+	});
+
+	$effect(() => {
+		untrack(check);
 	});
 
 	async function check() {
@@ -61,9 +87,11 @@
 	}
 
 	async function saveKey(value: string | null) {
+		const provider = explain.provider;
 		saving = true;
 		try {
-			hasKey = (await backend.setExplainKey(value)).hasKey;
+			const saved = (await backend.setExplainKey(provider, value)).hasKey;
+			if (explain.provider === provider) hasKey = saved;
 			key = '';
 			app.toast(value ? t('Saved the API key') : t('Removed the API key'));
 		} catch (err) {
@@ -146,7 +174,7 @@
 				<input
 					list="explain-models"
 					value={explain.model}
-					placeholder={explain.provider === 'anthropic' ? ANTHROPIC_MODELS[0] : t('such as gpt-5 or llama3.2')}
+					placeholder={MODEL[explain.provider] ?? t('such as gpt-5 or llama3.2')}
 					onchange={(e) => update({ model: e.currentTarget.value })}
 				/>
 				{#if explain.provider === 'anthropic'}
@@ -159,10 +187,18 @@
 				<span>{t('Address')}</span>
 				<input
 					value={explain.baseUrl}
-					placeholder={explain.provider === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1'}
+					placeholder={ADDRESS[explain.provider]}
 					onchange={(e) => update({ baseUrl: e.currentTarget.value })}
 				/>
 			</label>
+			{#if explain.provider === 'openrouter'}
+				<p class="muted small hint">
+					<Phrase
+						text={t('One key reaches the models of many providers. Name one as {models} lists it; without a name, OpenRouter picks one for each question. Make a key at {keys}.')}
+						mono={{ models: 'openrouter.ai/models', keys: 'openrouter.ai/keys' }}
+					/>
+				</p>
+			{/if}
 			{#if explain.provider === 'openai'}
 				<p class="muted small hint">
 					<Phrase
@@ -190,7 +226,7 @@
 				{#if hasKey}<button type="button" class="small" disabled={saving} onclick={() => saveKey(null)}>{t('Remove')}</button>{/if}
 			</form>
 			<p class="muted small hint">
-				{#if hasKey}{keychain ? t('A key is stored in the system keychain.') : t('A key is stored in a file in Kubri’s config folder that only you can read.')}{:else}{t('No key is stored.')}{/if} {t('Kubri never shows it again and never writes it into the settings file.')}
+				{#if hasKey}{keychain ? t('A key is stored in the system keychain.') : t('A key is stored in a file in Kubri’s config folder that only you can read.')}{:else}{t('No key is stored.')}{/if} {t('Each provider has its own key. Kubri never shows it again and never writes it into the settings file.')}
 			</p>
 		</div>
 	{/if}

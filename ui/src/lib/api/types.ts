@@ -430,10 +430,10 @@ export interface Backend {
 	setExplainSettings(settings: ExplainSettings): Promise<Settings>;
 	/** Whether Explain can use Claude Code and Codex here, and where they are. */
 	explainClis(): Promise<ExplainClis>;
-	/** Whether an API key for Explain is stored; the key itself never comes back. */
-	explainKey(): Promise<{ hasKey: boolean }>;
-	/** Stores the key, or removes it with null. */
-	setExplainKey(key: string | null): Promise<{ hasKey: boolean }>;
+	/** Whether an API key of the provider is stored; the key itself never comes back. */
+	explainKey(provider: ExplainProvider): Promise<{ hasKey: boolean }>;
+	/** Stores the provider's key, or removes it with null. Each provider keeps its own. */
+	setExplainKey(provider: ExplainProvider, key: string | null): Promise<{ hasKey: boolean }>;
 	/** Gathers what Explain would send; nothing leaves Kubri yet. */
 	explainPrompt(subject: ExplainSubject): Promise<ExplainPrompt>;
 	/** Sends the prompt's text to the model in the settings. */
