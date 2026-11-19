@@ -565,35 +565,45 @@
 					<span class="in-use" style:left={percent(Math.min(r.used / r.capacity, 1))} title={t('In use')}></span>
 				{/if}
 			</span>
-			{#if r.free !== null}
-				<span class="kpi-room">{t('{free} of {capacity} free', { free: format(r.free), capacity: format(r.capacity) })}</span>
-			{:else if r.reserved === null}
+			{#if r.reserved === null}
 				<span class="kpi-note">{t('{used} used of {capacity}', { used: format(r.used ?? 0), capacity: format(r.capacity) })}</span>
-			{:else}
+			{:else if r.partial}
 				<span class="kpi-note">{t('{reserved} of {capacity} reserved', { reserved: format(r.reserved), capacity: format(r.capacity) })}</span>
-			{/if}
-			{#if r.reserved !== null}
-				<span class="kpi-note">
-					{r.used !== null ? t('{used} in use right now', { used: format(r.used) }) : t('Use not measured: no metrics-server')}
-				</span>
-			{/if}
-			{#if r.partial && namespace}
-				<span class="kpi-note">{t('Counts only namespace {name}: pods of other namespaces may not be listed', { name: namespace })}</span>
-			{:else if r.namespace && namespace}
-				<span class="kpi-note legend {tone}">
-					<span class="dot" aria-hidden="true"></span>
-					<span>
-						{r.namespace.used !== null
-							? t('{name}: {reserved} reserved, {used} in use', { name: namespace, reserved: format(r.namespace.reserved), used: format(r.namespace.used) })
-							: t('{name}: {reserved} reserved', { name: namespace, reserved: format(r.namespace.reserved) })}
-					</span>
-				</span>
-				{#if r.reserved !== null}
-					<span class="kpi-note legend others {tone}">
-						<span class="dot" aria-hidden="true"></span>
-						<span>{t('Other namespaces: {reserved} reserved', { reserved: format(Math.max(0, r.reserved - r.namespace.reserved)) })}</span>
-					</span>
+				{#if namespace}
+					<span class="kpi-note">{t('Counts only namespace {name}: pods of other namespaces may not be listed', { name: namespace })}</span>
 				{/if}
+			{:else}
+				<span class="legend-list {tone}">
+					{#if r.namespace && namespace}
+						<span class="legend">
+							<span class="swatch mine" aria-hidden="true"></span>
+							<span>
+								{r.namespace.used !== null
+									? t('{name}: {reserved} reserved, {used} in use', { name: namespace, reserved: format(r.namespace.reserved), used: format(r.namespace.used) })
+									: t('{name}: {reserved} reserved', { name: namespace, reserved: format(r.namespace.reserved) })}
+							</span>
+						</span>
+						<span class="legend">
+							<span class="swatch others" aria-hidden="true"></span>
+							<span>{t('Other namespaces: {reserved} reserved', { reserved: format(Math.max(0, r.reserved - r.namespace.reserved)) })}</span>
+						</span>
+					{:else}
+						<span class="legend">
+							<span class="swatch mine" aria-hidden="true"></span>
+							<span>{t('Reserved: {amount}', { amount: format(r.reserved) })}</span>
+						</span>
+					{/if}
+					{#if r.free !== null}
+						<span class="legend room">
+							<span class="swatch free" aria-hidden="true"></span>
+							<span>{t('Free: {free} of {capacity}', { free: format(r.free), capacity: format(r.capacity) })}</span>
+						</span>
+					{/if}
+					<span class="legend">
+						<span class="swatch tick" aria-hidden="true"></span>
+						<span>{r.used !== null ? t('In use right now: {used}', { used: format(r.used) }) : t('Use not measured: no metrics-server')}</span>
+					</span>
+				</span>
 			{/if}
 			{#if r.short && waiting.length}
 				<span class="kpi-note short" title={waitingTitle(waiting, resource, format)}>
@@ -837,8 +847,7 @@
 	.fill.others {
 		border-radius: 0 3px 3px 0;
 	}
-	.fill.others,
-	.legend.others .dot {
+	.fill.others {
 		background: color-mix(in srgb, var(--tone) 40%, var(--surface-2));
 	}
 	.in-use {
@@ -849,21 +858,44 @@
 		margin-left: -1px;
 		background: var(--text);
 	}
-	.kpi-room {
-		font-size: 13px;
-		font-weight: 500;
+	.legend-list {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
 	}
 	.legend {
 		display: flex;
-		gap: 6px;
+		gap: 7px;
 		align-items: baseline;
+		font-size: 11.5px;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
 	}
-	.legend .dot {
+	.legend.room {
+		font-size: 12.5px;
+		font-weight: 500;
+		color: var(--text);
+	}
+	.swatch {
 		flex: none;
-		width: 8px;
+		position: relative;
+		top: 1px;
+		width: 10px;
 		height: 8px;
 		border-radius: 2px;
+	}
+	.swatch.mine {
 		background: var(--tone);
+	}
+	.swatch.others {
+		background: color-mix(in srgb, var(--tone) 40%, var(--surface-2));
+	}
+	.swatch.free {
+		background: var(--surface-2);
+		box-shadow: inset 0 0 0 1px var(--border);
+	}
+	.swatch.tick {
+		background: linear-gradient(var(--text), var(--text)) center / 2px 100% no-repeat;
 	}
 	.columns {
 		display: grid;
