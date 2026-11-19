@@ -115,19 +115,19 @@ describe('pushTrail', () => {
 
 describe('room', () => {
 	it('counts only placed pods as reserved and flags pods that cannot fit', () => {
-		const r = room({ used: 300, requested: 65_010, waiting: 64_000, capacity: 4000 })!;
+		const r = room({ used: 300, requested: 65_010, waiting: 64_000, capacity: 4000, inNamespace: null, partial: false })!;
 		expect(r.reserved).toBe(1010);
 		expect(r.value).toBeCloseTo(0.2525);
 		expect(r.short).toBe(true);
 	});
 
 	it('does not flag waiting pods that fit into what is left', () => {
-		expect(room({ used: null, requested: 1100, waiting: 100, capacity: 4000 })!.short).toBe(false);
+		expect(room({ used: null, requested: 1100, waiting: 100, capacity: 4000, inNamespace: null, partial: false })!.short).toBe(false);
 	});
 
 	it('falls back to use without requests, and to nothing without capacity', () => {
-		expect(room({ used: 2000, requested: null, waiting: null, capacity: 4000 })).toMatchObject({ reserved: null, value: 0.5 });
-		expect(room({ used: 2000, requested: 1000, waiting: null, capacity: null })).toBeNull();
-		expect(room({ used: null, requested: null, waiting: null, capacity: 4000 })).toBeNull();
+		expect(room({ used: 2000, requested: null, waiting: null, capacity: 4000, inNamespace: null, partial: false })).toMatchObject({ reserved: null, value: 0.5 });
+		expect(room({ used: 2000, requested: 1000, waiting: null, capacity: null, inNamespace: null, partial: false })).toBeNull();
+		expect(room({ used: null, requested: null, waiting: null, capacity: 4000, inNamespace: null, partial: false })).toBeNull();
 	});
 });

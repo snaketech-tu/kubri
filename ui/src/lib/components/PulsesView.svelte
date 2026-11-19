@@ -549,7 +549,15 @@
 					{t('{used} used of {capacity}', { used: format(r.used ?? 0), capacity: format(r.capacity) })}
 				{/if}
 			</span>
-			{#if r.reserved !== null}
+			{#if r.reserved !== null && namespace && u.partial}
+				<span class="kpi-note">{t('Counts only namespace {name}: pods of other namespaces may not be listed', { name: namespace })}</span>
+			{:else if r.reserved !== null && namespace && u.inNamespace != null}
+				<span class="kpi-note">
+					{r.used !== null
+						? t('Namespace {name}: {reserved} reserved, {used} in use', { name: namespace, reserved: format(u.inNamespace), used: format(r.used) })
+						: t('Namespace {name}: {reserved} reserved', { name: namespace, reserved: format(u.inNamespace) })}
+				</span>
+			{:else if r.reserved !== null}
 				<span class="kpi-note">
 					{r.used !== null ? t('{used} in use right now', { used: format(r.used) }) : t('Use not measured: no metrics-server')}
 				</span>
@@ -574,7 +582,7 @@
 					class="fill {r.short ? 'bad' : meterTone(r.value) === 'accent' ? '' : meterTone(r.value)}"
 					style:width={percent(Math.min(r.value, 1))}
 				></span>
-				{#if r.reserved !== null && r.used !== null}
+				{#if r.reserved !== null && r.used !== null && !namespace}
 					<span class="request" style:left={percent(Math.min(r.used / r.capacity, 1))} title={t('In use')}></span>
 				{/if}
 			</span>

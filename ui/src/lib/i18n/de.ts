@@ -2179,7 +2179,6 @@ const de: Record<string, string> = {
 	'Show its overview': 'Seine Übersicht zeigen',
 	'Connected': 'Verbunden',
 	'Could not be checked': 'Konnte nicht geprüft werden',
-	'{requested} requested of {capacity}': '{requested} von {capacity} angefordert',
 	'Added in Kubri': 'In Kubri hinzugefügt',
 	'Remove from Kubri?': 'Aus Kubri entfernen?',
 	'Meters show what pods request of what nodes can hold. Opening a cluster connects Kubri to it.': 'Die Balken zeigen, was Pods von dem anfordern, was Nodes fassen. Ein Cluster zu öffnen, verbindet Kubri mit ihm.',
@@ -2673,6 +2672,11 @@ const de: Record<string, string> = {
 	'{n} namespaces are now production': '{n} Namespaces sind jetzt Produktion',
 	'{n} namespace is no longer production': '{n} Namespace ist nicht mehr Produktion',
 	'{n} namespaces are no longer production': '{n} Namespaces sind nicht mehr Produktion',
+	'CPU reserved': 'CPU reserviert',
+	'Memory reserved': 'Speicher reserviert',
+	'Namespace {name}: {reserved} reserved': 'Namespace {name}: {reserved} reserviert',
+	'Namespace {name}: {reserved} reserved, {used} in use': 'Namespace {name}: {reserved} reserviert, {used} in Benutzung',
+	'Counts only namespace {name}: pods of other namespaces may not be listed': 'Zählt nur Namespace {name}: Pods anderer Namespaces dürfen nicht gelistet werden',
 };
 
 export default de;

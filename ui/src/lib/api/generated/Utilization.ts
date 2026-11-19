@@ -16,4 +16,14 @@ waiting: number | null,
 /**
  * Allocatable on all nodes.
  */
-capacity: number | null, };
+capacity: number | null, 
+/**
+ * With a namespace selected, what its pods on a node reserve; `requested` and `waiting`
+ * still count the whole cluster, since a new pod may land on any node.
+ */
+inNamespace: number | null, 
+/**
+ * `requested` and `waiting` count only the selected namespace: pods in all namespaces
+ * may not be listed.
+ */
+partial: boolean, };

@@ -127,6 +127,12 @@ pub struct Utilization {
     pub waiting: Option<f64>,
     /// Allocatable on all nodes.
     pub capacity: Option<f64>,
+    /// With a namespace selected, what its pods on a node reserve; `requested` and `waiting`
+    /// still count the whole cluster, since a new pod may land on any node.
+    pub in_namespace: Option<f64>,
+    /// `requested` and `waiting` count only the selected namespace: pods in all namespaces
+    /// may not be listed.
+    pub partial: bool,
 }
 
 /// Lists everything the overview needs at once. Kinds that cannot be listed are reported
@@ -139,9 +145,17 @@ pub(crate) async fn gather(
     now: Timestamp,
 ) -> Pulse {
     let c = &client;
-    let (nodes, pods, deployments, stateful_sets, daemon_sets, replica_sets) = futures::join!(
+    // Room for new pods is a question about the whole cluster, so its requests count every pod.
+    let all_pods = async {
+        match namespace {
+            Some(_) => Some(list(Api::<Pod>::all(c.clone())).await),
+            None => None,
+        }
+    };
+    let (nodes, pods, all_pods, deployments, stateful_sets, daemon_sets, replica_sets) = futures::join!(
         list(Api::<Node>::all(c.clone())),
         list(scoped::<Pod>(c, namespace)),
+        all_pods,
         list(scoped::<Deployment>(c, namespace)),
         list(scoped::<StatefulSet>(c, namespace)),
         list(scoped::<DaemonSet>(c, namespace)),
@@ -183,20 +197,33 @@ pub(crate) async fn gather(
 
     let usage = usage.ok();
     let used = |pick: fn(&Usage) -> f64| usage.as_ref().map(|u| u.iter().map(pick).sum());
+    let (cluster_pods, partial) = match &all_pods {
+        Some(Ok(all)) => (Ok(all.as_slice()), false),
+        Some(Err(_)) => (pods.as_deref().map_err(|_| ()), pods.is_ok()),
+        None => (pods.as_deref().map_err(|_| ()), false),
+    };
+    let in_namespace = |resource| match (namespace, &pods) {
+        (Some(_), Ok(pods)) => Some(reserved(pods, resource)),
+        _ => None,
+    };
     let cpu = Utilization {
         used: used(|u| u.cpu),
-        requested: pods.as_ref().ok().map(|p| requested(p, "cpu") * 1000.0),
-        waiting: pods.as_ref().ok().map(|p| requested(unplaced(p), "cpu") * 1000.0),
+        requested: cluster_pods.ok().map(|p| requested(p, "cpu") * 1000.0),
+        waiting: cluster_pods.ok().map(|p| requested(unplaced(p), "cpu") * 1000.0),
         capacity: nodes.as_ref().ok().map(|n| allocatable(n, "cpu") * 1000.0),
+        in_namespace: in_namespace("cpu").map(|v| v * 1000.0),
+        partial,
     };
     let memory = Utilization {
         used: used(|u| u.memory),
-        requested: pods.as_ref().ok().map(|p| requested(p, "memory")),
-        waiting: pods.as_ref().ok().map(|p| requested(unplaced(p), "memory")),
+        requested: cluster_pods.ok().map(|p| requested(p, "memory")),
+        waiting: cluster_pods.ok().map(|p| requested(unplaced(p), "memory")),
         capacity: nodes.as_ref().ok().map(|n| allocatable(n, "memory")),
+        in_namespace: in_namespace("memory"),
+        partial,
     };
 
-    let waiting = pods.as_deref().map(waiting_pods).unwrap_or_default();
+    let waiting = cluster_pods.map(waiting_pods).unwrap_or_default();
     Pulse {
         kinds: vec![
             summarize(nodes, health::node),
@@ -333,6 +360,12 @@ pub(crate) fn requested<'a>(pods: impl IntoIterator<Item = &'a Pod>, resource: &
         .filter(|p| !finished(p))
         .map(|p| pod_request(p, resource))
         .sum()
+}
+
+/// What pods a node has taken reserve there, as the Clusters page and the overview show it:
+/// [`requested`] without the pods that still wait for a node.
+pub(crate) fn reserved(pods: &[Pod], resource: &str) -> f64 {
+    (requested(pods, resource) - requested(unplaced(pods), resource)).max(0.0)
 }
 
 fn finished(pod: &Pod) -> bool {
@@ -652,6 +685,72 @@ mod tests {
         assert_eq!(names, ["big", "small"]);
         assert_eq!(waiting[0].cpu, 64_000.0);
         assert_eq!(waiting[0].object.namespace.as_deref(), Some("shop"));
+    }
+
+    #[test]
+    fn reserves_only_what_pods_on_a_node_ask_for() {
+        let pod = |node: Option<&str>, cpu: &str| -> Pod {
+            from(json!({ "metadata": { "name": "p" }, "spec": {
+                "nodeName": node,
+                "containers": [{ "name": "a", "resources": { "requests": { "cpu": cpu } } }]
+            }, "status": { "phase": "Running" } }))
+        };
+        let pods = [pod(Some("n1"), "1"), pod(Some("n1"), "500m"), pod(None, "64")];
+        assert!((reserved(&pods, "cpu") - 1.5).abs() < 1e-9);
+    }
+
+    /// The overview with namespace `shop` selected, on a 4-core node where `kube-system`
+    /// reserves 2 cores and `shop` 1. `all` answers the list of pods in every namespace.
+    async fn shop_pulse(all: (u16, String)) -> Pulse {
+        let pod = |namespace: &str, cpu: &str| {
+            json!({ "metadata": { "name": format!("{namespace}-{cpu}"), "namespace": namespace },
+                "spec": { "nodeName": "n1",
+                    "containers": [{ "name": "a", "resources": { "requests": { "cpu": cpu, "memory": "1Gi" } } }] },
+                "status": { "phase": "Running" } })
+        };
+        let items = |items: Vec<serde_json::Value>| {
+            json!({ "kind": "List", "apiVersion": "v1", "metadata": {}, "items": items }).to_string()
+        };
+        let shop = items(vec![pod("shop", "1")]);
+        let (client, _) = crate::testing::client(move |r| {
+            let path = r.uri.split('?').next().unwrap_or_default();
+            match path {
+                "/api/v1/nodes" => (
+                    200,
+                    items(vec![json!({ "metadata": { "name": "n1" },
+                        "status": { "allocatable": { "cpu": "4", "memory": "8Gi" } } })]),
+                ),
+                "/api/v1/pods" => all.clone(),
+                "/api/v1/namespaces/shop/pods" => (200, shop.clone()),
+                _ => (200, items(vec![])),
+            }
+        });
+        let metrics = async { Err(crate::Error::NotFound("metrics".into())) };
+        gather(client, Some("shop"), metrics, |_, _| None, Timestamp::UNIX_EPOCH).await
+    }
+
+    #[tokio::test]
+    async fn counts_the_whole_cluster_with_a_namespace_selected() {
+        let all = json!({ "kind": "List", "apiVersion": "v1", "metadata": {}, "items": [
+            { "metadata": { "name": "a", "namespace": "kube-system" }, "spec": { "nodeName": "n1",
+                "containers": [{ "name": "a", "resources": { "requests": { "cpu": "2" } } }] }, "status": { "phase": "Running" } },
+            { "metadata": { "name": "b", "namespace": "shop" }, "spec": { "nodeName": "n1",
+                "containers": [{ "name": "a", "resources": { "requests": { "cpu": "1" } } }] }, "status": { "phase": "Running" } }
+        ] });
+        let pulse = shop_pulse((200, all.to_string())).await;
+        assert_eq!(pulse.cpu.requested, Some(3000.0));
+        assert_eq!(pulse.cpu.capacity, Some(4000.0));
+        assert_eq!(pulse.cpu.in_namespace, Some(1000.0));
+        assert!(!pulse.cpu.partial);
+    }
+
+    #[tokio::test]
+    async fn says_when_only_the_namespace_could_be_counted() {
+        let pulse = shop_pulse((403, crate::testing::status(403, "forbidden"))).await;
+        assert_eq!(pulse.cpu.requested, Some(1000.0));
+        assert_eq!(pulse.cpu.in_namespace, Some(1000.0));
+        assert!(pulse.cpu.partial);
+        assert_eq!(pulse.memory.in_namespace, Some(1024.0 * 1024.0 * 1024.0));
     }
 
     #[test]

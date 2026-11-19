@@ -23,7 +23,7 @@ export function fill(u: Utilization): { value: number; measured: boolean } | nul
 /** How much room is left: what running pods reserve, what they use, and what waits for a node. */
 export interface Room {
 	capacity: number;
-	/** Requested by pods a node has taken; null without access to pods. */
+	/** Requested by pods a node has taken, in all namespaces; null without access to pods. */
 	reserved: number | null;
 	used: number | null;
 	/** Requested by pods no node has taken yet. */

@@ -170,13 +170,13 @@
 						</span>
 						{#if c.cpu && c.memory}
 							{@const usage = [
-								['CPU requested', c.cpu, (v: number) => cpuText(v, true)],
-								['Memory requested', c.memory, (v: number) => memoryText(v)]
+								[t('CPU reserved'), c.cpu, (v: number) => cpuText(v, true)],
+								[t('Memory reserved'), c.memory, (v: number) => memoryText(v)]
 							] as const}
 							<span class="meters">
-								{#each usage as [label, [requested, capacity], format] (label)}
-									{@const share = percent(requested, capacity)}
-									<span class="meter-row" title={t('{requested} requested of {capacity}', { requested: format(requested), capacity: format(capacity) })}>
+								{#each usage as [label, [reserved, capacity], format] (label)}
+									{@const share = percent(reserved, capacity)}
+									<span class="meter-row" title={t('{reserved} of {capacity} reserved', { reserved: format(reserved), capacity: format(capacity) })}>
 										<small>{label}</small>
 										<span class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(share * 100)} aria-label={label}>
 											<span class="fill {meterTone(share)}" style:width="{Math.min(share, 1) * 100}%"></span>
