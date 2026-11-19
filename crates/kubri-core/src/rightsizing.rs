@@ -82,6 +82,10 @@ pub struct RightSizing {
     pub source: String,
     /// Use over time, so 95th percentiles and peaks; else one sample of now.
     pub history: bool,
+    /// Deployments, StatefulSets and DaemonSets looked at.
+    pub workloads: u32,
+    /// Containers of them whose use was found.
+    pub measured: u32,
     pub advice: Vec<SizeAdvice>,
 }
 
@@ -294,6 +298,19 @@ struct Workload {
     pods: Regex,
 }
 
+impl Workload {
+    fn new(target: ObjectRef, kind: &str, template: Option<PodTemplateSpec>) -> Option<Self> {
+        let pattern = format!("^(?:{})$", crate::prometheus::pod_regex(kind, &target.name));
+        let pods = Regex::new(&pattern).ok()?;
+        Some(Workload {
+            target,
+            kind: kind.to_owned(),
+            template,
+            pods,
+        })
+    }
+}
+
 async fn workloads(client: &Client, namespace: Option<&str>, context: &str) -> Result<Vec<Workload>> {
     let (deployments, stateful_sets, daemon_sets) = futures::join!(
         list(scoped::<Deployment>(client, namespace)),
@@ -303,20 +320,13 @@ async fn workloads(client: &Client, namespace: Option<&str>, context: &str) -> R
     let mut out = Vec::new();
     let mut add = |kind: &str, resource, meta: (String, String), template: Option<PodTemplateSpec>| {
         let (ns, name) = meta;
-        let pattern = format!("^{}$", crate::prometheus::pod_pattern(kind, &name));
-        if let Ok(pods) = Regex::new(&pattern) {
-            out.push(Workload {
-                target: ObjectRef {
-                    context: Some(context.to_owned()),
-                    resource,
-                    namespace: Some(ns),
-                    name,
-                },
-                kind: kind.to_owned(),
-                template,
-                pods,
-            });
-        }
+        let target = ObjectRef {
+            context: Some(context.to_owned()),
+            resource,
+            namespace: Some(ns),
+            name,
+        };
+        out.extend(Workload::new(target, kind, template));
     };
     for d in deployments? {
         let meta = (d.namespace().unwrap_or_default(), d.name_any());
@@ -348,9 +358,11 @@ async fn workloads(client: &Client, namespace: Option<&str>, context: &str) -> R
     Ok(out)
 }
 
-/// The advice for every container of `workloads`, from what their pods used.
-fn advice(workloads: &[Workload], used: &Used, history: bool) -> Vec<SizeAdvice> {
+/// The advice for every container of `workloads`, from what their pods used, and how many
+/// containers had any use to go by.
+fn advice(workloads: &[Workload], used: &Used, history: bool) -> (Vec<SizeAdvice>, u32) {
     let mut out = Vec::new();
+    let mut measured = 0;
     for w in workloads {
         let ns = w.target.namespace.as_deref().unwrap_or_default();
         let containers = w
@@ -371,6 +383,9 @@ fn advice(workloads: &[Workload], used: &Used, history: bool) -> Vec<SizeAdvice>
             let amounts =
                 |of: Option<&BTreeMap<String, k8s_openapi::apimachinery::pkg::api::resource::Quantity>>,
                  what: &str| { of.and_then(|m| m.get(what)).map(|q| q.0.clone()) };
+            if peak.0.is_some() || peak.1.is_some() {
+                measured += 1;
+            }
             let resources = c.resources.as_ref();
             for (what, used) in [("cpu", peak.0), ("memory", peak.1)] {
                 let Some(used) = used else { continue };
@@ -404,7 +419,7 @@ fn advice(workloads: &[Workload], used: &Used, history: bool) -> Vec<SizeAdvice>
             .then_with(|| a.resource.cmp(&b.resource))
             .then_with(|| b.freed.total_cmp(&a.freed))
     });
-    out
+    (out, measured)
 }
 
 fn max(a: Option<f64>, b: Option<f64>) -> Option<f64> {
@@ -439,10 +454,13 @@ impl Kubri {
                 false,
             ),
         };
+        let (advice, measured) = advice(&workloads, &used, history);
         Ok(RightSizing {
             source,
             history,
-            advice: advice(&workloads, &used, history),
+            workloads: u32::try_from(workloads.len()).unwrap_or(u32::MAX),
+            measured,
+            advice,
         })
     }
 
@@ -492,6 +510,37 @@ mod tests {
         );
         // Fine as it is.
         assert!(advise("memory", Some("128Mi"), Some("256Mi"), 90.0 * MI, true).is_none());
+    }
+
+    #[test]
+    fn matches_pods_of_workloads_with_dashed_names() {
+        let template: PodTemplateSpec = serde_json::from_value(json!({ "spec": { "containers": [
+            { "name": "api", "resources": { "requests": { "memory": "64Mi" } } }
+        ] } }))
+        .unwrap();
+        let target = ObjectRef {
+            context: None,
+            resource: resource_ref::<Deployment>(),
+            namespace: Some("shop".into()),
+            name: "order-api".into(),
+        };
+        let workload = Workload::new(target, "Deployment", Some(template)).unwrap();
+        let used = Used::from([
+            (
+                ("shop".into(), "order-api-6756d48f97-cjzr9".into(), "api".into()),
+                (Some(0.01), Some(100.0 * MI)),
+            ),
+            // Another namespace's pod of the same name does not count.
+            (
+                ("test".into(), "order-api-6756d48f97-x7k2p".into(), "api".into()),
+                (None, Some(900.0 * MI)),
+            ),
+        ]);
+        let (advice, measured) = advice(&[workload], &used, true);
+        assert_eq!(measured, 1);
+        let memory = advice.iter().find(|a| a.resource == "memory").unwrap();
+        assert_eq!(memory.reason, SizeReason::UnderRequested);
+        assert_eq!(memory.used, 100.0 * MI);
     }
 
     #[test]

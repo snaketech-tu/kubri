@@ -147,7 +147,13 @@ fn regex_escape(text: &str) -> String {
 
 /// The pod names a workload's controller gives its pods, as a PromQL regex.
 pub(crate) fn pod_pattern(kind: &str, name: &str) -> String {
-    let name = regex_escape(name);
+    // A PromQL string literal needs each backslash twice.
+    pod_regex(kind, name).replace('\\', "\\\\")
+}
+
+/// The pod names a workload's controller gives its pods, as a regex.
+pub(crate) fn pod_regex(kind: &str, name: &str) -> String {
+    let name = regex::escape(name);
     match kind {
         "Deployment" => format!("{name}-[a-z0-9]{{1,10}}-[a-z0-9]{{5}}"),
         "StatefulSet" => format!("{name}-[0-9]+"),
@@ -628,16 +634,17 @@ mod tests {
 
     #[test]
     fn pod_names_of_workloads() {
-        let re = |kind, name| {
-            regex::Regex::new(&format!(
-                "^(?:{})$",
-                pod_pattern(kind, name).replace("\\\\", "\\")
-            ))
-            .unwrap()
-        };
+        let re = |kind, name| regex::Regex::new(&format!("^(?:{})$", pod_regex(kind, name))).unwrap();
         let deploy = re("Deployment", "web");
         assert!(deploy.is_match("web-6756d48f97-cjzr9"));
         assert!(!deploy.is_match("web-api-6756d48f97-cjzr9"));
+        let dashed = re("Deployment", "web-api");
+        assert!(dashed.is_match("web-api-6756d48f97-cjzr9"));
+        assert!(!dashed.is_match("web-6756d48f97-cjzr9"));
+        assert_eq!(
+            pod_pattern("Deployment", "web-api"),
+            "web\\\\-api-[a-z0-9]{1,10}-[a-z0-9]{5}"
+        );
         assert!(re("StatefulSet", "db").is_match("db-0"));
         assert!(!re("StatefulSet", "db").is_match("db-api-0"));
         assert!(re("DaemonSet", "agent").is_match("agent-x7k2p"));
