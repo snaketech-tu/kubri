@@ -394,6 +394,7 @@ const UNRECORDED: &[&str] = &[
     "integrationUrl",
     "lokiLogs",
     "portForwards",
+    "portsInUse",
     "benchmarks",
     "stopBenchmark",
     "removeBenchmark",

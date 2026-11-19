@@ -173,7 +173,24 @@
 					</table>
 				</div>
 			{:else}
-				<p class="empty"><Icon name="ok" size={16} /> {t('Every container requests about what it uses.')}</p>
+				{#if found.workloads === 0}
+					<p class="empty">
+						<Icon name="sizing" size={16} />
+						{namespace
+							? t('There are no Deployments, StatefulSets or DaemonSets in {namespace}, and only their containers are checked.', { namespace })
+							: t('There are no Deployments, StatefulSets or DaemonSets, and only their containers are checked.')}
+					</p>
+				{:else if found.measured === 0}
+					<p class="empty">
+						<Icon name="warning" size={16} />
+						{t('No use was found for any of their containers, so there is nothing to compare. Check that the source above collects container metrics from the kubelet (cAdvisor).')}
+					</p>
+				{:else}
+					<p class="empty">
+						<Icon name="ok" size={16} />
+						{plural(found.measured, 'Checked {n} container: it requests about what it uses.', 'Checked {n} containers: each requests about what it uses.')}
+					</p>
+				{/if}
 			{/if}
 		</div>
 	{/if}

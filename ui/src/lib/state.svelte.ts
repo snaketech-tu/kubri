@@ -64,7 +64,7 @@ import { KindViews } from './state/views.svelte';
 
 export * from './state/model';
 export { NO_CONTEXT_SETTINGS, legacyContextSettings } from './state/settings.svelte';
-export { favoriteLabel, isForwardOf } from './state/favorites.svelte';
+export { byNamespace, favoriteKey, favoriteLabel, favoriteRoute, isForwardOf } from './state/favorites.svelte';
 
 /**
  * Global app state: kubeconfig contexts, the connected cluster and what is being browsed. The

@@ -1,9 +1,12 @@
 ## What's new
 
-Kubri 1.12.1 fixes two things.
+Kubri 1.13 makes Explain work with the AI tools you already use, and port-forward favorites easier to keep in bulk.
 
-- **Helm actions no longer say `helm` is missing** when it is installed but not on the app's `PATH`, as can happen when Kubri starts from a launcher or the Dock. Kubri also looks where Helm's installers put it, and **Reload** on the Helm page looks again.
-- **One focus mark.** On the Overview, Tab and the arrow keys mark the same tile.
+- **Explain through Claude Code, Codex or OpenRouter.** Claude Code and Codex run with the account you signed in with, so no API key is needed. OpenRouter reaches many providers' models with one key, and each provider now keeps its own key.
+- **Names for port-forward favorites**, shown in the sidebar instead of the target.
+- **Many favorites at once:** from marked rows, every Service of a namespace, pasted `kubectl port-forward` commands or a favorites file, with free local ports picked for you. **Export favorites** saves them to share, and the sidebar groups many favorites by namespace.
+- **Grafana behind a client certificate.** Kubri asks the Service behind the Ingress instead, and your browser still opens the URL.
+- **Right-sizing finds workloads with a dash in their name**, like `order-api`, which were missing before.
 
 The full list is in the [changelog](https://github.com/snaketech-tu/kubri/blob/main/CHANGELOG.md).
 

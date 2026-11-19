@@ -9,4 +9,12 @@ source: string,
 /**
  * Use over time, so 95th percentiles and peaks; else one sample of now.
  */
-history: boolean, advice: Array<SizeAdvice>, };
+history: boolean, 
+/**
+ * Deployments, StatefulSets and DaemonSets looked at.
+ */
+workloads: number, 
+/**
+ * Containers of them whose use was found.
+ */
+measured: number, advice: Array<SizeAdvice>, };

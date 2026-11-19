@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { t } from '../i18n';
-	import type { Integration, IntegrationSettings } from '../api';
+	import { coreText } from '../i18n/errors';
+	import type { Endpoint, Integration, IntegrationSettings } from '../api';
 	import { openTool } from '../integrations';
 	import { app } from '../state.svelte';
 	import DashboardList from './DashboardList.svelte';
@@ -101,7 +102,10 @@
 	function where(item: Integration): string | null {
 		const e = item.endpoint;
 		if (!e) return null;
-		return e.via === 'url' ? e.url : t('Service {service}, through the API server', { service: `${e.namespace}/${e.name}:${e.port}` });
+		const service = (s: Endpoint) => (s.via === 'service' ? `${s.namespace}/${s.name}:${s.port}` : s.url);
+		if (e.via === 'service') return t('Service {service}, through the API server', { service: service(e) });
+		// The Service behind the URL's Ingress, which Kubri asks when the URL does not answer it.
+		return e.behind ? t('{url}, else Service {service} behind its Ingress', { url: e.url, service: service(e.behind) }) : e.url;
 	}
 
 	/** The namespace picked in the sidebar, whose dashboards the Grafana card lists. */
@@ -140,7 +144,7 @@
 								</div>
 								<p class="about">{about?.text}</p>
 								{#if where(item)}<p class="where">{where(item)}</p>{/if}
-								{#if item.error}<p class="error">{item.error}</p>{/if}
+								{#if item.error}<p class="error">{coreText(item.error)}</p>{/if}
 								{#if item.id === 'grafana' && item.endpoint && !item.error}
 									<div class="kinds">
 										<button class="btn" onclick={() => openTool('grafana', '/')}>{t('Open Grafana')}</button>

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.13.0 — 2026-11-19
+
+- **Explain through Claude Code, Codex or OpenRouter.** If you already use Claude Code or Codex, Explain can run it with the account you signed in with, without an API key: Claude Code without any tools, Codex in its read-only sandbox, both in an empty folder. OpenRouter reaches the models of many providers with one key. Each provider now keeps its own key, so a key only goes to the provider it was saved for. In the web app, Claude Code and Codex are only offered when the server runs with `KUBRI_LOCAL_TERMINAL=true`, and never on a Kubri shared by a team. See [Explain](docs/EXPLAIN.md).
+- **Names for port-forward favorites.** Give a favorite a name, such as "Shop database", when you keep it or later with **Rename** on the port-forwards page. The sidebar shows the name instead of the target.
+- **Many port-forward favorites at once.** **Keep as port-forward favorites…** on a Service, workload or pod, or on all marked rows, and **Keep its Services as favorites…** on a namespace. **Add favorites…** on the port-forwards page reads pasted `kubectl port-forward` commands, a whole start script or a favorites file. Kubri checks each target and port and picks free local ports. **Export favorites** saves them as a file to share. With more than five favorites, the sidebar groups them by namespace, with a button to start or stop a whole group. See [Create and change](docs/CREATE.md).
+- **Grafana behind a client certificate.** When the URL of Grafana, Prometheus or Loki wants a client certificate, Kubri asks the Service behind the cluster's Ingress for that host instead, through the API server, and your browser still opens the URL. Kubri also notices when a tool speaks HTTPS on a port taken for plain HTTP, or the other way round. Why a tool does not answer is now said in plain words, in German too. See [Integrations](docs/INTEGRATIONS.md#client-certificates).
+- **Right-sizing finds workloads with a dash in their name**, like `order-api`. Until now their pods were never matched, so they were missing from the list. An empty list now says whether every measured container fits, no use was found, or there is nothing to check.
+- **Newer libraries**, among them kube 5.1, rusqlite 0.42 and jsonwebtoken 12.
+
 ## 1.12.1 — 2026-11-16
 
 - **Helm finds `helm` again when the app starts from a launcher.** When `helm` is not on the app's `PATH`, Kubri also looks where Helm's installers put it: Homebrew, `~/.local/bin`, `/usr/local/bin`, Snap, Nix, asdf and mise, and winget, Chocolatey and Scoop on Windows. A `helm` that starts but does not say its version counts as installed, so its own error shows. **Reload** on the Helm page looks for `helm` again.

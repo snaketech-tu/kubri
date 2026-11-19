@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ResourceInfo, Row } from './api';
 import { markedActions, withCellActions } from './list-actions';
 import type { MenuAction } from './menu';
+import { app } from './state.svelte';
 
 const deployments: ResourceInfo = {
 	group: 'apps',
@@ -33,6 +34,16 @@ describe('markedActions', () => {
 	it('offers changes to the marked rows only where changes are allowed', () => {
 		expect(labels(true)).toEqual(['Copy names', 'Copy namespaces', 'Mark all', 'Unmark all', 'Scale 2…', 'Restart 2…', 'Delete 2…']);
 		expect(labels(false)).toEqual(['Copy names', 'Copy namespaces', 'Mark all', 'Unmark all']);
+	});
+
+	it('keeps marked workloads as port-forward favorites while connected, also when changes are off', () => {
+		expect(labels(false)).not.toContain('Keep 2 as port-forward favorites…');
+		app.cluster = { context: 'dev', snapshot: null } as unknown as typeof app.cluster;
+		try {
+			expect(labels(false)).toContain('Keep 2 as port-forward favorites…');
+		} finally {
+			app.cluster = null;
+		}
 	});
 
 	it('copies no namespaces of cluster-wide kinds', () => {

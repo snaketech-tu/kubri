@@ -264,9 +264,20 @@ impl Hangup {
             format!("kill -HUP {pid}"),
         ];
         let hangup = async {
-            if let Ok(process) = self.api.exec(&self.pod, command, &params).await {
-                let _ = process.join().await;
+            let mut process = match self.api.exec(&self.pod, command, &params).await {
+                Ok(process) => process,
+                Err(e) => {
+                    tracing::debug!(pod = %self.pod, pid, error = %e, "cannot hang up the closed shell");
+                    return;
+                }
+            };
+            // A refused kill, such as by an AppArmor profile on the node, only shows in the status.
+            if let Some(status) = process.take_status()
+                && let Some(message) = status.await.and_then(|s| exit_message(&s))
+            {
+                tracing::debug!(pod = %self.pod, pid, message, "the closed shell did not take the hangup");
             }
+            let _ = process.join().await;
         };
         if tokio::time::timeout(HANGUP_TIMEOUT, hangup).await.is_err() {
             tracing::debug!(pod = %self.pod, pid, "the closed shell did not end in time");

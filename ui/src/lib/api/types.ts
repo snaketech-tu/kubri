@@ -519,6 +519,8 @@ export interface Backend {
 	/** Starts the connected context's favorite forwards that are not running. */
 	startFavoriteForwards(): Promise<FavoriteStart[]>;
 	stopPortForward(id: number): Promise<void>;
+	/** Which of the local ports something already listens on, at the address or 127.0.0.1. */
+	portsInUse(address: string | null, ports: number[]): Promise<number[]>;
 	/** Newest first, with live progress while running. */
 	benchmarks(): Promise<BenchInfo[]>;
 	startBenchmark(request: BenchRequest): Promise<BenchInfo>;

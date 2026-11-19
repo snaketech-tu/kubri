@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/kubri-core", "crates/kubri-mcp", "crates/kubri-cli", "crates/kubri-server", "ui/src-tauri"]
 
 [workspace.package]
-version = "1.12.1"
+version = "1.13.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/snaketech-tu/kubri"
@@ -31,7 +31,7 @@ ring = "0.17"
 serde-saphyr = "2"
 secrecy = "0.10"
 regex = "1"
-rusqlite = { version = "0.41", features = ["bundled"] }
+rusqlite = { version = "0.42", features = ["bundled"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "system-proxy", "http2"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde = { version = "1", features = ["derive"] }

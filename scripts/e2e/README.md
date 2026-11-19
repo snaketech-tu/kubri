@@ -1,7 +1,7 @@
 # End-to-end tests
 
 The web app's main flows, in a real browser against a real cluster: lists and filters, context
-switching and the browser's Back, logs, a shell, a port-forward and a favorite one, editing YAML, scaling, restarting
+switching and the browser's Back, logs, a shell, a port-forward, a favorite one and favorites added from kubectl commands, editing YAML, scaling, restarting
 and deleting, read-only mode, snapshots, and MCP. A second check starts the desktop app on Linux
 and waits for it to show the overview. CI runs both on every pull request (`.github/workflows/ci.yml`,
 jobs **End-to-end** and **Desktop start**).
@@ -30,7 +30,8 @@ matter. When a test fails, a screenshot of the page lands in `e2e-artifacts/`.
 | `PLAYWRIGHT_MODULE` | `playwright` |
 | `E2E_ARTIFACTS` | `e2e-artifacts` |
 
-The desktop check needs the Tauri system libraries, `webkit2gtk-driver`, `tauri-driver`
+The desktop check needs the Tauri system libraries, the WebKit driver (`webkitgtk-webdriver`,
+called `webkit2gtk-driver` on older Ubuntu), `tauri-driver`
 (`cargo install tauri-driver --locked`) and Xvfb:
 
 ```sh

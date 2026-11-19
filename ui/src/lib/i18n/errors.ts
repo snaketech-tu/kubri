@@ -62,7 +62,17 @@ export const CORE_TEXTS = [
  */
 export const SOURCE_TEXTS: Record<string, string[]> = {
 	'prometheus.rs': ['CPU', 'Memory', 'Network', 'Container restarts', 'Requests', 'Received', 'Sent', 'Request', 'Limit'],
-	'integrations.rs': ['{0} restarted ({1})', 'Rollout', 'Revision {0}'],
+	'integrations.rs': [
+		'{0} restarted ({1})',
+		'Rollout',
+		'Revision {0}',
+		// Why Prometheus, Grafana or Loki does not answer.
+		'{0} asks for a client certificate, which Kubri does not send; your browser can still open it',
+		'{0} answered {1} through the API server: {2}',
+		'{0} has no ready pod to answer',
+		'{0} did not answer in time',
+		'{0} did not answer with JSON: {1}'
+	],
 	'local_terminal.rs': [
 		'The local terminal is off here: it would be a shell on the server. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it.',
 		'AI agents cannot open a local terminal.',

@@ -150,6 +150,7 @@ export function callBackend(send: Transport): CallBackend {
 		startPortForward: (request) => call('startPortForward', request),
 		startFavoriteForwards: () => call('startFavoriteForwards'),
 		stopPortForward: (id) => done(call('stopPortForward', { id })),
+		portsInUse: (address, ports) => call('portsInUse', { address, ports }),
 		benchmarks: () => call('benchmarks'),
 		startBenchmark: (request) => call('startBenchmark', request),
 		stopBenchmark: (id) => done(call('stopBenchmark', { id })),

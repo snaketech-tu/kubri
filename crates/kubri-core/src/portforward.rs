@@ -583,6 +583,32 @@ impl Kubri {
     pub fn stop_port_forward(&self, id: u32) -> Result<()> {
         self.forwards.lock().unwrap().stop(id)
     }
+
+    /// Which of `ports` something already listens on at `address` (127.0.0.1 when left out),
+    /// so favorites can be given free local ports. Ports of Kubri's own forwards count as taken.
+    pub async fn ports_in_use(&self, address: Option<String>, ports: Vec<u16>) -> Result<Vec<u16>> {
+        ports_in_use(address, ports).await
+    }
+}
+
+/// The most ports one [`Kubri::ports_in_use`] call tries.
+const MOST_PORTS_TRIED: usize = 2000;
+
+async fn ports_in_use(address: Option<String>, mut ports: Vec<u16>) -> Result<Vec<u16>> {
+    validate_address(address.as_deref())?;
+    let address = address
+        .filter(|a| !a.is_empty())
+        .unwrap_or_else(|| "127.0.0.1".to_owned());
+    ports.sort_unstable();
+    ports.dedup();
+    let mut taken = Vec::new();
+    for port in ports.into_iter().filter(|p| *p != 0).take(MOST_PORTS_TRIED) {
+        // Bound and closed again at once; only a port that cannot be bound is taken.
+        if listen(&address, port).await.is_err() {
+            taken.push(port);
+        }
+    }
+    Ok(taken)
 }
 
 #[cfg(test)]
@@ -768,6 +794,18 @@ mod tests {
         let port = taken.local_addr().unwrap().port();
         assert!(listen("localhost", port).await.is_err());
         assert!(listen("127.0.0.1", port).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn finds_ports_in_use() {
+        let taken = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = taken.local_addr().unwrap().port();
+        let free = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let free_port = free.local_addr().unwrap().port();
+        drop(free);
+        let found = ports_in_use(None, vec![free_port, port, port, 0]).await.unwrap();
+        assert_eq!(found, vec![port]);
+        assert!(ports_in_use(Some("nowhere".into()), vec![port]).await.is_err());
     }
 
     fn pod(name: &str, created: &str, ready: bool) -> Pod {

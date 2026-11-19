@@ -14,6 +14,7 @@
 	import { listenForBindings } from '#lib/bindings.js';
 	import ActionDialog from '#lib/components/ActionDialog.svelte';
 	import NewForwardDialog from '#lib/components/NewForwardDialog.svelte';
+	import AddFavoritesDialog from '#lib/components/AddFavoritesDialog.svelte';
 	import ActionMenu from '#lib/components/ActionMenu.svelte';
 	import ExplainPanel from '#lib/components/ExplainPanel.svelte';
 	import BenchmarksView from '#lib/components/BenchmarksView.svelte';
@@ -542,6 +543,8 @@
 	<SnapshotDialog dialog={app.dialog} />
 {:else if app.dialog?.kind === 'newForward'}
 	<NewForwardDialog />
+{:else if app.dialog?.kind === 'addFavorites'}
+	<AddFavoritesDialog dialog={app.dialog} />
 {:else if app.dialog}
 	<ActionDialog dialog={app.dialog} />
 {/if}

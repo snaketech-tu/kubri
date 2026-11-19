@@ -228,6 +228,15 @@ export function objectActions(subject: Subject, options: ActionOptions, writable
 	if (canPortForward(resource)) {
 		const forward = isPods(resource) ? on('create', 'portforward') : need('create', pods, ns, { subresource: 'portforward' });
 		add('Connect', t('Port-forward…'), ['F'], () => void portForward(resource, target), { primary: 8, needs: forward, kubectl: k({ op: 'portForward' }) });
+		if (app.cluster && !app.cluster.snapshot) {
+			add('Connect', t('Keep as port-forward favorites…'), [], dialog(() => ({ kind: 'addFavorites', targets: [target] })), { id: 'favorites', needs: forward });
+		}
+	}
+	if (isNamespaces(resource) && app.cluster && !app.cluster.snapshot && findResource(app.resources, { group: '', version: 'v1', plural: 'services' })) {
+		add('Connect', t('Keep its Services as favorites…'), [], dialog(() => ({ kind: 'addFavorites', namespace: target.name })), {
+			id: 'favorites',
+			needs: need('create', pods, target.name, { subresource: 'portforward' })
+		});
 	}
 
 	if (writable) {

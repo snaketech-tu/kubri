@@ -3,6 +3,7 @@ import { errorMessage } from '../format';
 import { plural, t } from '../i18n';
 import { coreText } from '../i18n/errors';
 import type { AppState } from '../state.svelte';
+import { fewAtATime } from '../forward-import';
 import { sameResource } from './model';
 
 /** Whether a running forward is a favorite. */
@@ -16,8 +17,29 @@ export function isForwardOf(favorite: FavoriteForward, forward: PortForwardInfo)
 	);
 }
 
-export function favoriteLabel(f: FavoriteForward) {
+/** What a favorite forwards, from the target to the local port. */
+export function favoriteRoute(f: FavoriteForward) {
 	return t('{target} on port {port}', { target: `${f.target.resource.plural}/${f.target.name}:${f.remotePort}`, port: f.localPort });
+}
+
+/** A favorite's name, or what it forwards when it has none. */
+export function favoriteLabel(f: FavoriteForward) {
+	return f.name?.trim() || favoriteRoute(f);
+}
+
+/** Tells the favorites of a context apart, whatever they are named. */
+export function favoriteKey(f: FavoriteForward) {
+	return `${f.target.resource.group}/${f.target.resource.plural}/${f.target.namespace ?? ''}/${f.target.name}:${f.remotePort}:${f.localPort}`;
+}
+
+/** Favorites by namespace, in the order of their first favorite, for groups in lists. */
+export function byNamespace(favorites: FavoriteForward[]): { namespace: string; favorites: FavoriteForward[] }[] {
+	const groups = new Map<string, FavoriteForward[]>();
+	for (const f of favorites) {
+		const ns = f.target.namespace ?? '';
+		groups.set(ns, [...(groups.get(ns) ?? []), f]);
+	}
+	return [...groups].map(([namespace, favorites]) => ({ namespace, favorites }));
 }
 
 /** The port-forwards kept per context, to start with one click or whenever Kubri connects. */
@@ -96,15 +118,26 @@ export class FavoriteForwards {
 
 	/** Whether a favorite of the connected context starts whenever Kubri connects. */
 	async setStartOnConnect(favorite: FavoriteForward, startOnConnect: boolean) {
-		const context = this.#app.cluster?.context;
-		if (!context) return;
-		const settings = this.#app.prefs.contextSettingsOf(context);
-		const forwards = (settings.forwards ?? []).map((f) => (f === favorite ? { ...f, startOnConnect } : f));
-		await this.#app.prefs.setContextSettings(context, { ...settings, forwards });
+		await this.#change(favorite, { startOnConnect });
 	}
 
-	/** Keeps a running forward as a favorite of its context, or forgets it. */
-	async toggle(forward: PortForwardInfo) {
+	/** Names a favorite of the connected context; an empty name shows its target again. */
+	async rename(favorite: FavoriteForward, name: string) {
+		name = name.trim();
+		if (name === (favorite.name ?? '')) return true;
+		return this.#change(favorite, { name });
+	}
+
+	async #change(favorite: FavoriteForward, change: Partial<FavoriteForward>) {
+		const context = this.#app.cluster?.context;
+		if (!context) return false;
+		const settings = this.#app.prefs.contextSettingsOf(context);
+		const forwards = (settings.forwards ?? []).map((f) => (f === favorite ? { ...f, ...change } : f));
+		return this.#app.prefs.setContextSettings(context, { ...settings, forwards });
+	}
+
+	/** Keeps a running forward as a favorite of its context, under `name` if given, or forgets it. */
+	async toggle(forward: PortForwardInfo, name = '') {
 		const settings = this.#app.prefs.contextSettingsOf(forward.context);
 		const kept = settings.forwards ?? [];
 		const known = this.of(forward);
@@ -115,6 +148,7 @@ export class FavoriteForwards {
 					...kept,
 					{
 						target,
+						name: name.trim(),
 						remotePort: forward.remotePort,
 						localPort: forward.localPort,
 						address: forward.address === '127.0.0.1' ? '' : forward.address,
@@ -136,5 +170,62 @@ export class FavoriteForwards {
 		if (!context) return;
 		const settings = this.#app.prefs.contextSettingsOf(context);
 		await this.#app.prefs.setContextSettings(context, { ...settings, forwards: (settings.forwards ?? []).filter((f) => f !== favorite) });
+	}
+
+	/** Keeps more favorites for the connected context, after those it has. */
+	async add(added: FavoriteForward[]) {
+		const context = this.#app.cluster?.context;
+		if (!context || !added.length) return false;
+		const settings = this.#app.prefs.contextSettingsOf(context);
+		return this.#app.prefs.setContextSettings(context, { ...settings, forwards: [...(settings.forwards ?? []), ...added] });
+	}
+
+	/**
+	 * Starts the favorites of the connected context that do not run, or with `on` false stops
+	 * those that do, and says in one message how many; each that failed has its own.
+	 */
+	async switchAll(favorites: FavoriteForward[], on: boolean) {
+		const app = this.#app;
+		const context = app.cluster?.context;
+		if (!context) return;
+		await app.refreshForwards();
+		const todo = favorites.filter((f) => !!this.running(f) !== on && !this.switching.includes(f));
+		if (!todo.length) return;
+		this.switching = [...this.switching, ...todo];
+		let done = 0;
+		const failed: string[] = [];
+		await fewAtATime(todo, async (favorite) => {
+			try {
+				const running = this.running(favorite);
+				if (on) {
+					await backend.startPortForward({
+						target: { ...favorite.target, context },
+						remotePort: favorite.remotePort,
+						localPort: favorite.localPort,
+						address: favorite.address || null
+					});
+				} else if (running) {
+					await backend.stopPortForward(running.id);
+				}
+				done++;
+			} catch (err) {
+				failed.push(
+					on ? t('{name} did not start: {error}', { name: favoriteLabel(favorite), error: errorMessage(err) }) : errorMessage(err)
+				);
+			} finally {
+				this.switching = this.switching.filter((f) => f !== favorite);
+			}
+		});
+		await app.refreshForwards();
+		if (done) {
+			app.toast(
+				on
+					? plural(done, 'Started {n} favorite port-forward', 'Started {n} favorite port-forwards')
+					: plural(done, 'Stopped {n} favorite port-forward', 'Stopped {n} favorite port-forwards')
+			);
+		}
+		// One message each for the first few; the rest are counted.
+		for (const message of failed.slice(0, 3)) app.toast(message, 'bad');
+		if (failed.length > 3) app.toast(t('{n} more did not work', { n: failed.length - 3 }), 'bad');
 	}
 }
