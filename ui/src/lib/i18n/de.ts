@@ -2697,7 +2697,7 @@ const de: Record<string, string> = {
 	'Or every Service in a namespace': 'Oder alle Services eines Namespace',
 	'With labels (optional)': 'Mit Labels (optional)',
 	'Take its Services': 'Seine Services nehmen',
-	'For {context}. Kubri chose the local ports that are not given: the same as the target where it is free, else the target plus 10000. Change any of them here.': 'Für {context}. Kubri hat die fehlenden lokalen Ports gewählt: denselben wie das Ziel, wenn er frei ist, sonst das Ziel plus 10000. Du kannst jeden hier ändern.',
+	'For {context}. Kubri chose the local ports that are not given: the same as the target where it is free, else the target plus 10000, else the first free one from 20000. Change any of them here.': 'Für {context}. Kubri hat die fehlenden lokalen Ports gewählt: denselben wie das Ziel, wenn er frei ist, sonst das Ziel plus 10000, sonst den ersten freien ab 20000. Du kannst jeden hier ändern.',
 	'Port-forwards to keep': 'Zu behaltende Port-Forwards',
 	'Keep {name}': '{name} behalten',
 	'from context {name}': 'aus Kontext {name}',

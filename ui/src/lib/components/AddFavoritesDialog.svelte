@@ -433,7 +433,7 @@
 	{:else}
 		<p class="lead">
 			<Phrase
-				text={t('For {context}. Kubri chose the local ports that are not given: the same as the target where it is free, else the target plus 10000. Change any of them here.')}
+				text={t('For {context}. Kubri chose the local ports that are not given: the same as the target where it is free, else the target plus 10000, else the first free one from 20000. Change any of them here.')}
 				strong={{ context: context ? app.prefs.contextName(context) : '' }}
 			/>
 		</p>
