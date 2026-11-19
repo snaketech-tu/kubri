@@ -253,6 +253,10 @@ describe('logs and shell', () => {
 		await page.getByRole('complementary', { name: 'Pod inspector' }).waitFor({ state: 'hidden' });
 		const ps = () => h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'ps', '-o', 'pid,ppid,pgid,stat,args');
 		console.log('DIAG ps after close\n' + ps());
+		const shells = ps().split('\n').filter((l) => / sh$/.test(l)).map((l) => l.trim().split(/\s+/)[0]);
+		console.log('DIAG kill ' + shells.join(',') + '\n' + h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'sh', '-c', `for p in ${shells.join(' ')}; do kill -HUP $p 2>&1; echo "kill $p rc=$?"; done; id; cat /proc/self/attr/current 2>&1; cat /proc/${shells[0]}/attr/current 2>&1`));
+		try { console.log('DIAG dmesg\n' + require('node:child_process').execSync('sudo dmesg | grep -iE "apparmor|denied" | tail -20', { encoding: 'utf8' })); } catch (e) { console.log('DIAG dmesg failed ' + e.message); }
+		console.log('DIAG ps after kill\n' + ps());
 		console.log('DIAG signals\n' + h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'sh', '-c', 'for f in /proc/[0-9]*/status; do echo "$f $(grep -E "^(Name|SigIgn|SigCgt|SigBlk)" $f | tr "\\n" " ")"; done'));
 		try {
 			await h.until(async () => !running(), { message: 'the closed shell to end in the container' });
