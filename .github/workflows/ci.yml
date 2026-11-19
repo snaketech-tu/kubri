@@ -146,6 +146,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Start k3s
         run: |
+          # Ubuntu 26.04 turns containerd's AppArmor profile into a stack for processes that
+          # kubectl exec starts, and the profile then refuses any signal between them, so a
+          # closed shell could not be ended. Nodes of a real cluster are set up by their owners.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
           curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.33.5+k3s1 INSTALL_K3S_EXEC="--disable=traefik --write-kubeconfig-mode=644" sh -
           mkdir -p ~/.kube && cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
