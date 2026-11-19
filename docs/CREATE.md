@@ -82,6 +82,7 @@ An empty list of a kind you may create offers **Create** right there, and an emp
 - A forward to a Service or workload moves to another ready pod when its pod goes away, as after a restart or rollout. A forward straight to a pod keeps using that pod's name.
 - **Favorite** (<kbd>s</kbd> on the port-forwards page, or **Keep as a favorite** when you start one) keeps a forward in its context's settings, on the same local port.
 - The favorites of the connected context are listed under **Port-forwards** in the sidebar. Click one to start it, and click it again to stop it. A filled dot means it is running.
+- A favorite can have a name, such as "Shop database", which the sidebar and the port-forwards page show instead of the target. Type it when you keep the forward, or use **Rename** on the port-forwards page later. An empty name shows the target again.
 - The port-forwards page lists the favorites too, to start, stop or remove them. With **Start on connect**, Kubri starts a favorite each time it connects to its context. Favorites kept before Kubri 1.9 start on connect; new ones do not until you turn it on.
 - <kbd>o</kbd> opens a forward in the browser, and <kbd>c</kbd> copies its URL.
 - Quiet connections stay open: Kubri pings the cluster every 20 seconds, so load balancers and proxies in front of the API server do not drop them as idle.

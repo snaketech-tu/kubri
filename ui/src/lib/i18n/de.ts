@@ -2149,6 +2149,11 @@ const de: Record<string, string> = {
 	'Local port {port} is in use by the forward to {target}. Choose another, or leave it empty for any free port.': 'Der lokale Port {port} wird schon vom Forward zu {target} genutzt. Wähle einen anderen oder lass das Feld leer für einen freien Port.',
 	'Favorites in {context}': 'Favoriten in {context}',
 	'Forget this favorite': 'Diesen Favoriten vergessen',
+	'Rename': 'Umbenennen',
+	'Give it a name to show instead of the target': 'Einen Namen geben, der statt des Ziels erscheint',
+	'Name of this favorite': 'Name dieses Favoriten',
+	'Enter saves, Esc cancels. Leave it empty to show the target.': 'Enter speichert, Esc bricht ab. Leer lassen, um das Ziel zu zeigen.',
+	'Name (optional)': 'Name (optional)',
 	'{n} running': '{n} aktiv',
 
 	// Columns, clusters, graph

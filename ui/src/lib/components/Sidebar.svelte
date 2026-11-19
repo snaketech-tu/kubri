@@ -7,7 +7,7 @@
 	import { clampWidth, followDrag } from '../resize';
 	import { t } from '../i18n';
 	import { roving } from '../roving';
-	import { app, favoriteLabel, sameResource } from '../state.svelte';
+	import { app, favoriteKey, favoriteRoute, sameResource } from '../state.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 
 	// Resources are sorted with the core group first, so core events win over events.k8s.io.
@@ -162,7 +162,7 @@
 						{/if}
 					</button>
 					{#if entry.id === 'portforwards'}
-						{#each app.favorites.here as favorite (favoriteLabel(favorite))}
+						{#each app.favorites.here as favorite (favoriteKey(favorite))}
 							{@const on = !!app.favorites.running(favorite)}
 							{@const busy = app.favorites.switching.includes(favorite)}
 							<button
@@ -171,10 +171,10 @@
 								aria-pressed={on}
 								aria-busy={busy}
 								onclick={() => app.favorites.switch(favorite)}
-								title="{favoriteLabel(favorite)}{favorite.address ? ` · ${favorite.address}` : ''} · {on ? t('Click to stop') : t('Click to start')}"
+								title="{favorite.name ? `${favorite.name} · ` : ''}{favoriteRoute(favorite)}{favorite.address ? ` · ${favorite.address}` : ''} · {on ? t('Click to stop') : t('Click to start')}"
 							>
 								<span class="dot" aria-hidden="true"></span>
-								<span class="label">{favorite.target.name}</span>
+								<span class="label">{favorite.name || favorite.target.name}</span>
 								<span class="hint">{busy ? '…' : `:${favorite.localPort}`}</span>
 							</button>
 						{/each}
