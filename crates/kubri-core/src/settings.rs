@@ -59,6 +59,9 @@ pub struct ContextSettings {
 pub struct FavoriteForward {
     /// A pod, Service or workload; the context comes from where the favorite is kept.
     pub target: crate::ObjectRef,
+    /// A name chosen for it, shown instead of the target's; empty for none.
+    #[serde(default)]
+    pub name: String,
     pub remote_port: u16,
     pub local_port: u16,
     /// Where to listen; empty for 127.0.0.1.
@@ -817,9 +820,13 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(favorite.address, "");
+        assert_eq!(favorite.name, "");
         assert!(favorite.start_on_connect);
         let mut prod = settings.context("prod");
-        prod.forwards.push(favorite);
+        prod.forwards.push(FavoriteForward {
+            name: "Shop".into(),
+            ..favorite
+        });
         settings.set_context("prod", prod).unwrap();
         write(&path, &settings).unwrap();
         assert_eq!(read(&path).unwrap(), settings);

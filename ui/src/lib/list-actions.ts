@@ -3,7 +3,7 @@ import { canDelete, canRestart, canScale, copyLines } from './actions';
 import type { ObjectRef, ResourceInfo, Row } from './api';
 import { t } from './i18n';
 import type { MenuAction } from './menu';
-import { isPods } from './pods';
+import { canPortForward, isPods } from './pods';
 import { app } from './state.svelte';
 
 export interface MarkedRows {
@@ -51,6 +51,16 @@ export function markedActions(m: MarkedRows): MenuAction[] {
 		if (named.length) {
 			out.push({ group: 'Change', label: t('Unmark {n} as production', { n: named.length }), keys: [], primary: 0, run: () => void app.setProductionNamespace(named, false) });
 		}
+	}
+	if (canPortForward(resource) && app.cluster && !app.cluster.snapshot) {
+		// A setting in Kubri, so also when changes are off.
+		out.push({
+			group: 'Connect',
+			label: t('Keep {n} as port-forward favorites…', { n: chosen.length }),
+			keys: [],
+			primary: 0,
+			run: () => (app.dialog = { kind: 'addFavorites', targets: chosen.map(target) })
+		});
 	}
 	if (m.writable && canScale(resource) && !isPods(resource)) {
 		out.push({

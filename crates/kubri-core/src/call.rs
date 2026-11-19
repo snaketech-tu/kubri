@@ -278,6 +278,9 @@ calls! {
     /// Starts the context's favorite port-forwards that start on connect.
     StartFavoriteForwards {} -> Vec<FavoriteStart> => |kubri| kubri.start_favorite_forwards().await?;
     StopPortForward { id: u32 } -> () => |kubri| kubri.stop_port_forward(id)?;
+    /// Which local ports something already listens on, for planning favorites.
+    PortsInUse { address: Option<String>, ports: Vec<u16> } -> Vec<u16> =>
+        |kubri| kubri.ports_in_use(address, ports).await?;
     Benchmarks {} -> Vec<BenchInfo> => |kubri| kubri.benchmarks();
     StartBenchmark { #[serde(flatten)] request: BenchRequest } -> BenchInfo => |kubri| kubri.start_benchmark(&request)?;
     StopBenchmark { id: u32 } -> () => |kubri| kubri.stop_benchmark(id)?;

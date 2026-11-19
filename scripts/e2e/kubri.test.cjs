@@ -372,6 +372,39 @@ describe('favorite port-forwards', () => {
 		await kept.getByRole('button', { name: 'Remove', exact: true }).click();
 		await favorite.waitFor({ state: 'detached' });
 	});
+
+	check('adds favorites from pasted kubectl commands and starts them', async () => {
+		const port = await h.freePort();
+		const answers = async () => {
+			try {
+				return (await (await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) })).text()).includes('hello from web');
+			} catch {
+				return false;
+			}
+		};
+		await h.openList(page, server.url, { resource: 'services.v1', heading: 'Services', filter: 'web' });
+		await h.command(page, 'pf');
+		await page.getByRole('button', { name: 'Add favorites…' }).first().click();
+		const dialog = page.getByRole('dialog', { name: 'Add port-forward favorites' });
+		await dialog.getByRole('textbox').first().fill(
+			[`kubectl -n e2e port-forward svc/web ${port}:80 &`, 'kubectl -n e2e port-forward svc/nowhere 8080:80 &', 'wait'].join('\n')
+		);
+		await dialog.getByRole('button', { name: 'Next', exact: true }).click();
+		const local = dialog.getByRole('spinbutton', { name: 'Local port for services/web' });
+		await local.waitFor();
+		assert.equal(await local.inputValue(), String(port));
+		// The Service that does not exist is listed, but not kept.
+		assert.equal(await dialog.getByRole('checkbox', { name: 'Keep services/nowhere' }).isChecked(), false);
+		await dialog.getByRole('button', { name: 'Keep 1 favorite', exact: true }).click();
+		await dialog.waitFor({ state: 'hidden' });
+		await h.until(answers, { message: `an answer on port ${port}` });
+
+		const kept = page.getByRole('listitem').filter({ hasText: `:${port}` });
+		await kept.getByRole('button', { name: 'Stop', exact: true }).click();
+		await kept.getByRole('button', { name: 'Start', exact: true }).waitFor();
+		await kept.getByRole('button', { name: 'Remove', exact: true }).click();
+		await kept.waitFor({ state: 'detached' });
+	});
 });
 
 describe('changes', () => {

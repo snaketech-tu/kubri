@@ -120,6 +120,7 @@
 	// k9s `portForwardAddress`, or K9S_DEFAULT_PF_ADDRESS.
 	let address = $state(untrack(() => app.k9s?.portForwardAddress) ?? '127.0.0.1');
 	let keepForward = $state(false);
+	let favoriteName = $state('');
 
 	// Image: the containers as they are, and the images typed in.
 	let images = $state<ContainerImage[] | null>(null);
@@ -338,7 +339,7 @@
 						remotePort,
 						localPort: localPort || null,
 						address: address.trim() || null
-					}, keepForward);
+					}, keepForward, favoriteName);
 					break;
 				case 'benchmark': {
 					if (!benchmark) break;
@@ -615,6 +616,7 @@
 			bind:localPort
 			bind:address
 			bind:keep={keepForward}
+			bind:name={favoriteName}
 			bind:firstField
 		/>
 	{:else if dialog.kind === 'drain'}

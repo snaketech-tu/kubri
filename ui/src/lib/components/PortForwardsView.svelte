@@ -3,11 +3,12 @@
 	import { forControl } from '../keys';
 	import { follow } from '../roving';
 	import { tick } from 'svelte';
-	import { stopPortForward } from '../actions';
-	import { backend, type PortForwardInfo } from '../api';
+	import { saveFile, stopPortForward } from '../actions';
+	import { backend, type FavoriteForward, type PortForwardInfo } from '../api';
 	import { age, errorMessage } from '../format';
+	import { exportFavorites as favoritesFile } from '../forward-import';
 	import { lastEnd } from '../forwards';
-	import { app, favoriteLabel } from '../state.svelte';
+	import { app, byNamespace, favoriteKey } from '../state.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import Phrase from './Phrase.svelte';
 
@@ -61,6 +62,45 @@
 	function move(delta: number) {
 		if (!forwards.length) return;
 		cursorId = forwards[Math.max(0, Math.min(forwards.length - 1, cursor + delta))].id;
+	}
+
+	/** The favorite whose name is being edited, by its key. */
+	let renaming = $state<string | null>(null);
+	let list = $state<HTMLElement>();
+
+	/** Favorites by namespace; one group is shown without a heading. */
+	const groups = $derived(byNamespace(app.favorites.here));
+
+	function addFavorites() {
+		if (canStart) app.dialog = { kind: 'addFavorites' };
+	}
+
+	function exportFavorites() {
+		const context = app.cluster?.context;
+		if (!context) return;
+		const file = `kubri-port-forwards-${context.replace(/[^\w.-]+/g, '-')}.yaml`;
+		void saveFile(file, favoritesFile(app.favorites.here));
+	}
+
+	function startRename(f: FavoriteForward) {
+		renaming = favoriteKey(f);
+	}
+
+	/** Saves the name typed in, or with `save` false leaves it, and gives the focus back to its button. */
+	async function endRename(f: FavoriteForward, input: HTMLInputElement, save: boolean) {
+		const key = favoriteKey(f);
+		if (renaming !== key) return;
+		renaming = null;
+		const hadFocus = document.activeElement === input;
+		if (save) await app.favorites.rename(f, input.value);
+		if (!hadFocus) return;
+		await tick();
+		list?.querySelector<HTMLButtonElement>(`button[data-rename="${CSS.escape(key)}"]`)?.focus();
+	}
+
+	function selectAll(input: HTMLInputElement) {
+		input.focus();
+		input.select();
 	}
 
 	function copy(f: PortForwardInfo) {
@@ -122,6 +162,8 @@
 		subtitle={t('Local ports tunneled to pods. They keep running while you work elsewhere in Kubri, and move to another pod when theirs goes away.')}
 	>
 		{#snippet tools()}
+			{#if canStart && app.favorites.here.length}<button class="btn" onclick={exportFavorites} title={t('Save the favorites of this context as a file to share')}>{t('Export favorites')}</button>{/if}
+			{#if canStart}<button class="btn" onclick={addFavorites} title={t('From kubectl commands, a file or every Service of a namespace')}>{t('Add favorites…')}</button>{/if}
 			{#if canStart && forwards.length}<button class="btn" onclick={choose} title={t('Choose a namespace, a target and a port (Shift+F)')}>{t('Start a port-forward…')}</button>{/if}
 		{/snippet}
 	</PageHeader>
@@ -143,13 +185,17 @@
 					</thead>
 					<tbody>
 						{#each forwards as f, i (f.id)}
-							{@const favorite = !!app.favorites.of(f)}
+							{@const kept = app.favorites.of(f)}
+							{@const favorite = !!kept}
 							<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)} onfocusin={() => (cursorId = f.id)}>
 								<td class="mono">
 									<a href={url(f)} target="_blank" rel="noreferrer" title={t('Open in the browser (o)')}>{f.address}:{f.localPort}</a>
 									<button class="link" onclick={() => copy(f)} title={t('Copy URL (c)')}>{t('copy')}</button>
 								</td>
-								<td class="mono">{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</td>
+								<td class="mono">
+									{#if kept?.name}<div class="kept-name">{kept.name}</div>{/if}
+									{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}
+								</td>
 								<td class="mono">
 									{f.pod}:{f.podPort}
 									{#if f.error}<div class="error" title={f.error}>{f.error}</div>
@@ -185,10 +231,20 @@
 				</div>
 			{/if}
 			{#if app.favorites.here.length}
-				<div class="favorites">
-					<h3>{t('Favorites in {context}', { context: app.cluster ? app.prefs.contextName(app.cluster.context) : '' })}</h3>
+				<div class="favorites" bind:this={list}>
+					<div class="group-head">
+						<h3>{t('Favorites in {context}', { context: app.cluster ? app.prefs.contextName(app.cluster.context) : '' })}</h3>
+						{@render switchAll(app.favorites.here, null)}
+					</div>
+					{#each groups as group (group.namespace)}
+					{#if groups.length > 1}
+						<div class="group-head">
+							<h4 class="mono">{group.namespace || t('No namespace')}</h4>
+							{@render switchAll(group.favorites, group.namespace)}
+						</div>
+					{/if}
 					<ul>
-						{#each app.favorites.here as f (favoriteLabel(f))}
+						{#each group.favorites as f (favoriteKey(f))}
 							{@const on = !!app.favorites.running(f)}
 							{@const busy = app.favorites.switching.includes(f)}
 							{@const running = app.favorites.running(f)}
@@ -196,8 +252,28 @@
 								<span class="dot" title={on ? t('Running') : t('Stopped')}></span>
 								<div class="what">
 									<div class="name">
-										<strong>{f.target.name}</strong>
-										<span class="muted">{f.target.resource.plural}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</span>
+										{#if renaming === favoriteKey(f)}
+											<input
+												class="rename"
+												value={f.name}
+												placeholder={f.target.name}
+												maxlength="60"
+												aria-label={t('Name of this favorite')}
+												title={t('Enter saves, Esc cancels. Leave it empty to show the target.')}
+												{@attach selectAll}
+												onkeydown={(e) => {
+													if (e.key === 'Enter' || e.key === 'Escape') {
+														e.preventDefault();
+														e.stopPropagation();
+														endRename(f, e.currentTarget, e.key === 'Enter');
+													}
+												}}
+												onblur={(e) => endRename(f, e.currentTarget, true)}
+											/>
+										{:else}
+											<strong>{f.name || f.target.name}</strong>
+										{/if}
+										<span class="muted">{f.name ? `${f.target.resource.plural}/${f.target.name}` : f.target.resource.plural}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</span>
 									</div>
 									<div class="mono route">
 										{#if running}
@@ -219,16 +295,29 @@
 									<button class="btn" class:danger={on} onclick={() => app.favorites.switch(f)} disabled={busy}>
 										{busy ? (on ? t('Stopping…') : t('Starting…')) : on ? t('Stop') : t('Start')}
 									</button>
+									<button class="btn" data-rename={favoriteKey(f)} onclick={() => startRename(f)} disabled={renaming === favoriteKey(f)} title={t('Give it a name to show instead of the target')}>{t('Rename')}</button>
 									<button class="btn" onclick={() => app.favorites.remove(f)} title={t('Forget this favorite')}>{t('Remove')}</button>
 								</span>
 							</li>
 						{/each}
 					</ul>
+					{/each}
 				</div>
 			{/if}
 		</div>
 	</div>
 </section>
+
+{#snippet switchAll(favorites: FavoriteForward[], namespace: string | null)}
+	{@const on = favorites.filter((f) => !!app.favorites.running(f)).length}
+	{#if favorites.length > 1}
+		<span class="group-buttons">
+			<span class="muted count">{t('{on} of {n} running', { on, n: favorites.length })}</span>
+			<button class="btn small" onclick={() => app.favorites.switchAll(favorites, true)} disabled={on === favorites.length} aria-label={namespace ? t('Start all in {namespace}', { namespace }) : undefined}>{t('Start all')}</button>
+			<button class="btn small" onclick={() => app.favorites.switchAll(favorites, false)} disabled={on === 0} aria-label={namespace ? t('Stop all in {namespace}', { namespace }) : undefined}>{t('Stop all')}</button>
+		</span>
+	{/if}
+{/snippet}
 
 <style>
 	section {
@@ -251,6 +340,33 @@
 	.favorites {
 		padding: 12px 16px 18px;
 		border-top: 1px solid var(--border-subtle);
+	}
+	.group-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 6px 12px;
+		margin: 6px 0 10px;
+	}
+	.group-head h3 {
+		margin: 0;
+	}
+	.group-head h4 {
+		margin: 8px 0 0;
+		font-size: 13px;
+		font-weight: 600;
+	}
+	.favorites ul + .group-head {
+		margin-top: 18px;
+	}
+	.group-buttons {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.group-buttons .count {
+		font-size: 12px;
 	}
 	.favorites h3 {
 		margin: 6px 0 10px;
@@ -289,6 +405,7 @@
 	}
 	.favorites .name {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 8px;
 		min-width: 0;
@@ -299,6 +416,19 @@
 	}
 	.favorites .name .muted {
 		font-size: 12.5px;
+		white-space: nowrap;
+	}
+	.favorites .rename {
+		width: min(260px, 100%);
+		padding: 3px 8px;
+		font-size: 15px;
+		font-weight: 600;
+	}
+	.kept-name {
+		margin-bottom: 2px;
+		font-family: var(--sans);
+		font-size: 13px;
+		font-weight: 600;
 	}
 	.favorites .route {
 		font-size: 13px;

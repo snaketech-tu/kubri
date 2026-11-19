@@ -14,6 +14,7 @@
 		localPort = $bindable(),
 		address = $bindable(),
 		keep = $bindable(),
+		name = $bindable(),
 		firstField = $bindable(),
 		intro = true
 	}: {
@@ -26,6 +27,8 @@
 		address: string;
 		/** Keep the forward as a favorite. */
 		keep: boolean;
+		/** The favorite's name; empty shows its target. */
+		name: string;
 		firstField?: HTMLInputElement | HTMLTextAreaElement;
 		/** Says what the forward goes to; off where the dialog chose it above. */
 		intro?: boolean;
@@ -82,6 +85,12 @@
 	<input type="checkbox" bind:checked={keep} />
 	{t('Keep as a favorite')}
 </label>
+{#if keep}
+	<label class="field">
+		{t('Name (optional)')}
+		<input bind:value={name} placeholder={target.name} maxlength="60" />
+	</label>
+{/if}
 {#if !backend.desktop}
 	<p class="muted">{t('The port opens on the computer kubri-server runs on.')}</p>
 {/if}

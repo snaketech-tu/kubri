@@ -36,6 +36,7 @@
 	// k9s `portForwardAddress`, or K9S_DEFAULT_PF_ADDRESS.
 	let address = $state(untrack(() => app.k9s?.portForwardAddress) ?? '127.0.0.1');
 	let keep = $state(false);
+	let name = $state('');
 	/** The local port field, which takes the focus once a target is chosen: it is the one people change. */
 	let localField = $state<HTMLInputElement | HTMLTextAreaElement>();
 	let busy = $state(false);
@@ -128,7 +129,7 @@
 		}
 		busy = true;
 		error = null;
-		const ok = await startPortForward({ target, remotePort, localPort: localPort || null, address: address.trim() || null }, keep);
+		const ok = await startPortForward({ target, remotePort, localPort: localPort || null, address: address.trim() || null }, keep, name);
 		busy = false;
 		if (ok) app.dialog = null;
 	}
@@ -191,6 +192,7 @@
 					bind:localPort
 					bind:address
 					bind:keep
+					bind:name
 					bind:firstField={localField}
 				/>
 			</div>

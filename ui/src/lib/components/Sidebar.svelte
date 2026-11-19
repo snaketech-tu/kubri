@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ResourceInfo } from '../api';
+	import type { FavoriteForward, ResourceInfo } from '../api';
 	import logo from '../assets/logo.svg';
 	import { version } from '../../../package.json';
 	import { NAV_SECTIONS, SIDEBAR_TOOLS, TOOLS, pluralKind, toolOf } from '../nav';
@@ -7,7 +7,8 @@
 	import { clampWidth, followDrag } from '../resize';
 	import { t } from '../i18n';
 	import { roving } from '../roving';
-	import { app, favoriteLabel, sameResource } from '../state.svelte';
+	import { storedList, store } from '../storage';
+	import { app, byNamespace, favoriteKey, favoriteRoute, sameResource } from '../state.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 
 	// Resources are sorted with the core group first, so core events win over events.k8s.io.
@@ -27,6 +28,18 @@
 			.filter((r) => r.context === app.cluster?.context && r.name && !app.pins.here.some((p) => samePin(p, r)))
 			.slice(0, 3)
 	);
+
+	/** With many favorites, the sidebar lists them by namespace, each folded until opened. */
+	const favoriteGroups = $derived(app.favorites.here.length > 5 ? byNamespace(app.favorites.here) : null);
+	const GROUPS_KEY = 'kubri.favoriteGroups';
+	/** The groups opened, by context and namespace, kept in the browser. */
+	let openGroups = $state<string[]>(storedList<string>(GROUPS_KEY));
+	const groupKey = (namespace: string) => `${app.cluster?.context ?? ''}/${namespace}`;
+	function toggleGroup(namespace: string) {
+		const key = groupKey(namespace);
+		openGroups = openGroups.includes(key) ? openGroups.filter((k) => k !== key) : [...openGroups, key];
+		store(GROUPS_KEY, JSON.stringify(openGroups));
+	}
 
 	const running = $derived(app.benchmarks.filter((b) => b.state === 'running').length);
 
@@ -98,7 +111,7 @@
 	</div>
 	<div class="list">
 		<div class="scroll" bind:this={scroller} onscroll={measure}>
-			<div class="items" bind:this={items} {@attach roving({ items: 'button:not(.unpin)', orientation: 'vertical' })}>
+			<div class="items" bind:this={items} {@attach roving({ items: 'button:not(.side)', orientation: 'vertical' })}>
 				{#if app.pins.here.length}
 					<h3 class="first">{t('Pinned')}</h3>
 					{#each app.pins.here as pin (`${pin.group}/${pin.plural}/${pin.namespace ?? ''}/${pin.name}`)}
@@ -107,7 +120,7 @@
 								<Icon name="bookmark" size={16} />
 								<span class="label">{pin.name || pluralKind(pin.kind, pin.plural)}</span>
 							</button>
-							<button class="unpin" onclick={() => app.pins.toggle(pin)} title={t('Unpin')} aria-label={t('Unpin {name}', { name: pin.name || pin.kind })}>×</button>
+							<button class="unpin side" onclick={() => app.pins.toggle(pin)} title={t('Unpin')} aria-label={t('Unpin {name}', { name: pin.name || pin.kind })}>×</button>
 						</div>
 					{/each}
 					<hr />
@@ -162,22 +175,39 @@
 						{/if}
 					</button>
 					{#if entry.id === 'portforwards'}
-						{#each app.favorites.here as favorite (favoriteLabel(favorite))}
-							{@const on = !!app.favorites.running(favorite)}
-							{@const busy = app.favorites.switching.includes(favorite)}
-							<button
-								class="favorite"
-								class:on
-								aria-pressed={on}
-								aria-busy={busy}
-								onclick={() => app.favorites.switch(favorite)}
-								title="{favoriteLabel(favorite)}{favorite.address ? ` · ${favorite.address}` : ''} · {on ? t('Click to stop') : t('Click to start')}"
-							>
-								<span class="dot" aria-hidden="true"></span>
-								<span class="label">{favorite.target.name}</span>
-								<span class="hint">{busy ? '…' : `:${favorite.localPort}`}</span>
-							</button>
-						{/each}
+						{#if favoriteGroups}
+							{#each favoriteGroups as group (group.namespace)}
+								{@const opened = openGroups.includes(groupKey(group.namespace))}
+								{@const on = group.favorites.filter((f) => !!app.favorites.running(f)).length}
+								<div class="pin">
+									<button
+										class="favorite-group"
+										aria-expanded={opened}
+										onclick={() => toggleGroup(group.namespace)}
+										title={t('{on} of {n} running in {namespace}', { on, n: group.favorites.length, namespace: group.namespace })}
+									>
+										<span class="chevron" class:opened aria-hidden="true"><Icon name="chevron" size={14} /></span>
+										<span class="label mono">{group.namespace || t('No namespace')}</span>
+										<span class="hint count">{on}/{group.favorites.length}</span>
+									</button>
+									<button
+										class="side all"
+										onclick={() => app.favorites.switchAll(group.favorites, on === 0)}
+										title={on ? t('Stop all in {namespace}', { namespace: group.namespace }) : t('Start all in {namespace}', { namespace: group.namespace })}
+										aria-label={on ? t('Stop all in {namespace}', { namespace: group.namespace }) : t('Start all in {namespace}', { namespace: group.namespace })}
+									>{on ? '■' : '▶'}</button>
+								</div>
+								{#if opened}
+									{#each group.favorites as favorite (favoriteKey(favorite))}
+										{@render favoriteButton(favorite, true)}
+									{/each}
+								{/if}
+							{/each}
+						{:else}
+							{#each app.favorites.here as favorite (favoriteKey(favorite))}
+								{@render favoriteButton(favorite)}
+							{/each}
+						{/if}
 					{/if}
 				{/each}
 				<button class:active={otherTool} aria-current={here(otherTool)} onclick={() => app.showTools()} title="{t('Every tool, with what it does')} (:tools)">
@@ -257,6 +287,24 @@
 	></div>
 </nav>
 
+{#snippet favoriteButton(favorite: FavoriteForward, nested = false)}
+	{@const on = !!app.favorites.running(favorite)}
+	{@const busy = app.favorites.switching.includes(favorite)}
+	<button
+		class="favorite"
+		class:nested
+		class:on
+		aria-pressed={on}
+		aria-busy={busy}
+		onclick={() => app.favorites.switch(favorite)}
+		title="{favorite.name ? `${favorite.name} · ` : ''}{favoriteRoute(favorite)}{favorite.address ? ` · ${favorite.address}` : ''} · {on ? t('Click to stop') : t('Click to start')}"
+	>
+		<span class="dot" aria-hidden="true"></span>
+		<span class="label">{favorite.name || favorite.target.name}</span>
+		<span class="hint">{busy ? '…' : `:${favorite.localPort}`}</span>
+	</button>
+{/snippet}
+
 {#snippet item(r: ResourceInfo, label: string, icon: IconName)}
 	<button
 		class:active={isOpen(r)}
@@ -279,6 +327,34 @@
 			display: inline;
 		}
 	}
+	.favorite-group .chevron {
+		display: inline-flex;
+		margin: 0 3px;
+		color: var(--text-muted);
+		transform: rotate(-90deg);
+		transition: transform 0.12s;
+	}
+	.favorite-group .chevron.opened {
+		transform: none;
+	}
+	.favorite-group .label {
+		font-size: 12.5px;
+	}
+	.favorite-group .count {
+		display: inline;
+		font-family: var(--mono);
+	}
+	.favorite.nested .dot {
+		margin-left: 18px;
+	}
+	/* The count makes room for the start and stop button that shows on hover. */
+	.pin:hover .favorite-group .count,
+	.pin:focus-within .favorite-group .count {
+		visibility: hidden;
+	}
+	.pin .all {
+		font-size: 11px;
+	}
 	.favorite .dot {
 		flex: none;
 		width: 8px;
@@ -300,7 +376,7 @@
 		flex: 1;
 		min-width: 0;
 	}
-	.pin .unpin {
+	.pin .side {
 		position: absolute;
 		right: 6px;
 		width: 22px;
@@ -309,11 +385,11 @@
 		background: none;
 		color: var(--text-muted);
 	}
-	.pin:hover .unpin,
-	.pin .unpin:focus-visible {
+	.pin:hover .side,
+	.pin .side:focus-visible {
 		opacity: 1;
 	}
-	.pin .unpin:hover {
+	.pin .side:hover {
 		color: var(--text);
 	}
 	nav {
