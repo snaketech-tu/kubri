@@ -131,7 +131,7 @@ localPort?: number | null,
 /**
  * Address to listen on. Defaults to `127.0.0.1`.
  */
-address?: string | null, } | { "call": "startFavoriteForwards", } | { "call": "stopPortForward", id: number, } | { "call": "benchmarks", } | { "call": "startBenchmark", 
+address?: string | null, } | { "call": "startFavoriteForwards", } | { "call": "stopPortForward", id: number, } | { "call": "portsInUse", address: string | null, ports: Array<number>, } | { "call": "benchmarks", } | { "call": "startBenchmark", 
 /**
  * The port-forward to send the requests through.
  */
