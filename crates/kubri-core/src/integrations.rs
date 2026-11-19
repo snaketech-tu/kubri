@@ -8,7 +8,8 @@
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use k8s_openapi::api::core::v1::{Pod, Service};
+use k8s_openapi::api::core::v1::{Pod, Service, ServicePort};
+use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
 use kube::{Api, Client};
 use serde::{Deserialize, Serialize};
@@ -74,7 +75,16 @@ pub enum Endpoint {
         https: bool,
     },
     /// Straight to a URL, from the settings.
-    Url { url: String },
+    #[serde(rename_all = "camelCase")]
+    Url {
+        url: String,
+        /// The Service the cluster's Ingress for the URL's host sends it to. Kubri asks it,
+        /// through the API server, when the URL does not answer, such as when the Ingress wants
+        /// a client certificate. The browser still opens the URL.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        behind: Option<Box<Endpoint>>,
+    },
 }
 
 impl Endpoint {
@@ -110,6 +120,7 @@ impl Endpoint {
             }
             _ => Endpoint::Url {
                 url: url.trim_end_matches('/').to_owned(),
+                behind: None,
             },
         })
     }
@@ -123,7 +134,7 @@ impl Endpoint {
                 port,
                 ..
             } => format!("{namespace}/{name}:{port}"),
-            Endpoint::Url { url } => url.clone(),
+            Endpoint::Url { url, .. } => url.clone(),
         }
     }
 
@@ -136,72 +147,102 @@ impl Endpoint {
     /// GETs `path` (with its query) and returns the body. `token` goes only to URLs: the
     /// service proxy uses the Authorization header for the API server.
     pub(crate) async fn get(&self, client: &Client, path: &str, token: Option<&str>) -> Result<String> {
+        self.fetch(client, path, token).await.map(|(text, _)| text)
+    }
+
+    /// Like `get`, and whether a Service taken for plain HTTP answered only over HTTPS.
+    pub(crate) async fn fetch(
+        &self,
+        client: &Client,
+        path: &str,
+        token: Option<&str>,
+    ) -> Result<(String, bool)> {
         match self {
-            Endpoint::Service {
-                namespace,
-                name,
-                port,
-                https,
-            } => {
-                let uri = Self::proxy_path(namespace, name, *port, *https, path);
-                let request = http::Request::get(uri)
-                    .header(http::header::ACCEPT, "application/json")
-                    .body(Vec::new())
-                    .map_err(|e| Error::Unsupported(e.to_string()))?;
-                let call = client.request_text(request);
-                match tokio::time::timeout(TIMEOUT, call).await {
-                    Ok(Ok(text)) => Ok(text),
-                    Ok(Err(kube::Error::Api(status)))
-                        if status.message.contains("no endpoints available") =>
-                    {
-                        Err(Error::Integration(format!(
-                            "{} has no ready pod to answer",
-                            self.label()
-                        )))
+            Endpoint::Service { https, .. } => match self.through_proxy(client, path, *https).await {
+                Ok(text) => Ok((text, false)),
+                // A pod that speaks TLS answers 400 to plain HTTP: "Client sent an HTTP request
+                // to an HTTPS server", "The plain HTTP request was sent to HTTPS port".
+                Err((Some(400), err)) if !*https => match self.through_proxy(client, path, true).await {
+                    Ok(text) => Ok((text, true)),
+                    // It answered over HTTPS too, such as that it wants a client certificate.
+                    Err((Some(_), again)) => Err(again),
+                    Err(_) => Err(err),
+                },
+                Err((_, err)) => Err(err),
+            },
+            Endpoint::Url { url, behind } => match direct(url, path, token).await {
+                Ok(text) => Ok((text, false)),
+                Err(err) => match behind.as_deref() {
+                    Some(service @ Endpoint::Service { https, .. }) => {
+                        match service.through_proxy(client, path, *https).await {
+                            Ok(text) => Ok((text, false)),
+                            Err((Some(400), _)) if !*https => service
+                                .through_proxy(client, path, true)
+                                .await
+                                .map(|text| (text, false))
+                                .map_err(|_| err),
+                            Err(_) => Err(err),
+                        }
                     }
-                    Ok(Err(kube::Error::Api(status))) => Err(Error::Integration(format!(
-                        "{} answered {} through the API server: {}",
-                        self.label(),
-                        status.code,
-                        short(&status.message)
-                    ))),
-                    Ok(Err(err)) => Err(Error::Integration(format!(
-                        "{}: {}",
-                        self.label(),
-                        Error::from(err)
-                    ))),
-                    Err(_) => Err(Error::Integration(format!(
-                        "{} did not answer in time",
-                        self.label()
-                    ))),
-                }
-            }
-            Endpoint::Url { url } => {
-                let http = CLIENT.as_ref().map_err(|e| Error::Integration(e.clone()))?;
-                let mut request = http
-                    .get(format!("{url}{path}"))
-                    .header("Accept", "application/json");
-                if let Some(token) = token.filter(|t| !t.is_empty()) {
-                    request = request.bearer_auth(token);
-                }
-                let response = request
-                    .send()
-                    .await
-                    .map_err(|e| Error::Integration(format!("{url}: {}", reqwest_message(&e))))?;
-                let status = response.status();
-                let text = response
-                    .text()
-                    .await
-                    .map_err(|e| Error::Integration(format!("{url}: {}", reqwest_message(&e))))?;
-                if !status.is_success() {
-                    return Err(Error::Integration(format!(
-                        "{url} answered {}: {}",
-                        status.as_u16(),
-                        short(&text)
-                    )));
-                }
-                Ok(text)
-            }
+                    _ => Err(err),
+                },
+            },
+        }
+    }
+
+    /// GETs `path` of a Service through the API server's service proxy; a failure comes with
+    /// the status the Service answered, if it answered.
+    async fn through_proxy(
+        &self,
+        client: &Client,
+        path: &str,
+        https: bool,
+    ) -> std::result::Result<String, (Option<u16>, Error)> {
+        let Endpoint::Service {
+            namespace,
+            name,
+            port,
+            ..
+        } = self
+        else {
+            return Err((
+                None,
+                Error::Unsupported(format!("{} is not a Service", self.label())),
+            ));
+        };
+        let uri = Self::proxy_path(namespace, name, *port, https, path);
+        let request = http::Request::get(uri)
+            .header(http::header::ACCEPT, "application/json")
+            .body(Vec::new())
+            .map_err(|e| (None, Error::Unsupported(e.to_string())))?;
+        let call = client.request_text(request);
+        match tokio::time::timeout(TIMEOUT, call).await {
+            Ok(Ok(text)) => Ok(text),
+            Ok(Err(kube::Error::Api(status))) if status.message.contains("no endpoints available") => Err((
+                None,
+                Error::Integration(format!("{} has no ready pod to answer", self.label())),
+            )),
+            Ok(Err(kube::Error::Api(status))) if wants_certificate(&status.message) => Err((
+                Some(status.code),
+                Error::Integration(no_certificate(&self.label())),
+            )),
+            Ok(Err(kube::Error::Api(status))) => Err((
+                Some(status.code),
+                Error::Integration(format!(
+                    "{} answered {} through the API server: {}",
+                    self.label(),
+                    status.code,
+                    short(&status.message)
+                )),
+            )),
+            Ok(Err(err)) => Err((
+                None,
+                Error::Integration(format!("{}: {}", self.label(), Error::from(err))),
+            )),
+            Err(_) => Err((
+                None,
+                Error::Integration(format!("{} did not answer in time", self.label())),
+            )),
         }
     }
 
@@ -215,6 +256,55 @@ impl Endpoint {
             ))
         })
     }
+}
+
+/// GETs `path` of a URL, with `token` if there is one.
+async fn direct(url: &str, path: &str, token: Option<&str>) -> Result<String> {
+    let http = CLIENT.as_ref().map_err(|e| Error::Integration(e.clone()))?;
+    let mut request = http
+        .get(format!("{url}{path}"))
+        .header("Accept", "application/json");
+    if let Some(token) = token.filter(|t| !t.is_empty()) {
+        request = request.bearer_auth(token);
+    }
+    let failed = |e: reqwest::Error| {
+        let message = reqwest_message(&e);
+        Error::Integration(if wants_certificate(&message) {
+            no_certificate(url)
+        } else {
+            format!("{url}: {message}")
+        })
+    };
+    let response = request.send().await.map_err(failed)?;
+    let status = response.status();
+    let text = response.text().await.map_err(failed)?;
+    if !status.is_success() {
+        if wants_certificate(&text) {
+            return Err(Error::Integration(no_certificate(url)));
+        }
+        return Err(Error::Integration(format!(
+            "{url} answered {}: {}",
+            status.as_u16(),
+            short(&text)
+        )));
+    }
+    Ok(text)
+}
+
+/// Whether an answer or error says that a client certificate was missing: nginx's "400 No
+/// required SSL certificate was sent", or the TLS alert "certificate required".
+fn wants_certificate(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    text.contains("no required ssl certificate")
+        || text.contains("certificaterequired")
+        || text.contains("certificate required")
+}
+
+/// Why a tool behind a client certificate does not answer Kubri.
+fn no_certificate(label: &str) -> String {
+    format!(
+        "{label} asks for a client certificate, which Kubri does not send; your browser can still open it"
+    )
 }
 
 static CLIENT: LazyLock<std::result::Result<reqwest::Client, String>> = LazyLock::new(|| {
@@ -297,8 +387,24 @@ enum Tool {
     Loki,
 }
 
+/// Whether a Service's port speaks TLS, by its name, its app protocol or its number.
+fn speaks_tls(port: &ServicePort) -> bool {
+    let name = port.name.as_deref().unwrap_or_default();
+    let protocol = port
+        .app_protocol
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    name == "https"
+        || name == "tls"
+        || name.starts_with("https-")
+        || protocol == "https"
+        || protocol.ends_with("/https")
+        || matches!(port.port, 443 | 8443)
+}
+
 /// How well a Service fits a tool: higher is better, `None` is not it.
-fn score(tool: Tool, service: &Service) -> Option<(i32, u16)> {
+fn score(tool: Tool, service: &Service) -> Option<(i32, ServicePort)> {
     let name = service.metadata.name.as_deref().unwrap_or_default();
     let labels = service.metadata.labels.clone().unwrap_or_default();
     let app = labels
@@ -318,7 +424,8 @@ fn score(tool: Tool, service: &Service) -> Option<(i32, u16)> {
             .iter()
             .find(|p| p.name.as_deref().is_some_and(|n| names.contains(&n)) || numbers.contains(&p.port))
             .or_else(|| (ports.len() == 1).then(|| &ports[0]))
-            .and_then(|p| u16::try_from(p.port).ok())
+            .filter(|p| u16::try_from(p.port).is_ok())
+            .cloned()
     };
     match tool {
         Tool::Prometheus => {
@@ -418,9 +525,101 @@ fn best(tool: Tool, services: &[Service]) -> Option<Endpoint> {
         .map(|(_, port, s)| Endpoint::Service {
             namespace: s.metadata.namespace.clone().unwrap_or_default(),
             name: s.metadata.name.clone().unwrap_or_default(),
-            port,
-            https: false,
+            port: port.port as u16,
+            https: speaks_tls(&port),
         })
+}
+
+/// The Service an Ingress of the cluster sends `url` to: the backend of the root path of the
+/// rule for its host. Only for a URL without a path, as an Ingress may rewrite one.
+fn behind_ingress(url: &str, ingresses: &[Ingress], services: &[Service]) -> Option<Endpoint> {
+    let parsed = reqwest::Url::parse(url).ok()?;
+    if !matches!(parsed.path(), "" | "/") {
+        return None;
+    }
+    let host = parsed.host_str()?.to_ascii_lowercase();
+    let fits = |rule: &str| {
+        let rule = rule.to_ascii_lowercase();
+        match rule.strip_prefix("*.") {
+            // A wildcard stands for exactly one label.
+            Some(domain) => host
+                .split_once('.')
+                .is_some_and(|(label, rest)| !label.is_empty() && rest == domain),
+            None => rule == host,
+        }
+    };
+    // An exact host wins over a wildcard, as in Ingress controllers.
+    let mut found: Option<(bool, Endpoint)> = None;
+    for ingress in ingresses {
+        let namespace = ingress.metadata.namespace.clone().unwrap_or_default();
+        let annotations = ingress.metadata.annotations.clone().unwrap_or_default();
+        let backend_tls = annotations
+            .get("nginx.ingress.kubernetes.io/backend-protocol")
+            .is_some_and(|p| p.eq_ignore_ascii_case("https"))
+            || annotations
+                .get("traefik.ingress.kubernetes.io/service.serversscheme")
+                .is_some_and(|p| p.eq_ignore_ascii_case("https"));
+        let Some(spec) = ingress.spec.as_ref() else {
+            continue;
+        };
+        for rule in spec.rules.iter().flatten() {
+            let Some(rule_host) = rule.host.as_deref().filter(|h| fits(h)) else {
+                continue;
+            };
+            let exact = !rule_host.starts_with("*.");
+            if found.as_ref().is_some_and(|(was_exact, _)| *was_exact || !exact) {
+                continue;
+            }
+            let backend = match rule.http.as_ref() {
+                Some(http) => http
+                    .paths
+                    .iter()
+                    .find(|p| matches!(p.path.as_deref(), None | Some("" | "/" | "/*")))
+                    .and_then(|p| p.backend.service.clone()),
+                None => spec.default_backend.as_ref().and_then(|b| b.service.clone()),
+            };
+            let Some(backend) = backend else {
+                continue;
+            };
+            let service = services.iter().find(|s| {
+                s.metadata.namespace.as_deref() == Some(namespace.as_str())
+                    && s.metadata.name.as_deref() == Some(backend.name.as_str())
+            });
+            let wanted = backend.port.as_ref();
+            let port = service
+                .and_then(|s| s.spec.as_ref())
+                .and_then(|spec| spec.ports.as_ref())
+                .and_then(|ports| {
+                    ports.iter().find(|p| match wanted {
+                        Some(w) if w.number.is_some() => w.number == Some(p.port),
+                        Some(w) => w.name.is_some() && w.name == p.name,
+                        None => false,
+                    })
+                })
+                .cloned()
+                .or_else(|| {
+                    // A Service Kubri may not read: the number in the Ingress is enough.
+                    let number = wanted?.number?;
+                    Some(ServicePort {
+                        port: number,
+                        ..Default::default()
+                    })
+                });
+            let Some(port) = port.filter(|p| u16::try_from(p.port).is_ok()) else {
+                continue;
+            };
+            found = Some((
+                exact,
+                Endpoint::Service {
+                    namespace: namespace.clone(),
+                    name: backend.name.clone(),
+                    port: port.port as u16,
+                    https: backend_tls || speaks_tls(&port),
+                },
+            ));
+        }
+    }
+    found.map(|(_, endpoint)| endpoint)
 }
 
 /// Finds the tools: Services across the cluster for those Kubri talks to, served API groups
@@ -437,6 +636,20 @@ pub(crate) async fn detect(
             Vec::new()
         }
     };
+    // The Ingresses only matter for a tool given by URL.
+    let urls = [&settings.prometheus, &settings.grafana, &settings.loki]
+        .into_iter()
+        .any(|s| s.starts_with("http"));
+    let ingresses = if urls {
+        crate::typed::list(Api::<Ingress>::all(client.clone()))
+            .await
+            .unwrap_or_else(|err| {
+                tracing::debug!("cannot list Ingresses to find the Services behind URLs: {err}");
+                Vec::new()
+            })
+    } else {
+        Vec::new()
+    };
     let mut items = Vec::new();
     for (id, name, tool, setting) in [
         ("prometheus", "Prometheus", Tool::Prometheus, &settings.prometheus),
@@ -446,7 +659,14 @@ pub(crate) async fn detect(
         let (endpoint, source) = if setting == OFF {
             (None, "off")
         } else if !setting.is_empty() {
-            (Endpoint::from_url(setting).ok(), "settings")
+            let endpoint = Endpoint::from_url(setting).ok().map(|endpoint| match endpoint {
+                Endpoint::Url { url, .. } => {
+                    let behind = behind_ingress(&url, &ingresses, &services).map(Box::new);
+                    Endpoint::Url { url, behind }
+                }
+                service => service,
+            });
+            (endpoint, "settings")
         } else {
             match best(tool, &services) {
                 Some(endpoint) => (Some(endpoint), "found"),
@@ -493,25 +713,35 @@ pub(crate) async fn detect(
     Integrations { items }
 }
 
-/// Asks each tool Kubri talks to for its version, which also shows that it answers.
+/// Where a tool tells its version, which also shows that it answers.
+fn version_path(id: &str) -> Option<&'static str> {
+    match id {
+        "prometheus" => Some("/api/v1/status/buildinfo"),
+        "grafana" => Some("/api/health"),
+        "loki" => Some("/loki/api/v1/status/buildinfo"),
+        _ => None,
+    }
+}
+
+/// Asks each tool Kubri talks to for its version, which also shows that it answers. A Service
+/// that answers only over HTTPS is marked so, for the browser's port-forward too.
 pub(crate) async fn probe(client: &Client, integrations: &mut Integrations, grafana_token: Option<&str>) {
     let checks = integrations.items.iter().map(|item| {
-        let path = match item.id.as_str() {
-            "prometheus" => "/api/v1/status/buildinfo",
-            "grafana" => "/api/health",
-            "loki" => "/loki/api/v1/status/buildinfo",
-            _ => "",
-        };
+        let path = version_path(&item.id);
         let token = (item.id == "grafana").then_some(grafana_token).flatten();
         let endpoint = item.endpoint.clone();
         async move {
-            let endpoint = endpoint.filter(|_| !path.is_empty())?;
-            Some(match endpoint.get_json(client, path, token).await {
-                Ok(answer) => Ok(answer
-                    .pointer("/data/version")
-                    .or_else(|| answer.get("version"))
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)),
+            let (endpoint, path) = endpoint.zip(path)?;
+            Some(match endpoint.fetch(client, path, token).await {
+                Ok((text, tls)) => {
+                    let answer: Value = serde_json::from_str(&text).unwrap_or_default();
+                    let version = answer
+                        .pointer("/data/version")
+                        .or_else(|| answer.get("version"))
+                        .and_then(Value::as_str)
+                        .map(str::to_owned);
+                    Ok((version, tls))
+                }
                 Err(err) => Err(err.to_string()),
             })
         }
@@ -519,7 +749,12 @@ pub(crate) async fn probe(client: &Client, integrations: &mut Integrations, graf
     let answers = futures::future::join_all(checks).await;
     for (item, answer) in integrations.items.iter_mut().zip(answers) {
         match answer {
-            Some(Ok(version)) => item.version = version,
+            Some(Ok((version, tls))) => {
+                item.version = version;
+                if let (true, Some(Endpoint::Service { https, .. })) = (tls, item.endpoint.as_mut()) {
+                    *https = true;
+                }
+            }
             Some(Err(err)) => item.error = Some(err),
             None => {}
         }
@@ -1077,14 +1312,25 @@ impl crate::Kubri {
             .endpoint(id)
             .cloned()
             .ok_or_else(|| Error::Unsupported(format!("{id} is not found in this cluster")))?;
+        // A Service taken for plain HTTP may answer only over HTTPS, which the browser needs.
+        let tls = match (&endpoint, version_path(id)) {
+            (Endpoint::Service { https: false, .. }, Some(path)) => {
+                let session = self.session().await?;
+                matches!(
+                    endpoint.fetch(&session.proxy_client, path, None).await,
+                    Ok((_, true))
+                )
+            }
+            _ => false,
+        };
         let (namespace, name, port, https) = match endpoint {
-            Endpoint::Url { url } => return Ok(url),
+            Endpoint::Url { url, .. } => return Ok(url),
             Endpoint::Service {
                 namespace,
                 name,
                 port,
                 https,
-            } => (namespace, name, port, https),
+            } => (namespace, name, port, https || tls),
         };
         let context = self.cluster().await.map(|c| c.context).unwrap_or_default();
         let scheme = if https { "https" } else { "http" };
@@ -1371,7 +1617,8 @@ mod tests {
         assert_eq!(
             Endpoint::from_url("https://grafana.example.com/").unwrap(),
             Endpoint::Url {
-                url: "https://grafana.example.com".into()
+                url: "https://grafana.example.com".into(),
+                behind: None,
             }
         );
         assert!(Endpoint::from_url("grafana.example.com").is_err());
@@ -1385,5 +1632,236 @@ mod tests {
         .unwrap();
         assert_eq!(settings.prometheus, OFF);
         assert_eq!(settings.grafana, "https://g.example.com");
+    }
+
+    #[test]
+    fn finds_services_that_speak_tls() {
+        let grafana = |ports: &[(&str, i32)]| {
+            [service(
+                "ops",
+                "grafana",
+                &[("app.kubernetes.io/name", "grafana")],
+                ports,
+                false,
+            )]
+        };
+        let https = |services: &[Service]| match best(Tool::Grafana, services) {
+            Some(Endpoint::Service { https, port, .. }) => (port, https),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(https(&grafana(&[("https", 443)])), (443, true));
+        assert_eq!(https(&grafana(&[("web", 8443)])), (8443, true));
+        assert_eq!(https(&grafana(&[("http-web", 80)])), (80, false));
+        // Plain HTTP first, where the Service has both.
+        assert_eq!(https(&grafana(&[("https", 443), ("http-web", 80)])), (80, false));
+    }
+
+    fn ingress(namespace: &str, host: &str, service: &str, port: Value, annotations: Value) -> Ingress {
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "namespace": namespace, "name": service, "annotations": annotations },
+            "spec": { "rules": [{ "host": host, "http": { "paths": [
+                { "path": "/api", "pathType": "Prefix", "backend": { "service": { "name": "other", "port": { "number": 1 } } } },
+                { "path": "/", "pathType": "Prefix", "backend": { "service": { "name": service, "port": port } } }
+            ] } }] }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn finds_the_service_behind_an_ingress() {
+        let services = [service(
+            "ops",
+            "grafana",
+            &[],
+            &[("service", 80), ("tls", 3443)],
+            false,
+        )];
+        let ingresses = [
+            ingress(
+                "ops",
+                "*.example.com",
+                "wild",
+                serde_json::json!({ "number": 8080 }),
+                serde_json::json!({}),
+            ),
+            ingress(
+                "ops",
+                "grafana.example.com",
+                "grafana",
+                serde_json::json!({ "name": "service" }),
+                serde_json::json!({}),
+            ),
+        ];
+        let svc = |name: &str, port, https| Endpoint::Service {
+            namespace: "ops".into(),
+            name: name.into(),
+            port,
+            https,
+        };
+        // The exact host wins over the wildcard, whichever comes first; a port by its name.
+        assert_eq!(
+            behind_ingress("https://Grafana.example.com", &ingresses, &services),
+            Some(svc("grafana", 80, false))
+        );
+        // A Service Kubri cannot read still has the Ingress's port number.
+        assert_eq!(
+            behind_ingress("https://loki.example.com", &ingresses, &services),
+            Some(svc("wild", 8080, false))
+        );
+        assert_eq!(
+            behind_ingress("https://a.b.example.com", &ingresses, &services),
+            None
+        );
+        assert_eq!(
+            behind_ingress("https://grafana.example.com/grafana", &ingresses, &services),
+            None
+        );
+        assert_eq!(
+            behind_ingress("https://grafana.example.org", &ingresses, &services),
+            None
+        );
+        let tls = [ingress(
+            "ops",
+            "grafana.example.com",
+            "grafana",
+            serde_json::json!({ "name": "tls" }),
+            serde_json::json!({}),
+        )];
+        assert_eq!(
+            behind_ingress("https://grafana.example.com", &tls, &services),
+            Some(svc("grafana", 3443, true))
+        );
+        let annotated = [ingress(
+            "ops",
+            "grafana.example.com",
+            "grafana",
+            serde_json::json!({ "number": 80 }),
+            serde_json::json!({ "nginx.ingress.kubernetes.io/backend-protocol": "HTTPS" }),
+        )];
+        assert_eq!(
+            behind_ingress("https://grafana.example.com", &annotated, &services),
+            Some(svc("grafana", 80, true))
+        );
+    }
+
+    #[tokio::test]
+    async fn asks_a_service_over_https_when_plain_http_fails() {
+        let (client, log) = crate::testing::client(|r| {
+            if r.uri.contains("/services/https:grafana:80/") {
+                (200, r#"{"version":"11.3.0"}"#.into())
+            } else {
+                (400, "Client sent an HTTP request to an HTTPS server.".into())
+            }
+        });
+        let endpoint = Endpoint::Service {
+            namespace: "ops".into(),
+            name: "grafana".into(),
+            port: 80,
+            https: false,
+        };
+        let (text, tls) = endpoint.fetch(&client, "/api/health", None).await.unwrap();
+        assert!(tls && text.contains("11.3.0"));
+        assert_eq!(log.lock().unwrap().len(), 2);
+
+        let mut found = Integrations {
+            items: vec![Integration {
+                id: "grafana".into(),
+                name: "Grafana".into(),
+                endpoint: Some(endpoint),
+                source: "found".into(),
+                version: None,
+                error: None,
+            }],
+        };
+        probe(&client, &mut found, None).await;
+        let item = &found.items[0];
+        assert_eq!(item.version.as_deref(), Some("11.3.0"));
+        assert!(matches!(
+            item.endpoint,
+            Some(Endpoint::Service { https: true, .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn says_when_a_client_certificate_is_wanted() {
+        // A TLS sidecar that wants a client certificate, on a port taken for plain HTTP.
+        let (client, log) = crate::testing::client(|r| {
+            let body = if r.uri.contains("/services/https:") {
+                "<html>\n<head><title>400 No required SSL certificate was sent</title></head>"
+            } else {
+                "<html>\n<head><title>400 The plain HTTP request was sent to HTTPS port</title></head>"
+            };
+            (400, body.into())
+        });
+        let endpoint = Endpoint::Service {
+            namespace: "ops".into(),
+            name: "grafana".into(),
+            port: 80,
+            https: false,
+        };
+        let err = endpoint.get(&client, "/api/health", None).await.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "ops/grafana:80 asks for a client certificate, which Kubri does not send; your browser can still open it"
+        );
+        assert_eq!(log.lock().unwrap().len(), 2);
+    }
+
+    /// A server that answers every request as nginx does without a client certificate.
+    async fn nginx_wanting_a_certificate() -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let mut buffer = [0u8; 4096];
+                    let _ = socket.read(&mut buffer).await;
+                    let body =
+                        "<html><head><title>400 No required SSL certificate was sent</title></head></html>";
+                    let answer = format!(
+                        "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = socket.write_all(answer.as_bytes()).await;
+                });
+            }
+        });
+        format!("http://{address}")
+    }
+
+    #[tokio::test]
+    async fn asks_the_service_behind_the_ingress_when_the_url_wants_a_certificate() {
+        let url = nginx_wanting_a_certificate().await;
+        let (client, log) = crate::testing::client(|r| {
+            assert!(
+                r.uri
+                    .starts_with("/api/v1/namespaces/ops/services/grafana:80/proxy/api/health")
+            );
+            (200, r#"{"version":"11.3.0"}"#.into())
+        });
+        let alone = Endpoint::Url {
+            url: url.clone(),
+            behind: None,
+        };
+        let err = alone.get(&client, "/api/health", None).await.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "{url} asks for a client certificate, which Kubri does not send; your browser can still open it"
+            )
+        );
+        let behind = Endpoint::Url {
+            url,
+            behind: Some(Box::new(Endpoint::Service {
+                namespace: "ops".into(),
+                name: "grafana".into(),
+                port: 80,
+                https: false,
+            })),
+        };
+        let text = behind.get(&client, "/api/health", None).await.unwrap();
+        assert!(text.contains("11.3.0"));
+        assert_eq!(log.lock().unwrap().len(), 1);
     }
 }

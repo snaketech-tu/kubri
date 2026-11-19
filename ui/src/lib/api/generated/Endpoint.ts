@@ -3,4 +3,10 @@
 /**
  * How Kubri reaches a tool.
  */
-export type Endpoint = { "via": "service", namespace: string, name: string, port: number, https: boolean, } | { "via": "url", url: string, };
+export type Endpoint = { "via": "service", namespace: string, name: string, port: number, https: boolean, } | { "via": "url", url: string, 
+/**
+ * The Service the cluster's Ingress for the URL's host sends it to. Kubri asks it,
+ * through the API server, when the URL does not answer, such as when the Ingress wants
+ * a client certificate. The browser still opens the URL.
+ */
+behind?: Endpoint, };

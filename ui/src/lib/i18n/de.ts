@@ -1984,6 +1984,7 @@ const de: Record<string, string> = {
 	'From settings': 'Aus den Einstellungen',
 	'Found': 'Gefunden',
 	'Service {service}, through the API server': 'Service {service}, über den API-Server',
+	'{url}, else Service {service} behind its Ingress': '{url}, sonst Service {service} hinter seinem Ingress',
 	'Tools the cluster runs, found without setup': 'Tools, die im Cluster laufen, ohne Einrichtung gefunden',
 	'Looking…': 'Suche…',
 	'Look again': 'Erneut suchen',
