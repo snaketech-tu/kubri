@@ -183,7 +183,7 @@
 				{:else if found.measured === 0}
 					<p class="empty">
 						<Icon name="warning" size={16} />
-						{t('{source} has no use for any of their containers, so there is nothing to compare. Check that it collects container metrics from the kubelet (cAdvisor).', { source: coreText(found.source) })}
+						{t('No use was found for any of their containers, so there is nothing to compare. Check that the source above collects container metrics from the kubelet (cAdvisor).')}
 					</p>
 				{:else}
 					<p class="empty">
