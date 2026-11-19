@@ -243,6 +243,7 @@ describe('logs and shell', () => {
 		// In a child shell: busybox runs a plain sleep inside the shell itself.
 		await page.keyboard.type("sh -c 'sleep 4242; true'\n");
 		await h.until(async () => running(), { message: 'sleep running in the container' });
+		console.log('DIAG ps before close\n' + h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'ps', '-o', 'pid,ppid,pgid,stat,args'));
 		// Esc twice gives the keys back to Kubri, a third closes the inspector and the shell.
 		await page.keyboard.press('Escape');
 		await page.keyboard.press('Escape');
@@ -250,7 +251,14 @@ describe('logs and shell', () => {
 		await h.until(async () => !(await input.evaluate((el) => el === document.activeElement)), { message: 'the keys back' });
 		await page.keyboard.press('Escape');
 		await page.getByRole('complementary', { name: 'Pod inspector' }).waitFor({ state: 'hidden' });
-		await h.until(async () => !running(), { message: 'the closed shell to end in the container' });
+		const ps = () => h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'ps', '-o', 'pid,ppid,pgid,stat,args');
+		console.log('DIAG ps after close\n' + ps());
+		try {
+			await h.until(async () => !running(), { message: 'the closed shell to end in the container' });
+		} finally {
+			console.log('DIAG ps at end\n' + ps());
+			console.log('DIAG server\n' + server.output().split('\n').filter((l) => /terminal|shell|hangup|exec/i.test(l)).slice(-60).join('\n'));
+		}
 	});
 });
 
