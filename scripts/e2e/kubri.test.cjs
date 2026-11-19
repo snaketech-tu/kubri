@@ -253,6 +253,7 @@ describe('logs and shell', () => {
 		await page.getByRole('complementary', { name: 'Pod inspector' }).waitFor({ state: 'hidden' });
 		const ps = () => h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'ps', '-o', 'pid,ppid,pgid,stat,args');
 		console.log('DIAG ps after close\n' + ps());
+		console.log('DIAG signals\n' + h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'sh', '-c', 'for f in /proc/[0-9]*/status; do echo "$f $(grep -E "^(Name|SigIgn|SigCgt|SigBlk)" $f | tr "\\n" " ")"; done'));
 		try {
 			await h.until(async () => !running(), { message: 'the closed shell to end in the container' });
 		} finally {
