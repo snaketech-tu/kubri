@@ -30,7 +30,8 @@ matter. When a test fails, a screenshot of the page lands in `e2e-artifacts/`.
 | `PLAYWRIGHT_MODULE` | `playwright` |
 | `E2E_ARTIFACTS` | `e2e-artifacts` |
 
-The desktop check needs the Tauri system libraries, `webkit2gtk-driver`, `tauri-driver`
+The desktop check needs the Tauri system libraries, the WebKit driver (`webkitgtk-webdriver`,
+called `webkit2gtk-driver` on older Ubuntu), `tauri-driver`
 (`cargo install tauri-driver --locked`) and Xvfb:
 
 ```sh

@@ -634,7 +634,8 @@ mod tests {
             }
             if behavior.symmetric {
                 let header = Header::new(Algorithm::HS256);
-                return jsonwebtoken::encode(&header, &claims, &EncodingKey::from_secret(b"k1")).unwrap();
+                return jsonwebtoken::encode(&header, &claims, &EncodingKey::from_secret(b"k1").unwrap())
+                    .unwrap();
             }
             let mut header = Header::new(Algorithm::ES256);
             header.kid = Some("k1".into());
