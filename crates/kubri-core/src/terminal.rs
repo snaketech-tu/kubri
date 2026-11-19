@@ -264,9 +264,17 @@ impl Hangup {
             format!("kill -HUP {pid}"),
         ];
         let hangup = async {
-            if let Ok(process) = self.api.exec(&self.pod, command, &params).await {
-                let _ = process.join().await;
+            match self.api.exec(&self.pod, command, &params).await {
+                Ok(process) => {
+                    if let Err(e) = process.join().await {
+                        tracing::debug!(pod = %self.pod, pid, error = %e, "hanging up the closed shell failed");
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!(pod = %self.pod, pid, error = %e, "cannot hang up the closed shell")
+                }
             }
+            tracing::debug!(pod = %self.pod, pid, "hung up the closed shell");
         };
         if tokio::time::timeout(HANGUP_TIMEOUT, hangup).await.is_err() {
             tracing::debug!(pod = %self.pod, pid, "the closed shell did not end in time");
