@@ -50,6 +50,8 @@ import type { Drill } from './generated/Drill';
 import type { Endpoint } from './generated/Endpoint';
 import type { EventInfo } from './generated/EventInfo';
 import type { ExplainAnswer } from './generated/ExplainAnswer';
+import type { ExplainCli } from './generated/ExplainCli';
+import type { ExplainClis } from './generated/ExplainClis';
 import type { ExplainPrompt } from './generated/ExplainPrompt';
 import type { ExplainProvider } from './generated/ExplainProvider';
 import type { ExplainSettings } from './generated/ExplainSettings';
@@ -210,6 +212,8 @@ export type {
 	Endpoint,
 	EventInfo,
 	ExplainAnswer,
+	ExplainCli,
+	ExplainClis,
 	ExplainPrompt,
 	ExplainProvider,
 	ExplainSettings,
@@ -424,10 +428,12 @@ export interface Backend {
 	answerAgent(id: number, allow: boolean): Promise<boolean>;
 	agentCalls(): Promise<AgentCall[]>;
 	setExplainSettings(settings: ExplainSettings): Promise<Settings>;
-	/** Whether an API key for Explain is stored; the key itself never comes back. */
-	explainKey(): Promise<{ hasKey: boolean }>;
-	/** Stores the key, or removes it with null. */
-	setExplainKey(key: string | null): Promise<{ hasKey: boolean }>;
+	/** Whether Explain can use Claude Code and Codex here, and where they are. */
+	explainClis(): Promise<ExplainClis>;
+	/** Whether an API key of the provider is stored; the key itself never comes back. */
+	explainKey(provider: ExplainProvider): Promise<{ hasKey: boolean }>;
+	/** Stores the provider's key, or removes it with null. Each provider keeps its own. */
+	setExplainKey(provider: ExplainProvider, key: string | null): Promise<{ hasKey: boolean }>;
 	/** Gathers what Explain would send; nothing leaves Kubri yet. */
 	explainPrompt(subject: ExplainSubject): Promise<ExplainPrompt>;
 	/** Sends the prompt's text to the model in the settings. */

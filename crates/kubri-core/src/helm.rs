@@ -367,7 +367,7 @@ pub(crate) fn validate_name(name: &str) -> Result<()> {
 /// Folders where Helm's installers and package managers put `helm`. An app started from a
 /// desktop launcher, the Dock or a service often gets a shorter `PATH` than a terminal, so
 /// these are searched when `helm` is not on it.
-fn install_dirs() -> Vec<PathBuf> {
+pub(crate) fn install_dirs() -> Vec<PathBuf> {
     let var = |name: &str| {
         std::env::var_os(name)
             .filter(|v| !v.is_empty())

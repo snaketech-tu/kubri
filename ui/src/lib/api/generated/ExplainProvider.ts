@@ -3,4 +3,4 @@
 /**
  * Where Explain sends its questions.
  */
-export type ExplainProvider = "none" | "anthropic" | "openai";
+export type ExplainProvider = "none" | "anthropic" | "openai" | "openrouter" | "claude" | "codex";

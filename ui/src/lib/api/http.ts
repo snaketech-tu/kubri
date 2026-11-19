@@ -126,8 +126,8 @@ export const httpBackend: Backend = {
 	agentRequests: () => request('GET', '/agents/pending'),
 	answerAgent: (id, allow) => request('POST', '/agents/answer', { id, allow }),
 	agentCalls: () => request('GET', '/agents/calls'),
-	explainKey: () => request('GET', '/explain/key'),
-	setExplainKey: (key) => request('PUT', '/explain/key', { key }),
+	explainKey: (provider) => request('GET', `/explain/key?provider=${encodeURIComponent(provider)}`),
+	setExplainKey: (provider, key) => request('PUT', '/explain/key', { provider, key }),
 	explainPrompt: (subject) => request('POST', '/explain/prompt', subject),
 	explain: (text) => request('POST', '/explain', { text }),
 

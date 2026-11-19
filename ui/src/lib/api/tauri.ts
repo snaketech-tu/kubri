@@ -71,8 +71,8 @@ export const tauriBackend: Backend = {
 	agentRequests: () => invoke('agents_pending'),
 	answerAgent: (id, allow) => invoke('agents_answer', { id, allow }),
 	agentCalls: () => invoke('agents_calls'),
-	explainKey: () => invoke('explain_key'),
-	setExplainKey: (key) => invoke('set_explain_key', { key }),
+	explainKey: (provider) => invoke('explain_key', { provider }),
+	setExplainKey: (provider, key) => invoke('set_explain_key', { provider, key }),
 	explainPrompt: (subject) => invoke('explain_prompt', { subject }),
 	explain: (text) => invoke('explain', { text }),
 

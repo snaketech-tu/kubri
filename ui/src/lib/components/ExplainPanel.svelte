@@ -5,7 +5,7 @@
 	import { backend, type ExplainAnswer, type ExplainPrompt, type ExplainSubject } from '../api';
 	import { errorMessage } from '../format';
 	import { app } from '../state.svelte';
-	import { explainBlocker, providerName } from '../explain';
+	import { explainBlocker, providerName, runsCommand } from '../explain';
 	import Icon from './Icon.svelte';
 	import Markdown from './Markdown.svelte';
 	import Phrase from './Phrase.svelte';
@@ -117,7 +117,7 @@
 		{#if phase === 'asking'}
 			<p class="waiting" role="status">
 				<span class="spinner" aria-hidden="true"></span>
-				{t('Asking {model}… this can take a minute.', { model: prompt?.model ?? '' })}
+				{t('Asking {model}… this can take a minute.', { model: prompt?.model ?? (prompt ? providerName(prompt.provider) : '') })}
 			</p>
 		{/if}
 
@@ -136,7 +136,13 @@
 			<details class="sent" open={phase !== 'answered'}>
 				<summary>{phase === 'answered' ? t('What was sent') : t('What will be sent')}</summary>
 				<p class="muted small">
-					{#if prompt.endpoint}
+					{#if prompt.endpoint && runsCommand(prompt.provider)}
+						<Phrase
+							text={prompt.model ? t('To {provider}, model {model}, run as {endpoint}.', { model: prompt.model }) : t('To {provider}, run as {endpoint}.')}
+							strong={{ provider: providerName(prompt.provider) }}
+							code={{ endpoint: prompt.endpoint }}
+						/>
+					{:else if prompt.endpoint}
 						<Phrase
 							text={prompt.model ? t('To {provider}, model {model}, at {endpoint}.', { model: prompt.model }) : t('To {provider}, at {endpoint}.')}
 							strong={{ provider: providerName(prompt.provider) }}

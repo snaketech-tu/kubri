@@ -344,6 +344,7 @@ fn call_action(call: &str) -> Option<&'static str> {
 /// browser sees, such as the connected context or a benchmark's results.
 #[cfg(test)]
 const UNRECORDED: &[&str] = &[
+    "explainClis",
     "contexts",
     "reloadContexts",
     "kubeconfigFiles",

@@ -72,6 +72,12 @@ export const SOURCE_TEXTS: Record<string, string[]> = {
 		'{0}. A local terminal would get around that, so it stays closed.',
 		"kubectl {0} is more than one minor version away from the cluster's {1}; some commands may not work"
 	],
+	'explain_cli.rs': [
+		'Claude Code and Codex would run on the server here. Start the server with KUBRI_LOCAL_TERMINAL=true to allow it.',
+		'A Kubri shared by a team cannot use Claude Code or Codex: they would run on the server, with its own sign-in.',
+		'Kubri finds no `claude` command. Install Claude Code, sign in by running `claude` once, then try again.',
+		'Kubri finds no `codex` command. Install Codex, sign in with `codex login`, then try again.'
+	],
 	'rightsizing.rs': ['Prometheus at {0}, last 7 days', 'metrics-server, now'],
 	// Why a pod does not fit on a node. The selector's "no label" first, as the other would match it too.
 	'fixes.rs': [
