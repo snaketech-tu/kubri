@@ -8,7 +8,7 @@ use kube::{Api, Client};
 use serde::Serialize;
 
 use crate::health;
-use crate::pulse::{KindPulse, allocatable, list, requested, summarize};
+use crate::pulse::{KindPulse, allocatable, list, reserved, summarize};
 use crate::{Error, Kubri, Result, client_config};
 
 /// How long one context may take before the page calls it unreachable.
@@ -40,9 +40,9 @@ pub struct FleetCluster {
     pub millis: u64,
     /// Nodes, pods, Deployments, StatefulSets and DaemonSets, healthy or not.
     pub kinds: Vec<KindPulse>,
-    /// CPU requested and allocatable, in millicores.
+    /// CPU reserved by pods a node has taken, and allocatable, in millicores.
     pub cpu: Option<(f64, f64)>,
-    /// Memory requested and allocatable, in bytes.
+    /// Memory reserved by pods a node has taken, and allocatable, in bytes.
     pub memory: Option<(f64, f64)>,
 }
 
@@ -56,11 +56,8 @@ async fn gather(client: Client, cluster: &mut FleetCluster) {
         list(Api::<DaemonSet>::all(client.clone())),
     );
     if let (Ok(nodes), Ok(pods)) = (&nodes, &pods) {
-        cluster.cpu = Some((
-            requested(pods, "cpu") * 1000.0,
-            allocatable(nodes, "cpu") * 1000.0,
-        ));
-        cluster.memory = Some((requested(pods, "memory"), allocatable(nodes, "memory")));
+        cluster.cpu = Some((reserved(pods, "cpu") * 1000.0, allocatable(nodes, "cpu") * 1000.0));
+        cluster.memory = Some((reserved(pods, "memory"), allocatable(nodes, "memory")));
     }
     cluster.kinds = vec![
         summarize(nodes, health::node),

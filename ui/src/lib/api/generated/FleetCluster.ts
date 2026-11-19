@@ -22,10 +22,10 @@ millis: number,
  */
 kinds: Array<KindPulse>, 
 /**
- * CPU requested and allocatable, in millicores.
+ * CPU reserved by pods a node has taken, and allocatable, in millicores.
  */
 cpu: [number, number] | null, 
 /**
- * Memory requested and allocatable, in bytes.
+ * Memory reserved by pods a node has taken, and allocatable, in bytes.
  */
 memory: [number, number] | null, };

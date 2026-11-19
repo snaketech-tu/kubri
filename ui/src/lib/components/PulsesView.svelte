@@ -12,7 +12,7 @@
 	import { age, cpuText, errorMessage, memoryText as memory, relative } from '../format';
 	import { fleetState, serverHost, workloads } from '../fleet';
 	import { attentionTitle } from '../causes';
-	import { attentionItems, fill, kindLabel, meterTone, record, restartingContainer, room, shortMessage, splitKinds, type AttentionItem } from '../pulse';
+	import { attentionItems, fill, kindLabel, meterTone, namespacePart, record, restartingContainer, room, shortMessage, splitKinds, trendValue, type AttentionItem } from '../pulse';
 	import { lastLogLine } from '../lastlog';
 	import { app, findResource } from '../state.svelte';
 	import { plural, t } from '../i18n';
@@ -75,8 +75,8 @@
 				pulse = next;
 				error = null;
 				updated = at;
-				cpuHistory = record(cpuHistory, next.cpu.used ?? next.cpu.requested, at);
-				memoryHistory = record(memoryHistory, next.memory.used ?? next.memory.requested, at);
+				cpuHistory = record(cpuHistory, trendValue(next.cpu), at);
+				memoryHistory = record(memoryHistory, trendValue(next.memory), at);
 				kept.set(key, { cpu: cpuHistory, memory: memoryHistory });
 			} catch (err) {
 				if (!cancelled) error = errorMessage(err);
@@ -479,8 +479,8 @@
 							<p class="trend-wait" role="status"><span class="loader" aria-hidden="true"></span>{t('The trend appears after a few updates.')}</p>
 						{:else}
 							<div class="trends">
-								{@render trend('CPU', pulse.cpu, cpuTrend, cores)}
-								{@render trend(t('Memory'), pulse.memory, memoryTrend, memory)}
+								{@render trend('CPU', namespacePart(pulse.cpu), cpuTrend, cores)}
+								{@render trend(t('Memory'), namespacePart(pulse.memory), memoryTrend, memory)}
 							</div>
 						{/if}
 						<p class="note">
@@ -528,6 +528,7 @@
 {#snippet usageCard(index: number, label: string, icon: IconName, u: Utilization, format: (v: number) => string, resource: 'cpu' | 'memory')}
 	{@const r = room(u)}
 	{@const waiting = (pulse?.waiting ?? []).filter((w) => w[resource] > 0)}
+	{@const tone = `tone-${r ? (r.short ? 'bad' : meterTone(r.value)) : 'accent'}`}
 	<button
 		class="kpi"
 		class:cursor={marked(index)}
@@ -542,16 +543,66 @@
 		<span class="kpi-label">{label}<Icon name={icon} /></span>
 		{#if r}
 			<span class="kpi-value">{Math.round(r.value * 100)}<small>% {r.reserved !== null ? t('reserved') : t('used')}</small></span>
-			<span class="kpi-note">
-				{#if r.reserved !== null}
-					{t('{reserved} of {capacity} reserved', { reserved: format(r.reserved), capacity: format(r.capacity) })}
+			<span
+				class="meter {tone}"
+				role="meter"
+				aria-valuemin="0"
+				aria-valuemax="100"
+				aria-valuenow={Math.round(r.value * 100)}
+				aria-label="{label} {r.reserved !== null ? t('reserved') : t('used')}"
+			>
+				{#if r.namespace && r.reserved !== null}
+					<span class="fill mine" style:width={percent(Math.min(r.namespace.reserved / r.capacity, 1))}></span>
+					<span
+						class="fill others"
+						style:left={percent(Math.min(r.namespace.reserved / r.capacity, 1))}
+						style:width={percent(Math.max(0, Math.min((r.reserved - r.namespace.reserved) / r.capacity, 1 - r.namespace.reserved / r.capacity)))}
+					></span>
 				{:else}
-					{t('{used} used of {capacity}', { used: format(r.used ?? 0), capacity: format(r.capacity) })}
+					<span class="fill mine" style:width={percent(Math.min(r.value, 1))}></span>
+				{/if}
+				{#if r.reserved !== null && r.used !== null}
+					<span class="in-use" style:left={percent(Math.min(r.used / r.capacity, 1))} title={t('In use')}></span>
 				{/if}
 			</span>
-			{#if r.reserved !== null}
-				<span class="kpi-note">
-					{r.used !== null ? t('{used} in use right now', { used: format(r.used) }) : t('Use not measured: no metrics-server')}
+			{#if r.reserved === null}
+				<span class="kpi-note">{t('{used} used of {capacity}', { used: format(r.used ?? 0), capacity: format(r.capacity) })}</span>
+			{:else if r.partial}
+				<span class="kpi-note">{t('{reserved} of {capacity} reserved', { reserved: format(r.reserved), capacity: format(r.capacity) })}</span>
+				{#if namespace}
+					<span class="kpi-note">{t('Counts only namespace {name}: pods of other namespaces may not be listed', { name: namespace })}</span>
+				{/if}
+			{:else}
+				<span class="legend-list {tone}">
+					{#if r.namespace && namespace}
+						<span class="legend">
+							<span class="swatch mine" aria-hidden="true"></span>
+							<span>
+								{r.namespace.used !== null
+									? t('{name}: {reserved} reserved, {used} in use', { name: namespace, reserved: format(r.namespace.reserved), used: format(r.namespace.used) })
+									: t('{name}: {reserved} reserved', { name: namespace, reserved: format(r.namespace.reserved) })}
+							</span>
+						</span>
+						<span class="legend">
+							<span class="swatch others" aria-hidden="true"></span>
+							<span>{t('Other namespaces: {reserved} reserved', { reserved: format(Math.max(0, r.reserved - r.namespace.reserved)) })}</span>
+						</span>
+					{:else}
+						<span class="legend">
+							<span class="swatch mine" aria-hidden="true"></span>
+							<span>{t('Reserved: {amount}', { amount: format(r.reserved) })}</span>
+						</span>
+					{/if}
+					{#if r.free !== null}
+						<span class="legend room">
+							<span class="swatch free" aria-hidden="true"></span>
+							<span>{t('Free: {free} of {capacity}', { free: format(r.free), capacity: format(r.capacity) })}</span>
+						</span>
+					{/if}
+					<span class="legend">
+						<span class="swatch tick" aria-hidden="true"></span>
+						<span>{r.used !== null ? t('In use right now: {used}', { used: format(r.used) }) : t('Use not measured: no metrics-server')}</span>
+					</span>
 				</span>
 			{/if}
 			{#if r.short && waiting.length}
@@ -562,22 +613,6 @@
 						: t('{n} pods cannot start: they ask for {amount}', { n: waiting.length, amount: format(r.waiting) })}
 				</span>
 			{/if}
-			<span
-				class="meter"
-				role="meter"
-				aria-valuemin="0"
-				aria-valuemax="100"
-				aria-valuenow={Math.round(r.value * 100)}
-				aria-label="{label} {r.reserved !== null ? t('reserved') : t('used')}"
-			>
-				<span
-					class="fill {r.short ? 'bad' : meterTone(r.value) === 'accent' ? '' : meterTone(r.value)}"
-					style:width={percent(Math.min(r.value, 1))}
-				></span>
-				{#if r.reserved !== null && r.used !== null}
-					<span class="request" style:left={percent(Math.min(r.used / r.capacity, 1))} title={t('In use')}></span>
-				{/if}
-			</span>
 		{:else}
 			<span class="denied">{t('Not available')}</span>
 			<span class="kpi-note">{u.used === null ? t('Needs access to nodes and metrics-server') : t('Needs access to nodes')}</span>
@@ -787,30 +822,80 @@
 	}
 	.meter {
 		position: relative;
-		height: 5px;
-		margin-top: 6px;
+		height: 6px;
+		margin: 2px 0 4px;
 		border-radius: 3px;
 		background: var(--surface-2);
+	}
+	.kpi {
+		--tone: var(--accent);
+	}
+	.tone-warn {
+		--tone: var(--warn-mark);
+	}
+	.tone-bad {
+		--tone: var(--bad);
 	}
 	.fill {
 		position: absolute;
 		inset: 0 auto 0 0;
-		border-radius: 3px;
-		background: var(--accent);
 	}
-	.fill.warn {
-		background: var(--warn-mark);
+	.fill.mine {
+		border-radius: 3px 0 0 3px;
+		background: var(--tone);
 	}
-	.fill.bad {
-		background: var(--bad);
+	.fill.others {
+		border-radius: 0 3px 3px 0;
 	}
-	.request {
+	.fill.others {
+		background: color-mix(in srgb, var(--tone) 40%, var(--surface-2));
+	}
+	.in-use {
 		position: absolute;
 		top: -3px;
 		bottom: -3px;
 		width: 2px;
 		margin-left: -1px;
 		background: var(--text);
+	}
+	.legend-list {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+	.legend {
+		display: flex;
+		gap: 7px;
+		align-items: baseline;
+		font-size: 11.5px;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.legend.room {
+		font-size: 12.5px;
+		font-weight: 500;
+		color: var(--text);
+	}
+	.swatch {
+		flex: none;
+		position: relative;
+		top: 1px;
+		width: 10px;
+		height: 8px;
+		border-radius: 2px;
+	}
+	.swatch.mine {
+		background: var(--tone);
+	}
+	.swatch.others {
+		background: color-mix(in srgb, var(--tone) 40%, var(--surface-2));
+	}
+	.swatch.free {
+		background: var(--surface-2);
+		box-shadow: inset 0 0 0 1px var(--border);
+	}
+	.swatch.tick {
+		background: linear-gradient(var(--text), var(--text)) center / 2px 100% no-repeat;
 	}
 	.columns {
 		display: grid;

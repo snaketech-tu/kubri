@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { KindPulse, RecentEvent } from './api';
-import { attentionItems, pushTrail, room, shortMessage, splitKinds, TRAIL_LENGTH } from './pulse';
+import { attentionItems, namespacePart, pushTrail, room, shortMessage, splitKinds, trendValue, TRAIL_LENGTH } from './pulse';
 
 const pods = { group: '', version: 'v1', plural: 'pods' };
 
@@ -115,19 +115,33 @@ describe('pushTrail', () => {
 
 describe('room', () => {
 	it('counts only placed pods as reserved and flags pods that cannot fit', () => {
-		const r = room({ used: 300, requested: 65_010, waiting: 64_000, capacity: 4000 })!;
+		const r = room({ used: 300, requested: 65_010, waiting: 64_000, capacity: 4000, namespace: null, partial: false })!;
 		expect(r.reserved).toBe(1010);
 		expect(r.value).toBeCloseTo(0.2525);
 		expect(r.short).toBe(true);
 	});
 
 	it('does not flag waiting pods that fit into what is left', () => {
-		expect(room({ used: null, requested: 1100, waiting: 100, capacity: 4000 })!.short).toBe(false);
+		expect(room({ used: null, requested: 1100, waiting: 100, capacity: 4000, namespace: null, partial: false })!.short).toBe(false);
 	});
 
 	it('falls back to use without requests, and to nothing without capacity', () => {
-		expect(room({ used: 2000, requested: null, waiting: null, capacity: 4000 })).toMatchObject({ reserved: null, value: 0.5 });
-		expect(room({ used: 2000, requested: 1000, waiting: null, capacity: null })).toBeNull();
-		expect(room({ used: null, requested: null, waiting: null, capacity: 4000 })).toBeNull();
+		expect(room({ used: 2000, requested: null, waiting: null, capacity: 4000, namespace: null, partial: false })).toMatchObject({ reserved: null, value: 0.5 });
+		expect(room({ used: 2000, requested: 1000, waiting: null, capacity: null, namespace: null, partial: false })).toBeNull();
+		expect(room({ used: null, requested: null, waiting: null, capacity: 4000, namespace: null, partial: false })).toBeNull();
+	});
+
+	it('shows the whole cluster with the selected namespace as a part of it', () => {
+		const u = { used: 840, requested: 19_200, waiting: 16_000, capacity: 4000, namespace: { reserved: 600, used: 2 }, partial: false };
+		expect(room(u)).toMatchObject({ reserved: 3200, free: 800, value: 0.8, short: true, namespace: { reserved: 600, used: 2 } });
+		expect(namespacePart(u)).toMatchObject({ used: 2, requested: 600, waiting: null });
+		expect(trendValue(u)).toBe(2);
+		expect(trendValue({ ...u, namespace: { reserved: 600, used: null } })).toBe(600);
+		expect(trendValue({ ...u, namespace: null })).toBe(840);
+	});
+
+	it('claims no free room when only the namespace could be counted', () => {
+		const r = room({ used: null, requested: 600, waiting: 0, capacity: 4000, namespace: { reserved: 600, used: null }, partial: true })!;
+		expect(r).toMatchObject({ reserved: 600, free: null, namespace: null, partial: true, short: false });
 	});
 });
