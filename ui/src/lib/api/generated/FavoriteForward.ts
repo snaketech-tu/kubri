@@ -9,7 +9,11 @@ export type FavoriteForward = {
 /**
  * A pod, Service or workload; the context comes from where the favorite is kept.
  */
-target: ObjectRef, remotePort: number, localPort: number, 
+target: ObjectRef, 
+/**
+ * A name chosen for it, shown instead of the target's; empty for none.
+ */
+name: string, remotePort: number, localPort: number, 
 /**
  * Where to listen; empty for 127.0.0.1.
  */

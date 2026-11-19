@@ -16,8 +16,19 @@ export function isForwardOf(favorite: FavoriteForward, forward: PortForwardInfo)
 	);
 }
 
-export function favoriteLabel(f: FavoriteForward) {
+/** What a favorite forwards, from the target to the local port. */
+export function favoriteRoute(f: FavoriteForward) {
 	return t('{target} on port {port}', { target: `${f.target.resource.plural}/${f.target.name}:${f.remotePort}`, port: f.localPort });
+}
+
+/** A favorite's name, or what it forwards when it has none. */
+export function favoriteLabel(f: FavoriteForward) {
+	return f.name?.trim() || favoriteRoute(f);
+}
+
+/** Tells the favorites of a context apart, whatever they are named. */
+export function favoriteKey(f: FavoriteForward) {
+	return `${f.target.resource.group}/${f.target.resource.plural}/${f.target.namespace ?? ''}/${f.target.name}:${f.remotePort}:${f.localPort}`;
 }
 
 /** The port-forwards kept per context, to start with one click or whenever Kubri connects. */
@@ -96,15 +107,26 @@ export class FavoriteForwards {
 
 	/** Whether a favorite of the connected context starts whenever Kubri connects. */
 	async setStartOnConnect(favorite: FavoriteForward, startOnConnect: boolean) {
-		const context = this.#app.cluster?.context;
-		if (!context) return;
-		const settings = this.#app.prefs.contextSettingsOf(context);
-		const forwards = (settings.forwards ?? []).map((f) => (f === favorite ? { ...f, startOnConnect } : f));
-		await this.#app.prefs.setContextSettings(context, { ...settings, forwards });
+		await this.#change(favorite, { startOnConnect });
 	}
 
-	/** Keeps a running forward as a favorite of its context, or forgets it. */
-	async toggle(forward: PortForwardInfo) {
+	/** Names a favorite of the connected context; an empty name shows its target again. */
+	async rename(favorite: FavoriteForward, name: string) {
+		name = name.trim();
+		if (name === (favorite.name ?? '')) return true;
+		return this.#change(favorite, { name });
+	}
+
+	async #change(favorite: FavoriteForward, change: Partial<FavoriteForward>) {
+		const context = this.#app.cluster?.context;
+		if (!context) return false;
+		const settings = this.#app.prefs.contextSettingsOf(context);
+		const forwards = (settings.forwards ?? []).map((f) => (f === favorite ? { ...f, ...change } : f));
+		return this.#app.prefs.setContextSettings(context, { ...settings, forwards });
+	}
+
+	/** Keeps a running forward as a favorite of its context, under `name` if given, or forgets it. */
+	async toggle(forward: PortForwardInfo, name = '') {
 		const settings = this.#app.prefs.contextSettingsOf(forward.context);
 		const kept = settings.forwards ?? [];
 		const known = this.of(forward);
@@ -115,6 +137,7 @@ export class FavoriteForwards {
 					...kept,
 					{
 						target,
+						name: name.trim(),
 						remotePort: forward.remotePort,
 						localPort: forward.localPort,
 						address: forward.address === '127.0.0.1' ? '' : forward.address,

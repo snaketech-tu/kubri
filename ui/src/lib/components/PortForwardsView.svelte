@@ -4,10 +4,10 @@
 	import { follow } from '../roving';
 	import { tick } from 'svelte';
 	import { stopPortForward } from '../actions';
-	import { backend, type PortForwardInfo } from '../api';
+	import { backend, type FavoriteForward, type PortForwardInfo } from '../api';
 	import { age, errorMessage } from '../format';
 	import { lastEnd } from '../forwards';
-	import { app, favoriteLabel } from '../state.svelte';
+	import { app, favoriteKey } from '../state.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import Phrase from './Phrase.svelte';
 
@@ -61,6 +61,31 @@
 	function move(delta: number) {
 		if (!forwards.length) return;
 		cursorId = forwards[Math.max(0, Math.min(forwards.length - 1, cursor + delta))].id;
+	}
+
+	/** The favorite whose name is being edited, by its key. */
+	let renaming = $state<string | null>(null);
+	let list = $state<HTMLUListElement>();
+
+	function startRename(f: FavoriteForward) {
+		renaming = favoriteKey(f);
+	}
+
+	/** Saves the name typed in, or with `save` false leaves it, and gives the focus back to its button. */
+	async function endRename(f: FavoriteForward, input: HTMLInputElement, save: boolean) {
+		const key = favoriteKey(f);
+		if (renaming !== key) return;
+		renaming = null;
+		const hadFocus = document.activeElement === input;
+		if (save) await app.favorites.rename(f, input.value);
+		if (!hadFocus) return;
+		await tick();
+		list?.querySelector<HTMLButtonElement>(`button[data-rename="${CSS.escape(key)}"]`)?.focus();
+	}
+
+	function selectAll(input: HTMLInputElement) {
+		input.focus();
+		input.select();
 	}
 
 	function copy(f: PortForwardInfo) {
@@ -143,13 +168,17 @@
 					</thead>
 					<tbody>
 						{#each forwards as f, i (f.id)}
-							{@const favorite = !!app.favorites.of(f)}
+							{@const kept = app.favorites.of(f)}
+							{@const favorite = !!kept}
 							<tr class:cursor={i === cursor} onclick={() => (cursorId = f.id)} onfocusin={() => (cursorId = f.id)}>
 								<td class="mono">
 									<a href={url(f)} target="_blank" rel="noreferrer" title={t('Open in the browser (o)')}>{f.address}:{f.localPort}</a>
 									<button class="link" onclick={() => copy(f)} title={t('Copy URL (c)')}>{t('copy')}</button>
 								</td>
-								<td class="mono">{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</td>
+								<td class="mono">
+									{#if kept?.name}<div class="kept-name">{kept.name}</div>{/if}
+									{f.target.resource.plural}/{f.target.name}{f.target.namespace ? ` · ${f.target.namespace}` : ''}
+								</td>
 								<td class="mono">
 									{f.pod}:{f.podPort}
 									{#if f.error}<div class="error" title={f.error}>{f.error}</div>
@@ -187,8 +216,8 @@
 			{#if app.favorites.here.length}
 				<div class="favorites">
 					<h3>{t('Favorites in {context}', { context: app.cluster ? app.prefs.contextName(app.cluster.context) : '' })}</h3>
-					<ul>
-						{#each app.favorites.here as f (favoriteLabel(f))}
+					<ul bind:this={list}>
+						{#each app.favorites.here as f (favoriteKey(f))}
 							{@const on = !!app.favorites.running(f)}
 							{@const busy = app.favorites.switching.includes(f)}
 							{@const running = app.favorites.running(f)}
@@ -196,8 +225,28 @@
 								<span class="dot" title={on ? t('Running') : t('Stopped')}></span>
 								<div class="what">
 									<div class="name">
-										<strong>{f.target.name}</strong>
-										<span class="muted">{f.target.resource.plural}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</span>
+										{#if renaming === favoriteKey(f)}
+											<input
+												class="rename"
+												value={f.name}
+												placeholder={f.target.name}
+												maxlength="60"
+												aria-label={t('Name of this favorite')}
+												title={t('Enter saves, Esc cancels. Leave it empty to show the target.')}
+												{@attach selectAll}
+												onkeydown={(e) => {
+													if (e.key === 'Enter' || e.key === 'Escape') {
+														e.preventDefault();
+														e.stopPropagation();
+														endRename(f, e.currentTarget, e.key === 'Enter');
+													}
+												}}
+												onblur={(e) => endRename(f, e.currentTarget, true)}
+											/>
+										{:else}
+											<strong>{f.name || f.target.name}</strong>
+										{/if}
+										<span class="muted">{f.name ? `${f.target.resource.plural}/${f.target.name}` : f.target.resource.plural}{f.target.namespace ? ` · ${f.target.namespace}` : ''}</span>
 									</div>
 									<div class="mono route">
 										{#if running}
@@ -219,6 +268,7 @@
 									<button class="btn" class:danger={on} onclick={() => app.favorites.switch(f)} disabled={busy}>
 										{busy ? (on ? t('Stopping…') : t('Starting…')) : on ? t('Stop') : t('Start')}
 									</button>
+									<button class="btn" data-rename={favoriteKey(f)} onclick={() => startRename(f)} disabled={renaming === favoriteKey(f)} title={t('Give it a name to show instead of the target')}>{t('Rename')}</button>
 									<button class="btn" onclick={() => app.favorites.remove(f)} title={t('Forget this favorite')}>{t('Remove')}</button>
 								</span>
 							</li>
@@ -289,6 +339,7 @@
 	}
 	.favorites .name {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 8px;
 		min-width: 0;
@@ -299,6 +350,19 @@
 	}
 	.favorites .name .muted {
 		font-size: 12.5px;
+		white-space: nowrap;
+	}
+	.favorites .rename {
+		width: min(260px, 100%);
+		padding: 3px 8px;
+		font-size: 15px;
+		font-weight: 600;
+	}
+	.kept-name {
+		margin-bottom: 2px;
+		font-family: var(--sans);
+		font-size: 13px;
+		font-weight: 600;
 	}
 	.favorites .route {
 		font-size: 13px;
