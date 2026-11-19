@@ -53,10 +53,13 @@ describe('parseImport from kubectl commands', () => {
 	});
 });
 
+const entries0 = (text: string) => parseImport(text).entries[0].label;
+
 describe('the favorites file', () => {
 	const favorites: FavoriteForward[] = [
 		{
 			target: { resource: { group: '', version: 'v1', plural: 'services' }, namespace: 'shop', name: 'api' },
+			name: 'Shop API',
 			remotePort: 80,
 			localPort: 10080,
 			address: '',
@@ -64,6 +67,7 @@ describe('the favorites file', () => {
 		},
 		{
 			target: { resource: { group: 'apps', version: 'v1', plural: 'deployments' }, namespace: 'shop', name: 'web' },
+			name: '',
 			remotePort: 3000,
 			localPort: 3000,
 			address: '0.0.0.0',
@@ -74,6 +78,7 @@ describe('the favorites file', () => {
 	it('reads back what it exports', () => {
 		const text = exportFavorites(favorites);
 		expect(text).toContain('target: service/api');
+		expect(entries0(text)).toBe('Shop API');
 		const { entries, problems, format } = parseImport(text);
 		expect(format).toBe('file');
 		expect(problems).toEqual([]);
@@ -147,12 +152,14 @@ describe('entriesOf', () => {
 });
 
 describe('remotePortOf', () => {
-	const service = { kind: 'Service', metadata: { name: 'api' }, spec: { ports: [{ name: 'http', port: 80 }] } } as unknown as KubeObject;
+	const service = { kind: 'Service', metadata: { name: 'api' }, spec: { selector: { app: 'api' }, ports: [{ name: 'http', port: 80 }] } } as unknown as KubeObject;
 	it('looks up port names and checks Service ports', () => {
 		expect(remotePortOf({ kind: 'services', remote: 'http' }, service)).toBe(80);
 		expect(remotePortOf({ kind: 'services', remote: 80 }, service)).toBe(80);
 		expect(typeof remotePortOf({ kind: 'services', remote: 81 }, service)).toBe('string');
 		expect(typeof remotePortOf({ kind: 'services', remote: 'grpc' }, service)).toBe('string');
+		const selectorless = { ...service, spec: { ports: service.spec!.ports } } as unknown as KubeObject;
+		expect(remotePortOf({ kind: 'services', remote: 80 }, selectorless)).toBe('selects no pods to forward to');
 		// A pod may listen on a port it does not declare.
 		expect(remotePortOf({ kind: 'pods', remote: 81 }, { kind: 'Pod', metadata: { name: 'p' }, spec: {} } as unknown as KubeObject)).toBe(81);
 	});

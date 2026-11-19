@@ -309,7 +309,7 @@ function readFile(text: string): { entries: ForwardEntry[]; problems: ImportProb
 /** Writes favorites as a file to share, which {@link parseImport} reads back. */
 export function exportFavorites(favorites: FavoriteForward[]): string {
 	const forwards = favorites.map((f) => {
-		const label = (f as FavoriteForward & { name?: string }).name;
+		const label = f.name;
 		return {
 			...(label ? { name: label } : {}),
 			...(f.target.namespace ? { namespace: f.target.namespace } : {}),
@@ -349,6 +349,8 @@ export function entriesOf(objects: { kind: ForwardKind; object: KubeObject }[]):
  * A Service must have the port; a pod or workload may listen on one it does not declare.
  */
 export function remotePortOf(e: Pick<ForwardEntry, 'kind' | 'remote'>, object: KubeObject): number | string {
+	const selector = object.spec?.selector;
+	if (e.kind === 'services' && (!selector || !Object.keys(selector).length)) return t('selects no pods to forward to');
 	const ports = forwardablePorts(object);
 	if (typeof e.remote === 'string') {
 		const port = ports.find((p) => p.name === e.remote)?.port;
@@ -408,6 +410,15 @@ export function assignPorts(
 		out[i] = { local, chosen: true, conflict: null };
 	});
 	return out as PlannedPort[];
+}
+
+/** Runs `work` on each item, `at` at a time, so many objects do not flood the cluster with requests. */
+export async function fewAtATime<T>(items: T[], work: (item: T) => Promise<void>, at = 6) {
+	let next = 0;
+	const worker = async () => {
+		while (next < items.length) await work(items[next++]);
+	};
+	await Promise.all(Array.from({ length: Math.min(at, items.length) }, worker));
 }
 
 /** The target of an entry in the cluster's terms. */

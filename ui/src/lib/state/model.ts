@@ -91,6 +91,11 @@ export type Dialog =
 	| { kind: 'portforward'; resource: ResourceInfo; target: ObjectRef }
 	/** A forward to an object chosen in the dialog: namespace, then a workload, service or pod. */
 	| { kind: 'newForward' }
+	/**
+	 * Port-forward favorites in bulk: for chosen objects or every Service of a namespace, or
+	 * else from pasted commands or a file.
+	 */
+	| { kind: 'addFavorites'; targets?: ObjectRef[]; namespace?: string }
 	| { kind: 'benchmark'; forward: PortForwardInfo; preset?: BenchInfo }
 	| { kind: 'drain'; resource: ResourceInfo; target: ObjectRef }
 	| { kind: 'helmRollback'; release: HelmRelease; revision: number; done: () => void }

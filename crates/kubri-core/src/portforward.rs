@@ -596,7 +596,9 @@ const MOST_PORTS_TRIED: usize = 2000;
 
 async fn ports_in_use(address: Option<String>, mut ports: Vec<u16>) -> Result<Vec<u16>> {
     validate_address(address.as_deref())?;
-    let address = address.filter(|a| !a.is_empty()).unwrap_or_else(|| "127.0.0.1".to_owned());
+    let address = address
+        .filter(|a| !a.is_empty())
+        .unwrap_or_else(|| "127.0.0.1".to_owned());
     ports.sort_unstable();
     ports.dedup();
     let mut taken = Vec::new();

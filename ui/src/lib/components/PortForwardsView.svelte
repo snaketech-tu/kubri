@@ -3,11 +3,12 @@
 	import { forControl } from '../keys';
 	import { follow } from '../roving';
 	import { tick } from 'svelte';
-	import { stopPortForward } from '../actions';
+	import { saveFile, stopPortForward } from '../actions';
 	import { backend, type FavoriteForward, type PortForwardInfo } from '../api';
 	import { age, errorMessage } from '../format';
+	import { exportFavorites as favoritesFile } from '../forward-import';
 	import { lastEnd } from '../forwards';
-	import { app, favoriteKey } from '../state.svelte';
+	import { app, byNamespace, favoriteKey } from '../state.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import Phrase from './Phrase.svelte';
 
@@ -65,7 +66,21 @@
 
 	/** The favorite whose name is being edited, by its key. */
 	let renaming = $state<string | null>(null);
-	let list = $state<HTMLUListElement>();
+	let list = $state<HTMLElement>();
+
+	/** Favorites by namespace; one group is shown without a heading. */
+	const groups = $derived(byNamespace(app.favorites.here));
+
+	function addFavorites() {
+		if (canStart) app.dialog = { kind: 'addFavorites' };
+	}
+
+	function exportFavorites() {
+		const context = app.cluster?.context;
+		if (!context) return;
+		const file = `kubri-port-forwards-${context.replace(/[^\w.-]+/g, '-')}.yaml`;
+		void saveFile(file, favoritesFile(app.favorites.here));
+	}
 
 	function startRename(f: FavoriteForward) {
 		renaming = favoriteKey(f);
@@ -147,6 +162,8 @@
 		subtitle={t('Local ports tunneled to pods. They keep running while you work elsewhere in Kubri, and move to another pod when theirs goes away.')}
 	>
 		{#snippet tools()}
+			{#if canStart && app.favorites.here.length}<button class="btn" onclick={exportFavorites} title={t('Save the favorites of this context as a file to share')}>{t('Export favorites')}</button>{/if}
+			{#if canStart}<button class="btn" onclick={addFavorites} title={t('From kubectl commands, a file or every Service of a namespace')}>{t('Add favorites…')}</button>{/if}
 			{#if canStart && forwards.length}<button class="btn" onclick={choose} title={t('Choose a namespace, a target and a port (Shift+F)')}>{t('Start a port-forward…')}</button>{/if}
 		{/snippet}
 	</PageHeader>
@@ -214,10 +231,20 @@
 				</div>
 			{/if}
 			{#if app.favorites.here.length}
-				<div class="favorites">
-					<h3>{t('Favorites in {context}', { context: app.cluster ? app.prefs.contextName(app.cluster.context) : '' })}</h3>
-					<ul bind:this={list}>
-						{#each app.favorites.here as f (favoriteKey(f))}
+				<div class="favorites" bind:this={list}>
+					<div class="group-head">
+						<h3>{t('Favorites in {context}', { context: app.cluster ? app.prefs.contextName(app.cluster.context) : '' })}</h3>
+						{@render switchAll(app.favorites.here, null)}
+					</div>
+					{#each groups as group (group.namespace)}
+					{#if groups.length > 1}
+						<div class="group-head">
+							<h4 class="mono">{group.namespace || t('No namespace')}</h4>
+							{@render switchAll(group.favorites, group.namespace)}
+						</div>
+					{/if}
+					<ul>
+						{#each group.favorites as f (favoriteKey(f))}
 							{@const on = !!app.favorites.running(f)}
 							{@const busy = app.favorites.switching.includes(f)}
 							{@const running = app.favorites.running(f)}
@@ -274,11 +301,23 @@
 							</li>
 						{/each}
 					</ul>
+					{/each}
 				</div>
 			{/if}
 		</div>
 	</div>
 </section>
+
+{#snippet switchAll(favorites: FavoriteForward[], namespace: string | null)}
+	{@const on = favorites.filter((f) => !!app.favorites.running(f)).length}
+	{#if favorites.length > 1}
+		<span class="group-buttons">
+			<span class="muted count">{t('{on} of {n} running', { on, n: favorites.length })}</span>
+			<button class="btn small" onclick={() => app.favorites.switchAll(favorites, true)} disabled={on === favorites.length} aria-label={namespace ? t('Start all in {namespace}', { namespace }) : undefined}>{t('Start all')}</button>
+			<button class="btn small" onclick={() => app.favorites.switchAll(favorites, false)} disabled={on === 0} aria-label={namespace ? t('Stop all in {namespace}', { namespace }) : undefined}>{t('Stop all')}</button>
+		</span>
+	{/if}
+{/snippet}
 
 <style>
 	section {
@@ -301,6 +340,33 @@
 	.favorites {
 		padding: 12px 16px 18px;
 		border-top: 1px solid var(--border-subtle);
+	}
+	.group-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 6px 12px;
+		margin: 6px 0 10px;
+	}
+	.group-head h3 {
+		margin: 0;
+	}
+	.group-head h4 {
+		margin: 8px 0 0;
+		font-size: 13px;
+		font-weight: 600;
+	}
+	.favorites ul + .group-head {
+		margin-top: 18px;
+	}
+	.group-buttons {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.group-buttons .count {
+		font-size: 12px;
 	}
 	.favorites h3 {
 		margin: 6px 0 10px;

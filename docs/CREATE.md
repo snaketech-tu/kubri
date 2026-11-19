@@ -90,3 +90,29 @@ An empty list of a kind you may create offers **Create** right there, and an emp
 - A client that connects and leaves without sending anything, such as a check whether the port is open, frees the pod's connection after a second. When the pod resets a connection whose client has already left, as MariaDB does with one that never signed in, that is not shown as an error.
 - With the address `localhost`, a forward listens on both 127.0.0.1 and ::1, like kubectl, so clients reach it whichever one they try.
 - Each row says how its last connection ended: closed by the pod, closed by the client, or the error, in red.
+
+### Many favorites at once
+
+For many services, there is no need to add each favorite by hand. Each way below opens a list to review before anything is kept:
+
+- **Keep as port-forward favorites…** in the menu of a Service, workload or pod, or **Keep N as port-forward favorites…** for several marked rows (<kbd>Space</kbd> marks a row, <kbd>Ctrl</kbd>+<kbd>A</kbd> all of them): one favorite for each TCP port they declare.
+- **Keep its Services as favorites…** in the menu of a namespace.
+- **Add favorites…** on the port-forwards page: paste `kubectl port-forward` commands or the script you start them with, or choose a favorites file. Other lines of a script are skipped. The same dialog can take every Service of a namespace, also only those with labels such as `tier=backend`.
+
+The list shows each target, its port and the local port. Kubri checks that the target and its port exist, and chooses the local ports that are not given: the same port as the target if it is free and needs no admin rights, else the target's port plus 10000 (80 becomes 10080), else the first free port from 20000. It leaves out ports that other favorites or other programs use now. Change any local port in the list before you keep them. Two favorites on one port cannot be kept; one that something else listens on now is marked, but can be kept. With **Start them now**, they start right away.
+
+**Export favorites** on the port-forwards page saves the favorites of the context as a file. Put it in your team's repository, and others can import it with **Add favorites…**. The file looks like this; only `target` and `port` are needed:
+
+```yaml
+forwards:
+  - name: Shop API          # shown instead of the target
+    namespace: shop         # the context's namespace when left out
+    target: service/api     # or deployment/, statefulset/, daemonset/, pod/
+    port: 80                # the port of the target, or its name
+    localPort: 8081         # chosen by Kubri when left out
+    address: 127.0.0.1
+    startOnConnect: false
+```
+
+With more than five favorites, the sidebar groups them by namespace. Click a namespace to open or close it; the button next to it starts or stops all of them. The port-forwards page groups them the same way, with **Start all** and **Stop all**.
+
