@@ -2334,7 +2334,7 @@ const de: Record<string, string> = {
 	'Review…': 'Prüfen…',
 	'There are no Deployments, StatefulSets or DaemonSets in {namespace}, and only their containers are checked.': 'In {namespace} gibt es keine Deployments, StatefulSets oder DaemonSets, und nur deren Container werden geprüft.',
 	'There are no Deployments, StatefulSets or DaemonSets, and only their containers are checked.': 'Es gibt keine Deployments, StatefulSets oder DaemonSets, und nur deren Container werden geprüft.',
-	'{source} has no use for any of their containers, so there is nothing to compare. Check that it collects container metrics from the kubelet (cAdvisor).': '{source} kennt für keinen ihrer Container den Verbrauch, darum gibt es nichts zu vergleichen. Prüfe, ob dort Container-Metriken vom Kubelet (cAdvisor) ankommen.',
+	'No use was found for any of their containers, so there is nothing to compare. Check that the source above collects container metrics from the kubelet (cAdvisor).': 'Für keinen ihrer Container wurde ein Verbrauch gefunden, darum gibt es nichts zu vergleichen. Prüfe, ob die Quelle oben Container-Metriken vom Kubelet (cAdvisor) sammelt.',
 	'Checked {n} container: it requests about what it uses.': '{n} Container geprüft: Er fordert etwa an, was er braucht.',
 	'Checked {n} containers: each requests about what it uses.': '{n} Container geprüft: Jeder fordert etwa an, was er braucht.',
 	'Prometheus at {0}, last 7 days': 'Prometheus unter {0}, letzte 7 Tage',
