@@ -243,7 +243,6 @@ describe('logs and shell', () => {
 		// In a child shell: busybox runs a plain sleep inside the shell itself.
 		await page.keyboard.type("sh -c 'sleep 4242; true'\n");
 		await h.until(async () => running(), { message: 'sleep running in the container' });
-		console.log('DIAG ps before close\n' + h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'ps', '-o', 'pid,ppid,pgid,stat,args'));
 		// Esc twice gives the keys back to Kubri, a third closes the inspector and the shell.
 		await page.keyboard.press('Escape');
 		await page.keyboard.press('Escape');
@@ -251,19 +250,7 @@ describe('logs and shell', () => {
 		await h.until(async () => !(await input.evaluate((el) => el === document.activeElement)), { message: 'the keys back' });
 		await page.keyboard.press('Escape');
 		await page.getByRole('complementary', { name: 'Pod inspector' }).waitFor({ state: 'hidden' });
-		const ps = () => h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'ps', '-o', 'pid,ppid,pgid,stat,args');
-		console.log('DIAG ps after close\n' + ps());
-		const shells = ps().split('\n').filter((l) => / sh$/.test(l)).map((l) => l.trim().split(/\s+/)[0]);
-		console.log('DIAG kill ' + shells.join(',') + '\n' + h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'sh', '-c', `for p in ${shells.join(' ')}; do kill -HUP $p 2>&1; echo "kill $p rc=$?"; done; id; cat /proc/self/attr/current 2>&1; cat /proc/${shells[0]}/attr/current 2>&1`));
-		try { console.log('DIAG dmesg\n' + require('node:child_process').execSync('sudo dmesg | grep -iE "apparmor|denied" | tail -20', { encoding: 'utf8' })); } catch (e) { console.log('DIAG dmesg failed ' + e.message); }
-		console.log('DIAG ps after kill\n' + ps());
-		console.log('DIAG signals\n' + h.kubectl('exec', '-n', 'e2e', pod, '-c', 'web', '--', 'sh', '-c', 'for f in /proc/[0-9]*/status; do echo "$f $(grep -E "^(Name|SigIgn|SigCgt|SigBlk)" $f | tr "\\n" " ")"; done'));
-		try {
-			await h.until(async () => !running(), { message: 'the closed shell to end in the container' });
-		} finally {
-			console.log('DIAG ps at end\n' + ps());
-			console.log('DIAG server\n' + server.output().split('\n').filter((l) => /terminal|shell|hangup|exec/i.test(l)).slice(-60).join('\n'));
-		}
+		await h.until(async () => !running(), { message: 'the closed shell to end in the container' });
 	});
 });
 
