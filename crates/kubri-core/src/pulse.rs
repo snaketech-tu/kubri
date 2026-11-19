@@ -119,7 +119,7 @@ pub struct Workload {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct Utilization {
-    /// Measured by metrics-server; `None` when it is not installed.
+    /// Measured by metrics-server on all nodes; `None` when it is not installed.
     pub used: Option<f64>,
     /// Requested by the pods that are not finished.
     pub requested: Option<f64>,
@@ -127,12 +127,23 @@ pub struct Utilization {
     pub waiting: Option<f64>,
     /// Allocatable on all nodes.
     pub capacity: Option<f64>,
-    /// With a namespace selected, what its pods on a node reserve; `requested` and `waiting`
-    /// still count the whole cluster, since a new pod may land on any node.
-    pub in_namespace: Option<f64>,
+    /// With a namespace selected, its part; the other fields still count the whole cluster,
+    /// since a new pod may land on any node.
+    pub namespace: Option<NamespaceShare>,
     /// `requested` and `waiting` count only the selected namespace: pods in all namespaces
     /// may not be listed.
     pub partial: bool,
+}
+
+/// What the pods of the selected namespace reserve and use.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NamespaceShare {
+    /// Requested by its pods a node has taken.
+    pub reserved: f64,
+    /// Measured by metrics-server; `None` when it is not installed.
+    pub used: Option<f64>,
 }
 
 /// Lists everything the overview needs at once. Kinds that cannot be listed are reported
@@ -141,6 +152,7 @@ pub(crate) async fn gather(
     client: Client,
     namespace: Option<&str>,
     metrics: impl Future<Output = Result<Vec<Usage>>>,
+    namespace_metrics: impl Future<Output = Option<Result<Vec<Usage>>>>,
     resolve: impl Fn(&str, &str) -> Option<ResourceRef>,
     now: Timestamp,
 ) -> Pulse {
@@ -161,14 +173,14 @@ pub(crate) async fn gather(
         list(scoped::<DaemonSet>(c, namespace)),
         list(scoped::<ReplicaSet>(c, namespace)),
     );
-    let (jobs, cron_jobs, autoscalers, claims, volumes, events, usage, certificates) = futures::join!(
+    let (jobs, cron_jobs, autoscalers, claims, volumes, events, (usage, namespace_usage), certificates) = futures::join!(
         list(scoped::<Job>(c, namespace)),
         list(scoped::<CronJob>(c, namespace)),
         list(scoped::<HorizontalPodAutoscaler>(c, namespace)),
         list(scoped::<PersistentVolumeClaim>(c, namespace)),
         list(Api::<PersistentVolume>::all(c.clone())),
         list(scoped::<Event>(c, namespace)),
-        metrics,
+        futures::future::join(metrics, namespace_metrics),
         crate::certmanager::list(c, namespace),
     );
     let (certificate_pulse, certificates) = match certificates {
@@ -195,31 +207,36 @@ pub(crate) async fn gather(
     owners.add("Job", &jobs);
     owners.add("CronJob", &cron_jobs);
 
-    let usage = usage.ok();
-    let used = |pick: fn(&Usage) -> f64| usage.as_ref().map(|u| u.iter().map(pick).sum());
+    let sum = |usage: Option<&Result<Vec<Usage>>>, pick: fn(&Usage) -> f64| match usage {
+        Some(Ok(usage)) => Some(usage.iter().map(pick).sum::<f64>()),
+        _ => None,
+    };
     let (cluster_pods, partial) = match &all_pods {
         Some(Ok(all)) => (Ok(all.as_slice()), false),
         Some(Err(_)) => (pods.as_deref().map_err(|_| ()), pods.is_ok()),
         None => (pods.as_deref().map_err(|_| ()), false),
     };
-    let in_namespace = |resource| match (namespace, &pods) {
-        (Some(_), Ok(pods)) => Some(reserved(pods, resource)),
+    let share = |resource, pick: fn(&Usage) -> f64, scale: f64| match (namespace, &pods) {
+        (Some(_), Ok(pods)) => Some(NamespaceShare {
+            reserved: reserved(pods, resource) * scale,
+            used: sum(namespace_usage.as_ref(), pick),
+        }),
         _ => None,
     };
     let cpu = Utilization {
-        used: used(|u| u.cpu),
+        used: sum(Some(&usage), |u| u.cpu),
         requested: cluster_pods.ok().map(|p| requested(p, "cpu") * 1000.0),
         waiting: cluster_pods.ok().map(|p| requested(unplaced(p), "cpu") * 1000.0),
         capacity: nodes.as_ref().ok().map(|n| allocatable(n, "cpu") * 1000.0),
-        in_namespace: in_namespace("cpu").map(|v| v * 1000.0),
+        namespace: share("cpu", |u| u.cpu, 1000.0),
         partial,
     };
     let memory = Utilization {
-        used: used(|u| u.memory),
+        used: sum(Some(&usage), |u| u.memory),
         requested: cluster_pods.ok().map(|p| requested(p, "memory")),
         waiting: cluster_pods.ok().map(|p| requested(unplaced(p), "memory")),
         capacity: nodes.as_ref().ok().map(|n| allocatable(n, "memory")),
-        in_namespace: in_namespace("memory"),
+        namespace: share("memory", |u| u.memory, 1.0),
         partial,
     };
 
@@ -605,12 +622,23 @@ impl Kubri {
     pub async fn pulse(&self, namespace: Option<&str>) -> Result<Pulse> {
         let session = self.session().await?;
         // Usage of the whole cluster comes from the nodes, of one namespace from its pods.
-        let metrics = match namespace {
-            Some(_) => session.metrics(MetricsKind::Pods, namespace),
-            None => session.metrics(MetricsKind::Nodes, None),
+        let metrics = session.metrics(MetricsKind::Nodes, None);
+        let namespace_metrics = async {
+            match namespace {
+                Some(_) => Some(session.metrics(MetricsKind::Pods, namespace).await),
+                None => None,
+            }
         };
         let resolve = |api_version: &str, kind: &str| session.resolve(api_version, kind);
-        Ok(gather(session.client.clone(), namespace, metrics, resolve, session.now()).await)
+        Ok(gather(
+            session.client.clone(),
+            namespace,
+            metrics,
+            namespace_metrics,
+            resolve,
+            session.now(),
+        )
+        .await)
     }
 }
 
@@ -726,7 +754,16 @@ mod tests {
             }
         });
         let metrics = async { Err(crate::Error::NotFound("metrics".into())) };
-        gather(client, Some("shop"), metrics, |_, _| None, Timestamp::UNIX_EPOCH).await
+        let namespace_metrics = async { None };
+        gather(
+            client,
+            Some("shop"),
+            metrics,
+            namespace_metrics,
+            |_, _| None,
+            Timestamp::UNIX_EPOCH,
+        )
+        .await
     }
 
     #[tokio::test]
@@ -740,7 +777,8 @@ mod tests {
         let pulse = shop_pulse((200, all.to_string())).await;
         assert_eq!(pulse.cpu.requested, Some(3000.0));
         assert_eq!(pulse.cpu.capacity, Some(4000.0));
-        assert_eq!(pulse.cpu.in_namespace, Some(1000.0));
+        let share = pulse.cpu.namespace.unwrap();
+        assert_eq!((share.reserved, share.used), (1000.0, None));
         assert!(!pulse.cpu.partial);
     }
 
@@ -748,9 +786,9 @@ mod tests {
     async fn says_when_only_the_namespace_could_be_counted() {
         let pulse = shop_pulse((403, crate::testing::status(403, "forbidden"))).await;
         assert_eq!(pulse.cpu.requested, Some(1000.0));
-        assert_eq!(pulse.cpu.in_namespace, Some(1000.0));
+        assert_eq!(pulse.cpu.namespace.as_ref().unwrap().reserved, 1000.0);
         assert!(pulse.cpu.partial);
-        assert_eq!(pulse.memory.in_namespace, Some(1024.0 * 1024.0 * 1024.0));
+        assert_eq!(pulse.memory.namespace.unwrap().reserved, 1024.0 * 1024.0 * 1024.0);
     }
 
     #[test]

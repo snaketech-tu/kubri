@@ -25,11 +25,17 @@ export interface Room {
 	capacity: number;
 	/** Requested by pods a node has taken, in all namespaces; null without access to pods. */
 	reserved: number | null;
+	/** What is not reserved: room for new pods. Null when not every pod could be counted. */
+	free: number | null;
 	used: number | null;
 	/** Requested by pods no node has taken yet. */
 	waiting: number;
 	/** The waiting pods ask for more than is left: they cannot start until room is made. */
 	short: boolean;
+	/** The selected namespace's part of `reserved` and `used`. */
+	namespace: { reserved: number; used: number | null } | null;
+	/** Only the selected namespace could be counted. */
+	partial: boolean;
 	/** The main number, from 0: reserved, or used when requests are not known. */
 	value: number;
 }
@@ -41,8 +47,31 @@ export function room(u: Utilization): Room | null {
 	const reserved = u.requested === null ? null : Math.max(0, u.requested - waiting);
 	const main = reserved ?? u.used;
 	if (main === null) return null;
-	const short = reserved !== null && waiting > 0 && waiting > u.capacity - reserved;
-	return { capacity: u.capacity, reserved, used: u.used, waiting, short, value: main / u.capacity };
+	const partial = !!u.partial;
+	const short = reserved !== null && !partial && waiting > 0 && waiting > u.capacity - reserved;
+	return {
+		capacity: u.capacity,
+		reserved,
+		free: reserved === null || partial ? null : Math.max(0, u.capacity - reserved),
+		used: u.used,
+		waiting,
+		short,
+		namespace: partial ? null : (u.namespace ?? null),
+		partial,
+		value: main / u.capacity
+	};
+}
+
+/** The selected namespace's part as a whole Utilization, for its trend line. */
+export function namespacePart(u: Utilization): Utilization {
+	if (!u.namespace) return u;
+	return { ...u, used: u.namespace.used, requested: u.namespace.reserved, waiting: null, namespace: null };
+}
+
+/** What the trend line records: use, or requests without metrics-server, of the namespace when one is selected. */
+export function trendValue(u: Utilization): number | null {
+	const part = namespacePart(u);
+	return part.used ?? part.requested;
 }
 
 /** Meter severity: the fill turns amber, then red, as the cluster fills up. */

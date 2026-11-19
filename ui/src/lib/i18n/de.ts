@@ -2673,9 +2673,11 @@ const de: Record<string, string> = {
 	'{n} namespace is no longer production': '{n} Namespace ist nicht mehr Produktion',
 	'{n} namespaces are no longer production': '{n} Namespaces sind nicht mehr Produktion',
 	'CPU reserved': 'CPU reserviert',
+	'{free} of {capacity} free': '{free} von {capacity} frei',
+	'Other namespaces: {reserved} reserved': 'Andere Namespaces: {reserved} reserviert',
 	'Memory reserved': 'Speicher reserviert',
-	'Namespace {name}: {reserved} reserved': 'Namespace {name}: {reserved} reserviert',
-	'Namespace {name}: {reserved} reserved, {used} in use': 'Namespace {name}: {reserved} reserviert, {used} in Benutzung',
+	'{name}: {reserved} reserved': '{name}: {reserved} reserviert',
+	'{name}: {reserved} reserved, {used} in use': '{name}: {reserved} reserviert, {used} genutzt',
 	'Counts only namespace {name}: pods of other namespaces may not be listed': 'Zählt nur Namespace {name}: Pods anderer Namespaces dürfen nicht gelistet werden',
 };
 
