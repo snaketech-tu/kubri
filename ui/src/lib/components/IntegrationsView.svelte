@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '../i18n';
+	import { coreText } from '../i18n/errors';
 	import type { Endpoint, Integration, IntegrationSettings } from '../api';
 	import { openTool } from '../integrations';
 	import { app } from '../state.svelte';
@@ -143,7 +144,7 @@
 								</div>
 								<p class="about">{about?.text}</p>
 								{#if where(item)}<p class="where">{where(item)}</p>{/if}
-								{#if item.error}<p class="error">{item.error}</p>{/if}
+								{#if item.error}<p class="error">{coreText(item.error)}</p>{/if}
 								{#if item.id === 'grafana' && item.endpoint && !item.error}
 									<div class="kinds">
 										<button class="btn" onclick={() => openTool('grafana', '/')}>{t('Open Grafana')}</button>

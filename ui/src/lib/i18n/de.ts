@@ -1457,6 +1457,11 @@ const de: Record<string, string> = {
 	'Sent': 'Gesendet',
 	'Request': 'Request',
 	'{0} restarted ({1})': '{0} neu gestartet ({1})',
+	'{0} asks for a client certificate, which Kubri does not send; your browser can still open it': '{0} verlangt ein Client-Zertifikat, das Kubri nicht sendet; dein Browser kann es trotzdem öffnen',
+	'{0} answered {1} through the API server: {2}': '{0} antwortete über den API-Server mit {1}: {2}',
+	'{0} has no ready pod to answer': '{0} hat keinen bereiten Pod, der antworten kann',
+	'{0} did not answer in time': '{0} hat nicht rechtzeitig geantwortet',
+	'{0} did not answer with JSON: {1}': '{0} hat nicht mit JSON geantwortet: {1}',
 	'Rollout': 'Rollout',
 	'Revision {0}': 'Revision {0}',
 

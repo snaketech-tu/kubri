@@ -90,7 +90,7 @@ The queries use the `namespace`, `pod` and `container` labels that Promtail, Gra
 
 An Ingress that wants a client certificate, such as nginx with `auth-tls-verify-client`, answers Kubri with `400 No required SSL certificate was sent`. Kubri has no client certificate to send, so for a URL under **Point elsewhere** it looks for the Ingress in the cluster that serves the URL's host and asks the Service behind it instead, through the API server, the way it asks a Grafana it found itself. The browser still opens the URL, where your certificate works as usual. This needs a URL without a path, like `https://grafana.example.com`, and the rights to list Ingresses and to use the Service's `proxy`.
 
-Kubri asks a Service over HTTPS when its port says so: named `https`, `tls` or `https-…`, with the app protocol `https`, or port 443 or 8443, and for the Service behind an Ingress also when the Ingress sends HTTPS to it. A Service that answers plain HTTP with 400, as one that speaks only HTTPS does, is asked again over HTTPS.
+Kubri asks a Service over HTTPS when its port says so: named `https`, `tls` or `https-…`, with the app protocol `https`, or port 443 or 8443, and for the Service behind an Ingress also when the Ingress sends HTTPS to it. A Service that answers plain HTTP with 400, as one that speaks only HTTPS does, is asked again over HTTPS, and one taken for HTTPS that speaks plain HTTP is asked again over plain HTTP.
 
 When none of this reaches Grafana, the Integrations page says that it asks for a client certificate, and the links still open in your browser.
 

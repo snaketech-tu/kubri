@@ -150,54 +150,79 @@ impl Endpoint {
         self.fetch(client, path, token).await.map(|(text, _)| text)
     }
 
-    /// Like `get`, and whether a Service taken for plain HTTP answered only over HTTPS.
+    /// Like `get`, and for a Service the scheme that answered when it was not the one expected:
+    /// `Some(true)` for HTTPS, `Some(false)` for plain HTTP.
     pub(crate) async fn fetch(
         &self,
         client: &Client,
         path: &str,
         token: Option<&str>,
-    ) -> Result<(String, bool)> {
+    ) -> Result<(String, Option<bool>)> {
         match self {
-            Endpoint::Service { https, .. } => match self.through_proxy(client, path, *https).await {
-                Ok(text) => Ok((text, false)),
-                // A pod that speaks TLS answers 400 to plain HTTP: "Client sent an HTTP request
-                // to an HTTPS server", "The plain HTTP request was sent to HTTPS port".
-                Err((Some(400), err)) if !*https => match self.through_proxy(client, path, true).await {
-                    Ok(text) => Ok((text, true)),
-                    // It answered over HTTPS too, such as that it wants a client certificate.
-                    Err((Some(_), again)) => Err(again),
-                    Err(_) => Err(err),
-                },
-                Err((_, err)) => Err(err),
-            },
+            Endpoint::Service { https, .. } => self
+                .through_proxy_either(client, path, *https)
+                .await
+                .map_err(|failure| failure.error),
             Endpoint::Url { url, behind } => match direct(url, path, token).await {
-                Ok(text) => Ok((text, false)),
+                Ok(text) => Ok((text, None)),
                 Err(err) => match behind.as_deref() {
-                    Some(service @ Endpoint::Service { https, .. }) => {
-                        match service.through_proxy(client, path, *https).await {
-                            Ok(text) => Ok((text, false)),
-                            Err((Some(400), _)) if !*https => service
-                                .through_proxy(client, path, true)
-                                .await
-                                .map(|text| (text, false))
-                                .map_err(|_| err),
-                            Err(_) => Err(err),
-                        }
-                    }
+                    Some(service @ Endpoint::Service { https, .. }) => service
+                        .through_proxy_either(client, path, *https)
+                        .await
+                        .map(|(text, _)| (text, None))
+                        // The URL's own error says best why it does not answer.
+                        .map_err(|_| err),
                     _ => Err(err),
                 },
             },
         }
     }
 
-    /// GETs `path` of a Service through the API server's service proxy; a failure comes with
-    /// the status the Service answered, if it answered.
+    /// GETs `path` of a Service through the API server's service proxy over HTTPS or not, and
+    /// over the other scheme when the answer shows that the first was wrong: a server that
+    /// speaks TLS answers plain HTTP with 400 ("Client sent an HTTP request to an HTTPS
+    /// server"), and the API server cannot do a TLS handshake with one that speaks plain HTTP.
+    /// With the scheme that answered when it was the other one.
+    async fn through_proxy_either(
+        &self,
+        client: &Client,
+        path: &str,
+        https: bool,
+    ) -> std::result::Result<(String, Option<bool>), ProxyFailure> {
+        let first = match self.through_proxy(client, path, https).await {
+            Ok(text) => return Ok((text, None)),
+            Err(first) => first,
+        };
+        let wrong = if https {
+            first.plain
+        } else {
+            first.status == Some(400)
+        };
+        if !wrong {
+            return Err(first);
+        }
+        match self.through_proxy(client, path, !https).await {
+            Ok(text) => Ok((text, Some(!https))),
+            // It answered over the other scheme too, such as that it wants a client
+            // certificate, which says more than the first answer.
+            Err(again) if again.status.is_some() && !again.plain => Err(again),
+            // A 400 of its own, from a server that speaks plain HTTP.
+            Err(_) => Err(first),
+        }
+    }
+
+    /// GETs `path` of a Service through the API server's service proxy.
     async fn through_proxy(
         &self,
         client: &Client,
         path: &str,
         https: bool,
-    ) -> std::result::Result<String, (Option<u16>, Error)> {
+    ) -> std::result::Result<String, ProxyFailure> {
+        let fail = |status: Option<u16>, message: String| ProxyFailure {
+            status,
+            plain: false,
+            error: Error::Integration(message),
+        };
         let Endpoint::Service {
             namespace,
             name,
@@ -205,44 +230,44 @@ impl Endpoint {
             ..
         } = self
         else {
-            return Err((
-                None,
-                Error::Unsupported(format!("{} is not a Service", self.label())),
-            ));
+            return Err(ProxyFailure {
+                status: None,
+                plain: false,
+                error: Error::Unsupported(format!("{} is not a Service", self.label())),
+            });
         };
         let uri = Self::proxy_path(namespace, name, *port, https, path);
         let request = http::Request::get(uri)
             .header(http::header::ACCEPT, "application/json")
             .body(Vec::new())
-            .map_err(|e| (None, Error::Unsupported(e.to_string())))?;
+            .map_err(|e| ProxyFailure {
+                status: None,
+                plain: false,
+                error: Error::Unsupported(e.to_string()),
+            })?;
         let call = client.request_text(request);
         match tokio::time::timeout(TIMEOUT, call).await {
             Ok(Ok(text)) => Ok(text),
-            Ok(Err(kube::Error::Api(status))) if status.message.contains("no endpoints available") => Err((
-                None,
-                Error::Integration(format!("{} has no ready pod to answer", self.label())),
-            )),
-            Ok(Err(kube::Error::Api(status))) if wants_certificate(&status.message) => Err((
-                Some(status.code),
-                Error::Integration(no_certificate(&self.label())),
-            )),
-            Ok(Err(kube::Error::Api(status))) => Err((
-                Some(status.code),
-                Error::Integration(format!(
-                    "{} answered {} through the API server: {}",
-                    self.label(),
-                    status.code,
-                    short(&status.message)
-                )),
-            )),
-            Ok(Err(err)) => Err((
-                None,
-                Error::Integration(format!("{}: {}", self.label(), Error::from(err))),
-            )),
-            Err(_) => Err((
-                None,
-                Error::Integration(format!("{} did not answer in time", self.label())),
-            )),
+            Ok(Err(kube::Error::Api(status))) if status.message.contains("no endpoints available") => {
+                Err(fail(None, format!("{} has no ready pod to answer", self.label())))
+            }
+            Ok(Err(kube::Error::Api(status))) if wants_certificate(&status.message) => {
+                Err(fail(Some(status.code), no_certificate(&self.label())))
+            }
+            Ok(Err(kube::Error::Api(status))) => Err(ProxyFailure {
+                plain: https && speaks_plain(&status.message),
+                ..fail(
+                    Some(status.code),
+                    format!(
+                        "{} answered {} through the API server: {}",
+                        self.label(),
+                        status.code,
+                        short(&status.message)
+                    ),
+                )
+            }),
+            Ok(Err(err)) => Err(fail(None, format!("{}: {}", self.label(), Error::from(err)))),
+            Err(_) => Err(fail(None, format!("{} did not answer in time", self.label()))),
         }
     }
 
@@ -305,6 +330,23 @@ fn no_certificate(label: &str) -> String {
     format!(
         "{label} asks for a client certificate, which Kubri does not send; your browser can still open it"
     )
+}
+
+/// Why a GET through the API server's service proxy failed.
+struct ProxyFailure {
+    /// The status the API server answered with, if it answered.
+    status: Option<u16>,
+    /// The API server tried HTTPS, and the Service answered in plain HTTP.
+    plain: bool,
+    error: Error,
+}
+
+/// Whether the API server's error says that it tried TLS with a server that speaks plain HTTP:
+/// "error trying to reach service: tls: first record does not look like a TLS handshake".
+fn speaks_plain(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("first record does not look like a tls handshake")
+        || message.contains("server gave http response to https client")
 }
 
 static CLIENT: LazyLock<std::result::Result<reqwest::Client, String>> = LazyLock::new(|| {
@@ -724,7 +766,8 @@ fn version_path(id: &str) -> Option<&'static str> {
 }
 
 /// Asks each tool Kubri talks to for its version, which also shows that it answers. A Service
-/// that answers only over HTTPS is marked so, for the browser's port-forward too.
+/// that answers only over the other scheme than the one expected is marked so, for the
+/// browser's port-forward too.
 pub(crate) async fn probe(client: &Client, integrations: &mut Integrations, grafana_token: Option<&str>) {
     let checks = integrations.items.iter().map(|item| {
         let path = version_path(&item.id);
@@ -733,14 +776,14 @@ pub(crate) async fn probe(client: &Client, integrations: &mut Integrations, graf
         async move {
             let (endpoint, path) = endpoint.zip(path)?;
             Some(match endpoint.fetch(client, path, token).await {
-                Ok((text, tls)) => {
+                Ok((text, scheme)) => {
                     let answer: Value = serde_json::from_str(&text).unwrap_or_default();
                     let version = answer
                         .pointer("/data/version")
                         .or_else(|| answer.get("version"))
                         .and_then(Value::as_str)
                         .map(str::to_owned);
-                    Ok((version, tls))
+                    Ok((version, scheme))
                 }
                 Err(err) => Err(err.to_string()),
             })
@@ -749,10 +792,10 @@ pub(crate) async fn probe(client: &Client, integrations: &mut Integrations, graf
     let answers = futures::future::join_all(checks).await;
     for (item, answer) in integrations.items.iter_mut().zip(answers) {
         match answer {
-            Some(Ok((version, tls))) => {
+            Some(Ok((version, scheme))) => {
                 item.version = version;
-                if let (true, Some(Endpoint::Service { https, .. })) = (tls, item.endpoint.as_mut()) {
-                    *https = true;
+                if let (Some(tls), Some(Endpoint::Service { https, .. })) = (scheme, item.endpoint.as_mut()) {
+                    *https = tls;
                 }
             }
             Some(Err(err)) => item.error = Some(err),
@@ -1312,16 +1355,18 @@ impl crate::Kubri {
             .endpoint(id)
             .cloned()
             .ok_or_else(|| Error::Unsupported(format!("{id} is not found in this cluster")))?;
-        // A Service taken for plain HTTP may answer only over HTTPS, which the browser needs.
-        let tls = match (&endpoint, version_path(id)) {
-            (Endpoint::Service { https: false, .. }, Some(path)) => {
+        // A Service may answer only over the other scheme than the one expected, and the
+        // browser needs the one it answers.
+        let scheme = match (&endpoint, version_path(id)) {
+            (Endpoint::Service { .. }, Some(path)) => {
                 let session = self.session().await?;
-                matches!(
-                    endpoint.fetch(&session.proxy_client, path, None).await,
-                    Ok((_, true))
-                )
+                endpoint
+                    .fetch(&session.proxy_client, path, None)
+                    .await
+                    .ok()
+                    .and_then(|(_, scheme)| scheme)
             }
-            _ => false,
+            _ => None,
         };
         let (namespace, name, port, https) = match endpoint {
             Endpoint::Url { url, .. } => return Ok(url),
@@ -1330,7 +1375,7 @@ impl crate::Kubri {
                 name,
                 port,
                 https,
-            } => (namespace, name, port, https || tls),
+            } => (namespace, name, port, scheme.unwrap_or(https)),
         };
         let context = self.cluster().await.map(|c| c.context).unwrap_or_default();
         let scheme = if https { "https" } else { "http" };
@@ -1759,8 +1804,9 @@ mod tests {
             port: 80,
             https: false,
         };
-        let (text, tls) = endpoint.fetch(&client, "/api/health", None).await.unwrap();
-        assert!(tls && text.contains("11.3.0"));
+        let (text, scheme) = endpoint.fetch(&client, "/api/health", None).await.unwrap();
+        assert_eq!(scheme, Some(true));
+        assert!(text.contains("11.3.0"));
         assert_eq!(log.lock().unwrap().len(), 2);
 
         let mut found = Integrations {
@@ -1780,6 +1826,76 @@ mod tests {
             item.endpoint,
             Some(Endpoint::Service { https: true, .. })
         ));
+    }
+
+    /// What the API server answers when it tries TLS with a Service that speaks plain HTTP.
+    const NOT_TLS: &str = r#"{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"error trying to reach service: tls: first record does not look like a TLS handshake","reason":"ServiceUnavailable","code":503}"#;
+
+    #[tokio::test]
+    async fn asks_a_service_over_plain_http_when_it_speaks_no_tls() {
+        // Port 443 is taken for HTTPS, but the pod behind it speaks plain HTTP.
+        let (client, log) = crate::testing::client(|r| {
+            if r.uri.contains("/services/https:") {
+                (503, NOT_TLS.into())
+            } else {
+                (200, r#"{"version":"11.3.0"}"#.into())
+            }
+        });
+        let endpoint = Endpoint::Service {
+            namespace: "ops".into(),
+            name: "grafana".into(),
+            port: 443,
+            https: true,
+        };
+        let (text, scheme) = endpoint.fetch(&client, "/api/health", None).await.unwrap();
+        assert_eq!(scheme, Some(false));
+        assert!(text.contains("11.3.0"));
+        assert_eq!(log.lock().unwrap().len(), 2);
+
+        let mut found = Integrations {
+            items: vec![Integration {
+                id: "grafana".into(),
+                name: "Grafana".into(),
+                endpoint: Some(endpoint),
+                source: "found".into(),
+                version: None,
+                error: None,
+            }],
+        };
+        probe(&client, &mut found, None).await;
+        assert!(matches!(
+            found.items[0].endpoint,
+            Some(Endpoint::Service { https: false, .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn keeps_the_400_of_a_service_that_speaks_plain_http() {
+        // Prometheus refusing a query: the answer over HTTPS fails the handshake, so the
+        // query's own error is the one that counts.
+        let (client, log) = crate::testing::client(|r| {
+            if r.uri.contains("/services/https:") {
+                (503, NOT_TLS.into())
+            } else {
+                (
+                    400,
+                    r#"{"status":"error","errorType":"bad_data","error":"parse error"}"#.into(),
+                )
+            }
+        });
+        let endpoint = Endpoint::Service {
+            namespace: "ops".into(),
+            name: "prometheus".into(),
+            port: 9090,
+            https: false,
+        };
+        let err = endpoint
+            .get(&client, "/api/v1/query?query=up(", None)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("parse error"), "{err}");
+        assert!(!err.to_string().contains("TLS"), "{err}");
+        assert_eq!(log.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]

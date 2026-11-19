@@ -146,6 +146,10 @@ describe('i18n', () => {
 		expect(coreText('node selector wants disk=ssd, the node has disk=hdd')).toBe('der Node-Selector will disk=ssd, der Node hat disk=hdd');
 		expect(coreText('Its TLS secret web-tls does not exist')).toBe('Sein TLS-Secret web-tls gibt es nicht');
 		expect(coreText('Memory use is at 93% of what is allocatable')).toBe('Speicher-Nutzung liegt bei 93% dessen, was zuteilbar ist');
+		expect(coreText('https://grafana.example.com asks for a client certificate, which Kubri does not send; your browser can still open it')).toBe(
+			'https://grafana.example.com verlangt ein Client-Zertifikat, das Kubri nicht sendet; dein Browser kann es trotzdem öffnen'
+		);
+		expect(coreText('ops/grafana:80 answered 502 through the API server: bad gateway')).toBe('ops/grafana:80 antwortete über den API-Server mit 502: bad gateway');
 	});
 
 	it('only takes texts written out, so the test above sees them', () => {
