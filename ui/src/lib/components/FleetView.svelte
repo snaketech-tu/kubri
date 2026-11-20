@@ -200,7 +200,7 @@
 				</article>
 			{/each}
 		</div>
-		<p class="muted small">{t('Meters show what pods request of what nodes can hold. Opening a cluster connects Kubri to it.')}</p>
+		<p class="muted small">{t('Meters show what pods on the nodes reserve of what the nodes can hold. Opening a cluster connects Kubri to it.')}</p>
 	{/if}
 </section>
 
