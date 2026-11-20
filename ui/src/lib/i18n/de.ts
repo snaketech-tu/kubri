@@ -2191,7 +2191,7 @@ const de: Record<string, string> = {
 	'Could not be checked': 'Konnte nicht geprüft werden',
 	'Added in Kubri': 'In Kubri hinzugefügt',
 	'Remove from Kubri?': 'Aus Kubri entfernen?',
-	'Meters show what pods request of what nodes can hold. Opening a cluster connects Kubri to it.': 'Die Balken zeigen, was Pods von dem anfordern, was Nodes fassen. Ein Cluster zu öffnen, verbindet Kubri mit ihm.',
+	'Meters show what pods on the nodes reserve of what the nodes can hold. Opening a cluster connects Kubri to it.': 'Die Balken zeigen, was Pods auf den Nodes von dem reservieren, was die Nodes fassen. Ein Cluster zu öffnen, verbindet Kubri mit ihm.',
 	'{kind} {name} is not there': '{kind} {name} gibt es nicht',
 	'How the objects in {namespace} connect, from Ingresses to the nodes their pods run on': 'Wie die Objekte in {namespace} zusammenhängen, von Ingresses bis zu den Nodes, auf denen ihre Pods laufen',
 	'How the objects in all namespaces connect, from Ingresses to the nodes their pods run on': 'Wie die Objekte in allen Namespaces zusammenhängen, von Ingresses bis zu den Nodes, auf denen ihre Pods laufen',
@@ -2694,7 +2694,7 @@ const de: Record<string, string> = {
 	'Memory reserved': 'Speicher reserviert',
 	'{name}: {reserved} reserved': '{name}: {reserved} reserviert',
 	'{name}: {reserved} reserved, {used} in use': '{name}: {reserved} reserviert, {used} genutzt',
-	'Counts only namespace {name}: pods of other namespaces may not be listed': 'Zählt nur Namespace {name}: Pods anderer Namespaces dürfen nicht gelistet werden',
+	'Counts only namespace {name}: you may not list pods in other namespaces': 'Zählt nur Namespace {name}: Pods anderer Namespaces darfst du nicht auflisten',
 	// Port-forward favorites in bulk
 	'{name} declares no TCP port. Start a port-forward to it and keep it as a favorite instead.': '{name} gibt keinen TCP-Port an. Starte stattdessen einen Port-Forward dorthin und behalte ihn als Favoriten.',
 	'None of them declares a TCP port.': 'Keines davon gibt einen TCP-Port an.',

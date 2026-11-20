@@ -474,7 +474,7 @@
 							<h2 id="trend-title">{t('Usage trend')}</h2>
 							<span class="muted">{namespace ? t('This namespace') : t('Cluster-wide')}</span>
 						</div>
-						{#if cpuTrend.length < 2 && memoryTrend.length < 2 && (fill(pulse.cpu) || fill(pulse.memory))}
+						{#if cpuTrend.length < 2 && memoryTrend.length < 2 && (fill(namespacePart(pulse.cpu)) || fill(namespacePart(pulse.memory)))}
 							<!-- One line until there is a trend to draw, not two empty charts. -->
 							<p class="trend-wait" role="status"><span class="loader" aria-hidden="true"></span>{t('The trend appears after a few updates.')}</p>
 						{:else}
@@ -552,9 +552,9 @@
 				aria-label="{label} {r.reserved !== null ? t('reserved') : t('used')}"
 			>
 				{#if r.namespace && r.reserved !== null}
-					<span class="fill mine" style:width={percent(Math.min(r.namespace.reserved / r.capacity, 1))}></span>
+					<span class="fill mine split" style:width={percent(Math.min(r.namespace.reserved / r.capacity, 1))}></span>
 					<span
-						class="fill others"
+						class="fill others split"
 						style:left={percent(Math.min(r.namespace.reserved / r.capacity, 1))}
 						style:width={percent(Math.max(0, Math.min((r.reserved - r.namespace.reserved) / r.capacity, 1 - r.namespace.reserved / r.capacity)))}
 					></span>
@@ -570,7 +570,7 @@
 			{:else if r.partial}
 				<span class="kpi-note">{t('{reserved} of {capacity} reserved', { reserved: format(r.reserved), capacity: format(r.capacity) })}</span>
 				{#if namespace}
-					<span class="kpi-note">{t('Counts only namespace {name}: pods of other namespaces may not be listed', { name: namespace })}</span>
+					<span class="kpi-note">{t('Counts only namespace {name}: you may not list pods in other namespaces', { name: namespace })}</span>
 				{/if}
 			{:else}
 				<span class="legend-list {tone}">
@@ -839,15 +839,16 @@
 	.fill {
 		position: absolute;
 		inset: 0 auto 0 0;
+		border-radius: 3px;
 	}
 	.fill.mine {
-		border-radius: 3px 0 0 3px;
 		background: var(--tone);
+	}
+	.fill.mine.split {
+		border-radius: 3px 0 0 3px;
 	}
 	.fill.others {
 		border-radius: 0 3px 3px 0;
-	}
-	.fill.others {
 		background: color-mix(in srgb, var(--tone) 40%, var(--surface-2));
 	}
 	.in-use {
