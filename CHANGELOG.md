@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.1 — 2026-11-20
+
+- **The overview's CPU and memory cards count the whole cluster, like the Clusters page.** Both now show what pods on the nodes reserve, so the numbers match. A new pod may land on any node, so the cards count every namespace even with one selected; the bar then splits what is reserved into that namespace and the others. A legend under the bar names what is reserved, what is still free for new pods, and the mark for what is in use right now. When you may not list pods in other namespaces, the card says it counts only your namespace. See [Clusters](docs/CLUSTERS.md).
+
 ## 1.13.0 — 2026-11-19
 
 - **Explain through Claude Code, Codex or OpenRouter.** If you already use Claude Code or Codex, Explain can run it with the account you signed in with, without an API key: Claude Code without any tools, Codex in its read-only sandbox, both in an empty folder. OpenRouter reaches the models of many providers with one key. Each provider now keeps its own key, so a key only goes to the provider it was saved for. In the web app, Claude Code and Codex are only offered when the server runs with `KUBRI_LOCAL_TERMINAL=true`, and never on a Kubri shared by a team. See [Explain](docs/EXPLAIN.md).
