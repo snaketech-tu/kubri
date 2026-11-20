@@ -2524,7 +2524,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-cli"
-version = "1.13.0"
+version = "1.13.1"
 dependencies = [
  "clap",
  "kubri-core",
@@ -2535,7 +2535,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-core"
-version = "1.13.0"
+version = "1.13.1"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -2569,7 +2569,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-desktop"
-version = "1.13.0"
+version = "1.13.1"
 dependencies = [
  "dirs",
  "futures",
@@ -2592,7 +2592,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-mcp"
-version = "1.13.0"
+version = "1.13.1"
 dependencies = [
  "axum",
  "futures",
@@ -2611,7 +2611,7 @@ dependencies = [
 
 [[package]]
 name = "kubri-server"
-version = "1.13.0"
+version = "1.13.1"
 dependencies = [
  "axum",
  "base64 0.23.1",

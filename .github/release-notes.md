@@ -1,12 +1,9 @@
 ## What's new
 
-Kubri 1.13 makes Explain work with the AI tools you already use, and port-forward favorites easier to keep in bulk.
+Kubri 1.13.1 makes the overview's CPU and memory cards match the Clusters page.
 
-- **Explain through Claude Code, Codex or OpenRouter.** Claude Code and Codex run with the account you signed in with, so no API key is needed. OpenRouter reaches many providers' models with one key, and each provider now keeps its own key.
-- **Names for port-forward favorites**, shown in the sidebar instead of the target.
-- **Many favorites at once:** from marked rows, every Service of a namespace, pasted `kubectl port-forward` commands or a favorites file, with free local ports picked for you. **Export favorites** saves them to share, and the sidebar groups many favorites by namespace.
-- **Grafana behind a client certificate.** Kubri asks the Service behind the Ingress instead, and your browser still opens the URL.
-- **Right-sizing finds workloads with a dash in their name**, like `order-api`, which were missing before.
+- **The whole cluster's room.** The cards show what pods on the nodes reserve, in every namespace, because a new pod may land on any node. With a namespace selected, the bar splits it into that namespace and the others.
+- **A legend under each bar** names what is reserved, what is still free for new pods, and what is in use right now.
 
 The full list is in the [changelog](https://github.com/snaketech-tu/kubri/blob/main/CHANGELOG.md).
 
