@@ -173,7 +173,7 @@ export async function rollback(target: ObjectRef) {
  */
 export function copyLines(lines: string[], many?: (n: number) => string): Promise<boolean> {
 	if (!lines.length) return Promise.resolve(false);
-	return navigator.clipboard.writeText(lines.join('\n')).then(
+	return writeClipboard(lines.join('\n')).then(
 		() => {
 			app.toast(lines.length > 1 && many ? many(lines.length) : t('Copied {text}', { text: lines.join(' ') }));
 			return true;
@@ -183,6 +183,26 @@ export function copyLines(lines: string[], many?: (n: number) => string): Promis
 			return false;
 		}
 	);
+}
+
+/**
+ * Puts text on the clipboard. Browsers offer `navigator.clipboard` only over HTTPS or on
+ * localhost, so a Kubri served over plain HTTP copies through a selected text field instead.
+ */
+export function writeClipboard(text: string): Promise<void> {
+	if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+	const field = document.createElement('textarea');
+	field.value = text;
+	field.setAttribute('readonly', '');
+	field.style.position = 'fixed';
+	field.style.opacity = '0';
+	const focused = document.activeElement as HTMLElement | null;
+	document.body.append(field);
+	field.select();
+	const copied = document.execCommand('copy');
+	field.remove();
+	focused?.focus();
+	return copied ? Promise.resolve() : Promise.reject(new Error(t('This browser does not let Kubri copy here. Select the text and copy it yourself.')));
 }
 
 /** Saves text as a file: to Downloads in the desktop app, as a download in the browser. */
