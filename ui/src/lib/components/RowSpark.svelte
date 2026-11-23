@@ -22,7 +22,7 @@
 	.spark {
 		display: inline-block;
 		vertical-align: middle;
-		margin-right: 8px;
+		margin-left: 8px;
 		color: var(--text-muted);
 		opacity: 0.8;
 	}
