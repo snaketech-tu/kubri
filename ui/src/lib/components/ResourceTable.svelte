@@ -339,10 +339,6 @@
 	table.stale tbody {
 		opacity: 0.55;
 	}
-	.reading {
-		display: inline-block;
-		min-width: 4.5ch;
-	}
 	/* What the pod may use at most, after its use, and how full that is as a thin bar. */
 	.limit {
 		margin-left: 0.4ch;
