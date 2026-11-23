@@ -169,13 +169,19 @@ export async function rollback(target: ObjectRef) {
 
 /**
  * Copies lines to the clipboard and says what: the line itself, or with `many` how many, like
- * k9s `c` and `n`.
+ * k9s `c` and `n`. Resolves to whether it worked.
  */
-export function copyLines(lines: string[], many?: (n: number) => string) {
-	if (!lines.length) return;
-	navigator.clipboard.writeText(lines.join('\n')).then(
-		() => app.toast(lines.length > 1 && many ? many(lines.length) : t('Copied {text}', { text: lines.join(' ') })),
-		(err) => app.toast(errorMessage(err), 'bad')
+export function copyLines(lines: string[], many?: (n: number) => string): Promise<boolean> {
+	if (!lines.length) return Promise.resolve(false);
+	return navigator.clipboard.writeText(lines.join('\n')).then(
+		() => {
+			app.toast(lines.length > 1 && many ? many(lines.length) : t('Copied {text}', { text: lines.join(' ') }));
+			return true;
+		},
+		(err) => {
+			app.toast(errorMessage(err), 'bad');
+			return false;
+		}
 	);
 }
 
