@@ -1,9 +1,11 @@
 ## What's new
 
-Kubri 1.13.1 makes the overview's CPU and memory cards match the Clusters page.
+Kubri 1.13.2 is a small update.
 
-- **The whole cluster's room.** The cards show what pods on the nodes reserve, in every namespace, because a new pod may land on any node. With a namespace selected, the bar splits it into that namespace and the others.
-- **A legend under each bar** names what is reserved, what is still free for new pods, and what is in use right now.
+- **Copy a name from the inspector** with the new button right of the name.
+- **Copying works over plain HTTP** in the browser, for names, kubectl commands and log lines.
+- **CPU and memory line up** with the other columns in the lists.
+- **Updated dependencies**, including fixes for two security advisories.
 
 The full list is in the [changelog](https://github.com/snaketech-tu/kubri/blob/main/CHANGELOG.md).
 

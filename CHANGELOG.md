@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.13.2 — 2026-11-23
+
+- **Copy a name from the inspector.** A copy button sits right of the object's name in the inspector. It turns into a check mark for a moment once the name is on the clipboard.
+- **Copying works over plain HTTP.** A Kubri in the browser that is not served over HTTPS could not copy names, kubectl commands or log lines. It now copies there too, and says so in plain words if the browser refuses.
+- **CPU and memory line up like the other columns.** In the lists they now start at the left like Ready, Restarts and Age, and the little trend line comes after the value.
+- **Updated dependencies**, including fixes for two security advisories in the `cookie` and `url` crates.
+
 ## 1.13.1 — 2026-11-20
 
 - **The overview's CPU and memory cards count the whole cluster, like the Clusters page.** Both now show what pods on the nodes reserve, so the numbers match. A new pod may land on any node, so the cards count every namespace even with one selected; the bar then splits what is reserved into that namespace and the others. A legend under the bar names what is reserved, what is still free for new pods, and the mark for what is in use right now. When you may not list pods in other namespaces, the card says it counts only your namespace. See [Clusters](docs/CLUSTERS.md).
