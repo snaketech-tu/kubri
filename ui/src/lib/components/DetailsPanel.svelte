@@ -10,7 +10,7 @@
 	import { store, stored } from '../storage';
 	import { tick, untrack } from 'svelte';
 	import { parse, stringify } from 'yaml';
-	import { canEdit, save } from '../actions';
+	import { canEdit, copyLines, save } from '../actions';
 	import { hasCharts } from '../charts';
 	import { backend, type EventInfo, type KubeObject, type ObjectRef, type Preview, type Reference, type TerminalMode } from '../api';
 	import { autoscalerCause } from '../causes';
@@ -150,6 +150,18 @@
 		app.details = null;
 		app.layout.maximized = false;
 	}
+
+	/** The name just copied, which shows a check mark on the copy button for a moment. */
+	let copied = $state<string | null>(null);
+	let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+	async function copyName() {
+		const name = details.target.name;
+		if (!(await copyLines([name]))) return;
+		copied = name;
+		clearTimeout(copiedTimer);
+		copiedTimer = setTimeout(() => (copied = null), 1500);
+	}
+	$effect(() => () => clearTimeout(copiedTimer));
 
 	/** Logs and shells, which take the place of the list unless kept beside it. */
 	const tool = $derived(details.tab === 'logs' || details.tab === 'shell');
@@ -552,7 +564,17 @@
 	<header>
 		<div class="title">
 			<span class="kind">{t('{kind} inspector', { kind: details.resource.kind })}</span>
-			<h2 title={details.target.name}>{details.target.name}</h2>
+			<div class="name">
+				<h2 title={details.target.name}>{details.target.name}</h2>
+				<button
+					class="copy"
+					class:done={copied === details.target.name}
+					onclick={copyName}
+					onmousedown={(e) => e.preventDefault()}
+					title={t('Copy name')}
+					aria-label={t('Copy name')}><Icon name={copied === details.target.name ? 'check' : 'copy'} size={15} /></button
+				>
+			</div>
 			<p class="context-path">
 				{#if app.cluster}
 					{@const label = app.prefs.contextName(app.cluster.context)}
@@ -873,7 +895,7 @@
 	.compact .kind {
 		display: none;
 	}
-	.compact h2,
+	.compact .name,
 	.compact .context-path,
 	.compact .status {
 		margin: 0;
@@ -944,13 +966,41 @@
 		text-transform: uppercase;
 		color: var(--text-muted);
 	}
-	h2 {
+	.name {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		min-width: 0;
 		margin: 6px 0 0;
+	}
+	h2 {
+		flex: 0 1 auto;
+		min-width: 0;
+		margin: 0;
 		font-size: 16px;
 		font-family: var(--mono);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.copy {
+		display: grid;
+		flex: none;
+		place-items: center;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		border: none;
+		border-radius: 6px;
+		background: none;
+		color: var(--text-muted);
+	}
+	.copy:hover {
+		background: var(--surface-2);
+		color: var(--text);
+	}
+	.copy.done {
+		color: var(--ok);
 	}
 	.window {
 		display: flex;

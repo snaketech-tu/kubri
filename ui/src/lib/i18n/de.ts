@@ -559,6 +559,7 @@ const de: Record<string, string> = {
 	'Asked cert-manager to renew {name}': 'cert-manager erneuert {name}',
 	'Rolled {owner} back to {name}': '{owner} auf {name} zurückgesetzt',
 	'Copied {text}': 'Kopiert: {text}',
+	'This browser does not let Kubri copy here. Select the text and copy it yourself.': 'Dieser Browser lässt Kubri hier nicht kopieren. Markiere den Text und kopiere ihn selbst.',
 	'Forwarding {local} to {pod}': '{local} wird an {pod} weitergeleitet',
 	'Stopped the port-forward': 'Port-Forward beendet',
 	'{name} changes the cluster, and Kubri is read-only': '{name} ändert den Cluster, und Kubri ist schreibgeschützt',
