@@ -251,10 +251,7 @@
 								<span class="clamp" title={text}>{text}</span>
 							{:else if column.kind === 'metric' && (column.label === 'CPU' || column.label === 'Mem')}
 								{@const trail = cells.trail(row.namespace, row.name)}
-								{#if trail}<RowSpark
-										values={column.label === 'CPU' ? trail.cpu : trail.memory}
-										label={t('{column} of {name}', { column: column.label, name: row.name })}
-									/>{/if}<span class="reading">{text}</span>{#if measure && limitSuffix(usage, measure)}
+								<span class="reading">{text}</span>{#if measure && limitSuffix(usage, measure)}
 									{@const share = limitShare(usage, measure) ?? 0}
 									<span class="limit">{limitSuffix(usage, measure)}</span><span
 										class="fill"
@@ -262,7 +259,10 @@
 										style:--share="{Math.round(share * 100)}%"
 										aria-hidden="true"
 									></span>
-								{/if}
+								{/if}{#if trail}<RowSpark
+										values={column.label === 'CPU' ? trail.cpu : trail.memory}
+										label={t('{column} of {name}', { column: column.label, name: row.name })}
+									/>{/if}
 							{:else}
 								{text}
 							{/if}
@@ -339,11 +339,6 @@
 	table.stale tbody {
 		opacity: 0.55;
 	}
-	.reading {
-		display: inline-block;
-		min-width: 4.5ch;
-		text-align: right;
-	}
 	/* What the pod may use at most, after its use, and how full that is as a thin bar. */
 	.limit {
 		margin-left: 0.4ch;
@@ -417,9 +412,6 @@
 	}
 	th.sorted .arrow {
 		opacity: 1;
-	}
-	th.numeric .sort {
-		flex-direction: row-reverse;
 	}
 	.spacer td {
 		height: auto;
@@ -573,8 +565,8 @@
 	.muted {
 		color: var(--text-muted);
 	}
+	/* Numbers are left-aligned like every other column; same-width digits keep them easy to compare. */
 	.numeric {
-		text-align: right;
 		font-variant-numeric: tabular-nums;
 	}
 	.ok {
